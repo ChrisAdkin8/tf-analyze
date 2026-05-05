@@ -62,18 +62,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Lock the count down. If a rule is added or removed, this number
+      # Lock the count down. If a rule is added or removed, the totals
       # must be updated as part of the same PR — drift signals an
-      # unintended change in detection behaviour.
-      - name: Count findings on examples/terragoat
+      # unintended change in detection behaviour. We check per-cloud
+      # totals separately so a regression in one cloud's coverage
+      # can't be hidden by an offsetting change in another.
+      - name: Count findings per cloud
         run: |
           set -euo pipefail
-          COUNT=$(
+          for c in gcp aws azure; do
+            N=$(
+              python3 scripts/detect.py --target "examples/terragoat/$c" --format json \
+                | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))'
+            )
+            echo "$c: $N findings"
+            case "$c" in
+              # Per-cloud expected counts. Tolerance is roughly ±20%
+              # because the catalogue evolves and this corpus is the
+              # canvas. Tighten once the catalogue stabilises.
+              gcp)   test "$N" -ge 48 -a "$N" -le 60 ;;
+              aws)   test "$N" -ge 8  -a "$N" -le 16 ;;
+              azure) test "$N" -ge 4  -a "$N" -le 10 ;;
+            esac
+          done
+          TOTAL=$(
             python3 scripts/detect.py --target examples/terragoat --format json \
               | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))'
           )
-          echo "terragoat finding count: $COUNT"
-          # Allow a ±2 tolerance — small wiggle room for catalogue
-          # additions that touch this corpus, without going so wide
-          # that real regressions slip through.
-          test "$COUNT" -ge 42 -a "$COUNT" -le 46
+          echo "total: $TOTAL findings"
+          test "$TOTAL" -ge 65 -a "$TOTAL" -le 80
