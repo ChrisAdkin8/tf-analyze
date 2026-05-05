@@ -1,0 +1,37 @@
+id: ROB-LIFECYCLE-001
+title: "Stateful resource missing lifecycle.prevent_destroy"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: google_storage_bucket
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: google_spanner_instance
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: google_spanner_database
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: google_sql_database_instance
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: google_compute_disk
+    nested_path: lifecycle.prevent_destroy
+recommendation: |
+  Add `lifecycle { prevent_destroy = true }` to any resource that holds
+  irrecoverable state. The block forces operators to remove the line
+  intentionally before a destroy plan can succeed — a deliberate friction
+  that has saved real outages.
+verification: |
+  Run `terraform plan -destroy` and confirm Terraform refuses to destroy
+  the resource with an error citing the prevent_destroy lifecycle rule.
+escalation:
+  - condition: "estimated_monthly_cost_usd > 500"
+    new_urgency: HIGH
+  - condition: "resource_holds_production_data"
+    new_urgency: CRITICAL
+fixtures:
+  - missing_prevent_destroy

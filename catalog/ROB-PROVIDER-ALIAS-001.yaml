@@ -1,0 +1,32 @@
+id: ROB-PROVIDER-ALIAS-001
+title: "Module references provider alias that is not declared"
+section: robustness
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: provider_alias_module_mismatch
+    description: module providers={} maps to pname.alias that is not declared in the calling config
+recommendation: |
+  The child module expects a provider alias that the root config does not
+  declare — at apply time Terraform will fall back to the default provider,
+  which may target the wrong project/region/account. Declare the alias
+  explicitly:
+
+  ```hcl
+  provider "google" {
+    alias   = "eu"
+    project = var.project_id
+    region  = "europe-west1"
+  }
+
+  module "eu_stack" {
+    source    = "./modules/stack"
+    providers = { google = google.eu }
+  }
+  ```
+verification: |
+  `terraform validate` succeeds, and `terraform plan` shows resources landing
+  in the intended region/account.
+fixtures:
+  - provider_alias_mismatch

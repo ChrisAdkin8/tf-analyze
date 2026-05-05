@@ -1,0 +1,27 @@
+id: ROB-VERSION-002
+title: "Submodule directory has no required_version"
+section: robustness
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: submodule_version_missing
+    description: A submodule directory (.tf present) has no required_version constraint anywhere
+recommendation: |
+  Submodules inherit the root's Terraform version *implicitly*. That hides
+  feature-level assumptions: a submodule using `optional()` object attrs or
+  `moved {}` blocks will silently break if the root drops to pre-1.3 /
+  pre-1.1. Declare:
+
+  ```hcl
+  terraform {
+    required_version = ">= 1.6"
+  }
+  ```
+
+  in each submodule so `terraform get` fails fast on unsupported versions.
+verification: |
+  Run `terraform init` inside the submodule directory (if it is callable
+  in isolation) — it should enforce the new constraint.
+fixtures:
+  - submodule_no_version

@@ -1,0 +1,70 @@
+name: tf-analyze
+
+on:
+  pull_request:
+    paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+  push:
+    branches: [main, master]
+    paths:
+      - "**/*.tf"
+
+permissions:
+  contents: read
+  security-events: write  # for SARIF upload
+  pull-requests: write    # for PR comment
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for diff-mode base detection
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch tf-analyze
+        run: |
+          git clone --depth 1 https://github.com/anthropics/claude-code-skills \
+            /tmp/tf-analyze-skill
+          ln -s /tmp/tf-analyze-skill/tf-analyze ~/.tf-analyze
+
+      - name: Run tf-analyze (diff on PR, full on push)
+        id: analyze
+        run: |
+          MODE=static
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            MODE=diff
+          fi
+          python3 ~/.tf-analyze/scripts/detect.py \
+            --target . \
+            --mode "$MODE" \
+            --format sarif \
+            --fail-on HIGH \
+            > tf-analyze.sarif || echo "::warning::tf-analyze found HIGH+ findings"
+
+      - name: Upload SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: tf-analyze.sarif
+          category: tf-analyze
+
+      - name: Generate HTML report
+        if: always()
+        run: |
+          python3 ~/.tf-analyze/scripts/detect.py \
+            --target . \
+            --format html > tf-analyze-report.html
+
+      - name: Upload HTML artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tf-analyze-report
+          path: tf-analyze-report.html
+          retention-days: 30

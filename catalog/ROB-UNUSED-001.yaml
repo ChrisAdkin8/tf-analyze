@@ -1,0 +1,18 @@
+id: ROB-UNUSED-001
+title: "Declared variable is never referenced"
+section: robustness
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: variable_unused
+    description: variable declared in variables.tf but never referenced as var.X in any .tf file in the same module directory
+recommendation: |
+  Remove the unused variable declaration. Unused variables create confusion
+  for module consumers who set them expecting an effect. If the variable was
+  intentionally reserved for future use, add a comment explaining why.
+verification: |
+  Run `terraform validate` after removing the variable. If any .tfvars file
+  sets it, remove that assignment too.
+fixtures:
+  - unused_variable

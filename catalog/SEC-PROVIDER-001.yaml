@@ -1,0 +1,24 @@
+id: SEC-PROVIDER-001
+title: "Provider version constraint missing upper bound"
+section: security
+default_urgency: MEDIUM
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/versions.tf"
+    regex: '(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]'
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'required_providers\s*\{[^}]*(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]'
+recommendation: |
+  Replace `>= X.Y` constraints with `~> X.Y` to bound the major version.
+  For production stability, prefer `~> X.Y` (minor pin) over `~> X` (major
+  pin). The 2026-04-11 finding history shows 70% of provider-related plan
+  failures came from automatic major version upgrades.
+verification: |
+  After updating the constraint, run `terraform init -upgrade` and confirm
+  the locked provider version in `.terraform.lock.hcl` is within the new
+  range.
+fixtures:
+  - wide_provider_constraint

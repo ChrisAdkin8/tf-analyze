@@ -1,0 +1,33 @@
+id: MOD-PIN-001
+title: "Module source not pinned"
+section: module
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'source\s*=\s*"git::[^"]*"\s*$'
+    description: git source without ?ref= pin
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'source\s*=\s*"github\.com/[^"]*"\s*$'
+    description: github.com source without ?ref= pin
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'source\s*=\s*"bitbucket\.org/[^"]*"\s*$'
+    description: bitbucket.org source without ?ref= pin
+  - kind: module_block_missing_arg
+    arg: version
+    source_regex: '^[^./].*'
+    description: registry source without version constraint
+recommendation: |
+  Pin every external module:
+   - Registry: add `version = "~> X.Y"`.
+   - Git: add `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL.
+   - Local (`./modules/foo`): no pin needed but verify the path is stable.
+verification: |
+  Run `terraform get -update` and confirm the same version resolves on
+  every machine. Commit `.terraform.lock.hcl`.
+fixtures:
+  - unpinned_module

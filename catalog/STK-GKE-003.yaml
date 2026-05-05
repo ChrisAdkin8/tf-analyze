@@ -1,0 +1,19 @@
+id: STK-GKE-003
+title: "GKE cluster missing application-layer secrets encryption"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: stub
+cis:
+  - "8.5.5"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    nested_path: database_encryption.state
+recommendation: |
+  Add a `database_encryption { state = "ENCRYPTED" key_name = <kms-key> }`
+  block. Without this, etcd-stored Kubernetes Secrets are encrypted only
+  at the Google-managed disk level — not at the application layer.
+verification: |
+  `gcloud container clusters describe <name> --format='value(databaseEncryption.state)'`
+  must return `ENCRYPTED`.

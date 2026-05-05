@@ -1,0 +1,28 @@
+id: SEC-STATE-001
+title: ".tfstate file committed to the repository"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.1"
+patterns:
+  - kind: tfstate_in_repo
+    description: .tfstate, .tfstate.backup, or .tfstate~ file present in the scanned tree
+recommendation: |
+  `.tfstate` contains plaintext attributes of every resource — including
+  provider secrets that were resolved at apply time (database passwords,
+  service-account keys, bucket ACLs). A committed state file is a leaked
+  credentials file.
+
+  1. Rotate every credential that appears in the committed state (service
+     accounts, database users, any `sensitive` output value).
+  2. Add `*.tfstate`, `*.tfstate.*`, and `.terraform/` to `.gitignore`.
+  3. Purge from history: `git filter-repo --path-glob '*.tfstate*' --invert-paths`.
+  4. Move to a remote backend (`backend "gcs" {}` or `backend "s3" {}`)
+     with encryption-at-rest and versioning enabled.
+verification: |
+  `find . -name '*.tfstate*' -not -path './.terraform/*'` returns empty,
+  and `git log --all --full-history -- '*.tfstate*'` returns empty.
+fixtures:
+  - tfstate_in_repo

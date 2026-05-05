@@ -1,0 +1,23 @@
+id: ROB-VERSION-001
+title: "required_version floor too old for skill assumptions"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/versions.tf"
+    regex: 'required_version\s*=\s*"[~>=\s]*0\.'
+  - kind: grep
+    file_glob: "**/versions.tf"
+    regex: 'required_version\s*=\s*"[~>=\s]*1\.[0-5]'
+recommendation: |
+  Set `required_version = "~> 1.10"` (or whatever the current Terraform
+  major is). Many checks in this skill assume features only available in
+  Terraform 1.6+: native test framework (`*.tftest.hcl`), `import` blocks,
+  `optional()` in object types, `moved` blocks, conditional outputs.
+verification: |
+  Run `terraform version` and confirm it satisfies the new constraint.
+  CI should pin the same version via `setup-terraform`.
+fixtures:
+  - old_required_version

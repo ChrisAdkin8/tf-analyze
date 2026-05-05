@@ -1,0 +1,23 @@
+id: STK-CLOUDSQL-003
+title: "Cloud SQL instance missing deletion protection"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: stub
+cis:
+  - "6.6"
+patterns:
+  - kind: hcl_attr
+    resource: google_sql_database_instance
+    path: deletion_protection
+    not_equal: true
+recommendation: |
+  Set `deletion_protection = true` on every Cloud SQL instance. This is
+  the only safety net against `terraform destroy` removing a database
+  with all of its data.
+verification: |
+  `gcloud sql instances describe <name> --format='value(settings.deletionProtectionEnabled)'`
+  must return `True`.
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: CRITICAL

@@ -1,0 +1,19 @@
+id: STK-DNS-001
+title: "Cloud DNS managed zone missing DNSSEC"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: stub
+cis:
+  - "3.9"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_dns_managed_zone
+    nested_path: dnssec_config.state
+recommendation: |
+  Add `dnssec_config { state = "on" }`. DNSSEC protects against
+  cache-poisoning attacks that can redirect resolvers to attacker
+  endpoints.
+verification: |
+  `gcloud dns managed-zones describe <name> --format='value(dnssecConfig.state)'`
+  must return `on`.

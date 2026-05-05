@@ -1,0 +1,20 @@
+id: SEC-SENSITIVE-001
+title: "Sensitive output not marked sensitive=true"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: output_sensitive_leak
+    description: |
+      Output value references a variable marked sensitive=true but the
+      output itself does not have sensitive=true.
+recommendation: |
+  Add `sensitive = true` to the output block. Without this marker the
+  value appears in `terraform plan` and `terraform output` console
+  output and may end up in CI logs.
+verification: |
+  Run `terraform output <name>` and confirm the value is masked as
+  `<sensitive>`. Re-run tf-analyze in mode:verify-fixed.
+fixtures:
+  - sensitive_leak

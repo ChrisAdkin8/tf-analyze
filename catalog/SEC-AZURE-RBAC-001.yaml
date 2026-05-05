@@ -1,0 +1,39 @@
+id: SEC-AZURE-RBAC-001
+title: "Azure role assignment scope is subscription-wide"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_arg
+    resource: azurerm_role_assignment
+    arg: scope
+    regex: '^data\.azurerm_subscription\.|^"?\/subscriptions\/[^/]+\/?"?$|management_group'
+recommendation: |
+  Replace the subscription- or management-group-wide scope with the
+  narrowest resource-level scope that still satisfies the use case.
+  Examples:
+
+      # Bad — applies the role to every resource in the subscription
+      scope = data.azurerm_subscription.primary.id
+
+      # Better — applies the role to a single resource group
+      scope = azurerm_resource_group.app.id
+
+      # Best — applies the role to a specific resource
+      scope = azurerm_storage_account.app.id
+
+  If a subscription-wide scope is genuinely required (rare — usually
+  `Reader` for monitoring tooling), document the rationale in a comment
+  and switch to a built-in role with audit-only permissions.
+verification: |
+  After applying, confirm with:
+
+      az role assignment list --assignee <principal-id> --output table
+
+  The `Scope` column should show a resource-group or resource path,
+  not `/subscriptions/<sub-id>`.
+related:
+  - SEC-IAM-001
+fixtures:
+  - azure_role_assignment_subscription

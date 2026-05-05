@@ -1,0 +1,34 @@
+id: COST-RISK-001
+title: "Expensive resource without cost control"
+section: ops
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: google_spanner_instance
+    arg: processing_units
+    description: Spanner instance without explicit processing_units (defaults may be expensive)
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    nested_path: cluster_autoscaling.resource_limits
+    description: GKE cluster without autoscaler resource_limits (unbounded scale-up)
+  - kind: resource_missing_arg
+    resource: google_sql_database_instance
+    nested_path: settings.disk_autoresize_limit
+    description: Cloud SQL without disk_autoresize_limit (unbounded disk growth)
+  - kind: resource_missing_arg
+    resource: google_compute_instance
+    arg: scheduling
+    description: Compute instance without scheduling block (always-on by default, consider preemptible for dev)
+recommendation: |
+  Add explicit cost controls to prevent bill surprises:
+  - Spanner: set `processing_units` explicitly
+  - GKE: set `cluster_autoscaling.resource_limits` with max bounds
+  - Cloud SQL: set `settings.disk_autoresize_limit`
+  - Compute: consider `scheduling { preemptible = true }` for non-production
+verification: |
+  Review `terraform plan` output to confirm the cost control arguments are
+  set. Check billing alerts are configured for the project.
+fixtures:
+  - expensive_no_controls

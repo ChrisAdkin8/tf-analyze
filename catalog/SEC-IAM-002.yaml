@@ -1,0 +1,33 @@
+id: SEC-IAM-002
+title: "Public IAM binding (allUsers / allAuthenticatedUsers)"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "5.1"
+  - "7.1"
+patterns:
+  - kind: resource_arg
+    resource: google_storage_bucket_iam_member
+    arg: member
+    regex: "^(allUsers|allAuthenticatedUsers)$"
+  - kind: resource_arg
+    resource: google_project_iam_member
+    arg: member
+    regex: "^(allUsers|allAuthenticatedUsers)$"
+  - kind: resource_arg
+    resource: google_bigquery_dataset_iam_member
+    arg: member
+    regex: "^(allUsers|allAuthenticatedUsers)$"
+recommendation: |
+  Public IAM grants must be removed unless the resource is intentionally
+  a public website or public dataset. If public access is intentional,
+  document it in CLAUDE.md and add a `# tf-analyze:ignore SEC-IAM-002`
+  comment on the binding line.
+verification: |
+  After applying the fix, attempt to access the resource without
+  credentials and confirm the request is denied. Re-run tf-analyze in
+  mode:verify-fixed.
+fixtures:
+  - public_bucket

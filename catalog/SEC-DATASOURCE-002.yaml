@@ -1,0 +1,28 @@
+id: SEC-DATASOURCE-002
+title: "data.external program takes user-controlled input"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: data_external_injection
+    description: data.external program array includes var/local references — untrusted input reaches a plan-time shell
+recommendation: |
+  `data.external` runs its `program` at plan time with the full privileges
+  of the Terraform runner. Passing variable- or local-derived arguments
+  means a Terraform variable can become a shell argument — a supply-chain
+  gap for operators and CI.
+
+  Options:
+   1. Replace with a provider data source (`data.http`, `data.aws_*`, etc.).
+   2. Hardcode the command and pipe variable data via stdin (map → JSON),
+      which `data.external` will pass as stdin. That keeps argv static.
+   3. Move the computation to a `null_resource` + `local-exec` with
+      `environment = {…}` — still runs something, but at apply time only
+      for resources that are being (re)created.
+verification: |
+  Diff the `program = [ ... ]` array: no `var.*` or `local.*` interpolation
+  in positions 1..N. If kept, pin the program path to a repo-local script
+  whose contents are reviewed alongside the Terraform.
+fixtures:
+  - data_external_injection

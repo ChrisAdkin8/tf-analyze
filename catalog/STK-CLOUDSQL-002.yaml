@@ -1,0 +1,20 @@
+id: STK-CLOUDSQL-002
+title: "Cloud SQL instance has public IP"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: stub
+cis:
+  - "6.1.1"
+patterns:
+  - kind: hcl_attr
+    resource: google_sql_database_instance
+    path: settings.ip_configuration.ipv4_enabled
+    not_equal: false
+recommendation: |
+  Set `settings { ip_configuration { ipv4_enabled = false private_network = <vpc> } }`.
+  Public Cloud SQL endpoints are reachable from the internet (subject only
+  to authorized networks) and bypass VPC Service Controls.
+verification: |
+  `gcloud sql instances describe <name> --format='value(settings.ipConfiguration.ipv4Enabled)'`
+  must return `False`.

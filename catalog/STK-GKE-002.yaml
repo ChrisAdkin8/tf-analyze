@@ -1,0 +1,41 @@
+id: STK-GKE-002
+title: "GKE cluster missing Workload Identity"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "8.5.2"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    nested_path: workload_identity_config.workload_pool
+recommendation: |
+  Add to the cluster:
+
+      workload_identity_config {
+        workload_pool = "${var.project_id}.svc.id.goog"
+      }
+
+  Without Workload Identity, pods that need GCP access must mount
+  static service account keys as Kubernetes secrets — a long-lived
+  credential that survives every pod restart and is hard to rotate.
+  WI binds a Kubernetes service account to a Google service account
+  via the cluster's identity pool, eliminating the static key.
+
+  Per-deployment, then bind a KSA to a GSA:
+
+      resource "google_service_account_iam_member" "wi" {
+        service_account_id = google_service_account.app.name
+        role               = "roles/iam.workloadIdentityUser"
+        member             = "serviceAccount:${var.project_id}.svc.id.goog[mynamespace/myksa]"
+      }
+verification: |
+  `gcloud container clusters describe <name> \\
+     --format='value(workloadIdentityConfig.workloadPool)'`
+  must return `<project>.svc.id.goog`. Re-run tf-analyze; STK-GKE-002
+  should not fire.
+related:
+  - STK-GKE-NODEPOOL-001
+fixtures:
+  - gke_no_workload_identity

@@ -1,0 +1,22 @@
+id: SEC-LOGGING-001
+title: "Cloud Audit Logs not configured"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "2.1"
+patterns:
+  - kind: resource_absent
+    resource: google_project_iam_audit_config
+    scope: repo
+recommendation: |
+  Add `google_project_iam_audit_config` resources covering at minimum
+  `aiplatform.googleapis.com`, `storage.googleapis.com`, `iam.googleapis.com`,
+  and any service that processes regulated data. Enable ADMIN_READ,
+  DATA_READ, and DATA_WRITE log types.
+verification: |
+  Run `gcloud logging read 'logName="projects/<project>/logs/cloudaudit.googleapis.com%2Fdata_access"' --limit 1`
+  and confirm at least one event is returned.
+fixtures:
+  - audit_logs_missing

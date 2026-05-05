@@ -1,0 +1,53 @@
+id: SEC-NETWORK-001
+title: "SSH (tcp:22) exposed to 0.0.0.0/0"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "3.6"
+patterns:
+  - kind: firewall_open_port
+    ports:
+      - "22"
+    description: |
+      `google_compute_firewall` with `source_ranges = ["0.0.0.0/0"]`
+      and an `allow {}` block containing port 22 (or a range that
+      includes it). World-open SSH is the most-attacked attack
+      surface on GCP — credential stuffing and zero-day exploits
+      against unpatched sshd find it within minutes.
+recommendation: |
+  Replace public SSH ingress with **Identity-Aware Proxy** TCP
+  forwarding. The trio is:
+
+      resource "google_compute_firewall" "iap_ssh" {
+        name      = "iap-ssh"
+        network   = google_compute_network.vpc.id
+        direction = "INGRESS"
+
+        # IAP CIDR — fixed Google-owned range
+        source_ranges = ["35.235.240.0/20"]
+
+        allow {
+          protocol = "tcp"
+          ports    = ["22"]
+        }
+
+        target_tags = ["iap-ssh"]
+      }
+
+  Then `gcloud compute ssh <vm> --tunnel-through-iap` from any
+  network. If IAP isn't an option, restrict `source_ranges` to
+  corporate egress CIDRs and rotate them out of band.
+verification: |
+  After applying:
+
+      gcloud compute firewall-rules list \\
+        --filter='allowed.ports:22 AND sourceRanges:0.0.0.0/0' \\
+        --format='value(name)'
+
+  Should return zero rows. Re-run tf-analyze to confirm clean.
+related:
+  - SEC-NETWORK-002
+fixtures:
+  - firewall_open_ssh

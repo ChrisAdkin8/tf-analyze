@@ -1,0 +1,18 @@
+id: ROB-MOVED-001
+title: "Stale moved block may need cleanup"
+section: robustness
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: moved_block_present
+    description: moved block detected — verify it has been applied and can be removed
+recommendation: |
+  After `terraform apply` has successfully run with this `moved` block and
+  the state reflects the new address, remove the block to keep the config
+  clean. Stale moved blocks accumulate noise and can confuse future readers.
+verification: |
+  Run `terraform plan` — if the plan shows no changes related to the moved
+  resource, the block is safe to remove.
+fixtures:
+  - stale_moved_block

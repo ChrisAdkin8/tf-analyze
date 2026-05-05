@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: self-test (catalogue ↔ fixtures)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # stub-status.py needs git history for ages
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run fixture self-test
+        run: python3 scripts/self_test.py
+      - name: Run schema validator regression
+        run: python3 scripts/test_schema.py
+      - name: Catalogue strict-load (fail on any malformed YAML)
+        # Pointing --target at the repo itself works because there are
+        # no .tf files at the root — detect.py is happy with an empty
+        # corpus, so this just exercises the strict-catalog path.
+        run: python3 scripts/detect.py --target . --strict-catalog --list-rules > /dev/null
+
+  cli-docs:
+    name: docs/cli.md is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/gen-cli-docs.py --check
+
+  stubs:
+    name: no stubs older than 180 days
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Non-zero exit if any stub is older than 180 days. The threshold
+      # is deliberately generous — half a year is enough time to either
+      # promote a sketched-out rule to active or formally deprecate it.
+      - run: python3 scripts/stub-status.py --age 180d
+
+  terragoat:
+    name: demo corpus produces expected finding count
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Lock the count down. If a rule is added or removed, this number
+      # must be updated as part of the same PR — drift signals an
+      # unintended change in detection behaviour.
+      - name: Count findings on examples/terragoat
+        run: |
+          set -euo pipefail
+          COUNT=$(
+            python3 scripts/detect.py --target examples/terragoat --format json \
+              | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))'
+          )
+          echo "terragoat finding count: $COUNT"
+          # Allow a ±2 tolerance — small wiggle room for catalogue
+          # additions that touch this corpus, without going so wide
+          # that real regressions slip through.
+          test "$COUNT" -ge 42 -a "$COUNT" -le 46

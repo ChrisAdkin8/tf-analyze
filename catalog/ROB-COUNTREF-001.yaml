@@ -1,0 +1,30 @@
+id: ROB-COUNTREF-001
+title: "Unguarded reference to count-conditional resource"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: count_index_ref
+    description: reference to resource[0] or module.X.output[0] where the source uses count and the consumer file has no matching conditional guard
+recommendation: |
+  Guard indexed references to count-conditional resources with a
+  conditional expression or a try() wrapper:
+
+  ```hcl
+  # Instead of:
+  value = aws_instance.optional[0].id
+
+  # Use:
+  value = length(aws_instance.optional) > 0 ? aws_instance.optional[0].id : null
+  # Or:
+  value = try(aws_instance.optional[0].id, null)
+  ```
+
+  Without the guard, destroying the conditional resource (count = 0)
+  produces an "index out of range" error.
+verification: |
+  Set the count condition to false and run `terraform plan`. The plan
+  should succeed without index errors.
+fixtures:
+  - unguarded_count_ref

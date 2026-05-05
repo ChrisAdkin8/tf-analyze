@@ -1,0 +1,19 @@
+id: STK-AZURE-NSG-001
+title: "Azure NSG rule open to the internet on sensitive ports"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: stub
+patterns:
+  - kind: grep
+    regex: 'source_address_prefix\s*=\s*"\*"'
+recommendation: |
+  TODO: stub. Detect `azurerm_network_security_rule` /
+  `azurerm_network_security_group` rules where
+  `source_address_prefix = "*"` (or `"Internet"`) and the destination
+  port range covers SSH/RDP/SQL/Redis (22, 3389, 1433, 6379, etc.).
+  Recommend narrowing to a specific CIDR or to a service-tag
+  (`AzureCloud`, `Storage`) when the source must be Azure-managed.
+verification: |
+  TODO
+fixtures: []

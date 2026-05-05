@@ -1,0 +1,19 @@
+id: SEC-AZURE-KV-001
+title: "Azure Key Vault missing purge protection or soft delete"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: stub
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_key_vault
+    arg: purge_protection_enabled
+recommendation: |
+  TODO: stub. Detect `azurerm_key_vault` blocks lacking
+  `purge_protection_enabled = true` and `soft_delete_retention_days >= 7`.
+  Without these, an accidental delete is unrecoverable, and a malicious
+  delete-and-recreate can substitute attacker-controlled secrets under
+  the same name.
+verification: |
+  TODO
+fixtures: []

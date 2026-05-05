@@ -1,0 +1,19 @@
+id: STK-GKE-001
+title: "GKE cluster missing private nodes"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: stub
+cis:
+  - "8.5.3"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    nested_path: private_cluster_config.enable_private_nodes
+recommendation: |
+  Add a `private_cluster_config { enable_private_nodes = true ... }` block.
+  Public node IPs widen the attack surface and prevent VPC Service Controls
+  from constraining outbound traffic.
+verification: |
+  `gcloud container clusters describe <name> --format='value(privateClusterConfig.enablePrivateNodes)'`
+  must return `True`.

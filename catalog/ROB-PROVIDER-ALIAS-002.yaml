@@ -1,0 +1,19 @@
+id: ROB-PROVIDER-ALIAS-002
+title: "Provider alias declared but never referenced"
+section: robustness
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: provider_alias_unused
+    description: provider block declares alias but no resource/module references it
+recommendation: |
+  Remove the unused alias, or wire it to the resources/modules that should
+  use it via `provider = google.<alias>` or module-level `providers = { … }`.
+  Unused aliases hide intent and cause confusion when readers look for where
+  a specific region/account is actually used.
+verification: |
+  Run `terraform plan` and confirm the resource graph is unchanged. If you
+  removed the alias, callers that relied on the default provider still work.
+fixtures:
+  - provider_alias_unused

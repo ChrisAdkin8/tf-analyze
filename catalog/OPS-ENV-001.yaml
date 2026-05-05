@@ -1,0 +1,24 @@
+id: OPS-ENV-001
+title: "Prod-scoped resource lacks deletion_protection"
+section: ops
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "2.3"
+patterns:
+  - kind: prod_no_deletion_protection
+    description: A resource in a prod path (or with environment=prod label) is missing deletion_protection=true on a type that supports it
+recommendation: |
+  Production databases, GKE clusters, and storage buckets should be locked
+  against accidental `terraform destroy`. Add `deletion_protection = true`
+  (or `prevent_destroy = true` in a `lifecycle {}` block if the type doesn't
+  expose `deletion_protection`).
+
+  Scope of the check: path containing `prod`, or `labels = { environment =
+  "prod" }` on the resource. Dev/staging environments are excluded by design.
+verification: |
+  Run `terraform plan` after the change and confirm only `+` additions
+  appear — the resource itself is not modified.
+fixtures:
+  - prod_deletion_protection

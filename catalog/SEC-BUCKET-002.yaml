@@ -1,0 +1,24 @@
+id: SEC-BUCKET-002
+title: "GCS bucket missing uniform_bucket_level_access"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "5.2"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_storage_bucket
+    arg: uniform_bucket_level_access
+  - kind: hcl_attr
+    resource: google_storage_bucket
+    path: uniform_bucket_level_access
+    not_equal: true
+recommendation: |
+  Set `uniform_bucket_level_access = true`. ACLs are legacy and should
+  not coexist with IAM bindings.
+verification: |
+  After applying, run `gcloud storage buckets describe gs://<bucket>
+  --format='value(iamConfiguration.uniformBucketLevelAccess.enabled)'`.
+fixtures:
+  - public_bucket

@@ -1,0 +1,41 @@
+id: SEC-SQL-PUBLIC-001
+title: "Cloud SQL instance permits public IPv4"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "6.6"
+patterns:
+  - kind: resource_body_contains
+    resource: google_sql_database_instance
+    regex: 'ipv4_enabled\s*=\s*true'
+    description: |
+      `google_sql_database_instance.settings.ip_configuration.ipv4_enabled = true`
+      assigns the instance a public IPv4 address. Even with
+      `authorized_networks` set, this exposes the SQL endpoint outside
+      the VPC perimeter — any network reachability mistake is now an
+      exfiltration path.
+recommendation: |
+  Set `ipv4_enabled = false` and use Private Service Connect or a
+  Private IP allocation:
+
+      ip_configuration {
+        ipv4_enabled    = false
+        private_network = google_compute_network.vpc.id
+      }
+
+  If a temporary public IP is needed for a one-off migration, gate it
+  behind a `count` driven by a tfvar (`var.allow_public_ip`) and
+  default to false. Document the migration window in CLAUDE.md.
+verification: |
+  After applying, run:
+
+      gcloud sql instances describe <name> \\
+        --format='value(ipAddresses[].type)'
+
+  Should print only `PRIVATE` (no `PRIMARY`).
+related:
+  - STK-CLOUDSQL-002
+fixtures:
+  - cloudsql_public_ip

@@ -1,0 +1,43 @@
+id: OPS-LABELS-001
+title: "GCP resource missing labels block"
+section: ops
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: google_compute_instance
+    arg: labels
+  - kind: resource_missing_arg
+    resource: google_storage_bucket
+    arg: labels
+  - kind: resource_missing_arg
+    resource: google_sql_database_instance
+    arg: settings.user_labels
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    arg: resource_labels
+  - kind: resource_missing_arg
+    resource: google_compute_disk
+    arg: labels
+  - kind: resource_missing_arg
+    resource: google_pubsub_topic
+    arg: labels
+  - kind: resource_missing_arg
+    resource: google_cloud_run_service
+    arg: metadata.labels
+  - kind: resource_missing_arg
+    resource: google_bigquery_dataset
+    arg: labels
+recommendation: |
+  Add a `labels` (or equivalent) block to every GCP resource that supports
+  it. At minimum include `environment` and `managed_by = "terraform"`.
+  Labels are required for cost allocation, compliance dashboards, and
+  automated cleanup policies. Use a shared `locals` block or variable to
+  keep labels consistent across the module.
+verification: |
+  Run `tf-analyze` in mode:verify-fixed and confirm OPS-LABELS-001 is
+  RESOLVED. Or run `gcloud asset search-all-resources --query="NOT labels:environment"`
+  to find unlabeled resources in the project.
+fixtures:
+  - missing_labels

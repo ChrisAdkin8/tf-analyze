@@ -1,0 +1,18 @@
+id: ROB-BACKEND-001
+title: "Inconsistent backend configuration across root modules"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: backend_inconsistency
+    description: multiple terraform backend blocks with different types or missing key attributes
+recommendation: |
+  Ensure all root modules in the repo use the same backend type and
+  consistent naming patterns for bucket/key/prefix. Mixed backends
+  (e.g., one module using S3, another using GCS) make state management
+  and disaster recovery harder.
+verification: |
+  Grep for all `backend` blocks and compare their configurations.
+fixtures:
+  - inconsistent_backend

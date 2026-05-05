@@ -1,0 +1,32 @@
+id: SEC-IAM-001
+title: "Project-level binding of overly broad role"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.6"
+patterns:
+  - kind: resource_arg
+    resource: google_project_iam_member
+    arg: role
+    regex: "^roles/(owner|editor|admin|iam\\.securityAdmin|resourcemanager\\.organizationAdmin|resourcemanager\\.folderAdmin|resourcemanager\\.projectAdmin|compute\\.admin|storage\\.admin|container\\.admin|cloudsql\\.admin|bigquery\\.admin|pubsub\\.admin|secretmanager\\.admin|dataproc\\.admin|appengine\\.appAdmin)$"
+  - kind: resource_arg
+    resource: google_project_iam_binding
+    arg: role
+    regex: "^roles/(owner|editor|admin|iam\\.securityAdmin|resourcemanager\\.organizationAdmin|resourcemanager\\.folderAdmin|resourcemanager\\.projectAdmin|compute\\.admin|storage\\.admin|container\\.admin|cloudsql\\.admin|bigquery\\.admin|pubsub\\.admin|secretmanager\\.admin|dataproc\\.admin|appengine\\.appAdmin)$"
+recommendation: |
+  Replace the broad role with a narrowly-scoped resource-level binding.
+  See Appendix A for the IAM compatibility matrix — not every service
+  exposes a `_iam_member` resource. Where resource-level binding is not
+  possible (Cloud Workflows, Cloud Build, Document AI, Vertex AI, Cloud
+  SQL), apply IAM Conditions on the project-level binding instead.
+verification: |
+  Run `terraform plan` and confirm the broad project-level binding is
+  destroyed and the narrow binding is created. Re-run `tf-analyze` in
+  mode:verify-fixed and confirm SEC-IAM-001 is RESOLVED.
+escalation:
+  - condition: "member matches '^(allUsers|allAuthenticatedUsers)$'"
+    new_urgency: CRITICAL
+fixtures:
+  - iam_too_broad

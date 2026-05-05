@@ -1,0 +1,20 @@
+id: SEC-SENSITIVE-002
+title: "Sensitive marker dropped at module boundary"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: cross_module
+    description: |
+      A sensitive variable in a parent module is passed to a child
+      module input whose corresponding variable is NOT marked sensitive.
+recommendation: |
+  Add `sensitive = true` to the child module's variable declaration.
+  Sensitivity does not propagate automatically across module boundaries
+  — each variable in each module must be marked independently.
+verification: |
+  Run `terraform plan` in the parent and confirm the value is shown
+  as `<sensitive>` in any module output that references the variable.
+fixtures:
+  - sensitive_leak

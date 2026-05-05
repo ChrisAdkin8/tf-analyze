@@ -1,0 +1,60 @@
+id: SEC-EPHEMERAL-001
+title: "Vault secret data source should use ephemeral on Terraform 1.10+"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+applies_when:
+  min_terraform: "1.10"
+patterns:
+  - kind: data_source_present
+    data_source: vault_kv_secret_v2
+    description: |
+      `data "vault_kv_secret_v2"` persists the secret value into Terraform
+      state. On Terraform 1.10+ the `ephemeral` block reads the secret
+      without committing it to state, eliminating an entire class of state
+      exposure (state file in object storage, state drift via
+      `terraform show`, accidental git commit of plan output).
+recommendation: |
+  If `required_version` permits Terraform 1.10 or later, replace:
+
+      data "vault_kv_secret_v2" "creds" {
+        mount = "secret"
+        name  = "app/db"
+      }
+
+      resource "google_sql_user" "app" {
+        password = data.vault_kv_secret_v2.creds.data["password"]
+        ...
+      }
+
+  with:
+
+      ephemeral "vault_kv_secret_v2" "creds" {
+        mount = "secret"
+        name  = "app/db"
+      }
+
+      resource "google_sql_user" "app" {
+        password = ephemeral.vault_kv_secret_v2.creds.data["password"]
+        ...
+      }
+
+  The ephemeral value is available during plan/apply but never written
+  to state. Combine with `write_only` arguments where supported (see
+  the Vault and SQL provider docs) so the value also doesn't appear in
+  the apply diff.
+
+  If you cannot upgrade past TF 1.9, ensure `sensitive = true` on every
+  variable and output that touches the secret, and audit the state
+  backend for encryption at rest plus restrictive IAM (SEC-STATE-001).
+verification: |
+  After migration, run `terraform plan` and confirm the secret value does
+  not appear in the proposed state JSON. `terraform show -json` after
+  apply should not contain the secret string anywhere under
+  `values.root_module.resources[*].values`.
+related:
+  - SEC-SENSITIVE-001
+  - SEC-STATE-001
+fixtures:
+  - vault_data_source_no_ephemeral

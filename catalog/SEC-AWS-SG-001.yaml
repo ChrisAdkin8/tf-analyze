@@ -1,0 +1,28 @@
+id: SEC-AWS-SG-001
+title: "Security group allows ingress from 0.0.0.0/0"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+escalation:
+  - condition: "port 22 or 3389"
+    urgency: CRITICAL
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'cidr_blocks\s*=\s*\["0\.0\.0\.0/0"\]'
+    description: security group ingress rule open to all IPv4
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'ipv6_cidr_blocks\s*=\s*\["::/0"\]'
+    description: security group ingress rule open to all IPv6
+recommendation: |
+  Restrict `cidr_blocks` to the specific IP ranges that need access.
+  For SSH/RDP, use a bastion host or AWS Systems Manager Session Manager
+  instead of opening ports to the internet. For web traffic, place an
+  ALB/NLB in front with a restrictive security group.
+verification: |
+  Run `aws ec2 describe-security-groups --group-ids <sg-id>` and confirm
+  no ingress rules have `0.0.0.0/0` or `::/0` as source.
+fixtures:
+  - aws_sg_open

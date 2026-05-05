@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+docs/sentinel/
+/tmp/
+*.sarif
+*.html
+!reports/*.html

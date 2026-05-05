@@ -1,0 +1,21 @@
+id: SEC-AZURE-MI-001
+title: "Azure user-assigned identity grants without explicit scope"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: stub
+patterns:
+  - kind: resource_present
+    resource: azurerm_user_assigned_identity
+recommendation: |
+  TODO: stub. Cross-reference `azurerm_user_assigned_identity` blocks
+  with their `azurerm_role_assignment` consumers. Flag identities that
+  have no role_assignment at all (orphan identity — likely dead code)
+  AND identities with role_assignments at subscription scope (covered
+  separately by SEC-AZURE-RBAC-001).
+
+  Will likely be implemented as a graph_check function once the Azure
+  resource volume in the corpus justifies the engineering cost.
+verification: |
+  TODO
+fixtures: []

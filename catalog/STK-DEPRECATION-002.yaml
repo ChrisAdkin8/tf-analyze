@@ -1,0 +1,35 @@
+id: STK-DEPRECATION-002
+title: "Deprecated data source: data.template_file"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: deprecated_datasource
+    types: "template_file"
+    description: data.template_file has been deprecated since Terraform 0.12 in favour of templatefile()
+recommendation: |
+  Replace with the built-in `templatefile()` function:
+
+  ```hcl
+  # Before
+  data "template_file" "init" {
+    template = file("${path.module}/init.tpl")
+    vars     = { name = var.name }
+  }
+
+  # After
+  locals {
+    init = templatefile("${path.module}/init.tpl", { name = var.name })
+  }
+  ```
+
+  `templatefile()` is evaluated at plan time natively — no provider
+  dependency, no resource graph node, and error messages point at the real
+  source line instead of a synthetic data-source.
+verification: |
+  Run `terraform plan` and confirm the rendered value is identical
+  (`diff <(terraform console <<< 'data.template_file.init.rendered')
+  <(terraform console <<< 'local.init')`).
+fixtures:
+  - deprecated_template_file

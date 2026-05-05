@@ -1,0 +1,26 @@
+id: SEC-AWS-IAM-001
+title: "IAM policy with wildcard resource"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: '"Resource"\s*:\s*"\*"'
+    description: IAM policy document with Resource = "*"
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'resources\s*=\s*\["\*"\]'
+    description: aws_iam_policy_document statement with resources = ["*"]
+recommendation: |
+  Narrow the `Resource` field to the specific ARN(s) the policy needs.
+  Wildcard resources grant the actions to every resource in the account,
+  violating least-privilege. Use `arn:aws:s3:::my-bucket/*` instead of
+  `*` for S3 access, `arn:aws:dynamodb:*:*:table/my-table` for DynamoDB,
+  etc.
+verification: |
+  Run `terraform plan` and verify the policy document in the plan output
+  has no `"Resource": "*"` statements.
+fixtures:
+  - aws_iam_wildcard

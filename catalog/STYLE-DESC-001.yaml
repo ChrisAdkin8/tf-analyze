@@ -1,0 +1,22 @@
+id: STYLE-DESC-001
+title: "Variable or output missing description"
+section: style
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: variable_missing_description
+    description: variable block without a description argument
+  - kind: output_missing_description
+    description: output block without a description argument
+recommendation: |
+  Add a `description` argument to every variable and output. Descriptions
+  populate `terraform-docs` output, IDE tooltips, and the Terraform
+  registry module page. Without them, consumers must read the source to
+  understand what a variable controls or an output provides.
+verification: |
+  Run `grep -rn 'variable\|output' *.tf` and confirm each block has a
+  `description` line. Or run `terraform-docs markdown .` and check for
+  blank description columns.
+fixtures:
+  - missing_description

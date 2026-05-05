@@ -1,0 +1,25 @@
+id: ROB-LIFECYCLE-002
+title: "Stateful resource has force_destroy=true"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: google_storage_bucket
+    arg: force_destroy
+    regex: "^true$"
+  - kind: resource_arg
+    resource: google_project
+    arg: force_destroy
+    regex: "^true$"
+recommendation: |
+  Set `force_destroy = false` (or remove the argument). With force_destroy
+  enabled, a `terraform destroy` will silently delete every object in the
+  bucket without asking, even if those objects were uploaded by an
+  application long after the bucket was created.
+verification: |
+  Run `terraform plan` and confirm no diff. Manually upload an object
+  and run `terraform destroy` — it should fail with "bucket is not empty".
+fixtures:
+  - missing_prevent_destroy

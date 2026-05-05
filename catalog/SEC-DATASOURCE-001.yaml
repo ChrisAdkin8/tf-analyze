@@ -1,0 +1,29 @@
+id: SEC-DATASOURCE-001
+title: "External or HTTP data source executes at plan time"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'data\s+"external"\s+"[\w-]+"\s*\{'
+    description: data.external runs arbitrary shell scripts at plan time
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'data\s+"http"\s+"[\w-]+"\s*\{'
+    description: data.http fetches from URLs at plan time
+recommendation: |
+  `data.external` runs an arbitrary program and trusts its JSON stdout.
+  `data.http` fetches a URL at plan time, which may leak plan context
+  or introduce non-determinism. Review each usage:
+  - Can the external script be replaced with a provider data source?
+  - Is the HTTP endpoint authenticated and pinned to a known host?
+  - Are results used in security-sensitive contexts (IAM, secrets)?
+  If the usage is intentional and reviewed, suppress with
+  `# tf-analyze:ignore SEC-DATASOURCE-001`.
+verification: |
+  Grep for `data "external"` and `data "http"` blocks. Confirm each is
+  documented with a justification or replaced with a native alternative.
+fixtures:
+  - dangerous_datasource

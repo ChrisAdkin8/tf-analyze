@@ -1,0 +1,25 @@
+id: ROB-REMOTESTATE-001
+title: "terraform_remote_state data source couples modules implicitly"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: remote_state_present
+    description: data "terraform_remote_state" couples this config to another root's state layout
+recommendation: |
+  Replace `data.terraform_remote_state` with an explicit interface — either
+  module outputs passed via `inputs`, or provider data sources that read the
+  underlying resource by attribute (e.g., `data.google_storage_bucket.x`).
+
+  terraform_remote_state has two failure modes that bite in production:
+   1. A rename of the upstream output (non-breaking at its producer) becomes
+      a plan-time failure here, with a message pointing nowhere useful.
+   2. Callers need read access to the upstream state bucket, which
+      over-scopes IAM (the bucket contains secrets in .tfstate attributes).
+verification: |
+  Grep for `data "terraform_remote_state"` under the scanned path — zero hits.
+  If the replacement uses provider data sources, run `terraform plan` and
+  confirm the same values resolve.
+fixtures:
+  - remote_state_coupling

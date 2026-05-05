@@ -1,0 +1,38 @@
+id: ROB-CHECK-001
+title: "TF 1.5+ check block missing assert"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: check_block_missing_assert
+    description: |
+      A `check "name" {}` block contains no `assert {}` body. Terraform
+      treats this as valid HCL and silently runs the block as a no-op
+      on every plan/apply — the most common failure mode is an
+      assertion author left a stub block when they intended to write a
+      condition and never came back to it.
+recommendation: |
+  Either delete the block, or add at least one `assert` body:
+
+      check "instance_count_matches_quota" {
+        data "google_compute_project_quota" "instances" { ... }
+
+        assert {
+          condition     = data.google_compute_project_quota.instances.usage <
+                          data.google_compute_project_quota.instances.limit
+          error_message = "Compute instance quota nearly exhausted."
+        }
+      }
+
+  Empty checks should be removed from version control rather than
+  retained as documentation — comments are a better fit for that.
+verification: |
+  After applying the fix, `terraform validate` should still pass and
+  `terraform plan` shows the assert running. Re-run tf-analyze;
+  ROB-CHECK-001 should not fire.
+related:
+  - ROB-VALIDATION-001
+  - ROB-PRECONDITION-001
+fixtures:
+  - check_block_no_assert

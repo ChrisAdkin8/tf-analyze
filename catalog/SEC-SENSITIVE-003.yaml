@@ -1,0 +1,23 @@
+id: SEC-SENSITIVE-003
+title: "Sensitive variable passed to templatefile()"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: templatefile_sensitive_leak
+    description: templatefile() call whose argument map references a sensitive variable, rendering the secret into a non-sensitive string
+recommendation: |
+  Avoid passing sensitive variables through `templatefile()`. The
+  rendered output is a plain string that Terraform does NOT mark as
+  sensitive, so it appears in plans, state, and logs.
+
+  Instead, use a `local` to construct the sensitive portion separately
+  and mark it `sensitive = true`, or use `nonsensitive()` explicitly
+  to acknowledge the exposure.
+verification: |
+  Run `terraform plan` and check that the rendered template value
+  shows as `(sensitive value)` in the plan output. If it shows in
+  cleartext, the leak is confirmed.
+fixtures:
+  - sensitive_templatefile

@@ -1,0 +1,41 @@
+id: STK-DEPRECATION-001
+title: "Resource uses deprecated argument"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  # google provider ≥6.0 deprecations
+  - kind: resource_arg
+    resource: google_container_cluster
+    arg: enable_legacy_abac
+    regex: ".*"
+    description: enable_legacy_abac is deprecated; remove it (ABAC disabled by default)
+  - kind: resource_arg
+    resource: google_container_cluster
+    arg: logging_service
+    regex: ".*"
+    description: logging_service is deprecated; use logging_config block instead
+  - kind: resource_arg
+    resource: google_container_cluster
+    arg: monitoring_service
+    regex: ".*"
+    description: monitoring_service is deprecated; use monitoring_config block instead
+  - kind: resource_arg
+    resource: google_compute_instance
+    arg: metadata_startup_script
+    regex: ".*"
+    description: metadata_startup_script is deprecated; use metadata.startup-script instead
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'resource\s+"google_compute_address".*\n.*\baddress\b'
+    description: google_compute_address.address argument renamed in v6
+recommendation: |
+  Replace deprecated arguments with their successors before the next major
+  provider version removes them. Check the Google provider changelog for
+  migration guidance.
+verification: |
+  Run `terraform validate` and `terraform plan` — no deprecation warnings
+  should appear.
+fixtures:
+  - deprecated_attributes

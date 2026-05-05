@@ -1,0 +1,37 @@
+id: SEC-IAM-003
+title: "Member has both project-level and resource-level IAM grants"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "1.6"
+patterns:
+  - kind: graph_check
+    function: iam_member_breadth
+    description: |
+      A member (service account, group, user) holds a `google_project_iam_*`
+      binding AND one or more resource-level bindings (bucket, topic, KMS
+      key, etc.). The project-level grant supersedes the resource-level
+      scoping, making the resource-level binding pointless and signalling
+      that the project-level role is broader than intended.
+recommendation: |
+  Remove the project-level binding. Keep the resource-level bindings —
+  they encode the actual access boundary. If you genuinely need the
+  member to span multiple resources of the same type, prefer one
+  resource-level binding per target rather than collapsing to the
+  project level (which also covers resources you didn't intend).
+
+  If the project-level grant is unavoidable (e.g. a baseline role like
+  `roles/monitoring.viewer`), delete the redundant resource-level
+  binding and document why the broader scope is required.
+verification: |
+  After applying, the member should appear in either project IAM or
+  resource IAM but not both. `gcloud projects get-iam-policy <project>`
+  + `gcloud storage buckets get-iam-policy gs://<bucket>` (or the
+  equivalent for the resource type) should not show overlap.
+related:
+  - SEC-IAM-001
+  - SEC-IAM-002
+fixtures:
+  - iam_member_breadth

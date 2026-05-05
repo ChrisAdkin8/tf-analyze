@@ -1,0 +1,21 @@
+id: SEC-NETWORK-002
+title: "RDP (tcp:3389) exposed to 0.0.0.0/0"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: stub
+cis:
+  - "3.7"
+patterns:
+  - kind: hcl_attr
+    resource: google_compute_firewall
+    path: source_ranges
+    description: |
+      Stub. Detection requires inspecting allow blocks for tcp:3389 and
+      checking source_ranges contains 0.0.0.0/0.
+recommendation: |
+  Restrict `source_ranges` to corporate CIDRs or use IAP TCP forwarding
+  for RDP access. Never expose tcp:3389 to the public internet.
+verification: |
+  `gcloud compute firewall-rules list --filter='allowed.ports:3389 AND sourceRanges:0.0.0.0/0'`
+  should return zero rows.

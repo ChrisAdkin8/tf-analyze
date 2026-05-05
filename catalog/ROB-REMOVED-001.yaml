@@ -1,0 +1,29 @@
+id: ROB-REMOVED-001
+title: "Stale removed block may need cleanup"
+section: robustness
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: removed_block_present
+    description: |
+      Terraform 1.7+ `removed` block detected — verify the destroy/forget has
+      been applied and the block can be removed.
+recommendation: |
+  Once `terraform apply` has executed the `removed` block (destroying or
+  forgetting the resource), delete the block to keep the configuration
+  clean. Stale `removed` blocks accumulate noise the same way stale `moved`
+  blocks do, and they are a warning sign that a refactor was started but
+  never finished.
+
+  If the intent was to *forget* the resource (keep it in the cloud, drop
+  it from state), confirm `lifecycle { destroy = false }` was set. If the
+  intent was to *destroy*, the default `destroy = true` is correct.
+verification: |
+  Run `terraform plan` — if the plan shows no changes related to the
+  removed address, the block is safe to delete. After deletion, re-run
+  `terraform plan` to confirm still-no-changes.
+related:
+  - ROB-MOVED-001
+fixtures:
+  - stale_removed_block

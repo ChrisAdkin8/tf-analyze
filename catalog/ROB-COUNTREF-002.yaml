@@ -1,0 +1,21 @@
+id: ROB-COUNTREF-002
+title: "Unguarded indexed reference to count = length(...) resource"
+section: robustness
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: count_length_unguarded
+    description: Resource created with count = length(var.x), and another resource references [N] without length/try guard — off-by-one on removal
+recommendation: |
+  `count = length(var.x)` makes the resource keyed by position. Any
+  reference like `aws_instance.web[2].id` breaks when an earlier element is
+  removed, because the third slot no longer exists.
+
+  Prefer `for_each = toset(var.x)` (or a map) so references are name-keyed,
+  or guard index references with `length(aws_instance.web) > 2 ? aws_instance.web[2].id : null`.
+verification: |
+  Remove an element from `var.x`, run `terraform plan`, confirm Terraform
+  does not produce spurious destroy/create plans for unrelated elements.
+fixtures:
+  - count_length_unguarded

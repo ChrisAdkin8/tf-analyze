@@ -1,0 +1,34 @@
+id: ROB-PRECONDITION-001
+title: "Precondition or postcondition missing error_message"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: precondition_missing_error_message
+    description: |
+      A `precondition` or `postcondition` block lacks `error_message`.
+      When the assertion fails Terraform emits a generic "Module output
+      precondition failed." with the source line as the only context —
+      operators on call have to grep the file to figure out what went
+      wrong.
+recommendation: |
+  Add a descriptive `error_message`:
+
+      precondition {
+        condition     = var.environment != "prod" || var.deletion_protection
+        error_message = "Production resources must enable deletion_protection."
+      }
+
+  The message should name the variable / invariant being protected
+  and what the operator should change. Keep it under 200 chars so
+  Terraform doesn't truncate in CLI output.
+verification: |
+  Trigger the precondition (e.g. by setting variables that would fail
+  the assertion) and confirm the error message appears verbatim in
+  `terraform plan` output. Re-run tf-analyze; the rule should not fire.
+related:
+  - ROB-VALIDATION-001
+  - ROB-CHECK-001
+fixtures:
+  - precondition_no_error_message

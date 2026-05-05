@@ -1,0 +1,19 @@
+id: STK-BIGQUERY-001
+title: "BigQuery dataset missing default CMEK"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: stub
+cis:
+  - "7.3"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_bigquery_dataset
+    nested_path: default_encryption_configuration.kms_key_name
+recommendation: |
+  Add `default_encryption_configuration { kms_key_name = <kms-key> }`
+  on every dataset. Without this, new tables fall back to Google-managed
+  keys and CIS GCP 7.2/7.3 are not satisfied.
+verification: |
+  `bq show --format=prettyjson <dataset> | jq '.defaultEncryptionConfiguration'`
+  must return a key reference.

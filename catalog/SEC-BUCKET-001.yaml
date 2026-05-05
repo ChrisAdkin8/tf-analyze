@@ -1,0 +1,26 @@
+id: SEC-BUCKET-001
+title: "GCS bucket missing public_access_prevention=enforced"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "5.1"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_storage_bucket
+    arg: public_access_prevention
+  - kind: hcl_attr
+    resource: google_storage_bucket
+    path: public_access_prevention
+    not_equal: "enforced"
+recommendation: |
+  Add `public_access_prevention = "enforced"` to every bucket. This is
+  a defense-in-depth control that blocks accidental public IAM grants
+  even if SEC-IAM-002 is bypassed.
+verification: |
+  After applying, run `gcloud storage buckets describe gs://<bucket>
+  --format='value(iamConfiguration.publicAccessPrevention)'` and
+  confirm the value is `enforced`.
+fixtures:
+  - public_bucket

@@ -1,0 +1,20 @@
+id: ROB-COUNT-002
+title: "Module mixes count-based and for_each-based resources"
+section: robustness
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: count_foreach_mix
+    description: Same module directory uses both count and for_each on different resources — forces consumers to learn both splat and dynamic reference forms
+recommendation: |
+  Pick one iteration form per module. `for_each` is almost always the right
+  answer (stable keys, better error messages, cleaner module output shape).
+  Migrate `count`-based resources to `for_each = toset(...)` so consumers
+  don't have to remember which form each output uses.
+verification: |
+  After the refactor, `terraform plan` diff should be zero for the
+  unchanged resources (use `moved {}` blocks to teach Terraform that
+  `aws_instance.web[0]` is now `aws_instance.web["primary"]`).
+fixtures:
+  - count_foreach_mix

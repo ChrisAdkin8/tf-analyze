@@ -1,0 +1,30 @@
+id: SEC-PROVISIONER-001
+title: "Provisioner block used for shell execution"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'provisioner\s+"local-exec"'
+    description: local-exec provisioner runs arbitrary shell commands
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'provisioner\s+"remote-exec"'
+    description: remote-exec provisioner runs commands on remote hosts
+recommendation: |
+  Provisioners are a last resort. Replace with provider-native resources
+  where possible:
+  - `local-exec` for scripts → `terraform_data` with `provisioner` only
+    when no provider resource exists, or use `null_resource` with explicit
+    `triggers` to control re-execution.
+  - `remote-exec` → cloud-init (`user_data`), Packer images, or
+    configuration management (Ansible, Chef, Puppet).
+  If a provisioner is genuinely needed, document the justification with
+  an inline `# tf-analyze:ignore SEC-PROVISIONER-001` comment.
+verification: |
+  Search for `provisioner` blocks in the codebase. Confirm each remaining
+  provisioner is documented with a justification comment or suppression.
+fixtures:
+  - provisioner_usage

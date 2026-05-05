@@ -1,0 +1,28 @@
+id: CI-TEST-001
+title: "Module has no Terraform test files"
+section: cicd
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: module_missing_tests
+    description: module directory contains .tf files but no .tftest.hcl files (Terraform native test framework)
+recommendation: |
+  Add at least one `.tftest.hcl` file covering the module's primary
+  resource creation path. Terraform native tests (1.6+) validate both
+  plan and apply without external tooling.
+
+  Example:
+  ```hcl
+  run "creates_bucket" {
+    command = plan
+    assert {
+      condition     = google_storage_bucket.main.location == "US"
+      error_message = "bucket location must be US"
+    }
+  }
+  ```
+verification: |
+  Run `terraform test` in the module directory.
+fixtures:
+  - missing_tests

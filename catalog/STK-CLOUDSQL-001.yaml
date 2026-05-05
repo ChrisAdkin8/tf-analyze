@@ -1,0 +1,27 @@
+id: STK-CLOUDSQL-001
+title: "Cloud SQL instance missing backup_configuration"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "6.4"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_sql_database_instance
+    nested_path: settings.backup_configuration.enabled
+  - kind: hcl_attr
+    resource: google_sql_database_instance
+    path: settings.backup_configuration.enabled
+    not_equal: true
+recommendation: |
+  Add a `settings { backup_configuration { enabled = true } }` block.
+  Without backups, a destructive query or instance loss is unrecoverable.
+  Also set `point_in_time_recovery_enabled = true` for Postgres / MySQL.
+verification: |
+  Run `gcloud sql instances describe <instance> --format='value(settings.backupConfiguration.enabled)'`.
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: CRITICAL
+fixtures:
+  - cloudsql_no_backup

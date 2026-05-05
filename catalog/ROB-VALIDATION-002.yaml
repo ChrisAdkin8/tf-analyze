@@ -1,0 +1,19 @@
+id: ROB-VALIDATION-002
+title: "Variable typed as bare any"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: variable_type
+    type_regex: "^any$"
+recommendation: |
+  Replace `type = any` with a concrete type. Use `string`, `number`, `bool`,
+  `list(string)`, `map(string)`, or `object({...})`. The `any` type defers
+  type checking until plan and produces opaque downstream errors.
+verification: |
+  Run `terraform validate` and confirm no warning. Pass a deliberately
+  wrong-typed value via `-var` and confirm Terraform rejects it at parse
+  time.
+fixtures:
+  - no_validation_blocks

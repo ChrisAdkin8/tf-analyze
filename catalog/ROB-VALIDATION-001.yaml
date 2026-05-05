@@ -1,0 +1,19 @@
+id: ROB-VALIDATION-001
+title: "Variable accepts dangerous input without validation block"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: variable_missing_validation
+    name_regex: "^(region|location|cron|schedule|cidr|machine_type|disk_type|environment|stage)$"
+recommendation: |
+  Add a `validation { condition = ... error_message = ... }` block. For
+  region/location use a regex that matches the cloud provider's region
+  format (e.g., `^[a-z]+-[a-z]+[0-9]+$` for GCP). For cron, validate the
+  5-field shape. For environment, restrict to `["dev", "staging", "prod"]`.
+verification: |
+  Run `terraform plan -var=<name>=<bad-value>` and confirm Terraform
+  rejects the input with the validation error message.
+fixtures:
+  - no_validation_blocks

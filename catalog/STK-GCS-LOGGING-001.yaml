@@ -1,0 +1,38 @@
+id: STK-GCS-LOGGING-001
+title: "GCS bucket logging target lacks public_access_prevention"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.1"
+patterns:
+  - kind: graph_check
+    function: logging_target_public
+    description: |
+      A `google_storage_bucket` references another bucket via
+      `logging.log_bucket = google_storage_bucket.<x>.name`, but that
+      target bucket does not set `public_access_prevention = "enforced"`.
+      Logging targets accumulate access records for every read/write on
+      the source bucket; if the target is publicly readable, an attacker
+      can enumerate which objects exist and how often they're read.
+recommendation: |
+  Add `public_access_prevention = "enforced"` to the target bucket
+  block. Also confirm `uniform_bucket_level_access = true` and that no
+  IAM binding grants `allUsers` or `allAuthenticatedUsers` access. If
+  the source and target bucket have different blast-radius requirements
+  (e.g., source is internal, target is shared with auditors), document
+  the rationale in a comment near the `logging` block so the next
+  reviewer doesn't downgrade it.
+verification: |
+  After applying the fix, run:
+
+      gcloud storage buckets describe gs://<target> --format='value(publicAccessPrevention)'
+
+  and confirm it prints `enforced`. Re-run tf-analyze; STK-GCS-LOGGING-001
+  should not fire.
+related:
+  - SEC-BUCKET-001
+  - SEC-BUCKET-002
+fixtures:
+  - logging_target_public

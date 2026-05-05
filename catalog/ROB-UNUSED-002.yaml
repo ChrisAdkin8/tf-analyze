@@ -1,0 +1,18 @@
+id: ROB-UNUSED-002
+title: "Declared output is never consumed by any caller"
+section: robustness
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: output_unused
+    description: output declared in a child module but never referenced as module.X.output_name by any caller in the repo
+recommendation: |
+  Remove the unused output if no external consumer (CI scripts, other repos)
+  depends on it. Unused outputs clutter `terraform output` and may expose
+  sensitive values unnecessarily.
+verification: |
+  Run `terraform validate` after removing the output. Search for any
+  external references (CI scripts, other repos) before deleting.
+fixtures:
+  - unused_variable

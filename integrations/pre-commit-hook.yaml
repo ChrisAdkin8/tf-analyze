@@ -1,0 +1,53 @@
+# tf-analyze as a pre-commit hook
+#
+# Add to your repo's .pre-commit-config.yaml under `repos:`:
+#
+#   repos:
+#     - repo: local
+#       hooks:
+#         - id: tf-analyze
+#           name: tf-analyze (diff mode)
+#           entry: bash -c 'python3 "${TF_ANALYZE_SKILL_ROOT:-$HOME/.claude/skills/tf-analyze}/scripts/detect.py" "$@"' --
+#           language: system
+#           files: \.tf$
+#           pass_filenames: false
+#           args:
+#             - --target=.
+#             - --mode=diff
+#             - --fail-on=HIGH
+#             - --format=text
+#
+# Why the bash wrapper — pre-commit's `entry:` is split into argv as a
+# fixed string. Without the wrapper there's no way to expand env vars,
+# so the path to the skill must be hardcoded. Using `${TF_ANALYZE_SKILL_ROOT}`
+# lets users install the skill anywhere; the fallback is the standard
+# Claude Code location.
+#
+# Override per-repo: export TF_ANALYZE_SKILL_ROOT=/opt/skills/tf-analyze
+# (e.g. in your shell rc file, or a CI secret).
+#
+# Diff mode only scans .tf files changed vs the default base branch, so
+# the hook stays fast on large repos. --fail-on HIGH blocks commits with
+# HIGH or CRITICAL findings; lower to MEDIUM for stricter enforcement,
+# raise to CRITICAL to allow HIGH through.
+#
+# Why pass_filenames: false — pre-commit would otherwise pass the staged
+# .tf paths as positional args, which detect.py rejects (it takes
+# --target only). The hook scopes itself via --mode=diff.
+#
+# Why language: system — the shell wrapper resolves python3 from PATH
+# without pre-commit creating its own virtualenv. Pre-requisites: Python
+# 3.10+. No pip dependencies — detect.py is stdlib-only. Hook cost on a
+# 5k-file repo: <2s cold, <1s warm.
+
+- id: tf-analyze
+  name: tf-analyze (diff mode)
+  entry: bash -c 'python3 "${TF_ANALYZE_SKILL_ROOT:-$HOME/.claude/skills/tf-analyze}/scripts/detect.py" "$@"' --
+  language: system
+  files: \.tf$
+  pass_filenames: false
+  args:
+    - --target=.
+    - --mode=diff
+    - --fail-on=HIGH
+    - --format=text

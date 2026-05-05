@@ -1,0 +1,22 @@
+id: SEC-NETWORK-003
+title: "VPC subnet missing flow logs"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: stub
+cis:
+  - "3.8"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_compute_subnetwork
+    nested_path: log_config.aggregation_interval
+recommendation: |
+  Enable VPC Flow Logs on every subnet:
+    log_config {
+      aggregation_interval = "INTERVAL_5_SEC"
+      flow_sampling        = 0.5
+      metadata             = "INCLUDE_ALL_METADATA"
+    }
+verification: |
+  `gcloud compute networks subnets list --format='value(name,enableFlowLogs)'`
+  must show all subnets enabled.

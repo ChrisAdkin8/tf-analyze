@@ -1,0 +1,25 @@
+id: ROB-FOREACH-001
+title: "for_each over list instead of map/set"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: foreach_over_list
+    description: for_each iterates over a list/tuple literal (not toset/map) — order-based keys, destructive on reorder
+recommendation: |
+  `for_each` must iterate over a `map` or a `set`. Passing a list silently
+  works only because Terraform errors late — and when elements are removed
+  or reordered, instances are destroyed and recreated because their keys are
+  position-dependent.
+
+  ```hcl
+  for_each = toset(var.names)         # set (stable keys)
+  # or
+  for_each = { for n in var.names : n => {} }   # map with stable keys
+  ```
+verification: |
+  Run `terraform plan` after the change — if stable keys were already in use,
+  diff should be zero.
+fixtures:
+  - foreach_list_antipattern

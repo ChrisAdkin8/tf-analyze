@@ -1,0 +1,25 @@
+id: ROB-COUNT-001
+title: "Boolean count pattern instead of for_each"
+section: robustness
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: count_bool_pattern
+    description: "count = var.x ? 1 : 0 should be migrated to for_each"
+recommendation: |
+  Replace `count = var.enabled ? 1 : 0` with:
+  ```hcl
+  for_each = var.enabled ? toset(["this"]) : toset([])
+  ```
+  The `for_each` approach produces map-keyed instances (`resource["this"]`)
+  instead of list-indexed ones (`resource[0]`). This eliminates fragile
+  `[0]` references, avoids off-by-one errors when the condition changes,
+  and makes `terraform plan` output clearer. The `one()` function can
+  simplify references: `one(resource.name[*].id)`.
+verification: |
+  Grep for `count\s*=.*\?\s*1\s*:\s*0` in .tf files. Confirm all
+  conditional resources use for_each instead. Re-run tf-analyze and
+  confirm ROB-COUNT-001 is RESOLVED.
+fixtures:
+  - count_bool_pattern
