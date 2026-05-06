@@ -1,0 +1,32 @@
+id: SEC-AZURE-STORAGE-002
+title: "Azure storage account allows public blob access"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: azurerm_storage_account
+    arg: allow_blob_public_access
+    regex: '^true$'
+  - kind: resource_arg
+    resource: azurerm_storage_account
+    arg: allow_nested_items_to_be_public
+    regex: '^true$'
+recommendation: |
+  Set `allow_nested_items_to_be_public = false` (provider v3+). Public blob
+  access allows anonymous reads of any blob in any container with public access
+  — the most common cause of cloud data breaches.
+
+      resource "azurerm_storage_account" "example" {
+        # ...
+        allow_nested_items_to_be_public = false
+      }
+verification: |
+  After applying, confirm with:
+
+      az storage account show --name <name> --query allowBlobPublicAccess
+
+  The command should return `false`.
+fixtures:
+  - azure_storage_public_blob

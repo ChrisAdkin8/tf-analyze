@@ -1,0 +1,50 @@
+id: SEC-AZURE-WEBAPP-001
+title: "Azure App Service / Function App missing IP access restrictions"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_app_service
+    arg: site_config
+    nested_path: site_config.ip_restriction
+  - kind: resource_missing_arg
+    resource: azurerm_linux_web_app
+    arg: site_config
+    nested_path: site_config.ip_restriction
+  - kind: resource_missing_arg
+    resource: azurerm_windows_web_app
+    arg: site_config
+    nested_path: site_config.ip_restriction
+recommendation: |
+  Add `ip_restriction` and `scm_ip_restriction` blocks inside `site_config` to
+  limit access to known CIDRs or service tags. Without this, the web app
+  management plane is reachable from any IP.
+
+      resource "azurerm_linux_web_app" "example" {
+        # ...
+        site_config {
+          ip_restriction {
+            ip_address = "203.0.113.0/24"
+            name       = "office-network"
+            priority   = 100
+            action     = "Allow"
+          }
+          scm_ip_restriction {
+            ip_address = "203.0.113.0/24"
+            name       = "office-network"
+            priority   = 100
+            action     = "Allow"
+          }
+        }
+      }
+verification: |
+  After applying, confirm with:
+
+      az webapp show --name <name> --resource-group <rg> \
+        --query siteConfig.ipSecurityRestrictions
+
+  The list should contain only expected CIDRs or service tags, not `Any`/`0.0.0.0/0`.
+fixtures:
+  - azure_webapp_public

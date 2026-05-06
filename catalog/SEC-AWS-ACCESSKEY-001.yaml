@@ -1,0 +1,33 @@
+id: SEC-AWS-ACCESSKEY-001
+title: "Long-lived IAM access key created for a user"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: resource_present
+    resource: aws_iam_access_key
+    description: Long-lived IAM access key resource present in Terraform configuration
+recommendation: |
+  Avoid long-lived IAM access keys entirely. Use IAM roles with temporary
+  credentials instead:
+  - EC2 workloads: EC2 instance profiles
+  - Lambda: Lambda execution roles
+  - CI/CD: OIDC federation (GitHub Actions, GitLab CI, CircleCI, etc.)
+  - Cross-account: `sts:AssumeRole`
+
+  If a long-lived key is truly unavoidable (a legacy system that cannot
+  use OIDC), enforce these mitigations:
+  1. Rotate every 90 days via automation.
+  2. Store the secret in AWS Secrets Manager or HashiCorp Vault — never
+     in `terraform.tfvars` or CI/CD environment variables in plaintext.
+  3. Attach a policy that restricts the key to the minimum required actions
+     and resources.
+  4. Enable CloudTrail and alert on unusual usage patterns.
+verification: |
+  Run `aws iam list-access-keys --user-name <name>` and confirm no keys
+  exist, or that existing keys were created within the last 90 days.
+  Search the codebase for `aws_iam_access_key` resources and ensure
+  removal is tracked in a migration plan.
+fixtures:
+  - aws_iam_access_key

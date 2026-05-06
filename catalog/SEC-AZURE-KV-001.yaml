@@ -3,17 +3,36 @@ title: "Azure Key Vault missing purge protection or soft delete"
 section: security
 default_urgency: HIGH
 blast_radius: module
-status: stub
+status: active
 patterns:
+  - kind: resource_arg
+    resource: azurerm_key_vault
+    arg: purge_protection_enabled
+    regex: '^false$'
   - kind: resource_missing_arg
     resource: azurerm_key_vault
     arg: purge_protection_enabled
+  - kind: resource_arg
+    resource: azurerm_key_vault
+    arg: soft_delete_retention_days
+    regex: '^[0-6]$'
 recommendation: |
-  TODO: stub. Detect `azurerm_key_vault` blocks lacking
-  `purge_protection_enabled = true` and `soft_delete_retention_days >= 7`.
-  Without these, an accidental delete is unrecoverable, and a malicious
-  delete-and-recreate can substitute attacker-controlled secrets under
-  the same name.
+  Set `purge_protection_enabled = true` and `soft_delete_retention_days = 90`.
+  Without purge protection, an attacker (or accident) that deletes the Key Vault
+  bypasses the soft-delete window by purging — secrets, keys, and certificates
+  are gone permanently.
+
+      resource "azurerm_key_vault" "example" {
+        # ...
+        purge_protection_enabled    = true
+        soft_delete_retention_days  = 90
+      }
 verification: |
-  TODO
-fixtures: []
+  After applying, confirm with:
+
+      az keyvault show --name <name> \
+        --query '{purgeProtection:properties.enablePurgeProtection,softDelete:properties.enableSoftDelete}'
+
+  Both values should return `true`.
+fixtures:
+  - azure_kv_no_purge

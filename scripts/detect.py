@@ -1117,6 +1117,19 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                 if "resource" not in pat:
                     continue
                 rt = pat["resource"]
+                # when_present: only fire if a prerequisite resource type exists
+                prerequisite = pat.get("when_present")
+                if prerequisite:
+                    prereq_seen = False
+                    for _, text in all_files_text.items():
+                        for blk in find_blocks(text, RESOURCE_START):
+                            if blk["groups"][0] == prerequisite:
+                                prereq_seen = True
+                                break
+                        if prereq_seen:
+                            break
+                    if not prereq_seen:
+                        continue
                 seen = False
                 for _, text in all_files_text.items():
                     for blk in find_blocks(text, RESOURCE_START):

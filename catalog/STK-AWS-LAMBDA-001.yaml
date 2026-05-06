@@ -1,0 +1,27 @@
+id: STK-AWS-LAMBDA-001
+title: "Lambda function uses end-of-life runtime"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_lambda_function
+    arg: runtime
+    regex: "^(nodejs10\.x|nodejs12\.x|nodejs14\.x|python2\.7|python3\.6|python3\.7|ruby2\.5|java8|go1\.x|dotnetcore2\.1|dotnetcore3\.1)$"
+    description: Lambda function using an end-of-life runtime no longer patched by AWS
+recommendation: |
+  Upgrade the `runtime` to a currently supported version. EOL runtimes
+  no longer receive security patches or OS updates from AWS, meaning known
+  CVEs accumulate silently. AWS may also block deployment of new functions
+  using deprecated runtimes after a deprecation deadline.
+  See https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html
+  for the current support matrix and deprecation schedule. Common
+  replacements: `nodejs14.x` → `nodejs22.x`, `python3.7` → `python3.13`,
+  `dotnetcore3.1` → `dotnet8`.
+verification: |
+  Run `aws lambda get-function-configuration --function-name <name>` and
+  confirm `Runtime` is a currently supported value. Run `terraform plan`
+  and verify the runtime argument references a non-EOL identifier.
+fixtures:
+  - aws_lambda_eol_runtime

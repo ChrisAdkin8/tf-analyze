@@ -1,0 +1,37 @@
+id: SEC-AWS-SSRF-001
+title: "EC2 instance metadata service v1 enabled (IMDSv2 not enforced)"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_instance
+    arg: metadata_options
+    description: EC2 instance missing metadata_options block (IMDSv1 allowed by default)
+  - kind: resource_arg
+    resource: aws_instance
+    arg: metadata_options.http_tokens
+    regex: "^optional$"
+    description: EC2 instance with http_tokens = "optional" (IMDSv1 still allowed)
+recommendation: |
+  Add a `metadata_options` block to every `aws_instance` that enforces
+  IMDSv2:
+
+    metadata_options {
+      http_tokens   = "required"
+      http_endpoint = "enabled"
+    }
+
+  IMDSv1 is a pre-authenticated HTTP endpoint accessible from within the
+  instance. An SSRF vulnerability in any application on the instance can
+  retrieve the instance's IAM credentials from `http://169.254.169.254/`.
+  This was the root cause of the Capital One breach in 2019. IMDSv2
+  requires a session-oriented PUT request before any GET, which is
+  incompatible with simple SSRF payloads.
+verification: |
+  Run `aws ec2 describe-instances --instance-ids <id>` and confirm
+  `MetadataOptions.HttpTokens` is `required`. Run `terraform plan` and
+  verify the metadata_options block is present with `http_tokens = "required"`.
+fixtures:
+  - aws_ec2_imdsv1

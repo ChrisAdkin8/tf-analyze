@@ -1,0 +1,29 @@
+id: SEC-AWS-KMS-001
+title: "KMS key rotation disabled"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_kms_key
+    arg: enable_key_rotation
+    regex: "^false$"
+    description: KMS key with enable_key_rotation = false
+  - kind: resource_missing_arg
+    resource: aws_kms_key
+    arg: enable_key_rotation
+    description: KMS key missing enable_key_rotation (defaults to false)
+recommendation: |
+  Add `enable_key_rotation = true` to every `aws_kms_key`. AWS automatically
+  rotates the key material once a year when rotation is enabled; the old
+  backing key material is retained to decrypt data encrypted before the
+  rotation. Disabling rotation means that a compromised key remains in use
+  indefinitely, violating least-privilege and common compliance controls
+  (CIS AWS 2.8, PCI-DSS Requirement 3.6.4).
+verification: |
+  Run `aws kms get-key-rotation-status --key-id <id>` and confirm
+  `KeyRotationEnabled` is `true`. Run `terraform plan` and verify no diff
+  shows `enable_key_rotation = false`.
+fixtures:
+  - aws_kms_no_rotation

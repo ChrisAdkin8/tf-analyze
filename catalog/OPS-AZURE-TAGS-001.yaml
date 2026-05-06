@@ -1,0 +1,45 @@
+id: OPS-AZURE-TAGS-001
+title: "Azure resource missing tags"
+section: ops
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_resource_group
+    arg: tags
+  - kind: resource_missing_arg
+    resource: azurerm_storage_account
+    arg: tags
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: tags
+  - kind: resource_missing_arg
+    resource: azurerm_mssql_server
+    arg: tags
+  - kind: resource_missing_arg
+    resource: azurerm_virtual_machine
+    arg: tags
+recommendation: |
+  Add a `tags` block with at minimum `environment`, `managed_by = "terraform"`,
+  and `project`. Use a `locals { common_tags = {...} }` pattern and merge with
+  `merge(local.common_tags, {...})` for resource-specific tags.
+
+      locals {
+        common_tags = {
+          environment = var.environment
+          managed_by  = "terraform"
+          project     = var.project_name
+        }
+      }
+
+      resource "azurerm_resource_group" "example" {
+        # ...
+        tags = local.common_tags
+      }
+verification: |
+  Confirm in the Azure portal that the resource shows the expected tags, or run:
+
+      az resource show --ids <resource-id> --query tags
+fixtures:
+  - azure_resource_no_tags

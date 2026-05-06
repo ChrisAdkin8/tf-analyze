@@ -1,0 +1,30 @@
+id: SEC-AZURE-SQL-001
+title: "Azure SQL Server has no Azure AD administrator configured"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: resource_absent
+    resource: azurerm_mssql_server_azure_ad_administrator
+    when_present: azurerm_mssql_server
+recommendation: |
+  Add an `azurerm_mssql_server_azure_ad_administrator` resource. Without Azure
+  AD auth, the server relies on SQL authentication (username/password) which is
+  harder to audit and enforce MFA on.
+
+      resource "azurerm_mssql_server_azure_ad_administrator" "example" {
+        server_id           = azurerm_mssql_server.example.id
+        login               = "sqladmin"
+        object_id           = var.aad_admin_object_id
+        tenant_id           = data.azurerm_client_config.current.tenant_id
+        azuread_authentication_only = true
+      }
+verification: |
+  After applying, confirm with:
+
+      az sql server ad-admin list --server <name> --resource-group <rg>
+
+  The command should return a non-empty list.
+fixtures:
+  - azure_sql_no_aad_admin

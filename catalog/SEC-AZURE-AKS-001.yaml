@@ -1,0 +1,37 @@
+id: SEC-AZURE-AKS-001
+title: "AKS cluster RBAC disabled"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: resource_arg
+    resource: azurerm_kubernetes_cluster
+    arg: role_based_access_control_enabled
+    regex: '^false$'
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: azure_active_directory_role_based_access_control
+recommendation: |
+  Set `role_based_access_control_enabled = true` and configure
+  `azure_active_directory_role_based_access_control`. Without RBAC, any
+  authenticated user can perform any action in the cluster.
+
+      resource "azurerm_kubernetes_cluster" "example" {
+        # ...
+        role_based_access_control_enabled = true
+
+        azure_active_directory_role_based_access_control {
+          managed                = true
+          admin_group_object_ids = [var.aks_admin_group_id]
+          azure_rbac_enabled     = true
+        }
+      }
+verification: |
+  After applying, confirm with:
+
+      az aks show --name <name> --resource-group <rg> --query 'enableRBAC'
+
+  The command should return `true`.
+fixtures:
+  - azure_aks_rbac_disabled

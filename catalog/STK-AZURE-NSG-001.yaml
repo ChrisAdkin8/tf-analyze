@@ -3,17 +3,38 @@ title: "Azure NSG rule open to the internet on sensitive ports"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
-status: stub
+status: active
+escalation:
+  - condition: "destination_port_range matches (^22$|^3389$)"
+    urgency: CRITICAL
 patterns:
   - kind: grep
     regex: 'source_address_prefix\s*=\s*"\*"'
+  - kind: grep
+    regex: 'source_address_prefix\s*=\s*"Internet"'
+  - kind: grep
+    regex: 'source_address_prefix\s*=\s*"0\.0\.0\.0/0"'
 recommendation: |
-  TODO: stub. Detect `azurerm_network_security_rule` /
-  `azurerm_network_security_group` rules where
-  `source_address_prefix = "*"` (or `"Internet"`) and the destination
-  port range covers SSH/RDP/SQL/Redis (22, 3389, 1433, 6379, etc.).
-  Recommend narrowing to a specific CIDR or to a service-tag
-  (`AzureCloud`, `Storage`) when the source must be Azure-managed.
+  Replace `source_address_prefix = "*"` with a specific CIDR or Azure service
+  tag. For SSH/RDP, use Azure Bastion instead of opening ports to the internet.
+  For internal services, use VNet service tags (`VirtualNetwork`) rather than `*`.
+
+      # Bad — any IP on the internet can reach this port
+      source_address_prefix = "*"
+
+      # Better — restrict to a known CIDR
+      source_address_prefix = "10.0.0.0/8"
+
+      # Best for management ports — use Azure Bastion and remove the rule
+  If port 22 or 3389 is involved, treat this as CRITICAL and remediate
+  immediately.
 verification: |
-  TODO
-fixtures: []
+  After applying, confirm with:
+
+      az network nsg rule list --nsg-name <nsg> --resource-group <rg> \
+        --output table
+
+  No rules should have `*` or `Internet` as source with port 22 or 3389 as
+  destination.
+fixtures:
+  - azure_nsg_open

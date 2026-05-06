@@ -3,17 +3,35 @@ title: "Azure storage account allows non-HTTPS traffic"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
-status: stub
+status: active
 patterns:
   - kind: resource_arg
     resource: azurerm_storage_account
     arg: enable_https_traffic_only
     regex: '^false$'
+  - kind: resource_arg
+    resource: azurerm_storage_account
+    arg: https_only
+    regex: '^false$'
+  - kind: resource_arg
+    resource: azurerm_storage_account
+    arg: min_tls_version
+    regex: '^(TLS1_0|TLS1_1)$'
 recommendation: |
-  TODO: stub. Detect `azurerm_storage_account` blocks where
-  `enable_https_traffic_only` is set to false (or absent — the provider
-  default flipped between major versions). Recommend setting it to true
-  explicitly, plus `min_tls_version = "TLS1_2"`.
+  Set `https_only = true` (provider v3+) or `enable_https_traffic_only = true`
+  (provider v2). Also set `min_tls_version = "TLS1_2"`. Allowing HTTP exposes
+  storage account keys and SAS tokens in transit.
+
+      resource "azurerm_storage_account" "example" {
+        # ...
+        https_only       = true
+        min_tls_version  = "TLS1_2"
+      }
 verification: |
-  TODO
-fixtures: []
+  After applying, confirm with:
+
+      az storage account show --name <name> --query 'enableHttpsTrafficOnly'
+
+  The command should return `true`.
+fixtures:
+  - azure_storage_http

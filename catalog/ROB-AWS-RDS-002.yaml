@@ -1,0 +1,26 @@
+id: ROB-AWS-RDS-002
+title: "RDS instance skips final snapshot on deletion"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_db_instance
+    arg: skip_final_snapshot
+    regex: "^true$"
+    description: RDS instance with skip_final_snapshot = true
+recommendation: |
+  Set `skip_final_snapshot = false` and provide a `final_snapshot_identifier`
+  on every production `aws_db_instance`. Without this, running
+  `terraform destroy` (or any operation that removes the resource from
+  state) permanently destroys all data in the database with no recovery
+  path. The final snapshot costs a small amount of S3 storage and is a
+  last-resort safety net against accidental deletion.
+verification: |
+  Run `terraform plan -destroy` and confirm Terraform will create a final
+  snapshot before destroying the instance. Verify via
+  `aws rds describe-db-snapshots` after any deletion that a final snapshot
+  was created.
+fixtures:
+  - aws_rds_skip_snapshot

@@ -1,0 +1,39 @@
+id: ROB-AZURE-STORAGE-001
+title: "Azure storage account missing blob soft delete"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_storage_account
+    arg: blob_properties
+  - kind: resource_arg
+    resource: azurerm_storage_account
+    arg: blob_properties.delete_retention_policy.days
+    regex: '^[0-6]$'
+recommendation: |
+  Add `blob_properties` with `delete_retention_policy` and
+  `container_delete_retention_policy`. Soft delete gives a recovery window
+  for accidental deletions or ransomware.
+
+      resource "azurerm_storage_account" "example" {
+        # ...
+        blob_properties {
+          delete_retention_policy {
+            days = 30
+          }
+          container_delete_retention_policy {
+            days = 30
+          }
+        }
+      }
+verification: |
+  After applying, confirm with:
+
+      az storage account blob-service-properties show \
+        --account-name <name> --query deleteRetentionPolicy
+
+  The `enabled` field should be `true` and `days` should be >= 7.
+fixtures:
+  - azure_storage_no_soft_delete

@@ -1,0 +1,32 @@
+id: ROB-AZURE-SQL-001
+title: "Azure SQL database missing short-term backup retention policy"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_mssql_database
+    arg: short_term_retention_policy
+recommendation: |
+  Add `short_term_retention_policy { retention_days = 35 }`. The default is
+  7 days — too short for post-incident recovery in production. 35 days covers
+  a typical monthly billing cycle.
+
+      resource "azurerm_mssql_database" "example" {
+        # ...
+        short_term_retention_policy {
+          retention_days           = 35
+          backup_interval_in_hours = 12
+        }
+      }
+verification: |
+  After applying, confirm with:
+
+      az sql db str-policy show \
+        --server <s> --database <db> --resource-group <rg> \
+        --query retentionDays
+
+  The value should be >= 14 for non-prod and >= 35 for production.
+fixtures:
+  - azure_sql_no_backup

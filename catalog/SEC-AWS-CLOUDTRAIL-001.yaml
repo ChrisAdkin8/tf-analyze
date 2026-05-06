@@ -1,0 +1,30 @@
+id: SEC-AWS-CLOUDTRAIL-001
+title: "CloudTrail not enabled for all regions"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_cloudtrail
+    arg: is_multi_region_trail
+    regex: "^false$"
+    description: CloudTrail with is_multi_region_trail = false
+  - kind: resource_missing_arg
+    resource: aws_cloudtrail
+    arg: is_multi_region_trail
+    description: CloudTrail missing is_multi_region_trail (defaults to false)
+recommendation: |
+  Set `is_multi_region_trail = true` and `include_global_service_events = true`
+  on every `aws_cloudtrail`. Single-region trails miss API calls made in
+  regions that are not currently in active use. Attackers deliberately use
+  quiet or seldom-monitored regions to create IAM users, launch instances,
+  or establish persistence. A multi-region trail ensures all management
+  events — including those for global services like IAM and STS — flow to
+  a single, monitored log destination (CIS AWS 2.1, 2.4).
+verification: |
+  Run `aws cloudtrail describe-trails --trail-name-list <name>` and
+  confirm `IsMultiRegionTrail` is `true`. Run `terraform plan` and verify
+  no diff shows `is_multi_region_trail = false` or a missing value.
+fixtures:
+  - aws_cloudtrail_single_region

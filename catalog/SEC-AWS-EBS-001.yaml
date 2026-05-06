@@ -1,0 +1,29 @@
+id: SEC-AWS-EBS-001
+title: "EBS volume not encrypted"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_ebs_volume
+    arg: encrypted
+    regex: "^false$"
+    description: EBS volume with encrypted = false
+  - kind: resource_missing_arg
+    resource: aws_ebs_volume
+    arg: encrypted
+    description: EBS volume missing encrypted argument (defaults to false)
+recommendation: |
+  Set `encrypted = true` and supply a `kms_key_id` for every `aws_ebs_volume`.
+  Unencrypted EBS volumes expose data if a snapshot is accidentally shared
+  or if physical media is decommissioned. Enable the account-level default
+  encryption via `aws_ebs_encryption_by_default` as a safety net, but also
+  set `encrypted = true` explicitly in Terraform so the intent is auditable
+  in code.
+verification: |
+  Run `aws ec2 describe-volumes --volume-ids <id>` and confirm
+  `Encrypted` is `true`. Run `terraform plan` and verify no diff shows
+  `encrypted = false` or a missing encrypted argument.
+fixtures:
+  - aws_ebs_unencrypted

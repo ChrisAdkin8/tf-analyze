@@ -1,0 +1,29 @@
+id: ROB-AWS-RDS-001
+title: "RDS instance backup retention disabled"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_db_instance
+    arg: backup_retention_period
+    regex: "^0$"
+    description: RDS instance with backup_retention_period = 0 (backups disabled)
+  - kind: resource_missing_arg
+    resource: aws_db_instance
+    arg: backup_retention_period
+    description: RDS instance missing backup_retention_period (defaults to 0 for non-replica)
+recommendation: |
+  Set `backup_retention_period` to at least `7` (days) on every
+  `aws_db_instance`. For production databases, use `30` or more and also
+  set `delete_automated_backups = false` so that automated backups survive
+  an accidental instance deletion. Without backups, a corrupted or deleted
+  database cannot be recovered to a point-in-time prior to the incident.
+  Also consider enabling `copy_tags_to_snapshot = true` for cost allocation.
+verification: |
+  Run `aws rds describe-db-instances --db-instance-identifier <id>` and
+  confirm `BackupRetentionPeriod` is greater than 0. Run `terraform plan`
+  and verify no diff shows `backup_retention_period = 0` or a missing value.
+fixtures:
+  - aws_rds_no_backup

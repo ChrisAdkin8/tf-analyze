@@ -1,0 +1,35 @@
+id: SEC-AWS-IAM-002
+title: "IAM assume role policy with wildcard Principal"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: '"Principal"\s*:\s*"\*"'
+    description: IAM assume role policy with Principal = "*"
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'principals\s*\{[^}]*type\s*=\s*"\*"'
+    description: aws_iam_role inline principals block with type = "*"
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'Principal\s*=\s*"\*"'
+    description: IAM assume role policy Principal = "*" in jsonencode HCL object syntax
+recommendation: |
+  Restrict the `Principal` in assume role policies to specific AWS account
+  IDs, IAM roles, or services. A wildcard principal (`"Principal": "*"`)
+  allows any entity in the world to call `sts:AssumeRole`, effectively
+  making the role public unless a restrictive Condition is also present.
+  Replace `"Principal": "*"` with the exact ARN(s) of the trusted entity,
+  e.g. `"Principal": {"Service": "lambda.amazonaws.com"}` or
+  `"Principal": {"AWS": "arn:aws:iam::123456789012:role/my-role"}`.
+verification: |
+  Run `aws iam get-role --role-name <name>` and inspect the
+  `AssumeRolePolicyDocument`. Confirm there is no `"Principal": "*"`
+  without a restrictive `Condition` block. Run `terraform plan` and
+  verify the rendered policy document in the plan output has no
+  wildcard principal.
+fixtures:
+  - aws_iam_wildcard_principal
