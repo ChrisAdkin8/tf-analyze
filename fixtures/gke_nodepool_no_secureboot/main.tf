@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-GKE-NODEPOOL-001 HIGH — node pool missing shielded-instance hardening
+#  - STK-GCP-GKE-NODEPOOL-001 HIGH — node pool missing shielded-instance hardening
 
 resource "google_container_cluster" "main" {
   name               = "main"
@@ -15,6 +15,6 @@ resource "google_container_node_pool" "default" {
 
   node_config {
     machine_type = "e2-medium"
-    # shielded_instance_config intentionally omitted — STK-GKE-NODEPOOL-001 should fire
+    # shielded_instance_config intentionally omitted — STK-GCP-GKE-NODEPOOL-001 should fire
   }
 }

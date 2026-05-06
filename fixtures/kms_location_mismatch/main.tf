@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-KMS-LOCATION-001 HIGH — bucket in us-central1 references key ring in us-east1
+#  - STK-GCP-KMS-LOCATION-001 HIGH — bucket in us-central1 references key ring in us-east1
 
 resource "google_kms_key_ring" "primary" {
   name     = "primary"

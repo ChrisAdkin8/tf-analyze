@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-BUCKET-001 MEDIUM — bucket missing versioning
+#  - STK-GCP-BUCKET-001 MEDIUM — bucket missing versioning
 
 resource "google_storage_bucket" "data" {
   name                        = "data"

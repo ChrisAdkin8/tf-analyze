@@ -1,6 +1,6 @@
 # Expected findings:
-#  - OPS-LABELS-001 MEDIUM — compute instance missing labels
-#  - OPS-LABELS-001 MEDIUM — storage bucket missing labels
+#  - OPS-GCP-LABELS-001 MEDIUM — compute instance missing labels
+#  - OPS-GCP-LABELS-001 MEDIUM — storage bucket missing labels
 
 variable "project_id" {
   type        = string

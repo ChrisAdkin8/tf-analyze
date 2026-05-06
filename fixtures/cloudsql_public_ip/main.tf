@@ -1,5 +1,5 @@
 # Expected findings:
-#  - SEC-SQL-PUBLIC-001 HIGH — Cloud SQL instance has ipv4_enabled = true
+#  - SEC-GCP-SQL-PUBLIC-001 HIGH — Cloud SQL instance has ipv4_enabled = true
 
 resource "google_sql_database_instance" "main" {
   name             = "main"

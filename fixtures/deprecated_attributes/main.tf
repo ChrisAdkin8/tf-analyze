@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-DEPRECATION-001 MEDIUM — deprecated logging_service argument
+#  - STK-GCP-DEPRECATION-001 MEDIUM — deprecated logging_service argument
 
 resource "google_container_cluster" "primary" {
   name     = "test-cluster"

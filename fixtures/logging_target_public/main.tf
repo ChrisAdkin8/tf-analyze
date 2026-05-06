@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-GCS-LOGGING-001 HIGH — logging target bucket lacks public_access_prevention
+#  - STK-GCP-GCS-LOGGING-001 HIGH — logging target bucket lacks public_access_prevention
 
 resource "google_storage_bucket" "data" {
   name                        = "my-data"

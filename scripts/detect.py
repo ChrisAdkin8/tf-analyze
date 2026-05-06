@@ -14,11 +14,11 @@ Usage:
               [--diff-base <ref>] [--auto-stub <dir>]
 
 Output (text):
-    SEC-IAM-001 path/to/file.tf:42 google_project_iam_member.foo
-    ROB-LIFECYCLE-001 path/to/db.tf:17 google_sql_database_instance.main
+    SEC-GCP-IAM-001 path/to/file.tf:42 google_project_iam_member.foo
+    ROB-GCP-LIFECYCLE-001 path/to/db.tf:17 google_sql_database_instance.main
 
 Output (json):
-    [{"id":"SEC-IAM-001","file":"path/to/file.tf","line":42,
+    [{"id":"SEC-GCP-IAM-001","file":"path/to/file.tf","line":42,
       "resource":"google_project_iam_member.foo"}, ...]
 
 Output (sarif):

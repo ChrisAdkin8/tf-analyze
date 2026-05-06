@@ -1,0 +1,43 @@
+id: STK-GCP-KMS-001
+title: "KMS crypto key missing rotation period"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "1.10"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_kms_crypto_key
+    arg: rotation_period
+recommendation: |
+  Set `rotation_period = "7776000s"` (90 days, the CIS maximum) or
+  shorter on every symmetric encryption key:
+
+      resource "google_kms_crypto_key" "data" {
+        name     = "data"
+        key_ring = google_kms_key_ring.primary.id
+        purpose  = "ENCRYPT_DECRYPT"
+
+        rotation_period = "7776000s"  # 90 days
+
+        lifecycle {
+          prevent_destroy = true
+        }
+      }
+
+  Asymmetric keys (purpose = `ASYMMETRIC_SIGN` /
+  `ASYMMETRIC_DECRYPT`) cannot rotate without invalidating
+  signatures and are exempt — suppress the finding via inline
+  `# tf-analyze:ignore STK-KMS-001` and a one-line reason.
+verification: |
+  After applying:
+
+      gcloud kms keys describe <key> --keyring <ring> --location <loc> \\
+        --format='value(rotationPeriod)'
+
+  Must return a value ≤ `7776000s`.
+related:
+  - STK-KMS-LOCATION-001
+fixtures:
+  - kms_no_rotation

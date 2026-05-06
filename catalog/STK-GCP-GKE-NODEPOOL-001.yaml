@@ -1,0 +1,44 @@
+id: STK-GCP-GKE-NODEPOOL-001
+title: "GKE node pool missing shielded-instance hardening"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "6.5.5"
+patterns:
+  - kind: graph_check
+    function: gke_nodepool_secure_boot
+    description: |
+      Every `google_container_node_pool` attached to a cluster must set
+      `node_config.shielded_instance_config.enable_secure_boot = true` AND
+      `enable_integrity_monitoring = true`. Pods schedule across pools, so
+      one unhardened pool nullifies the cluster-wide posture.
+recommendation: |
+  Add to each `google_container_node_pool`:
+
+      node_config {
+        shielded_instance_config {
+          enable_secure_boot          = true
+          enable_integrity_monitoring = true
+        }
+      }
+
+  Then re-create the pool — `node_config` changes force replacement, so
+  schedule the cycle during a maintenance window or use surge upgrades.
+
+  Tip: enforce this at cluster level via Org Policy
+  `constraints/container.requireShieldedNodes`. The Terraform finding then
+  becomes a defense-in-depth check rather than the only line of defense.
+verification: |
+  After applying, run:
+
+      gcloud container node-pools describe <pool> \\
+        --cluster=<cluster> --region=<region> \\
+        --format='value(config.shieldedInstanceConfig.enableSecureBoot,config.shieldedInstanceConfig.enableIntegrityMonitoring)'
+
+  Both fields should print `True`. Re-run tf-analyze to confirm clean.
+related:
+  - SEC-IAM-001
+fixtures:
+  - gke_nodepool_no_secureboot

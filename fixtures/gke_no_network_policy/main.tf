@@ -1,5 +1,5 @@
 # Expected findings:
-#  - SEC-GKE-NETWORK-POLICY-001 HIGH — cluster missing network_policy
+#  - SEC-GCP-GKE-NETWORK-POLICY-001 HIGH — cluster missing network_policy
 
 resource "google_container_cluster" "main" {
   name                     = "main"

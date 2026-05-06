@@ -1,5 +1,5 @@
 # Expected findings:
-#  - SEC-COMPUTE-PUBLIC-IP-001 HIGH — VM has access_config block (public IP)
+#  - SEC-GCP-COMPUTE-PUBLIC-IP-001 HIGH — VM has access_config block (public IP)
 
 resource "google_service_account" "vm" {
   account_id = "vm-runtime"
@@ -17,7 +17,7 @@ resource "google_compute_instance" "app" {
   network_interface {
     network = "default"
     access_config {
-      # ephemeral public IP — should fire SEC-COMPUTE-PUBLIC-IP-001
+      # ephemeral public IP — should fire SEC-GCP-COMPUTE-PUBLIC-IP-001
     }
   }
 

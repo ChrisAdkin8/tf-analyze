@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-GKE-002 HIGH — cluster missing Workload Identity
+#  - STK-GCP-GKE-002 HIGH — cluster missing Workload Identity
 
 resource "google_container_cluster" "main" {
   name                     = "main"

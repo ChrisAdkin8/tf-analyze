@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-KMS-001 HIGH — symmetric key missing rotation_period
+#  - STK-GCP-KMS-001 HIGH — symmetric key missing rotation_period
 
 resource "google_kms_key_ring" "primary" {
   name     = "primary"

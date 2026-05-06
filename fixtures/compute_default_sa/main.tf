@@ -1,5 +1,5 @@
 # Expected findings:
-#  - SEC-COMPUTE-SA-001 HIGH — compute instance uses default Compute SA
+#  - SEC-GCP-COMPUTE-SA-001 HIGH — compute instance uses default Compute SA
 
 resource "google_compute_instance" "app" {
   name         = "app"
@@ -15,5 +15,5 @@ resource "google_compute_instance" "app" {
   network_interface {
     network = "default"
   }
-  # service_account intentionally omitted — should fire SEC-COMPUTE-SA-001
+  # service_account intentionally omitted — should fire SEC-GCP-COMPUTE-SA-001
 }

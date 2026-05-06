@@ -1,5 +1,5 @@
 # Expected findings:
-#  - STK-CLOUDSQL-001 HIGH — google_sql_database_instance has no
+#  - STK-GCP-CLOUDSQL-001 HIGH — google_sql_database_instance has no
 #    settings.backup_configuration.enabled (CIS GCP 6.4)
 
 terraform {
