@@ -23,21 +23,21 @@
 Running `python3 ../../../scripts/detect.py --target . --format json | jq -r '.findings[].id' | sort | uniq -c` from this directory produces a known distribution. The exact rule IDs you should see at least once each:
 
 ```
-SEC-IAM-001, SEC-IAM-002, SEC-IAM-003,
-SEC-BUCKET-001, SEC-BUCKET-002,
-SEC-COMPUTE-SA-001, SEC-COMPUTE-PUBLIC-IP-001,
-SEC-NETWORK-001, SEC-SQL-PUBLIC-001,
-SEC-LOGGING-001, SEC-SENSITIVE-001,
+SEC-GCP-IAM-001, SEC-GCP-IAM-002, SEC-GCP-IAM-003,
+SEC-GCP-BUCKET-001, SEC-GCP-BUCKET-002,
+SEC-GCP-COMPUTE-SA-001, SEC-GCP-COMPUTE-PUBLIC-IP-001,
+SEC-GCP-NETWORK-001, SEC-GCP-SQL-PUBLIC-001,
+SEC-GCP-LOGGING-001, SEC-SENSITIVE-001,
 SEC-PROVISIONER-001, SEC-DATASOURCE-001,
-SEC-GKE-NETWORK-POLICY-001,
-STK-BUCKET-001, STK-GCS-LOGGING-001,
-STK-GKE-002, STK-GKE-NODEPOOL-001,
-STK-KMS-001, STK-KMS-LOCATION-001,
+SEC-GCP-GKE-NETWORK-POLICY-001,
+STK-GCP-BUCKET-001, STK-GCP-GCS-LOGGING-001,
+STK-GCP-GKE-002, STK-GCP-GKE-NODEPOOL-001,
+STK-GCP-KMS-001, STK-GCP-KMS-LOCATION-001,
 ROB-MOVED-001, ROB-REMOVED-001,
 MOD-PIN-001, OPS-ENV-001
 ```
 
-Plus the corpus-level rules (`CI-TEST-001`, `OPS-LABELS-001`, `STYLE-DESC-001`, `ROB-LIFECYCLE-001`, `ROB-VERSION-001`, `COST-RISK-001`) that fire as a function of the corpus shape rather than any specific anti-pattern. Total finding count: **~54** (subject to ±2 drift as the catalogue evolves).
+Plus the corpus-level rules (`CI-TEST-001`, `OPS-GCP-LABELS-001`, `STYLE-DESC-001`, `ROB-GCP-LIFECYCLE-001`, `ROB-VERSION-001`, `COST-GCP-RISK-001`) that fire as a function of the corpus shape rather than any specific anti-pattern. Total finding count: **~54** (subject to ±2 drift as the catalogue evolves).
 
 ## OWASP → GCP control mapping
 
@@ -77,7 +77,7 @@ Three Terraform-shaped integrity failures: object versioning off (so an accident
 
 ### A09 — Security Logging and Monitoring Failures
 
-Cloud Audit Logs configuration at the project level (`google_project_iam_audit_config`) is the baseline that lets you reconstruct an incident. Without it, post-incident investigation has no forensic timeline. The graph-style finding `STK-GCS-LOGGING-001` adds a layer: the log-sink target itself must be hardened, otherwise the logs are exfiltrable even when the source bucket isn't.
+Cloud Audit Logs configuration at the project level (`google_project_iam_audit_config`) is the baseline that lets you reconstruct an incident. Without it, post-incident investigation has no forensic timeline. The graph-style finding `STK-GCP-GCS-LOGGING-001` adds a layer: the log-sink target itself must be hardened, otherwise the logs are exfiltrable even when the source bucket isn't.
 
 ### A10 — Server-Side Request Forgery
 

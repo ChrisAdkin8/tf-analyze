@@ -12,3 +12,10 @@ resource "google_project" "test" {
   project_id = "test-project"
   org_id     = "123456789012"
 }
+
+# IAM member present but no audit config — satisfies when_present guard.
+resource "google_project_iam_member" "test" {
+  project = google_project.test.project_id
+  role    = "roles/viewer"
+  member  = "user:test@example.com"
+}

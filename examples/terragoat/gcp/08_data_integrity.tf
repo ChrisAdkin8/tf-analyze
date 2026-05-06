@@ -21,7 +21,7 @@
 #     dead history.
 #
 # Expected tf-analyze findings:
-#   - STK-BUCKET-001    MEDIUM   GCS bucket missing versioning
+#   - STK-GCP-BUCKET-001    MEDIUM   GCS bucket missing versioning
 #   - ROB-MOVED-001     LOW      Stale moved block may need cleanup
 #   - ROB-REMOVED-001   LOW      Stale removed block may need cleanup
 #

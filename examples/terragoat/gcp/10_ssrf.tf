@@ -26,7 +26,7 @@
 #     the build image.
 #
 # Expected tf-analyze findings:
-#   - SEC-SQL-PUBLIC-001    HIGH    Cloud SQL instance permits public IPv4
+#   - SEC-GCP-SQL-PUBLIC-001    HIGH    Cloud SQL instance permits public IPv4
 #   (note: full SSRF coverage requires VPC SC and metadata-service
 #   protections that aren't yet first-class catalogue rules — this
 #   file primarily fires the existing rule and serves as documentation

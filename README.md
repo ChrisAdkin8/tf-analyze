@@ -10,7 +10,7 @@ The skill is invoked from Claude Code as `/tf-analyze`. The detection engine (`s
 
 This is the upfront list — what the skill detects, what outputs it produces, and what it does that the OSS-tool field generally doesn't. If a capability isn't here, it isn't there.
 
-### Detection (catalogue-anchored, ~60 rules)
+### Detection (catalogue-anchored, ~84 rules)
 
 | Domain | Coverage |
 |---|---|
@@ -70,7 +70,7 @@ cd ~/Projects/tf-analyze
 python3 scripts/detect.py --target /path/to/tf
 python3 scripts/detect.py --target . --mode diff --fail-on HIGH --format sarif > out.sarif
 python3 scripts/detect.py --list-rules
-python3 scripts/detect.py --explain SEC-IAM-001
+python3 scripts/detect.py --explain SEC-GCP-IAM-001
 python3 scripts/detect.py --new-rule SEC-FOO-007
 
 # Try the demo corpus:
@@ -109,11 +109,11 @@ The skill files (`SKILL.md`, `catalog/`, `scripts/`, `fixtures/`, `integrations/
 
 ## Demo corpus — `examples/terragoat/`
 
-A small multi-file Terraform project where every block is wrong on purpose, modelled on Bridgecrew's [`terragoat`](https://github.com/bridgecrewio/terragoat). 9 files (iam, storage, compute, gke, sql, kms, secrets, checks, versions) trigger ~30 distinct catalogue rules and the corpus-level rules (`CI-TEST-001`, `SEC-LOGGING-001`, etc.). Total of 44 findings on the current rule set.
+A three-cloud intentionally-vulnerable Terraform corpus (GCP, AWS, Azure) organised by OWASP Top 10, modelled on Bridgecrew's [`terragoat`](https://github.com/bridgecrewio/terragoat). 30 files across the three clouds trigger 127 findings against the current rule set, covering SEC, ROB, STK, OPS, and COST rules for all three providers.
 
 It serves three jobs:
 
-1. **Smoke test for the engine.** `python3 scripts/detect.py --target examples/terragoat | grep -c '"id"'` should equal **44**. Drift in this number is a regression signal.
+1. **Smoke test for the engine.** `python3 scripts/detect.py --target examples/terragoat --format json | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['findings']))"` should equal **127**. Drift in this number is a regression signal.
 2. **Calibration target for new rules.** When you write a new detector, add a triggering snippet to the relevant `examples/terragoat/*.tf` file and re-run — your new ID should appear alongside the existing ones with no spurious cross-talk.
 3. **Live demo for first-time users.** Reports against this corpus are realistic-shaped (multi-file, GCP+Azure+Vault, real cross-resource interactions) rather than the isolated single-rule fixtures under `fixtures/`.
 

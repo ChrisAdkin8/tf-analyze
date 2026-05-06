@@ -34,7 +34,7 @@ print(f"---\n{len(fs)} total")
 '
 ```
 
-You'll see at least: `SEC-AZURE-RBAC-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`, `ROB-LIFECYCLE-001`. To exercise the stubs (which have placeholder patterns):
+You'll see at least: `SEC-AZURE-RBAC-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`. Note: `ROB-LIFECYCLE-001` was renamed `ROB-GCP-LIFECYCLE-001` as it targets GCP resources only; Azure-equivalent lifecycle rules are pending. To exercise the stubs (which have placeholder patterns):
 
 ```sh
 python3 ../../../scripts/detect.py --target . --include-stubs --format text

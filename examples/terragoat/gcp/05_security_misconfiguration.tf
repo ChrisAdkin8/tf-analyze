@@ -27,12 +27,12 @@
 # real-world repos.
 #
 # Expected tf-analyze findings:
-#   - SEC-COMPUTE-SA-001          HIGH       Compute instance uses default Compute SA
-#   - SEC-COMPUTE-PUBLIC-IP-001   HIGH       Compute instance has public IP via access_config
-#   - SEC-NETWORK-001             CRITICAL   SSH (tcp:22) exposed to 0.0.0.0/0
-#   - SEC-SQL-PUBLIC-001          HIGH       Cloud SQL instance permits public IPv4
-#   - SEC-BUCKET-001              HIGH       GCS bucket missing public_access_prevention=enforced
-#   - SEC-BUCKET-002              MEDIUM     GCS bucket missing uniform_bucket_level_access
+#   - SEC-GCP-COMPUTE-SA-001          HIGH       Compute instance uses default Compute SA
+#   - SEC-GCP-COMPUTE-PUBLIC-IP-001   HIGH       Compute instance has public IP via access_config
+#   - SEC-GCP-NETWORK-001             CRITICAL   SSH (tcp:22) exposed to 0.0.0.0/0
+#   - SEC-GCP-SQL-PUBLIC-001          HIGH       Cloud SQL instance permits public IPv4
+#   - SEC-GCP-BUCKET-001              HIGH       GCS bucket missing public_access_prevention=enforced
+#   - SEC-GCP-BUCKET-002              MEDIUM     GCS bucket missing uniform_bucket_level_access
 #   - OPS-ENV-001                 HIGH       Prod-scoped resource lacks deletion_protection
 #
 # Fix summary: each fix is one-to-three lines. The catalogue

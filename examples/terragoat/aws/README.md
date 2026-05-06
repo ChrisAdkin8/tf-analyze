@@ -34,7 +34,7 @@ print(f"---\n{len(fs)} total")
 '
 ```
 
-You should see at least: `SEC-AWS-IAM-001`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`, `ROB-LIFECYCLE-001`. Plus corpus-level rules (`CI-TEST-001`, etc.). The AWS rule density is intentionally lower than GCP's — closing this gap is on the roadmap.
+You should see at least: `SEC-AWS-IAM-001`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`. Plus corpus-level rules (`CI-TEST-001`, etc.). Note: `ROB-LIFECYCLE-001` was renamed `ROB-GCP-LIFECYCLE-001` as it targets GCP resources only; AWS-equivalent lifecycle rules are pending. The AWS rule density is intentionally lower than GCP's — closing this gap is on the roadmap.
 
 ## OWASP → AWS control mapping
 

@@ -9,6 +9,7 @@ cis:
 patterns:
   - kind: resource_absent
     resource: google_project_iam_audit_config
+    when_present: google_project_iam_member
     scope: repo
 recommendation: |
   Add `google_project_iam_audit_config` resources covering at minimum

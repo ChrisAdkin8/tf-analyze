@@ -24,7 +24,7 @@
 # Expected tf-analyze findings:
 #   - (Step 0a credential pattern detection — see SKILL.md — flags
 #     hardcoded AKIA / sk- / ghp_ patterns in tfvars at scan time)
-#   - ROB-LIFECYCLE-001  HIGH    Stateful resource missing prevent_destroy
+#   - ROB-GCP-LIFECYCLE-001 is GCP-specific; AWS equivalent is cloud-provider lifecycle blocks (EXPLORATORY)
 #
 # Fix summary: secrets via AWS Secrets Manager / SSM Parameter Store
 # fetched at runtime, never hardcoded; one IAM role per workload

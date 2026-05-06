@@ -31,7 +31,7 @@ Perform a comprehensive analysis of Terraform code in the current repository and
 ```bash
 scripts/detect.py --list-rules                # all catalogue IDs grouped by domain
 scripts/detect.py --list-rules --focus security
-scripts/detect.py --explain SEC-IAM-001       # full entry for one rule
+scripts/detect.py --explain SEC-GCP-IAM-001       # full entry for one rule
 scripts/detect.py --new-rule SEC-FOO-007      # scaffold catalog YAML + fixture
 scripts/stub-status.py --age 90d              # find stubs older than 90 days
 ```
@@ -385,8 +385,8 @@ Examine every `.tf` file in scope for:
 - Sensitive variables passed to module inputs where the receiving variable is NOT marked sensitive → **SEC-SENSITIVE-002**
 
 ### 2b. IAM and access control
-- Overly broad IAM roles (`roles/owner`, `roles/editor`, `roles/admin`, `*Admin`) → **SEC-IAM-001** | CIS 1.6
-- `allUsers` or `allAuthenticatedUsers` in any IAM binding → **SEC-IAM-002** | CIS 5.1, 7.1
+- Overly broad IAM roles (`roles/owner`, `roles/editor`, `roles/admin`, `*Admin`) → **SEC-GCP-IAM-001** | CIS 1.6
+- `allUsers` or `allAuthenticatedUsers` in any IAM binding → **SEC-GCP-IAM-002** | CIS 5.1, 7.1
 - IAM bindings at project level that should be at resource level (consult Appendix A first)
 - Service accounts with more permissions than their usage requires
 - Missing `condition` blocks on IAM bindings where appropriate
@@ -441,7 +441,7 @@ Examine every `.tf` file in scope for:
 
 ### 2g. Logging and audit (NEW)
 - VPC Flow Logs disabled on any subnet → CIS 3.8
-- Cloud Audit Logs not configured (check for `google_project_iam_audit_config`) → **SEC-LOGGING-001** | CIS 2.1
+- Cloud Audit Logs not configured (check for `google_project_iam_audit_config`) → **SEC-GCP-LOGGING-001** | CIS 2.1
 - GKE clusters without `logging_service = "logging.googleapis.com/kubernetes"` → CIS 8.7.1
 - Missing `vault_audit` resource (is Vault auditing enabled?)
 - Cloud NAT logging disabled or set to ERRORS_ONLY for production environments
@@ -583,8 +583,8 @@ Assign **MEDIUM** to all deprecated usage — they work today but will break on 
 - `required_version` constraint floor too old for skill assumptions → **ROB-VERSION-001**
 
 ### 5b. Error handling and lifecycle
-- Stateful resources (databases, buckets, disks, PKI CAs, secrets engines) missing `lifecycle { prevent_destroy = true }` → **ROB-LIFECYCLE-001**
-- Stateful resources with `force_destroy = true` → **ROB-LIFECYCLE-002**
+- Stateful resources (databases, buckets, disks, PKI CAs, secrets engines) missing `lifecycle { prevent_destroy = true }` → **ROB-GCP-LIFECYCLE-001**
+- Stateful resources with `force_destroy = true` → **ROB-GCP-LIFECYCLE-002**
 - Missing `depends_on` where implicit dependency detection may fail (e.g., IAM bindings needed before resource creation)
 - Resources that would be destroyed and recreated on name change but lack `create_before_destroy`
 - Missing `timeouts` blocks on resources known to be slow (GKE clusters, Cloud SQL, Helm releases, etc.)
@@ -688,8 +688,8 @@ Detect whether the codebase uses Terraform workspaces and assess resource naming
 
 ## Step 7: Analyze — Operational Readiness (NEW)
 
-### 7a. Tagging and labeling → OPS-LABELS-001
-- Are all GCP resources tagged with at least: `environment`, `managed_by`, `project`? → **OPS-LABELS-001** (detection pass flags `google_compute_instance`, `google_storage_bucket`, `google_sql_database_instance`, `google_container_cluster`, `google_compute_disk`, `google_pubsub_topic`, `google_cloud_run_service`, and `google_bigquery_dataset` resources missing their respective labels argument)
+### 7a. Tagging and labeling → OPS-GCP-LABELS-001
+- Are all GCP resources tagged with at least: `environment`, `managed_by`, `project`? → **OPS-GCP-LABELS-001** (detection pass flags `google_compute_instance`, `google_storage_bucket`, `google_sql_database_instance`, `google_container_cluster`, `google_compute_disk`, `google_pubsub_topic`, `google_cloud_run_service`, and `google_bigquery_dataset` resources missing their respective labels argument)
 - Is there a consistent `common_labels` local used across all modules?
 - Are K8s resources labeled with `app.kubernetes.io/*` labels consistently?
 - Are resources missing labels that would be needed for cost attribution or monitoring?
@@ -711,7 +711,7 @@ Detect whether the codebase uses Terraform workspaces and assess resource naming
 - `pd-ssd` disks where `pd-balanced` would suffice
 - Missing committed use discounts for stable workloads (INFO only — note if applicable)
 
-### 7e. Cost-risk controls → COST-RISK-001
+### 7e. Cost-risk controls → COST-GCP-RISK-001
 The detection pass flags expensive resources that lack explicit cost controls:
 - **Spanner** without `processing_units` — defaults may be expensive and unclear
 - **GKE** without `cluster_autoscaling.resource_limits` — unbounded scale-up
@@ -859,13 +859,13 @@ Apply these checks based on which providers and resources are detected in the co
 - Authorized networks include `0.0.0.0/0` → CIS 6.1.3
 - Postgres `log_checkpoints` flag off → CIS 6.2.1
 - SQL Server `external scripts enabled` flag on → CIS 6.3.1
-- Backups not configured → **STK-CLOUDSQL-001** | CIS 6.4
+- Backups not configured → **STK-GCP-CLOUDSQL-001** | CIS 6.4
 - HA not enabled (`availability_type != "REGIONAL"` for production) → CIS 6.5
 - `deletion_protection = false` → CIS 6.6
 - Missing `point_in_time_recovery_enabled` for Postgres / MySQL
 
 ### 10e. BigQuery-specific (if `google_bigquery_dataset` / `google_bigquery_table` present)
-- Public access via `allUsers` / `allAuthenticatedUsers` in dataset access blocks → **SEC-IAM-002** | CIS 7.1
+- Public access via `allUsers` / `allAuthenticatedUsers` in dataset access blocks → **SEC-GCP-IAM-002** | CIS 7.1
 - Tables/datasets without CMEK → CIS 7.2, 7.3
 
 ### 10f. Helm-specific (if `helm_release` resources present)
@@ -965,8 +965,8 @@ Class is derived deterministically from `machine_type` family + `node_count` + `
 ### 12c. Cost-driven escalation
 
 Walk every finding from the detection pass. For each one whose catalogue entry has an `escalation` rule keyed on cost class or dollar threshold, apply the escalation:
-- `ROB-LIFECYCLE-001` on an XS bucket → urgency stays HIGH (per default).
-- `ROB-LIFECYCLE-001` on an XL Spanner instance → urgency stays HIGH but is flagged for action plan top-3.
+- `ROB-GCP-LIFECYCLE-001` on an XS bucket → urgency stays HIGH (per default).
+- `ROB-GCP-LIFECYCLE-001` on an XL Spanner instance → urgency stays HIGH but is flagged for action plan top-3.
 
 If `mode:plan`, prefer the actual `for_each` / `count` expansion from the plan JSON over the static count (a `for_each` over a list of 8 entries means 8× the unit cost, not 1×).
 
@@ -1199,7 +1199,7 @@ Surface the worst-offender files so refactor effort can be targeted. Sort descen
 
 ### CRITICAL
 
-- **[SEC-IAM-002#1] Public bucket binding** — terraform/modules/foo/iam.tf:42 | Blast: infrastructure-wide | CIS: 5.1 | Effort: Small | Status: VERIFIED
+- **[SEC-GCP-IAM-002#1] Public bucket binding** — terraform/modules/foo/iam.tf:42 | Blast: infrastructure-wide | CIS: 5.1 | Effort: Small | Status: VERIFIED
   Description: `google_storage_bucket_iam_member` grants `roles/storage.objectViewer` to `allUsers`, exposing every object to anonymous reads.
   Recommendation: Remove the binding; add a signed-URL pattern if external read access is required.
   Verification: `gcloud storage buckets get-iam-policy gs://<bucket> --format='value(bindings)' | grep allUsers` returns nothing.
@@ -1277,7 +1277,7 @@ Use the effort definitions from Step 16 (Small ≤30 min / Medium ≤2 h / Large
 
 | # | Finding | Section | Effort | Blast Radius | Description |
 |---|---------|---------|--------|--------------|-------------|
-| 1 | SEC-IAM-002#1 | Security | Small | infrastructure-wide | Remove `allUsers` IAM binding on storage bucket |
+| 1 | SEC-GCP-IAM-002#1 | Security | Small | infrastructure-wide | Remove `allUsers` IAM binding on storage bucket |
 | ... | | | | | |
 
 _No CRITICAL findings_ — omit this sub-section if the band is empty.
@@ -1286,7 +1286,7 @@ _No CRITICAL findings_ — omit this sub-section if the band is empty.
 
 | # | Finding | Section | Effort | Blast Radius | Description |
 |---|---------|---------|--------|--------------|-------------|
-| 1 | ROB-LIFECYCLE-001#3 | Robustness | Small | module | Add `prevent_destroy` to stateful resource |
+| 1 | ROB-GCP-LIFECYCLE-001#3 | Robustness | Small | module | Add `prevent_destroy` to stateful resource |
 | ... | | | | | |
 
 _No HIGH findings_ — omit this sub-section if the band is empty.
@@ -1312,7 +1312,7 @@ _No LOW findings_ — omit this sub-section if the band is empty.
 ### Related Findings
 
 List clusters of findings that are related and should be addressed together:
-- SEC-IAM-001#1 + ROB-LIFECYCLE-001#3: "project-level IAM AND missing prevent_destroy compound the blast radius"
+- SEC-GCP-IAM-001#1 + ROB-GCP-LIFECYCLE-001#3: "project-level IAM AND missing prevent_destroy compound the blast radius"
 - MOD-PIN-001#2 + SEC-PROVIDER-001#1: "unpinned modules and wide provider constraints together break reproducibility"
 ```
 
@@ -1330,11 +1330,11 @@ The SARIF emitter (`scripts/detect.py --format sarif`) produces SARIF v2.1.0 JSO
         "name": "tf-analyze",
         "informationUri": "https://github.com/anthropics/claude-code-skills/tree/main/tf-analyze",
         "rules": [{
-          "id": "SEC-IAM-001",
+          "id": "SEC-GCP-IAM-001",
           "name": "OverlyBroadIamRole",
           "shortDescription": { "text": "Overly broad IAM role" },
           "fullDescription": { "text": "<recommendation from catalogue>" },
-          "helpUri": "https://github.com/anthropics/claude-code-skills/blob/main/tf-analyze/catalog/SEC-IAM-001.yaml",
+          "helpUri": "https://github.com/anthropics/claude-code-skills/blob/main/tf-analyze/catalog/SEC-GCP-IAM-001.yaml",
           "help": { "markdown": "<recommendation>" },
           "properties": {
             "tags": ["security", "cis-1.6", "blast-radius:infrastructure-wide"],
@@ -1344,7 +1344,7 @@ The SARIF emitter (`scripts/detect.py --format sarif`) produces SARIF v2.1.0 JSO
       }
     },
     "results": [{
-      "ruleId": "SEC-IAM-001",
+      "ruleId": "SEC-GCP-IAM-001",
       "level": "error",
       "message": { "text": "Project-level grant of roles/owner — narrow to resource scope." },
       "locations": [{
@@ -1380,7 +1380,7 @@ The SARIF emitter (`scripts/detect.py --format sarif`) produces SARIF v2.1.0 JSO
 
 ### Finding IDs
 
-**All finding IDs come from the catalogue.** Each finding in the report MUST reference a catalogue entry by its stable `id` field (e.g., `SEC-IAM-001`, `ROB-LIFECYCLE-002`, `STK-CLOUDSQL-001`). Multiple instances of the same catalogue ID are disambiguated with `#N` suffix in source order: `SEC-IAM-001#1`, `SEC-IAM-001#2`, etc.
+**All finding IDs come from the catalogue.** Each finding in the report MUST reference a catalogue entry by its stable `id` field (e.g., `SEC-GCP-IAM-001`, `ROB-GCP-LIFECYCLE-002`, `STK-GCP-CLOUDSQL-001`). Multiple instances of the same catalogue ID are disambiguated with `#N` suffix in source order: `SEC-GCP-IAM-001#1`, `SEC-GCP-IAM-001#2`, etc.
 
 There is **no separate per-section prefix system** (`S-NNN`, `D-NNN`, etc. — removed). The catalogue is the only source of finding identity. If a finding does not yet have a catalogue entry, add the entry under `catalog/` first (see `catalog/README.md`), then reference it.
 
@@ -1536,13 +1536,13 @@ If `format:json` was requested, also write `reports/tf-analysis-YYYY-MM-DD-HHmms
   "summary": "...",
   "delta": {
     "previous_report": "YYYY-MM-DD-HHmmss",
-    "resolved": ["SEC-IAM-001#1"],
-    "new": ["MOD-PIN-001#1", "ROB-LIFECYCLE-002#3"],
-    "unchanged": ["SEC-BUCKET-001#1", "SEC-PROVIDER-001#1"]
+    "resolved": ["SEC-GCP-IAM-001#1"],
+    "new": ["MOD-PIN-001#1", "ROB-GCP-LIFECYCLE-002#3"],
+    "unchanged": ["SEC-GCP-BUCKET-001#1", "SEC-PROVIDER-001#1"]
   },
   "findings": [
     {
-      "catalogue_id": "SEC-IAM-001",
+      "catalogue_id": "SEC-GCP-IAM-001",
       "instance": 1,
       "section": "security",
       "urgency": "HIGH",
@@ -1555,7 +1555,7 @@ If `format:json` was requested, also write `reports/tf-analysis-YYYY-MM-DD-HHmms
       "recommendation": "...",
       "verification": "...",
       "verification_status": "VERIFIED",
-      "related_findings": ["ROB-LIFECYCLE-001"],
+      "related_findings": ["ROB-GCP-LIFECYCLE-001"],
       "suppressed": false
     }
   ],
@@ -1581,7 +1581,7 @@ The runner does the following deterministically:
 
 1. Walks `fixtures/` and lists every directory as a fixture.
 2. For each fixture, derives the **expected** catalogue ID set by scanning `catalog/*.yaml` for entries whose `fixtures:` list contains the fixture name.
-3. Invokes `scripts/detect.py --target fixtures/<NAME> --only-fixture <NAME> --format json` to get the **actual** catalogue ID set. The `--only-fixture` flag scopes the catalogue to the entries that declare the fixture, which prevents corpus-level patterns (e.g., `resource_absent` for `SEC-LOGGING-001`) from cross-contaminating unrelated fixtures.
+3. Invokes `scripts/detect.py --target fixtures/<NAME> --only-fixture <NAME> --format json` to get the **actual** catalogue ID set. The `--only-fixture` flag scopes the catalogue to the entries that declare the fixture, which prevents corpus-level patterns (e.g., `resource_absent` for `SEC-GCP-LOGGING-001`) from cross-contaminating unrelated fixtures.
 4. Compares `expected` vs `actual` and prints `PASS` / `FAIL` per fixture.
 5. Exits with code `0` if all fixtures pass, code `1` if any fixture has a mismatch.
 

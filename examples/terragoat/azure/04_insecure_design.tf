@@ -22,7 +22,7 @@
 #     anti-pattern — same blast radius story.
 #
 # Expected tf-analyze findings:
-#   - ROB-LIFECYCLE-001  HIGH    Stateful resource missing prevent_destroy
+#   - ROB-GCP-LIFECYCLE-001 is GCP-specific; Azure equivalent pending catalogue entry (EXPLORATORY)
 #   - (Step 0a credential pattern detection flags the hardcoded
 #    password if it matches a known pattern)
 #

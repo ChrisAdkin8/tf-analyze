@@ -24,9 +24,9 @@
 #     across cordons / drains and even node-pool surge upgrades.
 #
 # Expected tf-analyze findings:
-#   - STK-GKE-002              HIGH   GKE cluster missing Workload Identity
-#   - SEC-GKE-NETWORK-POLICY-001 HIGH GKE cluster missing network_policy enforcement
-#   - STK-GKE-NODEPOOL-001     HIGH   Node pool missing shielded-instance hardening
+#   - STK-GCP-GKE-002              HIGH   GKE cluster missing Workload Identity
+#   - SEC-GCP-GKE-NETWORK-POLICY-001 HIGH GKE cluster missing network_policy enforcement
+#   - STK-GCP-GKE-NODEPOOL-001     HIGH   Node pool missing shielded-instance hardening
 #
 # Fix summary: enable Workload Identity at cluster create time,
 # enforce `enable_secure_boot` + `enable_integrity_monitoring` on

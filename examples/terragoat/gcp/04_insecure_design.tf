@@ -21,7 +21,7 @@
 #     still in storage but every consumer is now broken.
 #
 # Expected tf-analyze findings:
-#   - ROB-LIFECYCLE-001  HIGH    Stateful resource missing prevent_destroy
+#   - ROB-GCP-LIFECYCLE-001  HIGH    Stateful resource missing prevent_destroy
 #   - ROB-LIFECYCLE-002  HIGH    Stateful resource missing prevent_destroy
 #
 # Fix summary: one SA per workload boundary, narrow IAM per SA,

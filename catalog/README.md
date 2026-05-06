@@ -33,7 +33,7 @@ interpretable.
 ## Schema
 
 ```yaml
-id: SEC-IAM-001              # required, must match filename (without .yaml)
+id: SEC-GCP-IAM-001              # required, must match filename (without .yaml)
 title: "Short human title"   # required, ≤80 chars
 section: security            # required, one of: security|robustness|dry|style|simplicity|ops|cicd|module|stack|verification
 default_urgency: HIGH        # required, one of: CRITICAL|HIGH|MEDIUM|LOW|INFO
@@ -95,7 +95,7 @@ rules), collapses duplicates, and enriches with context.
 ## Sequencing within a run
 
 Within a single run, the report assigns instance numbers per finding ID:
-`SEC-IAM-001#1`, `SEC-IAM-001#2`, etc. Across runs the catalogue ID is the
+`SEC-GCP-IAM-001#1`, `SEC-GCP-IAM-001#2`, etc. Across runs the catalogue ID is the
 stable join key — instance numbers are not.
 
 ## Adding a new entry
@@ -105,4 +105,4 @@ stable join key — instance numbers are not.
 3. Add a fixture under `fixtures/<name>/` that triggers the new pattern.
 4. Re-run the skill against the fixture and confirm the new ID surfaces.
 5. Reference the new ID from any inline check list in `SKILL.md` that
-   produces it (e.g., Step 2b → SEC-IAM-001).
+   produces it (e.g., Step 2b → SEC-GCP-IAM-001).

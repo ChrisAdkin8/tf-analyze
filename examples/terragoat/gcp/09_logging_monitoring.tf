@@ -23,8 +23,8 @@
 #     bucket.
 #
 # Expected tf-analyze findings:
-#   - SEC-LOGGING-001         HIGH   Cloud Audit Logs not configured
-#   - STK-GCS-LOGGING-001     HIGH   GCS bucket logging target lacks public_access_prevention
+#   - SEC-GCP-LOGGING-001         HIGH   Cloud Audit Logs not configured
+#   - STK-GCP-GCS-LOGGING-001     HIGH   GCS bucket logging target lacks public_access_prevention
 #
 # Fix summary: declare `google_project_iam_audit_config` for
 # allServices in the root module; lock down every bucket that
@@ -57,7 +57,7 @@ resource "google_storage_bucket" "audit_target" {
   location                    = "US"
   uniform_bucket_level_access = true
   # public_access_prevention intentionally omitted — receives logs
-  # from `logged_source` above; STK-GCS-LOGGING-001 fires here.
+  # from `logged_source` above; STK-GCP-GCS-LOGGING-001 fires here.
 
   versioning {
     enabled = true
@@ -65,4 +65,4 @@ resource "google_storage_bucket" "audit_target" {
 }
 
 # google_project_iam_audit_config intentionally omitted at the project
-# level — SEC-LOGGING-001 fires.
+# level — SEC-GCP-LOGGING-001 fires.

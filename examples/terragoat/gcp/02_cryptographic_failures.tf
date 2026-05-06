@@ -22,8 +22,8 @@
 #     in well-instrumented pipelines.
 #
 # Expected tf-analyze findings:
-#   - STK-KMS-001           HIGH    KMS crypto key missing rotation period
-#   - STK-KMS-LOCATION-001  HIGH    CMEK consumer location mismatches key ring
+#   - STK-GCP-KMS-001           HIGH    KMS crypto key missing rotation period
+#   - STK-GCP-KMS-LOCATION-001  HIGH    CMEK consumer location mismatches key ring
 #   - SEC-SENSITIVE-001     HIGH    Sensitive output not marked sensitive=true
 #
 # Fix summary: add `rotation_period = "7776000s"` (90 days) on every

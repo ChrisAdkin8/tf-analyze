@@ -20,9 +20,9 @@
 #     only inspect resource-level IAM.
 #
 # Expected tf-analyze findings:
-#   - SEC-IAM-001     HIGH       Project-level binding of overly broad role
-#   - SEC-IAM-002     CRITICAL   Public IAM binding (allUsers)
-#   - SEC-IAM-003     HIGH       Member has both project-level and resource-level IAM grants
+#   - SEC-GCP-IAM-001     HIGH       Project-level binding of overly broad role
+#   - SEC-GCP-IAM-002     CRITICAL   Public IAM binding (allUsers)
+#   - SEC-GCP-IAM-003     HIGH       Member has both project-level and resource-level IAM grants
 #
 # Fix summary: bind narrow roles at the resource level using
 # `google_<service>_iam_member`. If the workload genuinely needs

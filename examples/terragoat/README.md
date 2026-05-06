@@ -86,7 +86,7 @@ The two axes (cloud × OWASP) compose: 3 clouds × 10 categories = 30 files. Plu
 ## Why both `fixtures/` and this corpus?
 
 - **`fixtures/`** are minimal one-rule-per-directory inputs used by `self_test.py`. A failing self-test pinpoints exactly which rule broke. Each fixture is one resource, sometimes two.
-- **`examples/terragoat/`** is a representative *project* that exercises rules in combination — including `graph_check` rules that need ≥2 resources to fire, corpus-level rules (`CI-TEST-001`, `SEC-LOGGING-001`, `STK-GCS-LOGGING-001`) that need a directory rather than a file, and the OWASP narrative that frames "why does this matter".
+- **`examples/terragoat/`** is a representative *project* that exercises rules in combination — including `graph_check` rules that need ≥2 resources to fire, corpus-level rules (`CI-TEST-001`, `SEC-GCP-LOGGING-001`, `STK-GCP-GCS-LOGGING-001`) that need a directory rather than a file, and the OWASP narrative that frames "why does this matter".
 
 Isolated fixtures alone miss interaction bugs. A project-shaped corpus alone loses diagnostic precision. Both serve.
 
