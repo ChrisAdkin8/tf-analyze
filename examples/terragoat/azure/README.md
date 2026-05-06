@@ -20,6 +20,8 @@
 
 ## Expected findings
 
+85 findings across 34 unique rule IDs. From inside this directory:
+
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
   | python3 -c '
@@ -34,24 +36,42 @@ print(f"---\n{len(fs)} total")
 
 Active rules that fire against this corpus:
 
-| Rule ID | File | What it catches |
+| Rule ID | Files | What it catches |
 |---|---|---|
 | `SEC-AZURE-RBAC-001` | 01 | Subscription-scope role assignment |
-| `SEC-AZURE-STORAGE-001` | 02, 05, 10 | Storage without HTTPS / min TLS / public access |
+| `SEC-AZURE-STORAGE-001` | 02, 05, 10 | Storage HTTPS not enforced |
+| `SEC-AZURE-STORAGE-002` | 05 | Storage allows public blob access |
 | `SEC-AZURE-KV-001` | 02 | Key Vault without purge protection |
-| `SEC-AZURE-AKS-001` | 05 | AKS with RBAC disabled |
-| `SEC-AZURE-SQL-001` | 07 | SQL Server without Entra admin |
+| `SEC-AZURE-KV-002` | 02 | Key Vault missing network ACL deny-by-default |
+| `SEC-AZURE-KV-003` | 02 | Key Vault key missing rotation policy |
+| `SEC-AZURE-AKS-001` | 05, 06 | AKS with RBAC disabled |
+| `SEC-AZURE-AKS-002` | 05 | AKS cluster missing network policy |
+| `SEC-AZURE-ACR-001` | 06 | Container Registry admin account enabled |
+| `SEC-AZURE-SQL-001` | 07 | SQL Server without Entra admin (corpus-level `resource_absent`) |
+| `SEC-AZURE-SQL-002` | 05 | SQL Server firewall rule open to all IPs |
 | `SEC-AZURE-LOGGING-001` | 09 | Key Vault without diagnostic setting |
-| `SEC-AZURE-WEBAPP-001` | 07 | Web App using storage account key |
+| `SEC-AZURE-MONITOR-001` | — | Subscription missing activity log diagnostic setting (corpus-level) |
+| `SEC-AZURE-WEBAPP-001` | 07, 10 | App Service missing IP access restrictions |
+| `SEC-AZURE-WEBAPP-002` | 06, 07, 10 | App Service / Function App HTTPS not enforced |
 | `SEC-AZURE-MI-001` | 04 | Orphan UAMI — no role_assignment referencing its principal_id |
-| `STK-AZURE-NSG-FLOWLOG-001` | 05, 09 | NSG present with no `azurerm_network_watcher_flow_log` in repo |
-| `ROB-AZURE-LIFECYCLE-001` | 04 | SQL Server without `lifecycle.prevent_destroy` |
-| `ROB-AZURE-SQL-001` | 04 | SQL Server missing `prevent_destroy` |
-| `ROB-AZURE-STORAGE-001` | 08 | Storage without soft delete |
+| `STK-AZURE-AKS-003` | 05, 06 | AKS workload identity not enabled |
+| `STK-AZURE-AKS-004` | 05, 06 | AKS cluster is publicly accessible |
+| `STK-AZURE-AKS-005` | 05, 06 | AKS API server missing authorized IP ranges |
+| `STK-AZURE-DB-001` | 07 | MySQL/PostgreSQL server missing SSL enforcement |
+| `STK-AZURE-NSG-001` | 05 | NSG rule open to the internet on sensitive ports |
+| `STK-AZURE-NSG-FLOWLOG-001` | — | NSG present with no flow log resource (corpus-level) |
+| `STK-AZURE-SQL-001` | 07 | Deprecated MySQL/PostgreSQL single-server resource |
+| `STK-AZURE-SQL-TDE-001` | — | Azure SQL Database missing TDE resource (corpus-level) |
+| `STK-AZURE-STORAGE-001` | 08 | Storage account missing blob versioning |
+| `ROB-AZURE-LIFECYCLE-001` | various | Stateful resource missing `lifecycle.prevent_destroy` |
+| `ROB-AZURE-SQL-001` | 04 | SQL database missing short-term backup retention |
+| `ROB-AZURE-STORAGE-001` | 08 | Storage without blob soft delete |
+| `ROB-VERSION-001` | versions.tf | `required_version` floor too old |
 | `OPS-AZURE-TAGS-001` | various | Resources missing `tags` |
 | `SEC-PROVISIONER-001` | 03 | `null_resource` with shell provisioner |
 | `MOD-PIN-001` | 06 | Module reference without `version` |
 | `SEC-SECRETS-001` | 04 | Hardcoded admin password in HCL |
+| `CI-TEST-001` | — | No `*.tftest.hcl` test files (corpus-level) |
 
 ## OWASP → Azure control mapping
 

@@ -1,6 +1,6 @@
 # AWS — OWASP Top 10 corpus
 
-10 deliberately vulnerable Terraform files demonstrating OWASP 2021 categories on AWS. AWS-specific catalogue coverage in `tf-analyze` is intentionally narrower than GCP — the corpus is part-demo, part-roadmap for catalogue expansion.
+10 deliberately vulnerable Terraform files demonstrating OWASP 2021 categories on AWS.
 
 ## File layout
 
@@ -20,7 +20,7 @@
 
 ## Expected findings
 
-The AWS catalogue has grown significantly. Active rules now include: `SEC-AWS-IAM-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-EBS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-CLOUDTRAIL-001`, `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-AWS-ECR-001`, `SEC-SECRETS-001`, `ROB-AWS-LIFECYCLE-001`, `ROB-AWS-RDS-001/002`, `ROB-AWS-S3-001`, `STK-AWS-LAMBDA-001`. From inside this directory:
+92 findings across 42 unique rule IDs. From inside this directory:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
@@ -34,13 +34,22 @@ print(f"---\n{len(fs)} total")
 '
 ```
 
-You should see: `SEC-AWS-IAM-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SG-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-AWS-ECR-001`, `SEC-SECRETS-001`, `ROB-AWS-LIFECYCLE-001`, `ROB-AWS-RDS-001/002`, `ROB-AWS-BACKEND-001`, `OPS-AWS-TAGS-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`, plus corpus-level rules (`CI-TEST-001`, `STYLE-DESC-001`, etc.).
+You should see at least one instance of each of:
+
+| Domain | Rule IDs |
+|---|---|
+| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
+| ROB | `ROB-AWS-BACKEND-001`, `ROB-AWS-LIFECYCLE-001/002`, `ROB-AWS-RDS-001/002/003`, `ROB-AWS-S3-001`, `ROB-VERSION-001/003` |
+| STK | `STK-AWS-EKS-001/002/003/004`, `STK-AWS-LAMBDA-001`, `STK-AWS-LAUNCH-TEMPLATE-001`, `STK-AWS-RDS-004`, `STK-AWS-ROUTE53-001` |
+| OPS/COST/MOD | `OPS-AWS-TAGS-001`, `COST-AWS-RISK-001`, `MOD-PIN-001`, `CI-TEST-001` |
+
+`SEC-AWS-ECR-002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `STK-AWS-EKS-004`, `STK-AWS-ROUTE53-001` are corpus-level `resource_absent` rules — they fire once per scan of this directory, not per file.
 
 ## OWASP → AWS control mapping
 
 ### A01 — Broken Access Control
 
-The single largest source of AWS data leaks. Bridgecrew/Checkov has ~15 AWS rules under this umbrella; `tf-analyze` has one (`SEC-AWS-IAM-001`). The corpus demonstrates three shapes: the IAM wildcard policy, the missing public-access block on S3, and the wildcard `Principal` in an assume-role policy. All three are catalogue expansion targets.
+The single largest source of AWS data leaks. The corpus demonstrates three shapes: the IAM wildcard policy (`SEC-AWS-IAM-001`), the missing public-access block on S3 (`SEC-AWS-S3-PUBLIC-BLOCK-001`), and the wildcard `Principal` in an assume-role policy (`SEC-AWS-IAM-002`).
 
 ### A02 — Cryptographic Failures
 
@@ -60,7 +69,7 @@ The most-flagged category by every IaC scanner. AWS-specific shapes: SGs with `0
 
 ### A06 — Vulnerable and Outdated Components
 
-Lambda runtimes on the AWS deprecation calendar are the most consequential AWS-specific shape — once deprecated, the function silently stops receiving security patches. `nodejs10.x`, `python3.6`, `dotnetcore2.1`, and earlier are all in the catalogue's future scope.
+Lambda runtimes on the AWS deprecation calendar (`STK-AWS-LAMBDA-001`) and launch templates without IMDSv2 enforcement (`STK-AWS-LAUNCH-TEMPLATE-001`). The corpus also exercises unpinned module sources (`MOD-PIN-001`) and a `required_providers` entry without a version constraint (`ROB-VERSION-003`).
 
 ### A07 — Identification and Authentication Failures
 
@@ -87,15 +96,13 @@ python3 ../../../scripts/detect.py --target . --format text
 # Or for SARIF / HTML / JSON, see the parent terragoat/README.md.
 ```
 
-## Catalogue expansion roadmap
+## Adding to this corpus
 
-If you're contributing AWS rules to `tf-analyze`, this corpus is the starting point. Each file's header lists "Expected tf-analyze findings" — anything not yet flagged is a candidate for a new catalogue entry. Suggested first additions, ranked:
+When you add a new AWS rule to the catalogue:
 
-1. `SEC-AWS-IMDS-001` — EC2 without IMDSv2-required (10_ssrf.tf trigger).
-2. `SEC-AWS-S3-PUBLIC-BLOCK-001` — bucket without `aws_s3_bucket_public_access_block` (01_broken_access_control.tf).
-3. `SEC-AWS-RDS-ENCRYPT-001` — RDS without `storage_encrypted = true` (02_cryptographic_failures.tf).
-4. `SEC-AWS-RDS-PUBLIC-001` — RDS with `publicly_accessible = true` (05_security_misconfiguration.tf).
-5. `SEC-AWS-LAMBDA-RUNTIME-001` — Lambda on EOL runtime (06_vulnerable_components.tf).
-6. `SEC-AWS-CLOUDTRAIL-001` — CloudTrail not multi-region or no log-file validation (09_logging_monitoring.tf).
+1. Identify the OWASP category from the table above.
+2. Add a triggering snippet to the relevant `0N_*.tf` file.
+3. Update the file's header comment under `Expected tf-analyze findings`.
+4. Re-run the scan to confirm the new ID appears in the count.
 
-Use `python3 scripts/detect.py --new-rule SEC-AWS-IMDS-001` to scaffold each one. The corresponding fixture goes in `fixtures/aws_imds_v1/main.tf` and the trigger in this corpus's `10_ssrf.tf` should already match.
+Use `python3 scripts/detect.py --new-rule SEC-AWS-NEWRULE-001` to scaffold the catalogue YAML + fixture skeleton.
