@@ -66,6 +66,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import fnmatch
 import os
 import re
 import subprocess
@@ -626,7 +627,7 @@ def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict
                 regex = re.compile(pat["regex"], re.MULTILINE)
                 glob = pat.get("file_glob", "**/*.tf")
                 if glob not in ("**/*.tf", "*.tf") and not str(file_path).endswith(
-                    glob.lstrip("*")
+                    glob.lstrip("*/")
                 ):
                     continue
                 search_text = strip_hcl_context(text) if pat.get("hcl_context") else text
@@ -1299,6 +1300,45 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                                     "file": bfile,
                                     "line": bline,
                                     "resource": f"backend.{btype}",
+                                }
+                            )
+            elif kind == "backend_missing_arg":
+                # Fire when a backend block of the specified type exists but lacks
+                # a required argument. Used to catch S3 backends without state locking.
+                backend_type = pat.get("backend_type")
+                arg = pat.get("arg")
+                if not backend_type or not arg:
+                    continue
+                backend_re = re.compile(
+                    r'^\s*backend\s+"' + re.escape(backend_type) + r'"\s*\{',
+                    re.MULTILINE,
+                )
+                arg_re = re.compile(r'\b' + re.escape(arg) + r'\s*=')
+                for fp, text in all_files_text.items():
+                    for m in backend_re.finditer(text):
+                        # Extract block body via brace matching
+                        depth, i, end = 0, m.end() - 1, None
+                        while i < len(text):
+                            c = text[i]
+                            if c == "{":
+                                depth += 1
+                            elif c == "}":
+                                depth -= 1
+                                if depth == 0:
+                                    end = i
+                                    break
+                            i += 1
+                        if end is None:
+                            continue
+                        body = text[m.end():end]
+                        if not arg_re.search(body):
+                            line = text.count("\n", 0, m.start()) + 1
+                            findings.append(
+                                {
+                                    "id": eid,
+                                    "file": str(fp),
+                                    "line": line,
+                                    "resource": f"backend.{backend_type}",
                                 }
                             )
             elif kind == "templatefile_sensitive_leak":

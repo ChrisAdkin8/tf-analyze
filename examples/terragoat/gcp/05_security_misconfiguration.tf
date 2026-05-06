@@ -33,6 +33,7 @@
 #   - SEC-GCP-NETWORK-002             CRITICAL   RDP (tcp:3389) exposed to 0.0.0.0/0
 #   - SEC-GCP-SQL-PUBLIC-001          HIGH       Cloud SQL instance permits public IPv4
 #   - STK-GCP-CLOUDSQL-003            HIGH       Cloud SQL instance missing deletion_protection
+#   - STK-GCP-CLOUDSQL-004            HIGH       Cloud SQL instance does not require SSL
 #   - SEC-GCP-BUCKET-001              HIGH       GCS bucket missing public_access_prevention=enforced
 #   - SEC-GCP-BUCKET-002              MEDIUM     GCS bucket missing uniform_bucket_level_access
 #   - OPS-ENV-001                     HIGH       Prod-scoped resource lacks deletion_protection

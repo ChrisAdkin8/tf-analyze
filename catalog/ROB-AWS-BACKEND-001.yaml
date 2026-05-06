@@ -1,0 +1,33 @@
+id: ROB-AWS-BACKEND-001
+title: "Terraform S3 backend missing DynamoDB state locking"
+section: robustness
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+patterns:
+  - kind: backend_missing_arg
+    backend_type: s3
+    arg: dynamodb_table
+recommendation: |
+  Add `dynamodb_table` to the S3 backend configuration:
+
+      terraform {
+        backend "s3" {
+          bucket         = "my-terraform-state"
+          key            = "terraform.tfstate"
+          region         = "us-east-1"
+          dynamodb_table = "terraform-state-lock"
+          encrypt        = true
+        }
+      }
+
+  Without state locking, concurrent `terraform apply` runs on the same
+  workspace will race and can corrupt the state file. The DynamoDB table
+  needs a `LockID` string hash key; `terraform init` does not create it
+  automatically.
+verification: |
+  Run two simultaneous `terraform plan` invocations and confirm the
+  second is blocked with "Error acquiring the state lock". Or check the
+  DynamoDB table in the AWS console for an active lock entry.
+fixtures:
+  - aws_s3_backend_no_lock

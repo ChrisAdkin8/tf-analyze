@@ -1,0 +1,36 @@
+id: STK-GCP-GKE-004
+title: "GKE cluster missing master authorized networks"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "8.5.4"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    nested_path: master_authorized_networks_config.cidr_blocks
+recommendation: |
+  Add a `master_authorized_networks_config` block to restrict who can
+  reach the Kubernetes API server:
+
+      master_authorized_networks_config {
+        cidr_blocks {
+          cidr_block   = "10.0.0.0/8"
+          display_name = "internal-vpc"
+        }
+        cidr_blocks {
+          cidr_block   = "<corporate-egress-cidr>"
+          display_name = "corp-vpn"
+        }
+      }
+
+  Without this block the API server is reachable from any IP that can
+  reach GCP, making it a target for credential stuffing and zero-day
+  exploits against the Kubernetes API.
+verification: |
+  `gcloud container clusters describe <name> \
+    --format='value(masterAuthorizedNetworksConfig.cidrBlocks)'`
+  must return at least one CIDR entry.
+fixtures:
+  - gke_no_master_auth_networks

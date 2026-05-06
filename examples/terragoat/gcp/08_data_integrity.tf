@@ -22,8 +22,9 @@
 #
 # Expected tf-analyze findings:
 #   - STK-GCP-BUCKET-001    MEDIUM   GCS bucket missing versioning
-#   - ROB-MOVED-001     LOW      Stale moved block may need cleanup
-#   - ROB-REMOVED-001   LOW      Stale removed block may need cleanup
+#   - STK-GCP-BIGQUERY-001  HIGH     BigQuery dataset missing default CMEK
+#   - ROB-MOVED-001         LOW      Stale moved block may need cleanup
+#   - ROB-REMOVED-001       LOW      Stale removed block may need cleanup
 #
 # Fix summary: turn on versioning + a lifecycle_rule expiring
 # non-current versions; delete moved/removed blocks immediately
@@ -53,4 +54,12 @@ removed {
   lifecycle {
     destroy = true
   }
+}
+
+# BigQuery dataset without CMEK — STK-GCP-BIGQUERY-001.
+resource "google_bigquery_dataset" "analytics" {
+  dataset_id = "demo_analytics"
+  location   = "US"
+
+  # default_encryption_configuration intentionally omitted — STK-GCP-BIGQUERY-001 fires.
 }

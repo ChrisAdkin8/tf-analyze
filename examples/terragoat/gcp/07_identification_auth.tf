@@ -27,6 +27,7 @@
 #   - STK-GCP-GKE-002              HIGH   GKE cluster missing Workload Identity
 #   - SEC-GCP-GKE-NETWORK-POLICY-001 HIGH GKE cluster missing network_policy enforcement
 #   - STK-GCP-GKE-NODEPOOL-001     HIGH   Node pool missing shielded-instance hardening
+#   - STK-GCP-GKE-004              HIGH   GKE cluster missing master authorized networks
 #
 # Fix summary: enable Workload Identity at cluster create time,
 # enforce `enable_secure_boot` + `enable_integrity_monitoring` on
@@ -41,6 +42,7 @@ resource "google_container_cluster" "demo" {
 
   # workload_identity_config intentionally omitted
   # network_policy intentionally omitted
+  # master_authorized_networks_config intentionally omitted — STK-GCP-GKE-004 fires.
 }
 
 resource "google_container_node_pool" "default" {

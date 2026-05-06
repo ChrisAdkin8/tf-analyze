@@ -1,0 +1,30 @@
+id: STK-GCP-CLOUDSQL-005
+title: "Cloud SQL instance uses end-of-life database version"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: google_sql_database_instance
+    arg: database_version
+    regex: '^(POSTGRES_9_6|MYSQL_5_6|MYSQL_5_7|SQLSERVER_2012|SQLSERVER_2014)$'
+    description: |
+      `database_version` set to a version that has reached end-of-life and
+      no longer receives security patches from the upstream project or Google.
+recommendation: |
+  Upgrade to a supported version. Current Google Cloud SQL supported versions:
+  - PostgreSQL: 14, 15, 16
+  - MySQL: 8.0, 8.4
+  - SQL Server: 2017, 2019, 2022
+
+  Test the upgrade on a clone first:
+      resource "google_sql_database_instance" "clone" {
+        database_version = "POSTGRES_15"
+        clone { source_instance_name = google_sql_database_instance.main.name }
+      }
+verification: |
+  `gcloud sql instances describe <name> --format='value(databaseVersion)'`
+  must return a supported, non-EOL version string.
+fixtures:
+  - cloudsql_eol_version

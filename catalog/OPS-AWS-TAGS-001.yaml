@@ -1,0 +1,56 @@
+id: OPS-AWS-TAGS-001
+title: "AWS resource missing tags"
+section: ops
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_instance
+    arg: tags
+  - kind: resource_missing_arg
+    resource: aws_s3_bucket
+    arg: tags
+  - kind: resource_missing_arg
+    resource: aws_db_instance
+    arg: tags
+  - kind: resource_missing_arg
+    resource: aws_eks_cluster
+    arg: tags
+  - kind: resource_missing_arg
+    resource: aws_lambda_function
+    arg: tags
+  - kind: resource_missing_arg
+    resource: aws_vpc
+    arg: tags
+  - kind: resource_missing_arg
+    resource: aws_dynamodb_table
+    arg: tags
+  - kind: resource_missing_arg
+    resource: aws_rds_cluster
+    arg: tags
+recommendation: |
+  Add a `tags` block with at minimum `Environment`, `ManagedBy = "terraform"`,
+  and `Project`. Use a `locals` block for shared tags:
+
+      locals {
+        common_tags = {
+          Environment = var.environment
+          ManagedBy   = "terraform"
+          Project     = var.project_name
+        }
+      }
+
+      resource "aws_instance" "app" {
+        # ...
+        tags = merge(local.common_tags, { Name = "app" })
+      }
+
+  Tags are required for cost allocation, compliance reporting, and
+  automated cleanup. AWS Cost Explorer cannot break down spend by
+  workload without consistent tags.
+verification: |
+  `aws resourcegroupstaggingapi get-resources --tag-filters Key=ManagedBy,Values=terraform`
+  must return the resource. Or review the AWS Tag Editor in the console.
+fixtures:
+  - aws_resource_no_tags
