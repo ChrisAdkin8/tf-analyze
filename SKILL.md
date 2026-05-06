@@ -1095,7 +1095,15 @@ Verify-fixed mode is significantly cheaper than a full scan (~10× fewer file re
 
 ## Step 16: Generate Report
 
-Write the report to `reports/tf-analysis-YYYY-MM-DD.md` (create `reports/` if needed). Use today's date.
+Generate the report filename by embedding the current datetime (date + time) so multiple runs on the same day are uniquely named and sortable:
+
+```bash
+REPORT_TS=$(date +%Y-%m-%d-%H%M%S)
+REPORT_FILE="reports/tf-analysis-${REPORT_TS}.md"
+mkdir -p reports
+```
+
+Write the report to `${REPORT_FILE}` (create `reports/` if needed).
 
 ### Delta comparison
 
@@ -1261,13 +1269,45 @@ Surface the worst-offender files so refactor effort can be targeted. Sort descen
 
 ## 13. Recommended Action Plan
 
-<Ordered list of the top 10-15 highest-impact changes, combining findings across sections, with estimated effort and blast radius>
+Group the top findings into urgency bands. Within each band sort by blast radius descending, then effort ascending (quick wins first). Show ALL CRITICAL findings; cap HIGH at 10, MEDIUM at 8, LOW at 5.
 
-| Priority | Finding | Section | Effort | Blast Radius | Description |
-|----------|---------|---------|--------|--------------|-------------|
-| 1 | SEC-IAM-001#1 | Security | Small | infrastructure-wide | ... |
-| 2 | ROB-LIFECYCLE-001#3 | Robustness | Medium | module | ... |
+Use the effort definitions from Step 16 (Small ≤30 min / Medium ≤2 h / Large ≥half-day) in the Effort column. Each row should be immediately actionable — include a one-line description concrete enough for a developer to start without reading the full finding.
+
+### CRITICAL — Fix Immediately
+
+| # | Finding | Section | Effort | Blast Radius | Description |
+|---|---------|---------|--------|--------------|-------------|
+| 1 | SEC-IAM-002#1 | Security | Small | infrastructure-wide | Remove `allUsers` IAM binding on storage bucket |
 | ... | | | | | |
+
+_No CRITICAL findings_ — omit this sub-section if the band is empty.
+
+### HIGH — Fix This Sprint
+
+| # | Finding | Section | Effort | Blast Radius | Description |
+|---|---------|---------|--------|--------------|-------------|
+| 1 | ROB-LIFECYCLE-001#3 | Robustness | Small | module | Add `prevent_destroy` to stateful resource |
+| ... | | | | | |
+
+_No HIGH findings_ — omit this sub-section if the band is empty.
+
+### MEDIUM — Plan to Address
+
+| # | Finding | Section | Effort | Blast Radius | Description |
+|---|---------|---------|--------|--------------|-------------|
+| 1 | MOD-PIN-001#2 | DRY | Medium | module | Pin module source to a versioned ref |
+| ... | | | | | |
+
+_No MEDIUM findings_ — omit this sub-section if the band is empty.
+
+### LOW — Address Opportunistically
+
+| # | Finding | Section | Effort | Blast Radius | Description |
+|---|---------|---------|--------|--------------|-------------|
+| 1 | STYLE-DESC-001#4 | Style | Small | single-resource | Add description to variable block |
+| ... | | | | | |
+
+_No LOW findings_ — omit this sub-section if the band is empty.
 
 ### Related Findings
 
@@ -1476,26 +1516,26 @@ When a band overflows, show the top N (sorted by blast radius descending, then b
 After writing the report, print a brief summary to the console:
 
 ```
-Report written: reports/tf-analysis-YYYY-MM-DD.md
+Report written: reports/tf-analysis-YYYY-MM-DD-HHmmss.md
 Health Grade: <A-F> (<score>/100)
 
 Findings: N CRITICAL, N HIGH, N MEDIUM, N LOW, N INFO
-Delta: +N new, -N resolved (vs YYYY-MM-DD)
+Delta: +N new, -N resolved (vs YYYY-MM-DD-HHmmss)
 Top priority: <one-line description of the #1 action item>
 ```
 
-If `format:json` was requested, also write `reports/tf-analysis-YYYY-MM-DD.json` with the same data structured as:
+If `format:json` was requested, also write `reports/tf-analysis-YYYY-MM-DD-HHmmss.json` with the same data structured as:
 
 ```json
 {
-  "date": "YYYY-MM-DD",
+  "date": "YYYY-MM-DD-HHmmss",
   "scope": "...",
   "mode": "static|plan",
   "health_grade": "B",
   "health_score": 72,
   "summary": "...",
   "delta": {
-    "previous_report": "YYYY-MM-DD",
+    "previous_report": "YYYY-MM-DD-HHmmss",
     "resolved": ["SEC-IAM-001#1"],
     "new": ["MOD-PIN-001#1", "ROB-LIFECYCLE-002#3"],
     "unchanged": ["SEC-BUCKET-001#1", "SEC-PROVIDER-001#1"]
