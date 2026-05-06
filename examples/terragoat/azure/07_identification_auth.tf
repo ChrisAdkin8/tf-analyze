@@ -23,7 +23,9 @@
 #     which become single-points-of-compromise.
 #
 # Expected tf-analyze findings:
-#   - SEC-AZURE-MI-001  MEDIUM   Azure user-assigned identity grants without explicit scope (stub)
+#   - SEC-AZURE-WEBAPP-001  HIGH    Web App using storage account key in app_settings
+#   - SEC-AZURE-WEBAPP-002  HIGH    Web App HTTPS not enforced (https_only absent)
+#   - SEC-AZURE-SQL-001     HIGH    SQL Server without Entra ID administrator
 #
 # Fix summary: use Managed Identity + RBAC for storage access; configure
 # `azuread_administrator` on every SQL Server; one UAMI per workload

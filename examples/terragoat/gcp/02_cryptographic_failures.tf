@@ -24,7 +24,8 @@
 # Expected tf-analyze findings:
 #   - STK-GCP-KMS-001           HIGH    KMS crypto key missing rotation period
 #   - STK-GCP-KMS-LOCATION-001  HIGH    CMEK consumer location mismatches key ring
-#   - SEC-SENSITIVE-001     HIGH    Sensitive output not marked sensitive=true
+#   - SEC-SENSITIVE-001         HIGH    Sensitive output not marked sensitive=true
+#   - STK-GCP-PUBSUB-001        MEDIUM  Pub/Sub topic without customer-managed encryption key
 #
 # Fix summary: add `rotation_period = "7776000s"` (90 days) on every
 # symmetric crypto key, co-locate consumers with their key rings, and
@@ -64,6 +65,15 @@ resource "google_storage_bucket" "encrypted_cross_region" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+# Pub/Sub topic without CMEK — messages encrypted with Google-managed
+# keys only. For topics carrying PII or regulated data, a CMEK binding
+# is required so the organisation controls key rotation and access
+# revocation.
+resource "google_pubsub_topic" "no_cmek" {
+  name = "demo-events"
+  # kms_key_name intentionally absent
 }
 
 variable "vault_token" {

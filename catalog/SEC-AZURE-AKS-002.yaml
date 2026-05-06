@@ -1,0 +1,37 @@
+id: SEC-AZURE-AKS-002
+title: "AKS cluster missing network policy"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    nested_path: network_profile.network_policy
+    description: |
+      `azurerm_kubernetes_cluster` without a `network_profile { network_policy }` setting.
+      Without a network policy, all pods in the cluster can communicate freely — a
+      compromised pod can reach every other pod and the Kubernetes API on any port.
+      With `network_policy = "azure"` (Azure CNI) or `network_policy = "calico"`,
+      pods are isolated by default and can only reach what a `NetworkPolicy` manifest
+      explicitly allows.
+recommendation: |
+  Set a network policy in the cluster's `network_profile` block:
+
+      resource "azurerm_kubernetes_cluster" "app" {
+        network_profile {
+          network_plugin = "azure"
+          network_policy = "azure"   # or "calico" / "cilium"
+        }
+      }
+
+  After enabling, deploy Kubernetes `NetworkPolicy` objects to restrict
+  pod-to-pod and pod-to-API-server traffic to the minimum required.
+  Without `NetworkPolicy` manifests the CNI allows all traffic even with
+  the policy engine installed.
+verification: |
+  `az aks show --name <cluster> --resource-group <rg> \
+    --query 'networkProfile.networkPolicy'`
+  must return `"azure"`, `"calico"`, or `"cilium"` (not `null` or `"none"`).
+fixtures:
+  - azure_aks_no_netpol

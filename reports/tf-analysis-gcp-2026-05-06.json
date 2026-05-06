@@ -297,19 +297,31 @@
     {
       "id": "OPS-GCP-LABELS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
-      "line": 50,
+      "line": 51,
       "resource": "google_storage_bucket.encrypted_cross_region"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 74,
+      "resource": "google_pubsub_topic.no_cmek"
     },
     {
       "id": "STK-GCP-KMS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
-      "line": 37,
+      "line": 38,
       "resource": "google_kms_crypto_key.data"
+    },
+    {
+      "id": "STK-GCP-PUBSUB-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 74,
+      "resource": "google_pubsub_topic.no_cmek"
     },
     {
       "id": "STYLE-DESC-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
-      "line": 77,
+      "line": 87,
       "resource": "output.vault_token_echo"
     },
     {
@@ -412,7 +424,7 @@
     {
       "id": "SEC-SENSITIVE-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
-      "line": 77,
+      "line": 87,
       "resource": "output.vault_token_echo"
     },
     {
@@ -431,7 +443,7 @@
     },
     {
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
-      "line": 50,
+      "line": 51,
       "resource": "google_storage_bucket.encrypted_cross_region",
       "context": "location 'us-central1' does not match KMS key ring location 'us-east1' (via google_kms_crypto_key.data)",
       "id": "STK-GCP-KMS-LOCATION-001"

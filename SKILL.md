@@ -109,6 +109,15 @@ The skill has five execution modes. Pick the right one before starting — they 
 
 The skill is **GCP-first**. Catalogue entries, CIS mappings, the IAM compatibility matrix (Appendix A), and stack-specific Step 10 checks are exhaustive for Google Cloud. AWS and Azure are **secondary**: the skill will surface obvious findings (public S3 buckets, hardcoded credentials, missing tags) but does NOT claim CIS coverage or full provider parity for those clouds. If the codebase is AWS- or Azure-dominant, expect lower recall and treat the report as a starting point rather than an audit.
 
+**Approximate per-cloud rule counts (as of the current catalogue):**
+
+| Cloud | Active rules | Notes |
+|---|---|---|
+| **GCP** | ~90 | Full CIS GCP v4.0 coverage for the documented controls; IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, Cloud Armor, GCS, networking |
+| **AWS** | ~30 | IAM wildcard, S3, RDS, KMS, CloudTrail, SQS, SNS, ElastiCache, ECR, VPC flow logs, CloudWatch cost controls, SG world-open ports, secrets |
+| **Azure** | ~20 | RBAC, storage, Key Vault, AKS, SQL, App Service, NSG flow logs, UAMI, TDE, HTTPS enforcement |
+| **Multi-cloud** | ~5 | Secrets in HCL/tfvars, provisioner usage, module pinning, lifecycle controls |
+
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.
 
 ---

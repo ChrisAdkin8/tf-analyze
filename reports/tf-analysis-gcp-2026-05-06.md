@@ -47,9 +47,11 @@ ROB-GCP-LIFECYCLE-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/
 SEC-GCP-BUCKET-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf:57 google_storage_bucket.audit_target
 SEC-GCP-NETWORK-003 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf:73 google_compute_subnetwork.no_flow_logs
 STK-GCP-DNS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf:83 google_dns_managed_zone.no_dnssec
-OPS-GCP-LABELS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:50 google_storage_bucket.encrypted_cross_region
-STK-GCP-KMS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:37 google_kms_crypto_key.data
-STYLE-DESC-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:77 output.vault_token_echo
+OPS-GCP-LABELS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:51 google_storage_bucket.encrypted_cross_region
+OPS-GCP-LABELS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:74 google_pubsub_topic.no_cmek
+STK-GCP-KMS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:38 google_kms_crypto_key.data
+STK-GCP-PUBSUB-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:74 google_pubsub_topic.no_cmek
+STYLE-DESC-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:87 output.vault_token_echo
 OPS-GCP-LABELS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf:32 google_storage_bucket.no_versioning
 OPS-GCP-LABELS-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf:60 google_bigquery_dataset.analytics
 ROB-MOVED-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf:46 moved
@@ -66,7 +68,7 @@ CI-TEST-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_bro
 OPS-ENV-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf:133 google_storage_bucket.prod_data
 SEC-GCP-IAM-003 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf:45 google_project_iam_member.app_at_project
 SEC-GCP-LOGGING-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp:0 <absent: google_project_iam_audit_config>
-SEC-SENSITIVE-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:77 output.vault_token_echo
+SEC-SENSITIVE-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:87 output.vault_token_echo
 STK-GCP-GCS-LOGGING-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf:57 google_storage_bucket.audit_target
 STK-GCP-GKE-NODEPOOL-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf:47 google_container_node_pool.default
-STK-GCP-KMS-LOCATION-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:50 google_storage_bucket.encrypted_cross_region
+STK-GCP-KMS-LOCATION-001 /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf:51 google_storage_bucket.encrypted_cross_region

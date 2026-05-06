@@ -24,9 +24,10 @@
 #     coffee-shop wifi.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-S3-001  HIGH  S3 bucket missing server-side encryption
-#                           (the existing rule fires here; the others
-#                           are roadmap items for the catalogue)
+#   - SEC-AWS-S3-001    HIGH  S3 bucket missing server-side encryption
+#   - SEC-AWS-RDS-002   HIGH  RDS instance storage not encrypted
+#   - SEC-AWS-KMS-001   HIGH  KMS key rotation disabled
+#   - SEC-AWS-EBS-001   HIGH  EBS volume not encrypted
 #
 # Fix summary: turn on every encryption flag explicitly; never rely
 # on AWS account defaults (they vary by region and by account age).

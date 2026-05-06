@@ -27,8 +27,7 @@
 #      restrictive firewall in the egress path.
 #
 # Expected tf-analyze findings:
-#   - (no Azure-specific catalogue rule for IMDS / Private Endpoints
-#    yet; documented as roadmap)
+#   - SEC-AZURE-WEBAPP-002  HIGH  Web App / Function App HTTPS not enforced
 #
 # Fix summary: every PaaS resource gets `public_network_access_enabled
 # = false` plus a Private Endpoint; AKS clusters route egress through

@@ -8,9 +8,14 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_sqs_queue
     arg: kms_master_key_id
+    suppress_if:
+      arg: sqs_managed_sse_enabled
+      equals: "true"
     description: |
       `aws_sqs_queue` without `kms_master_key_id` and without
       `sqs_managed_sse_enabled = true`. Messages at rest are unencrypted.
+      The finding is suppressed when `sqs_managed_sse_enabled = true`
+      is present (SQS-managed SSE is an acceptable alternative).
 recommendation: |
   Enable encryption using either a customer-managed KMS key or SQS-managed SSE:
 

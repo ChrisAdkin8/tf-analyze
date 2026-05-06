@@ -69,7 +69,7 @@ Per-file kinds (run inside `detect_in_file`):
 | Kind | Meaning |
 |---|---|
 | `resource_arg` | A `resource` block whose argument matches a regex |
-| `resource_missing_arg` | A `resource` block of the named type that lacks the named argument |
+| `resource_missing_arg` | A `resource` block of the named type that lacks the named argument. Supports an optional `suppress_if: { arg: X, equals: "val" }` field — the finding is suppressed when an alternative arg equals the specified value (e.g., SQS queue encrypted via `sqs_managed_sse_enabled = true` suppresses the `kms_master_key_id` missing check). |
 | `resource_present` | Any `resource` block of the named type triggers the finding |
 | `data_source_present` | Any `data` block of the named type triggers the finding (e.g. `vault_kv_secret_v2`) |
 | `grep` | A regex against the raw file body — last resort, use sparingly |
@@ -84,7 +84,9 @@ Corpus-level kinds (run inside `detect_corpus` once per scan):
 
 | Kind | Meaning |
 |---|---|
-| `resource_absent`, `output_sensitive_leak`, `cross_module`, `variable_unused`, `output_unused`, `module_missing_tests`, `backend_inconsistency`, `templatefile_sensitive_leak`, `remote_state_present`, `provider_alias_unused`, `provider_alias_module_mismatch`, `foreach_over_list`, `data_external_injection`, `tfstate_in_repo`, `submodule_version_missing`, `prod_no_deletion_protection`, `deprecated_datasource` | See in-source docstrings |
+| `resource_absent` | Fires when a resource type is **absent** from the scan target. Use `when_present: <type>` to guard against cross-cloud false positives (only fires when the prerequisite type exists). Use `scope: repo` for repo-wide absence checks. |
+| `backend_missing_arg` | Fires when a `terraform { backend "<type>" {} }` block is missing a required argument (e.g., S3 backend without `dynamodb_table`). Fields: `backend_type`, `arg`. |
+| `output_sensitive_leak`, `cross_module`, `variable_unused`, `output_unused`, `module_missing_tests`, `backend_inconsistency`, `templatefile_sensitive_leak`, `remote_state_present`, `provider_alias_unused`, `provider_alias_module_mismatch`, `foreach_over_list`, `data_external_injection`, `tfstate_in_repo`, `submodule_version_missing`, `prod_no_deletion_protection`, `deprecated_datasource` | See in-source docstrings |
 | `graph_check` | Cross-resource detector dispatched to a registered Python function. The catalogue YAML names the function via `function: <name>` and the dispatcher in `detect.py` routes to `_GRAPH_CHECKS[name]`. Use this for conditions that span ≥2 resources (e.g., a logging target's hardening, a Workload Identity binding's bidirectionality). To add a new graph check: implement the function in `detect.py` next to `_GRAPH_CHECKS`, register it in that dict, then reference `kind: graph_check, function: <name>` in the catalogue YAML. |
 
 The detection pass walks every `.tf` file in scope, applies every catalogue

@@ -1,0 +1,42 @@
+id: STK-GCP-PUBSUB-001
+title: "Pub/Sub topic missing customer-managed encryption key"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: google_pubsub_topic
+    arg: kms_key_name
+    description: |
+      `google_pubsub_topic` without `kms_key_name`. Messages stored in
+      the topic buffer — including any PII, credentials, or structured
+      data that producers push — are encrypted with Google-managed keys.
+      A CMEK binding ensures the organisation controls key rotation,
+      holds evidence of access, and can revoke access to the data by
+      disabling the key.
+recommendation: |
+  Bind a Cloud KMS key to the topic:
+
+      resource "google_pubsub_topic" "app" {
+        name       = "app-events"
+        kms_key_name = google_kms_crypto_key.pubsub.id
+      }
+
+      resource "google_kms_crypto_key_iam_member" "pubsub" {
+        crypto_key_id = google_kms_crypto_key.pubsub.id
+        role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+        member        = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+      }
+
+  The Pub/Sub service agent must have `cloudkms.cryptoKeyEncrypterDecrypter`
+  on the key — without the IAM binding the topic will fail to publish.
+
+  For topics in a regulated environment (HIPAA, FedRAMP), pair the CMEK
+  with `google_kms_crypto_key.rotation_period` of ≤ 90 days to satisfy
+  CIS GCP 1.10.
+verification: |
+  `gcloud pubsub topics describe <topic> --format='value(kmsKeyName)'`
+  must return the full key resource ID.
+fixtures:
+  - gcp_pubsub_no_cmek

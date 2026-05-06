@@ -1,0 +1,34 @@
+id: STK-AZURE-SQL-TDE-001
+title: "Azure SQL Database missing transparent data encryption resource"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_absent
+    resource: azurerm_mssql_database_transparent_data_encryption
+    when_present: azurerm_mssql_database
+    scope: repo
+    description: |
+      `azurerm_mssql_database` present but no
+      `azurerm_mssql_database_transparent_data_encryption` resource in
+      the repository. TDE encrypts data files, log files, and backups at
+      rest. Without an explicit TDE resource, encryption state depends on
+      provider defaults and cannot be audited or enforced in code.
+recommendation: |
+  Add a TDE resource for every SQL database and pin it to `"Enabled"`:
+
+      resource "azurerm_mssql_database_transparent_data_encryption" "app" {
+        database_id = azurerm_mssql_database.app.id
+        state       = "Enabled"
+      }
+
+  For databases on SQL Managed Instance (not SQL Server), TDE is enabled
+  by default and managed at the instance level — this rule applies only
+  to `azurerm_mssql_database` on `azurerm_mssql_server`.
+verification: |
+  `az sql db tde show --database <db> --server <server> \
+    --resource-group <rg> --query 'status'`
+  must return `"Enabled"`.
+fixtures:
+  - azure_sql_no_tde

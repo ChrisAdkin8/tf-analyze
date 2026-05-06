@@ -24,8 +24,10 @@
 #     as a contributing factor.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-VPC-FLOWLOGS-001 (VPC without aws_flow_log)
-#   - COST-AWS-RISK-001 (CloudWatch log group without retention_in_days)
+#   - SEC-AWS-VPC-FLOWLOGS-001   HIGH    VPC without aws_flow_log
+#   - SEC-AWS-CLOUDTRAIL-001     HIGH    CloudTrail not multi-region
+#   - SEC-AWS-CLOUDTRAIL-002     HIGH    CloudTrail log file validation disabled
+#   - COST-AWS-RISK-001          MEDIUM  CloudWatch log group without retention_in_days
 #
 # Fix summary: one CloudTrail trail with `is_multi_region_trail = true`
 # and `enable_log_file_validation = true` per organisation; flow logs

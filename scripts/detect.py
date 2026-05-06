@@ -661,6 +661,7 @@ def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict
                 arg_path = pat.get("arg") or pat.get("nested_path") or ""
                 if not arg_path:
                     continue
+                suppress_if = pat.get("suppress_if")
                 for blk in resources:
                     btype, bname = blk["groups"]
                     if btype != rt:
@@ -670,6 +671,13 @@ def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict
                     else:
                         present = block_has_arg(blk["body"], arg_path)
                     if not present:
+                        if suppress_if:
+                            s_arg = suppress_if.get("arg", "")
+                            s_val = str(suppress_if.get("equals", "")).lower().strip("\"'")
+                            if s_arg and s_val:
+                                actual = block_arg_value(blk["body"], s_arg)
+                                if actual and str(actual).lower().strip("\"'") == s_val:
+                                    continue
                         findings.append(
                             {
                                 "id": eid,
@@ -2683,11 +2691,19 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
                 arg_path = pat.get("arg") or pat.get("nested_path")
                 if not (rt and arg_path):
                     continue
+                suppress_if = pat.get("suppress_if")
                 for r in resources:
                     if r.get("type") != rt:
                         continue
                     val = _plan_value_at_path(r.get("values") or {}, arg_path)
                     if val in (None, [], {}):
+                        if suppress_if:
+                            s_arg = suppress_if.get("arg", "")
+                            s_val = suppress_if.get("equals")
+                            if s_arg and s_val is not None:
+                                actual = _plan_value_at_path(r.get("values") or {}, s_arg)
+                                if actual is not None and str(actual).lower() == str(s_val).lower():
+                                    continue
                         findings.append({
                             "id": eid,
                             "file": "<plan>",

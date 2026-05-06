@@ -24,8 +24,9 @@
 #     secret and substitutes their own.
 #
 # Expected tf-analyze findings:
-#   - SEC-AZURE-STORAGE-001  HIGH   Azure storage account allows non-HTTPS traffic (stub)
-#   - SEC-AZURE-KV-001       HIGH   Azure Key Vault missing purge protection (stub)
+#   - SEC-AZURE-STORAGE-001  HIGH  Azure storage account allows non-HTTPS / weak TLS
+#   - SEC-AZURE-KV-001       HIGH  Azure Key Vault missing purge protection
+#   - SEC-AZURE-KV-002       HIGH  Key Vault missing network ACL deny-by-default
 #
 # Fix summary: every storage account gets `enable_https_traffic_only
 # = true` and `min_tls_version = "TLS1_2"`; every Key Vault gets

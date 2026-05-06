@@ -1,0 +1,42 @@
+id: SEC-AWS-CLOUDTRAIL-002
+title: "CloudTrail log file integrity validation disabled"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_cloudtrail
+    arg: enable_log_file_validation
+    description: |
+      `aws_cloudtrail` without `enable_log_file_validation`. An attacker
+      who gains write access to the CloudTrail S3 bucket can edit or
+      delete log files to erase evidence of their activity. Without
+      validation, tampered logs are indistinguishable from authentic ones.
+  - kind: hcl_attr
+    resource: aws_cloudtrail
+    path: enable_log_file_validation
+    not_equal: true
+    description: |
+      `enable_log_file_validation = false` disables the SHA-256 hash
+      chain that makes log tampering detectable.
+recommendation: |
+  Enable log file validation on every CloudTrail trail:
+
+      resource "aws_cloudtrail" "org" {
+        name                       = "org-trail"
+        s3_bucket_name             = aws_s3_bucket.trail.id
+        enable_log_file_validation = true
+        is_multi_region_trail      = true
+        kms_key_id                 = aws_kms_key.trail.arn
+      }
+
+  Validation works by CloudTrail computing a SHA-256 digest file every
+  hour and signing it with a private key. To verify integrity retroactively:
+  `aws cloudtrail validate-logs --trail-arn <arn> --start-time <ISO8601>`.
+verification: |
+  `aws cloudtrail describe-trails --trail-name-list <name> \
+    --query 'trailList[0].LogFileValidationEnabled'`
+  must return `true`.
+fixtures:
+  - aws_cloudtrail_no_validation

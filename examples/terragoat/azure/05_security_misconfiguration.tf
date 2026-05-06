@@ -18,8 +18,10 @@
 #      and no `network_rules` block — reachable from any IP.
 #   5. App Service / Function App with `https_only = false`.
 #
-# Expected tf-analyze findings:
-#   - STK-AZURE-NSG-001  HIGH    NSG rule open to the internet on sensitive ports (stub)
+# Expected tf-analyze findings (selected):
+#   - STK-AZURE-NSG-001    HIGH  NSG rule open to the internet on sensitive ports
+#   - SEC-AZURE-AKS-001    HIGH  AKS RBAC disabled / node public IPs
+#   - SEC-AZURE-AKS-002    HIGH  AKS cluster missing network policy
 #
 # Fix summary: every NSG rule needs a specific CIDR or service tag
 # (`AzureCloud`, `Storage`, `VirtualNetwork`); RBAC on for every AKS

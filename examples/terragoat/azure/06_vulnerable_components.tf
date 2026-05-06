@@ -21,7 +21,9 @@
 #     compliance audits and lose Microsoft support.
 #
 # Expected tf-analyze findings:
-#   - MOD-PIN-001  MEDIUM   Registry module source missing version
+#   - MOD-PIN-001          MEDIUM  Registry module source missing version
+#   - SEC-AZURE-AKS-002    HIGH    AKS cluster missing network policy
+#   - SEC-AZURE-WEBAPP-002 HIGH    Function App HTTPS not enforced
 #
 # Fix summary: pin every runtime to a non-deprecated version and
 # subscribe to the deprecation calendar; pin AKS to N-1 at most;

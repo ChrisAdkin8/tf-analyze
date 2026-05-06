@@ -23,8 +23,9 @@
 #     network layer is impossible.
 #
 # Expected tf-analyze findings:
-#   - (no Azure-specific catalogue rule fires here today; documented
-#    as roadmap)
+#   - SEC-AZURE-LOGGING-001    HIGH  Key Vault without diagnostic setting
+#   - SEC-AZURE-KV-002         HIGH  Key Vault missing network ACL deny-by-default
+#   - STK-AZURE-NSG-FLOWLOG-001 HIGH NSG present with no flow log resource in repo
 #
 # Fix summary: one `azurerm_monitor_diagnostic_setting` per audit-
 # critical resource, sink to Log Analytics with 365-day+ retention;

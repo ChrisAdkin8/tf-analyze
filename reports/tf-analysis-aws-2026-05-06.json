@@ -159,109 +159,115 @@
     {
       "id": "COST-AWS-RISK-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
-      "line": 59,
+      "line": 61,
       "resource": "aws_cloudwatch_log_group.no_retention"
     },
     {
       "id": "OPS-AWS-TAGS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
-      "line": 53,
+      "line": 55,
       "resource": "aws_s3_bucket.unlogged"
     },
     {
       "id": "ROB-AWS-LIFECYCLE-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
-      "line": 53,
+      "line": 55,
       "resource": "aws_s3_bucket.unlogged"
     },
     {
       "id": "ROB-AWS-S3-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
-      "line": 53,
+      "line": 55,
       "resource": "aws_s3_bucket.unlogged"
     },
     {
       "id": "SEC-AWS-CLOUDTRAIL-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
-      "line": 35,
+      "line": 37,
+      "resource": "aws_cloudtrail.single_region"
+    },
+    {
+      "id": "SEC-AWS-CLOUDTRAIL-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 37,
       "resource": "aws_cloudtrail.single_region"
     },
     {
       "id": "SEC-AWS-S3-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
-      "line": 53,
+      "line": 55,
       "resource": "aws_s3_bucket.unlogged"
     },
     {
       "id": "OPS-AWS-TAGS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 35,
+      "line": 36,
       "resource": "aws_s3_bucket.no_sse"
     },
     {
       "id": "OPS-AWS-TAGS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 40,
+      "line": 41,
       "resource": "aws_db_instance.unencrypted"
     },
     {
       "id": "ROB-AWS-LIFECYCLE-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 40,
+      "line": 41,
       "resource": "aws_db_instance.unencrypted"
     },
     {
       "id": "ROB-AWS-LIFECYCLE-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 35,
+      "line": 36,
       "resource": "aws_s3_bucket.no_sse"
     },
     {
       "id": "ROB-AWS-RDS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 40,
+      "line": 41,
       "resource": "aws_db_instance.unencrypted"
     },
     {
       "id": "ROB-AWS-RDS-002",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 40,
+      "line": 41,
       "resource": "aws_db_instance.unencrypted"
     },
     {
       "id": "ROB-AWS-S3-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 35,
+      "line": 36,
       "resource": "aws_s3_bucket.no_sse"
     },
     {
       "id": "SEC-AWS-EBS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 54,
+      "line": 55,
       "resource": "aws_ebs_volume.unencrypted"
     },
     {
       "id": "SEC-AWS-KMS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 61,
+      "line": 62,
       "resource": "aws_kms_key.no_rotation"
     },
     {
       "id": "SEC-AWS-RDS-002",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 40,
+      "line": 41,
       "resource": "aws_db_instance.unencrypted"
     },
     {
       "id": "SEC-AWS-S3-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 35,
+      "line": 36,
       "resource": "aws_s3_bucket.no_sse"
     },
     {
       "id": "SEC-SECRETS-001",
       "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
-      "line": 47,
+      "line": 48,
       "resource": ""
     },
     {
