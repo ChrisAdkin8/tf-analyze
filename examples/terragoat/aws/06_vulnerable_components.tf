@@ -19,10 +19,11 @@
 #
 # Expected tf-analyze findings:
 #   - MOD-PIN-001        MEDIUM  Registry module source missing version
-#   - STK-AWS-EKS-001    HIGH    EKS endpoint_private_access not enabled
-#   - STK-AWS-EKS-002    HIGH    EKS control plane logging not enabled
-#   - STK-AWS-EKS-003    HIGH    EKS secrets encryption not configured
-#   - STK-AWS-EKS-004    HIGH    EKS OIDC provider absent (no IRSA)
+#   - STK-AWS-EKS-001             HIGH    EKS endpoint_private_access not enabled
+#   - STK-AWS-EKS-002             HIGH    EKS control plane logging not enabled
+#   - STK-AWS-EKS-003             HIGH    EKS secrets encryption not configured
+#   - STK-AWS-EKS-004             HIGH    EKS OIDC provider absent (no IRSA)
+#   - STK-AWS-LAUNCH-TEMPLATE-001 HIGH    Launch template does not enforce IMDSv2
 #
 # Fix summary: pin Lambda runtimes to a non-deprecated version
 # (consult the AWS Lambda runtimes page); use `data "aws_ami"` with
@@ -49,6 +50,16 @@ resource "aws_lambda_function" "eol_runtime" {
 resource "aws_instance" "frozen_ami" {
   ami           = "ami-0c55b159cbfafe1f0" # Ubuntu 18.04 from 2018
   instance_type = "t3.micro"
+}
+
+# Launch template without IMDSv2 enforcement. Used by EKS node groups
+# and standalone EC2 — any pod or workload with SSRF can reach
+# 169.254.169.254 and steal the node's IAM role credentials.
+resource "aws_launch_template" "insecure" {
+  name_prefix   = "demo-insecure-"
+  image_id      = "ami-0c55b159cbfafe1f0"
+  instance_type = "t3.micro"
+  # No metadata_options block — IMDSv1 accessible
 }
 
 # EKS cluster with no private endpoint, no logging, no secrets encryption.

@@ -1,0 +1,43 @@
+id: SEC-AZURE-MONITOR-001
+title: "Azure subscription missing activity log diagnostic setting"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_absent
+    resource: azurerm_subscription_diagnostic_setting
+    when_present: azurerm_resource_group
+    scope: repo
+recommendation: |
+  Add an `azurerm_subscription_diagnostic_setting` to forward subscription
+  Activity Logs to a Log Analytics workspace or storage account:
+
+      resource "azurerm_subscription_diagnostic_setting" "activity" {
+        name               = "activity-log-to-law"
+        target_resource_id = "/subscriptions/${var.subscription_id}"
+
+        log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+        enabled_log {
+          category = "Administrative"
+        }
+        enabled_log {
+          category = "Security"
+        }
+        enabled_log {
+          category = "Alert"
+        }
+        enabled_log {
+          category = "Policy"
+        }
+      }
+
+  Without this, all Resource Manager API calls (create/delete/modify) age out
+  at the platform's 90-day retention with no long-term archive. Post-incident
+  investigations are blind beyond that window.
+verification: |
+  `az monitor diagnostic-settings subscriptions list` must return at least one
+  setting with Log Analytics or storage sink. Re-run tf-analyze mode:verify-fixed.
+fixtures:
+  - azure_no_activity_log

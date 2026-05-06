@@ -1,0 +1,45 @@
+id: STK-AWS-LAUNCH-TEMPLATE-001
+title: "EC2 launch template does not enforce IMDSv2"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_launch_template
+    nested_path: metadata_options.http_tokens
+    description: |
+      `aws_launch_template` without `metadata_options { http_tokens = "required" }`.
+      Launch templates without IMDSv2 enforcement allow nodes (EC2 and EKS node
+      groups using this template) to call IMDSv1, which is exploitable via SSRF.
+  - kind: hcl_attr
+    resource: aws_launch_template
+    path: metadata_options.http_tokens
+    not_equal: '"required"'
+    description: |
+      `aws_launch_template` with `metadata_options.http_tokens` set to something
+      other than `"required"` — IMDSv2 not enforced.
+recommendation: |
+  Enforce IMDSv2 on every launch template:
+
+      resource "aws_launch_template" "app" {
+        # ...
+        metadata_options {
+          http_endpoint               = "enabled"
+          http_tokens                 = "required"
+          http_put_response_hop_limit = 1
+        }
+      }
+
+  For EKS managed node groups, the launch template feeds into
+  `aws_eks_node_group.launch_template`. Nodes without IMDSv2 are
+  exploitable from any pod with SSRF capability — the pod can reach
+  169.254.169.254 and steal the node's IAM role credentials.
+verification: |
+  `aws ec2 describe-launch-template-versions --launch-template-id <id>` —
+  `MetadataOptions.HttpTokens` must be `required`. Re-run tf-analyze mode:verify-fixed.
+related:
+  - SEC-AWS-SSRF-001
+  - STK-AWS-EKS-001
+fixtures:
+  - aws_launch_template_no_imdsv2

@@ -1,0 +1,26 @@
+id: SEC-AWS-GUARDDUTY-001
+title: "AWS GuardDuty detector not enabled in this account/region"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_absent
+    resource: aws_guardduty_detector
+    when_present: aws_vpc
+    scope: repo
+recommendation: |
+  Enable GuardDuty by adding an `aws_guardduty_detector` resource:
+
+      resource "aws_guardduty_detector" "main" {
+        enable = true
+      }
+
+  GuardDuty is a threat-detection service that continuously monitors for
+  malicious activity using VPC Flow Logs, DNS logs, and CloudTrail events.
+  A single detector per account/region suffices.
+verification: |
+  Run `aws guardduty list-detectors` and confirm a detector ID is returned.
+  Re-run tf-analyze in mode:verify-fixed.
+fixtures:
+  - aws_no_guardduty

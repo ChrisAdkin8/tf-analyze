@@ -1,0 +1,42 @@
+id: ROB-VERSION-003
+title: "required_providers entry missing version constraint"
+section: robustness
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: providers_version_missing
+    description: |
+      A `terraform { required_providers { ... } }` block contains a provider
+      entry without a `version` constraint. Without pinning, `terraform init`
+      may pull a newer major version that introduces breaking changes or new
+      provider defaults (e.g., a security-relevant default changing from
+      `false` to `true` or vice versa).
+recommendation: |
+  Add a `version` constraint to every provider entry in `required_providers`:
+
+      terraform {
+        required_providers {
+          google = {
+            source  = "hashicorp/google"
+            version = "~> 5.0"
+          }
+          aws = {
+            source  = "hashicorp/aws"
+            version = "~> 5.0"
+          }
+        }
+      }
+
+  The `~> X.Y` pessimistic-constraint operator pins the major version while
+  allowing minor/patch updates. For production environments, consider exact
+  pinning (`= X.Y.Z`) and committing `.terraform.lock.hcl`.
+verification: |
+  Run `terraform init -upgrade` and confirm no provider is downloaded at
+  an unexpected version. The `.terraform.lock.hcl` file should exist and
+  be committed to version control.
+related:
+  - ROB-VERSION-001
+  - ROB-VERSION-002
+fixtures:
+  - providers_no_version

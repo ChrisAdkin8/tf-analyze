@@ -1580,6 +1580,65 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                                 "resource": f"<module:{Path(d).name}>",
                             }
                         )
+            elif kind == "providers_version_missing":
+                # Find terraform { required_providers { ... } } blocks and
+                # flag any provider entry that lacks a version constraint.
+                tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
+                rp_block_re = re.compile(r"required_providers\s*\{")
+                # Matches a provider entry: name = { ... }
+                entry_re = re.compile(
+                    r"(\w[\w-]*)\s*=\s*\{([^{}]+)\}", re.DOTALL
+                )
+                for fp, text in all_files_text.items():
+                    for tf_m in tf_block_re.finditer(text):
+                        depth = 0
+                        i = tf_m.end() - 1
+                        tf_end = None
+                        while i < len(text):
+                            if text[i] == "{":
+                                depth += 1
+                            elif text[i] == "}":
+                                depth -= 1
+                                if depth == 0:
+                                    tf_end = i
+                                    break
+                            i += 1
+                        if tf_end is None:
+                            continue
+                        tf_body = text[tf_m.end():tf_end]
+                        rp = rp_block_re.search(tf_body)
+                        if not rp:
+                            continue
+                        # Extract only the required_providers inner block
+                        rp_start = tf_m.end() + rp.end()
+                        depth = 1
+                        j = rp_start
+                        rp_end = None
+                        while j < len(text):
+                            if text[j] == "{":
+                                depth += 1
+                            elif text[j] == "}":
+                                depth -= 1
+                                if depth == 0:
+                                    rp_end = j
+                                    break
+                            j += 1
+                        if rp_end is None:
+                            continue
+                        rp_body = text[rp_start:rp_end]
+                        for em in entry_re.finditer(rp_body):
+                            provider_name = em.group(1)
+                            entry_body = em.group(2)
+                            if not re.search(r"\bversion\s*=", entry_body):
+                                # Find the line number
+                                entry_pos = rp_start + em.start()
+                                line_no = text.count("\n", 0, entry_pos) + 1
+                                findings.append({
+                                    "id": eid,
+                                    "file": str(fp),
+                                    "line": line_no,
+                                    "resource": f"<provider:{provider_name}>",
+                                })
             elif kind == "prod_no_deletion_protection":
                 # Heuristic: resources in a file path containing 'prod' or
                 # labels mentioning prod, with deletion_protection=false or
@@ -1929,11 +1988,23 @@ SARIF_HELP_URI_BASE = (
 )
 
 
-def _sarif_fingerprint(finding: dict) -> str:
-    """Stable partial fingerprint so GitHub Code Scanning can deduplicate."""
-    key = f"{finding['id']}|{finding.get('file','')}|{finding.get('resource','')}"
+def _sarif_fingerprint(finding: dict) -> dict:
+    """Return partial fingerprints for SARIF.
+
+    Two complementary keys:
+    - tfAnalyze/v1: id|file|resource — changes when file is renamed (new/resolved pair)
+    - tfAnalyze/v1-resource: id|resource — stable across file renames; GitHub Code
+      Scanning uses the highest-specificity key that matches, so renaming a file
+      no longer floods the "fixed" view with false positives when the resource
+      name is preserved.
+    """
     import hashlib
-    return hashlib.sha256(key.encode()).hexdigest()[:16]
+    full_key = f"{finding['id']}|{finding.get('file','')}|{finding.get('resource','')}"
+    resource_key = f"{finding['id']}|{finding.get('resource','')}"
+    return {
+        "tfAnalyze/v1": hashlib.sha256(full_key.encode()).hexdigest()[:16],
+        "tfAnalyze/v1-resource": hashlib.sha256(resource_key.encode()).hexdigest()[:16],
+    }
 
 
 def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
@@ -2001,9 +2072,7 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
                     }
                 }
             ],
-            "partialFingerprints": {
-                "tfAnalyze/v1": _sarif_fingerprint(f),
-            },
+            "partialFingerprints": _sarif_fingerprint(f),
         }
         if f["id"] in rule_index:
             result["level"] = rules[rule_index[f["id"]]]["defaultConfiguration"]["level"]
@@ -2936,6 +3005,16 @@ def main():
         default="text",
     )
     ap.add_argument(
+        "--output",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Write report output to PATH instead of stdout. "
+            "The file is created or overwritten. stderr (progress, "
+            "counts, errors) is unaffected."
+        ),
+    )
+    ap.add_argument(
         "--mode",
         choices=["static", "diff", "verify-fixed"],
         default="static",
@@ -3088,6 +3167,20 @@ def main():
     if args.use_hcl2:
         _enable_hcl2_or_warn()
 
+    # Route report output: stdout (default) or a file (--output PATH).
+    # We shadow `print` for report output only — stderr progress lines
+    # always go to sys.stderr and are unaffected.
+    _out_file = None
+    if args.output:
+        _out_file = open(args.output, "w", encoding="utf-8")
+
+    def _emit(text: str) -> None:
+        """Write report output to stdout or --output file."""
+        if _out_file is not None:
+            _out_file.write(text + "\n")
+        else:
+            print(text)
+
     catalog_dir = Path(args.catalog).resolve()
 
     # Meta-commands run on the catalogue alone — no target needed.
@@ -3157,7 +3250,7 @@ def main():
                 continue
         verify = verify_fixed(prior, target, all_text, entries)
         if args.format == "json":
-            print(json.dumps(verify, indent=2, default=str))
+            _emit(json.dumps(verify, indent=2, default=str))
         else:
             import datetime
             out_path = reports_dir / f"tf-analysis-verify-{datetime.date.today()}.md"
@@ -3323,42 +3416,45 @@ def main():
               f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
         if args.format == "json":
             output = {"findings": findings, "suppressed": suppressed_findings, "delta": delta}
-            print(json.dumps(output, indent=2))
+            _emit(json.dumps(output, indent=2))
         elif args.format == "sarif":
             sarif = to_sarif(findings, entries)
-            print(json.dumps(sarif, indent=2))
+            _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            print(to_html(findings, entries, suppressed_findings))
+            _emit(to_html(findings, entries, suppressed_findings))
         else:
             if delta["new"]:
-                print("# NEW findings:")
+                _emit("# NEW findings:")
                 for f in delta["new"]:
-                    print(f"  + {f['id']} {f['file']}:{f['line']} {f['resource']}")
+                    _emit(f"  + {f['id']} {f['file']}:{f['line']} {f['resource']}")
             if delta["resolved"]:
-                print("# RESOLVED findings:")
+                _emit("# RESOLVED findings:")
                 for f in delta["resolved"]:
-                    print(f"  - {f['id']} {f['file']}:{f['line']} {f['resource']}")
+                    _emit(f"  - {f['id']} {f['file']}:{f['line']} {f['resource']}")
             if delta["unchanged"]:
-                print(f"# {len(delta['unchanged'])} unchanged finding(s)")
+                _emit(f"# {len(delta['unchanged'])} unchanged finding(s)")
     else:
         # Standard output
         if args.format == "json":
             output_data = {"findings": findings}
             if suppressed_findings:
                 output_data["suppressed"] = suppressed_findings
-            print(json.dumps(output_data, indent=2))
+            _emit(json.dumps(output_data, indent=2))
         elif args.format == "sarif":
             sarif = to_sarif(findings, entries)
-            print(json.dumps(sarif, indent=2))
+            _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            print(to_html(findings, entries, suppressed_findings))
+            _emit(to_html(findings, entries, suppressed_findings))
         else:
             for f in findings:
-                print(f"{f['id']} {f['file']}:{f['line']} {f['resource']}")
+                _emit(f"{f['id']} {f['file']}:{f['line']} {f['resource']}")
             if suppressed_findings:
                 print(f"# ({len(suppressed_findings)} suppressed)", file=sys.stderr)
             if not findings:
                 print("# no findings", file=sys.stderr)
+
+    if _out_file is not None:
+        _out_file.close()
 
     # Exit code for CI gating
     if args.fail_on:

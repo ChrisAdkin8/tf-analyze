@@ -25,5 +25,9 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.2"
     }
+    # random provider without version — fires ROB-VERSION-003
+    random = {
+      source = "hashicorp/random"
+    }
   }
 }

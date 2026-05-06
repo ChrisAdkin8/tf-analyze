@@ -133,3 +133,7 @@ Scaffold a new catalogue entry and fixture skeleton for the given ID (must match
 
 show this help message and exit
 
+### `--output`
+
+Write report output to PATH instead of stdout. The file is created or overwritten. stderr (progress, counts, errors) is unaffected.
+

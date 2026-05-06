@@ -1,0 +1,37 @@
+id: SEC-GCP-COMPUTE-SHIELDED-001
+title: "GCP Compute instance missing shielded instance configuration"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: google_compute_instance
+    nested_path: shielded_instance_config.enable_secure_boot
+    description: |
+      `google_compute_instance` without a `shielded_instance_config` block.
+      Shielded VMs provide Secure Boot, vTPM, and integrity monitoring — the
+      three controls that prevent a compromised bootloader or kernel module
+      from persisting across reboots undetected.
+recommendation: |
+  Add a `shielded_instance_config` block to every `google_compute_instance`:
+
+      resource "google_compute_instance" "app" {
+        # ...
+        shielded_instance_config {
+          enable_secure_boot          = true
+          enable_vtpm                 = true
+          enable_integrity_monitoring = true
+        }
+      }
+
+  The machine must use a Shielded-compatible image (all standard GCP images
+  published after 2018 are shielded-compatible). Use
+  `gcloud compute images list --filter="shielded=true"` to confirm.
+verification: |
+  `gcloud compute instances describe <instance> --format="json(shieldedInstanceConfig)"`
+  must show `enableSecureBoot: true`. Re-run tf-analyze in mode:verify-fixed.
+related:
+  - STK-GCP-GKE-NODEPOOL-001
+fixtures:
+  - gcp_compute_no_shielded
