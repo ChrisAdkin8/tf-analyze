@@ -3,6 +3,8 @@ title: "Azure Key Vault missing purge protection or soft delete"
 section: security
 default_urgency: HIGH
 blast_radius: module
+cis:
+  - "8.4"
 status: active
 patterns:
   - kind: resource_arg

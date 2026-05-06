@@ -1,0 +1,72 @@
+id: SEC-GCP-NETWORK-004
+title: "GCP firewall rule exposes database or cache port to 0.0.0.0/0"
+section: security
+default_urgency: CRITICAL
+blast_radius: environment
+status: active
+cis:
+  - "3.6"
+patterns:
+  - kind: firewall_open_port
+    ports:
+      - "3306"
+      - "5432"
+      - "1433"
+      - "5439"
+      - "6379"
+      - "11211"
+      - "27017"
+      - "27018"
+      - "9200"
+      - "9300"
+    description: |
+      `google_compute_firewall` with `source_ranges = ["0.0.0.0/0"]` and an
+      `allow {}` block containing a database or cache port:
+      - 3306  MySQL / MariaDB
+      - 5432  PostgreSQL
+      - 1433  Microsoft SQL Server
+      - 5439  Amazon Redshift (also used on GCP for Redshift-compatible)
+      - 6379  Redis
+      - 11211 Memcached
+      - 27017 MongoDB primary
+      - 27018 MongoDB shard
+      - 9200  Elasticsearch / OpenSearch HTTP
+      - 9300  Elasticsearch / OpenSearch transport
+
+      These services were designed for private network use. Publicly exposed
+      database ports are routinely scanned and exploited within hours — the
+      MongoDB ransomware waves of 2017 and 2019 both required only a public
+      port and no authentication. Even with authentication, service-specific
+      CVEs (unauthenticated RCE in Redis, Elasticsearch default no-auth) make
+      exposure high-severity.
+recommendation: |
+  Remove the `allow` block for database/cache ports or restrict
+  `source_ranges` to specific internal CIDR ranges:
+
+  ```hcl
+  resource "google_compute_firewall" "db_internal" {
+    name    = "allow-db-internal"
+    network = google_compute_network.main.name
+
+    allow {
+      protocol = "tcp"
+      ports    = ["5432"]
+    }
+
+    # Only allow from the application subnet, never from 0.0.0.0/0
+    source_ranges = [google_compute_subnetwork.app.ip_cidr_range]
+  }
+  ```
+
+  For GKE workloads, use a Kubernetes `NetworkPolicy` (covered by
+  SEC-GCP-GKE-NETWORK-POLICY-001) instead of a VPC firewall rule.
+
+  For Cloud SQL, the correct pattern is the Cloud SQL Auth Proxy or
+  Private Service Access — not a public IP with firewall rules.
+verification: |
+  `gcloud compute firewall-rules list --filter="direction=INGRESS" \
+    --format="table(name,allowed[].map().firewall_key():label=ALLOW,sourceRanges)"` —
+  confirm no row has `0.0.0.0/0` in source ranges and a database port in
+  the allow column. Re-run tf-analyze; SEC-GCP-NETWORK-004 must not fire.
+fixtures:
+  - gcp_firewall_db_port

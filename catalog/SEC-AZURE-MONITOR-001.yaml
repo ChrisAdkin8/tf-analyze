@@ -3,6 +3,8 @@ title: "Azure subscription missing activity log diagnostic setting"
 section: security
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "5.2.1"
 status: active
 patterns:
   - kind: resource_absent

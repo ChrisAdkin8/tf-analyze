@@ -3,6 +3,8 @@ title: "Azure Key Vault missing diagnostic settings"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "8.7"
 status: active
 patterns:
   - kind: resource_absent

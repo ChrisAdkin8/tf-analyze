@@ -635,17 +635,29 @@ def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict
                     line = search_text.count("\n", 0, m.start()) + 1
                     findings.append({"id": eid, "file": str(file_path), "line": line, "resource": ""})
             elif kind == "resource_arg":
-                if not all(k in pat for k in ("resource", "arg", "regex")):
+                has_regex = "regex" in pat
+                has_not_regex = "not_regex" in pat
+                if "resource" not in pat or "arg" not in pat:
+                    continue
+                if not has_regex and not has_not_regex:
                     continue
                 rt = pat["resource"]
                 arg = pat["arg"]
-                regex = re.compile(pat["regex"])
+                regex = re.compile(pat["regex"]) if has_regex else None
+                not_regex = re.compile(pat["not_regex"]) if has_not_regex else None
                 for blk in resources:
                     btype, bname = blk["groups"]
                     if btype != rt:
                         continue
                     val = block_arg_value(blk["body"], arg)
-                    if val is not None and regex.search(val):
+                    if val is None:
+                        continue
+                    hit = False
+                    if regex and regex.search(val):
+                        hit = True
+                    if not_regex and not not_regex.search(val):
+                        hit = True
+                    if hit:
                         findings.append(
                             {
                                 "id": eid,
@@ -1983,8 +1995,8 @@ _GRAPH_CHECKS = {
 # ---- SARIF output --------------------------------------------------------
 
 SARIF_HELP_URI_BASE = (
-    "https://github.com/anthropics/claude-code/blob/main/"
-    "skills/tf-analyze/catalog/{id}.yaml"
+    "https://github.com/ChrisAdkin8/tf-analyze/blob/main/"
+    "catalog/{id}.yaml"
 )
 
 
@@ -2087,7 +2099,7 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
                     "driver": {
                         "name": "tf-analyze",
                         "version": "1.2.0",
-                        "informationUri": "https://github.com/anthropics/claude-code",
+                        "informationUri": "https://github.com/ChrisAdkin8/tf-analyze",
                         "rules": rules,
                     }
                 },
@@ -2738,16 +2750,23 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
                 rt = pat.get("resource")
                 arg = pat.get("arg")
                 regex_str = pat.get("regex")
-                if not (rt and arg and regex_str):
+                not_regex_str = pat.get("not_regex")
+                if not (rt and arg and (regex_str or not_regex_str)):
                     continue
-                regex = re.compile(regex_str)
+                regex = re.compile(regex_str) if regex_str else None
+                not_regex = re.compile(not_regex_str) if not_regex_str else None
                 for r in resources:
                     if r.get("type") != rt:
                         continue
                     val = (r.get("values") or {}).get(arg)
                     if val is None:
                         continue
-                    if regex.search(str(val)):
+                    hit = False
+                    if regex and regex.search(str(val)):
+                        hit = True
+                    if not_regex and not not_regex.search(str(val)):
+                        hit = True
+                    if hit:
                         findings.append({
                             "id": eid,
                             "file": "<plan>",

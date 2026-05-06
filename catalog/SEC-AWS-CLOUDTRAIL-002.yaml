@@ -3,6 +3,8 @@ title: "CloudTrail log file integrity validation disabled"
 section: security
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "3.2"
 status: active
 patterns:
   - kind: resource_missing_arg

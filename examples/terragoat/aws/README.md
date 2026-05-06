@@ -14,13 +14,13 @@
 | [`06_vulnerable_components.tf`](06_vulnerable_components.tf) | A06 | Lambda on EOL `nodejs10.x`; hardcoded AMI; module without `version` |
 | [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | Long-lived IAM user with access key; inline `*/*` policy; weak `aws_iam_account_password_policy` |
 | [`08_data_integrity.tf`](08_data_integrity.tf) | A08 | S3 without versioning; RDS `backup_retention_period = 0`; ECR without image scanning |
-| [`09_logging_monitoring.tf`](09_logging_monitoring.tf) | A09 | CloudTrail single-region, no log-file validation; VPC without flow logs; S3 without access logging |
+| [`09_logging_monitoring.tf`](09_logging_monitoring.tf) | A09 | CloudTrail single-region, no log-file validation; VPC without flow logs; S3 without server access logging; EKS with partial control-plane log types (missing `audit`/`authenticator`); CloudWatch log group without retention |
 | [`10_ssrf.tf`](10_ssrf.tf) | A10 | EC2 without `metadata_options.http_tokens = "required"` (IMDSv1) — the Capital One shape |
 | [`versions.tf`](versions.tf) | — | Pins `~> 5.50` aws provider, `>= 1.10.0` Terraform |
 
 ## Expected findings
 
-92 findings across 42 unique rule IDs. From inside this directory:
+96 findings across 44 unique rule IDs. From inside this directory:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
@@ -38,9 +38,9 @@ You should see at least one instance of each of:
 
 | Domain | Rule IDs |
 |---|---|
-| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
+| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
 | ROB | `ROB-AWS-BACKEND-001`, `ROB-AWS-LIFECYCLE-001/002`, `ROB-AWS-RDS-001/002/003`, `ROB-AWS-S3-001`, `ROB-VERSION-001/003` |
-| STK | `STK-AWS-EKS-001/002/003/004`, `STK-AWS-LAMBDA-001`, `STK-AWS-LAUNCH-TEMPLATE-001`, `STK-AWS-RDS-004`, `STK-AWS-ROUTE53-001` |
+| STK | `STK-AWS-EKS-001/002/003/004/005`, `STK-AWS-LAMBDA-001`, `STK-AWS-LAUNCH-TEMPLATE-001`, `STK-AWS-RDS-004`, `STK-AWS-ROUTE53-001` |
 | OPS/COST/MOD | `OPS-AWS-TAGS-001`, `COST-AWS-RISK-001`, `MOD-PIN-001`, `CI-TEST-001` |
 
 `SEC-AWS-ECR-002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `STK-AWS-EKS-004`, `STK-AWS-ROUTE53-001` are corpus-level `resource_absent` rules — they fire once per scan of this directory, not per file.

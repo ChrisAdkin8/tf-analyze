@@ -3,6 +3,8 @@ title: "IAM policy with wildcard resource"
 section: security
 default_urgency: HIGH
 blast_radius: infrastructure-wide
+cis:
+  - "1.16"
 status: active
 patterns:
   - kind: grep

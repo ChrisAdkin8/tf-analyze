@@ -3,6 +3,8 @@ title: "Azure SQL Database missing transparent data encryption resource"
 section: stack
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "4.1.1"
 status: active
 patterns:
   - kind: resource_absent

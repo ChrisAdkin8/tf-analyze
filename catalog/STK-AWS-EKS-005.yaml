@@ -1,0 +1,59 @@
+id: STK-AWS-EKS-005
+title: "EKS cluster missing audit log type in enabled_cluster_log_types"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.4.1"
+patterns:
+  - kind: resource_arg
+    resource: aws_eks_cluster
+    arg: enabled_cluster_log_types
+    not_regex: '"audit"'
+    description: |
+      `aws_eks_cluster` with `enabled_cluster_log_types` set but the list
+      does not include `"audit"`. The audit log type captures every API call
+      made to the Kubernetes API server — kubectl commands, pod service-account
+      token usage, RBAC decisions. Without it, a compromised pod credential
+      leaves no trail. STK-AWS-EKS-002 catches complete absence of the
+      attribute; this rule catches the partial-config case where the attribute
+      exists but the most security-critical type is missing.
+
+      Also checks for `"authenticator"` absence — without it, IAM
+      authentication events (including failed attempts) are not logged.
+  - kind: resource_arg
+    resource: aws_eks_cluster
+    arg: enabled_cluster_log_types
+    not_regex: '"authenticator"'
+    description: |
+      `enabled_cluster_log_types` present but missing the `"authenticator"`
+      type. Authenticator logs record every IAM-based authentication attempt
+      to the API server — the first evidence of credential compromise.
+recommendation: |
+  Enable all five control-plane log types. The `audit` and `authenticator`
+  types are the most security-critical:
+
+  ```hcl
+  resource "aws_eks_cluster" "app" {
+    enabled_cluster_log_types = [
+      "api",
+      "audit",
+      "authenticator",
+      "controllerManager",
+      "scheduler",
+    ]
+  }
+  ```
+
+  Note: STK-AWS-EKS-002 fires when `enabled_cluster_log_types` is absent
+  entirely. This rule (STK-AWS-EKS-005) fires when the attribute exists but
+  critical types are missing — both rules must pass.
+verification: |
+  ```
+  aws eks describe-cluster --name <name> \
+    --query 'cluster.logging.clusterLogging[?enabled==`true`].types[]'
+  ```
+  Output must include `audit` and `authenticator`.
+fixtures:
+  - aws_eks_partial_logging

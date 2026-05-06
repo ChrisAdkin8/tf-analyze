@@ -3,6 +3,8 @@ title: "Azure role assignment scope is subscription-wide"
 section: security
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "1.21"
 status: active
 patterns:
   - kind: resource_arg

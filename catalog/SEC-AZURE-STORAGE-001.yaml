@@ -3,6 +3,8 @@ title: "Azure storage account allows non-HTTPS traffic"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "3.1"
 status: active
 patterns:
   - kind: resource_arg

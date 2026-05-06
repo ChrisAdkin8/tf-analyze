@@ -3,6 +3,8 @@ title: "Azure SQL Server firewall rule allows access from all IPs"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "4.1.3"
 status: active
 patterns:
   - kind: resource_arg

@@ -1,0 +1,52 @@
+id: SEC-AWS-S3-LOGGING-001
+title: "S3 bucket missing server access logging"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "3.6"
+patterns:
+  - kind: resource_absent
+    resource: aws_s3_bucket_logging
+    when_present: aws_s3_bucket
+    scope: repo
+    description: |
+      Repository contains `aws_s3_bucket` resources but no
+      `aws_s3_bucket_logging` resource. S3 server access logs record every
+      request made to a bucket — GETs, PUTs, DELETEs — and are the primary
+      evidence source for post-incident investigation and compliance auditing.
+      CIS AWS Foundations Benchmark §3.6 requires server access logging
+      enabled on all S3 buckets used to store CloudTrail logs; broader
+      best practice is to enable it on every bucket.
+
+      Without access logs, questions like "who downloaded this object?",
+      "when was this object deleted?", or "is there unusual GET activity from
+      an unexpected IP?" have no answer.
+recommendation: |
+  Add a dedicated logging bucket and enable access logging on every bucket
+  that requires audit trails:
+
+  ```hcl
+  resource "aws_s3_bucket" "logs" {
+    bucket = "${var.prefix}-access-logs"
+  }
+
+  resource "aws_s3_bucket_logging" "app" {
+    bucket        = aws_s3_bucket.app.id
+    target_bucket = aws_s3_bucket.logs.id
+    target_prefix = "app-access-logs/"
+  }
+  ```
+
+  The logging bucket itself does not need a logging configuration (that
+  would create a loop). Protect the logging bucket with:
+  - `aws_s3_bucket_public_access_block` (block all public access)
+  - `lifecycle_rule` with expiration (keep logs ≥90 days for CIS)
+  - `aws_s3_bucket_server_side_encryption_configuration`
+verification: |
+  `aws s3api get-bucket-logging --bucket <name>` must return a
+  `LoggingEnabled` key. After applying, confirm logs appear in the
+  target bucket within a few minutes of S3 activity.
+fixtures:
+  - aws_s3_no_logging

@@ -3,6 +3,8 @@ title: "EC2 instance metadata service v1 enabled (IMDSv2 not enforced)"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "5.6"
 status: active
 patterns:
   - kind: resource_missing_arg

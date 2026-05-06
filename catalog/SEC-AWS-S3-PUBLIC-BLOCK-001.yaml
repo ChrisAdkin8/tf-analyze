@@ -3,6 +3,8 @@ title: "S3 bucket missing public access block"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "2.1.5.1"
 status: active
 patterns:
   - kind: resource_absent

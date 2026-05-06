@@ -3,6 +3,8 @@ title: "AWS VPC missing flow log resource"
 section: security
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "3.9"
 status: active
 patterns:
   - kind: resource_absent

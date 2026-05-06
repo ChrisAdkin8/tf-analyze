@@ -3,6 +3,8 @@ title: "Azure NSG missing flow log resource"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "6.5"
 status: active
 patterns:
   - kind: resource_absent

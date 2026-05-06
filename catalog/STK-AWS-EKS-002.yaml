@@ -3,6 +3,8 @@ title: "EKS cluster control plane logging not enabled"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "5.4.1"
 status: active
 patterns:
   - kind: resource_missing_arg

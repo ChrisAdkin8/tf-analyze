@@ -3,6 +3,9 @@ title: "Security group allows ingress from 0.0.0.0/0"
 section: security
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "5.2"
+  - "5.3"
 status: active
 escalation:
   - condition: "port 22 or 3389"

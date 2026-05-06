@@ -3,6 +3,9 @@ title: "Azure NSG rule open to the internet on sensitive ports"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "6.1"
+  - "6.2"
 status: active
 escalation:
   - condition: "destination_port_range matches (^22$|^3389$)"

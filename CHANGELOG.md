@@ -5,6 +5,32 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 11 — 2026-05-06
+
+**Rules added (+4):**
+- `SEC-GCP-SA-KEY-001` — GCP service account key created in Terraform (static SA keys end up in TF state); `resource_present: google_service_account_key`
+- `SEC-GCP-NETWORK-004` — GCP firewall rule exposes database/cache port to 0.0.0.0/0 (`firewall_open_port` for MySQL/PostgreSQL/MSSQL/Redis/MongoDB/Elasticsearch/Memcached)
+- `SEC-AWS-S3-LOGGING-001` — S3 bucket missing server access logging (`resource_absent: aws_s3_bucket_logging` when `aws_s3_bucket` present)
+- `STK-AWS-EKS-005` — EKS cluster has `enabled_cluster_log_types` but is missing `audit` or `authenticator` log types (uses new `not_regex` field on `resource_arg`)
+
+**Rules extended:**
+- `ROB-AWS-RDS-001`, `ROB-AWS-RDS-002`, `ROB-AWS-RDS-003`, `SEC-AWS-RDS-001`, `SEC-AWS-RDS-002` — all 5 RDS rules extended with parallel patterns for `aws_rds_cluster` / `aws_rds_cluster_instance` (Aurora coverage)
+
+**CIS mappings added:**
+- 35 AWS/Azure rules updated with CIS mappings: CIS AWS Foundations Benchmark v3.0 (CloudTrail, S3, RDS, KMS, VPC flow logs, SG, EKS, EBS, GuardDuty, IAM) and CIS Azure Foundations Benchmark v2.0 (Key Vault, SQL, RBAC, NSG, Storage, Monitor)
+
+**Engine changes:**
+- `not_regex` field added to `resource_arg` pattern kind: fires when attribute is present but its value does NOT match the given regex. Enables partial-config detection (e.g., EKS log types present but missing "audit")
+- `hcl_context: true` added to `SEC-SECRETS-001` `.tf` grep patterns: strips HCL comments before matching to prevent false positives on commented-out credential examples
+- SARIF `helpUri` base URL corrected from `anthropics/claude-code` to `ChrisAdkin8/tf-analyze`
+- SARIF `informationUri` corrected to point at correct repository
+
+**Fixtures added (+4):** `gcp_sa_key`, `gcp_firewall_db_port`, `aws_s3_no_logging`, `aws_eks_partial_logging`
+
+**Corpus:** 252 → 260 findings. **Rules:** 138 → 142. **Self-test:** 136 → 140/140.
+
+---
+
 ## Round 10 — 2026-05-06
 
 **Rules added (+8):**

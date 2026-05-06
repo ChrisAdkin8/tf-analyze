@@ -113,12 +113,12 @@ The skill is **GCP-first**. Catalogue entries, CIS mappings, the IAM compatibili
 
 | Cloud | Cloud-specific rules | Notes |
 |---|---|---|
-| **GCP** | 36 | IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, GCS, networking, Shielded VM, Audit Logs. Full CIS GCP Foundations Benchmark v4.0 coverage for documented controls. |
-| **AWS** | 37 | IAM wildcard, S3, RDS (encryption/deletion-protection/EOL engine), KMS, CloudTrail, SQS, SNS, ElastiCache, ECR (scan-on-push/lifecycle), VPC flow logs, EKS (private endpoint/logging/secrets/IRSA), launch template IMDSv2, GuardDuty, Route53 DNSSEC, CloudWatch cost controls, SG world-open ports |
+| **GCP** | 38 | IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, GCS, networking (SSH/RDP/database port world-open), Shielded VM, Audit Logs, service account key creation. Full CIS GCP Foundations Benchmark v4.0 coverage for documented controls. |
+| **AWS** | 39 | IAM wildcard, S3 (public access block/server access logging), RDS/Aurora (encryption/deletion-protection/backup retention/EOL engine), KMS, CloudTrail, SQS, SNS, ElastiCache, ECR (scan-on-push/lifecycle), VPC flow logs, EKS (private endpoint/logging/secrets/IRSA/partial log-type detection), launch template IMDSv2, GuardDuty, Route53 DNSSEC, CloudWatch cost controls, SG world-open ports |
 | **Azure** | 29 | RBAC, storage (versioning/HTTPS), Key Vault (network ACL/key rotation), AKS (Workload Identity/private/authorized IPs/network policy), SQL (firewall/TDE/deprecated single-server/SSL), App Service HTTPS, NSG flow logs, UAMI, ACR admin, subscription activity log |
 | **Multi-cloud** | 36 | Secrets in HCL/tfvars, provisioner usage, module pinning, `required_providers` version pinning, lifecycle controls, count/for_each patterns, variable validation, sensitive outputs, provider aliases, backends, Vault data sources |
 
-Multi-cloud rules fire on any cloud stack; the 36 cloud-specific counts exclude them. Total: **138 active rules** (`python3 scripts/detect.py --list-rules` for the full enumeration).
+Multi-cloud rules fire on any cloud stack; the 36 cloud-specific counts exclude them. Total: **142 active rules** (`python3 scripts/detect.py --list-rules` for the full enumeration).
 
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.
 

@@ -3,6 +3,8 @@ title: "AKS cluster missing network policy"
 section: security
 default_urgency: HIGH
 blast_radius: environment
+cis:
+  - "5.3"
 status: active
 patterns:
   - kind: resource_missing_arg

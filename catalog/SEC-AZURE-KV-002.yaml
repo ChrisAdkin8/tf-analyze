@@ -3,6 +3,8 @@ title: "Key Vault missing network ACL deny-by-default"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "8.5"
 status: active
 patterns:
   - kind: resource_missing_arg

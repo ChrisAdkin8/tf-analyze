@@ -28,10 +28,12 @@
 #   - SEC-GCP-GKE-NETWORK-POLICY-001 HIGH GKE cluster missing network_policy enforcement
 #   - STK-GCP-GKE-NODEPOOL-001     HIGH   Node pool missing shielded-instance hardening
 #   - STK-GCP-GKE-004              HIGH   GKE cluster missing master authorized networks
+#   - SEC-GCP-SA-KEY-001           HIGH   Static service account key created in Terraform
 #
 # Fix summary: enable Workload Identity at cluster create time,
 # enforce `enable_secure_boot` + `enable_integrity_monitoring` on
 # every node pool, and set `network_policy { enabled = true }`.
+# Replace the static SA key with Workload Identity.
 
 resource "google_container_cluster" "demo" {
   name                     = "demo-cluster"
@@ -55,4 +57,16 @@ resource "google_container_node_pool" "default" {
     # No shielded_instance_config block — secure boot and integrity
     # monitoring are off.
   }
+}
+
+# Static service account key — private key ends up in Terraform state.
+# Workload Identity is the correct alternative for GKE workloads.
+resource "google_service_account" "app" {
+  account_id   = "demo-app"
+  display_name = "Demo App Service Account"
+  project      = "demo-project"
+}
+
+resource "google_service_account_key" "app_key" {
+  service_account_id = google_service_account.app.name
 }

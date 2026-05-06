@@ -3,6 +3,8 @@ title: "AKS cluster RBAC disabled"
 section: security
 default_urgency: HIGH
 blast_radius: module
+cis:
+  - "5.2"
 status: active
 patterns:
   - kind: resource_arg

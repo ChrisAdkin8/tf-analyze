@@ -31,6 +31,7 @@
 #   - SEC-GCP-COMPUTE-PUBLIC-IP-001   HIGH       Compute instance has public IP via access_config
 #   - SEC-GCP-NETWORK-001             CRITICAL   SSH (tcp:22) exposed to 0.0.0.0/0
 #   - SEC-GCP-NETWORK-002             CRITICAL   RDP (tcp:3389) exposed to 0.0.0.0/0
+#   - SEC-GCP-NETWORK-004             CRITICAL   Database port (5432) exposed to 0.0.0.0/0
 #   - SEC-GCP-SQL-PUBLIC-001          HIGH       Cloud SQL instance permits public IPv4
 #   - STK-GCP-CLOUDSQL-003            HIGH       Cloud SQL instance missing deletion_protection
 #   - STK-GCP-CLOUDSQL-004            HIGH       Cloud SQL instance does not require SSL
@@ -137,4 +138,17 @@ resource "google_storage_bucket" "prod_data" {
   labels = {
     environment = "prod"
   }
+}
+
+# Firewall rule exposing PostgreSQL to the entire internet.
+resource "google_compute_firewall" "open_postgres" {
+  name    = "allow-postgres-world"
+  network = "default"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5432"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
 }

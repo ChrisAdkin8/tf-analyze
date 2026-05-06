@@ -1,5 +1,5 @@
 id: ROB-AWS-RDS-003
-title: "RDS instance missing deletion protection"
+title: "RDS instance or Aurora cluster missing deletion protection"
 section: robustness
 default_urgency: HIGH
 blast_radius: single-resource
@@ -19,6 +19,18 @@ patterns:
     description: |
       deletion_protection = false explicitly removes the guard against
       accidental database deletion.
+  - kind: resource_missing_arg
+    resource: aws_rds_cluster
+    arg: deletion_protection
+    description: |
+      Aurora cluster without deletion_protection. Cluster deletion destroys
+      all cluster instances and their data.
+  - kind: hcl_attr
+    resource: aws_rds_cluster
+    path: deletion_protection
+    not_equal: true
+    description: |
+      Aurora cluster deletion_protection = false explicitly removes the guard.
 recommendation: |
   Set `deletion_protection = true` on every production RDS instance:
 

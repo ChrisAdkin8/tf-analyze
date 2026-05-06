@@ -1,0 +1,56 @@
+id: SEC-GCP-SA-KEY-001
+title: "GCP service account key created in Terraform"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "1.4"
+patterns:
+  - kind: resource_present
+    resource: google_service_account_key
+    description: |
+      Any `google_service_account_key` resource. Creating a service account
+      key in Terraform bakes the base64-encoded private key into Terraform
+      state. The key is a long-lived credential with no automatic rotation
+      that persists in state (and therefore in any state-backend snapshot or
+      S3 version) even after the resource is destroyed unless state is
+      explicitly purged.
+
+      CIS GCP Foundations Benchmark v1.3 §1.4 states: "service account keys
+      should not be created for user-managed service accounts." The preferred
+      patterns are Workload Identity (for GKE workloads), Workload Identity
+      Federation (for CI systems), or short-lived tokens via
+      `google_service_account_access_token`.
+recommendation: |
+  Remove the `google_service_account_key` resource and migrate to one of:
+
+  1. **GKE workloads** — Workload Identity:
+     ```hcl
+     resource "google_service_account_iam_member" "wi" {
+       service_account_id = google_service_account.app.name
+       role               = "roles/iam.workloadIdentityUser"
+       member             = "serviceAccount:${var.project}.svc.id.goog[${var.namespace}/${var.ksa}]"
+     }
+     ```
+     Set `google_container_cluster.workload_identity_config.workload_pool`.
+
+  2. **CI/CD pipelines** — Workload Identity Federation:
+     ```hcl
+     resource "google_iam_workload_identity_pool" "ci" { … }
+     resource "google_iam_workload_identity_pool_provider" "github" { … }
+     ```
+     No key file; pipeline asserts its OIDC token to get a short-lived token.
+
+  3. **Short-lived tokens** (rare on-premise need):
+     Use `google_service_account_access_token` data source for ephemeral
+     tokens scoped to a single call rather than a persistent key.
+
+  If you must keep a key temporarily, encrypt the output with Cloud KMS
+  before writing to any storage and rotate at least every 90 days.
+verification: |
+  `gcloud iam service-accounts keys list --iam-account <SA_EMAIL>` should
+  return only system-managed keys (type = SYSTEM_MANAGED). Re-run tf-analyze
+  — SEC-GCP-SA-KEY-001 must not fire.
+fixtures:
+  - gcp_sa_key

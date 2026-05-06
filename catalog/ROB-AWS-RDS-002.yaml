@@ -1,5 +1,5 @@
 id: ROB-AWS-RDS-002
-title: "RDS instance skips final snapshot on deletion"
+title: "RDS instance or Aurora cluster skips final snapshot on deletion"
 section: robustness
 default_urgency: HIGH
 blast_radius: single-resource
@@ -10,6 +10,11 @@ patterns:
     arg: skip_final_snapshot
     regex: "^true$"
     description: RDS instance with skip_final_snapshot = true
+  - kind: resource_arg
+    resource: aws_rds_cluster
+    arg: skip_final_snapshot
+    regex: "^true$"
+    description: Aurora cluster with skip_final_snapshot = true
 recommendation: |
   Set `skip_final_snapshot = false` and provide a `final_snapshot_identifier`
   on every production `aws_db_instance`. Without this, running

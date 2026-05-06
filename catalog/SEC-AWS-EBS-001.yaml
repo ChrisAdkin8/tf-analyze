@@ -3,6 +3,8 @@ title: "EBS volume not encrypted"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
+cis:
+  - "2.2.1"
 status: active
 patterns:
   - kind: resource_arg

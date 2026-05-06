@@ -1,15 +1,22 @@
 id: SEC-AWS-RDS-001
-title: "RDS instance publicly accessible"
+title: "RDS instance or Aurora cluster publicly accessible"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+cis:
+  - "2.3.3"
 patterns:
   - kind: resource_arg
     resource: aws_db_instance
     arg: publicly_accessible
     regex: "^true$"
     description: RDS instance with publicly_accessible = true
+  - kind: resource_arg
+    resource: aws_rds_cluster_instance
+    arg: publicly_accessible
+    regex: "^true$"
+    description: Aurora cluster instance with publicly_accessible = true
 recommendation: |
   Set `publicly_accessible = false` on every `aws_db_instance`. A publicly
   accessible RDS instance receives a DNS hostname resolvable from the

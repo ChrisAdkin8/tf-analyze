@@ -3,6 +3,8 @@ title: "Long-lived IAM access key created for a user"
 section: security
 default_urgency: HIGH
 blast_radius: module
+cis:
+  - "1.14"
 status: active
 patterns:
   - kind: resource_present

@@ -31,10 +31,12 @@
 #   - SEC-AWS-CLOUDTRAIL-002     HIGH    CloudTrail log file validation disabled
 #   - COST-AWS-RISK-001          MEDIUM  CloudWatch log group without retention_in_days
 #   - STK-AWS-ROUTE53-001        HIGH    Route53 zone without DNSSEC key-signing key
+#   - SEC-AWS-S3-LOGGING-001     MEDIUM  S3 bucket missing server access logging
+#   - STK-AWS-EKS-005            HIGH    EKS cluster missing audit/authenticator log types
 #
 # Fix summary: one CloudTrail trail with `is_multi_region_trail = true`
 # and `enable_log_file_validation = true` per organisation; flow logs
-# enabled on every VPC; CloudWatch log exports on every RDS instance.
+# enabled on every VPC; aws_s3_bucket_logging on every bucket.
 
 # CloudTrail with no multi-region, no validation.
 resource "aws_cloudtrail" "single_region" {
@@ -57,7 +59,21 @@ resource "aws_vpc" "unmonitored" {
 # S3 bucket without access logging.
 resource "aws_s3_bucket" "unlogged" {
   bucket = "demo-unlogged"
-  # No aws_s3_bucket_logging resource.
+  # No aws_s3_bucket_logging resource — SEC-AWS-S3-LOGGING-001 fires.
+}
+
+# EKS cluster with partial control-plane logging: "audit" and
+# "authenticator" intentionally omitted — STK-AWS-EKS-005 fires.
+resource "aws_eks_cluster" "partial_logging" {
+  name     = "demo-partial-logging"
+  role_arn = "arn:aws:iam::123456789012:role/eks-role"
+
+  vpc_config {
+    subnet_ids = ["subnet-ccc", "subnet-ddd"]
+  }
+
+  enabled_cluster_log_types = ["api", "controllerManager", "scheduler"]
+  # Missing: "audit", "authenticator"
 }
 
 # CloudWatch log group without retention — billed per GB forever.

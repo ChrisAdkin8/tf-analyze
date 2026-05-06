@@ -3,6 +3,8 @@ title: "Azure SQL Server has no Azure AD administrator configured"
 section: security
 default_urgency: HIGH
 blast_radius: module
+cis:
+  - "4.1.2"
 status: active
 patterns:
   - kind: resource_absent

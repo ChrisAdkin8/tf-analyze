@@ -3,6 +3,8 @@ title: "CloudTrail not enabled for all regions"
 section: security
 default_urgency: HIGH
 blast_radius: infrastructure-wide
+cis:
+  - "3.1"
 status: active
 patterns:
   - kind: resource_arg

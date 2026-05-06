@@ -3,6 +3,8 @@ title: "IAM assume role policy with wildcard Principal"
 section: security
 default_urgency: CRITICAL
 blast_radius: infrastructure-wide
+cis:
+  - "1.16"
 status: active
 patterns:
   - kind: grep

@@ -3,6 +3,8 @@ title: "KMS key rotation disabled"
 section: security
 default_urgency: HIGH
 blast_radius: module
+cis:
+  - "3.8"
 status: active
 patterns:
   - kind: resource_arg
