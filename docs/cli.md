@@ -1,4 +1,5 @@
-# `detect.py` CLI reference
+# wrote docs/cli.md
+ference
 
 **Auto-generated** by `scripts/gen-cli-docs.py` from `scripts/detect.py`'s argparse. Do not edit by hand — re-run the generator after changing flags.
 
@@ -132,6 +133,10 @@ Scaffold a new catalogue entry and fixture skeleton for the given ID (must match
 ### `-h/--help`
 
 show this help message and exit
+
+### `--attack-graph`
+
+Build a directed attack-path graph from internet-reachable resources to crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). With --format html adds an interactive Attack Graph tab (force-directed SVG, drag, click-to-inspect, critical path highlighted in red). With --format text (default) appends a Mermaid flowchart block after findings. Also enables adversarial scenario narratives for HIGH/CRITICAL findings.
 
 ### `--output`
 

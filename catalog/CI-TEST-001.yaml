@@ -25,4 +25,5 @@ recommendation: |
 verification: |
   Run `terraform test` in the module directory.
 fixtures:
+  - attack_graph_demo
   - missing_tests

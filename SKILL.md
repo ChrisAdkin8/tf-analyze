@@ -1163,6 +1163,36 @@ Worked examples:
 
 The formula intentionally penalises HIGH (7) more than 2× MEDIUM (6) to reflect the reality that one HIGH usually causes more pain than two MEDIUMs. If the score formula produces a letter grade that contradicts the agent's qualitative read of the codebase (e.g., the codebase feels like a B but scores a C because of one nuanced finding), trust the formula and adjust the urgency of the borderline finding instead.
 
+### 16e. Adversarial Scenarios
+
+For every HIGH and CRITICAL finding in the report, append an **Adversarial Scenarios** section.
+Each row names the specific resource, the attack technique an adversary would use, the blast
+radius, and (where applicable) a confirmed public breach that used the same vector.
+
+Use the pre-written narratives in `_ATTACK_NARRATIVES` inside `scripts/detect.py` as the source
+for the 15 covered rule IDs. For any HIGH/CRITICAL finding whose rule ID is not in that dict,
+generate a 2-3 sentence scenario following the same pattern: technique → blast radius → fix.
+
+```markdown
+## Adversarial Scenarios
+
+| Finding | Resource | Scenario |
+|---|---|---|
+| SEC-AWS-SSRF-001 | `aws_instance.web` | SSRF → IMDSv1 → unauthenticated credential retrieval → S3 exfiltration (Capital One 2019 pattern). IMDSv2 breaks this chain — the attacker's forged request cannot complete the required PUT handshake. |
+| SEC-AWS-IAM-001 | `aws_iam_policy.broad` | Wildcard Resource grants declared actions across every resource in the account; any credential theft or SSRF hitting this role yields account-wide blast radius. Narrow the Resource ARN to specific bucket/table/secret ARNs. |
+| SEC-AWS-KMS-001 | `aws_kms_key.data_key` | Disabled rotation means key-material compromise — via insider threat or account takeover — is permanent. CIS AWS 2.8 and PCI-DSS 3.6.4 both require rotation; enable `enable_key_rotation = true`. |
+```
+
+Rules:
+- Reference only confirmed public incidents: Capital One 2019, SolarWinds 2020, Tesla 2020
+  Kubernetes, Samsung 2022, Twitch 2021, Verizon 2017, Accenture 2017. Do not speculate.
+- Keep each scenario ≤ 4 sentences.
+- Order CRITICAL before HIGH, then by blast radius (infrastructure-wide first).
+- If `--attack-graph` was run and `critical_path` is non-empty, add a **Critical Attack Path**
+  paragraph *above* the table describing the end-to-end chain in narrative prose: who the
+  attacker is, what resource they compromise first, how they pivot to the crown jewel, and what
+  data or capability they gain.
+
 ### Report structure
 
 ```markdown

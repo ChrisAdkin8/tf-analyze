@@ -1992,6 +1992,510 @@ _GRAPH_CHECKS = {
 }
 
 
+# ---- attack graph --------------------------------------------------------
+
+_CROWN_JEWEL_TYPES: set[str] = {
+    "aws_db_instance", "aws_rds_cluster", "aws_rds_cluster_instance",
+    "aws_secretsmanager_secret", "aws_kms_key", "aws_s3_bucket",
+    "google_sql_database_instance", "google_secret_manager_secret",
+    "google_kms_crypto_key", "google_storage_bucket",
+    "azurerm_mssql_server", "azurerm_sql_server",
+    "azurerm_key_vault", "azurerm_key_vault_secret", "azurerm_storage_account",
+}
+
+_NODE_TYPE_MAP: dict[str, str] = {
+    "aws_instance": "compute", "aws_lambda_function": "compute",
+    "aws_ecs_task_definition": "compute", "aws_ecs_service": "compute",
+    "google_compute_instance": "compute", "google_cloud_run_v2_service": "compute",
+    "google_container_cluster": "compute",
+    "azurerm_linux_virtual_machine": "compute",
+    "azurerm_windows_virtual_machine": "compute",
+    "aws_iam_role": "iam", "aws_iam_instance_profile": "iam", "aws_iam_policy": "iam",
+    "google_service_account": "iam",
+    "azurerm_user_assigned_identity": "iam", "azurerm_role_assignment": "iam",
+    "aws_s3_bucket": "storage", "google_storage_bucket": "storage",
+    "azurerm_storage_account": "storage",
+    "aws_db_instance": "storage", "aws_rds_cluster": "storage",
+    "google_sql_database_instance": "storage", "azurerm_mssql_server": "storage",
+    "aws_secretsmanager_secret": "secret",
+    "google_secret_manager_secret": "secret",
+    "azurerm_key_vault_secret": "secret",
+    "aws_kms_key": "key", "google_kms_crypto_key": "key", "azurerm_key_vault_key": "key",
+    "aws_security_group": "network", "aws_lb": "network", "aws_alb": "network",
+    "google_compute_firewall": "network", "azurerm_network_security_group": "network",
+}
+
+# Internet-reachability detection regexes
+_INET_EC2_PUBLIC_IP_RE  = re.compile(r'associate_public_ip_address\s*=\s*true')
+_INET_RDS_PUBLIC_RE     = re.compile(r'publicly_accessible\s*=\s*true')
+_INET_SQL_PUBLIC_IP_RE  = re.compile(r'ipv4_enabled\s*=\s*true')
+_INET_SG_CIDR_RE        = re.compile(r'cidr_blocks\s*=\s*\[.*?"0\.0\.0\.0/0"', re.DOTALL)
+_INET_SG_IPV6_RE        = re.compile(r'ipv6_cidr_blocks\s*=\s*\[.*?"::/0"', re.DOTALL)
+_INET_CLOUDRUN_ALL_RE   = re.compile(r'ingress\s*=\s*"?INGRESS_TRAFFIC_ALL"?')
+_INET_ALB_FACING_RE     = re.compile(r'(?:scheme|load_balancer_type)\s*=\s*"?internet-facing"?')
+_INET_GCE_ACCESS_CFG_RE = re.compile(r'access_config\s*\{')
+_INET_GKE_PRIVATE_RE    = re.compile(r'private_cluster_config\s*\{')
+
+# Edge-inference regexes (HCL reference patterns between resources)
+_EDGE_IAM_PROFILE_RE  = re.compile(
+    r'iam_instance_profile\s*=\s*aws_iam_instance_profile\.([\w-]+)')
+_EDGE_PROFILE_ROLE_RE = re.compile(
+    r'\brole\s*=\s*aws_iam_role\.([\w-]+)(?:\.\w+)?')
+_EDGE_KMS_KEY_ID_RE   = re.compile(
+    r'kms_key_id\s*=\s*aws_kms_key\.([\w-]+)(?:\.\w+)?')
+_EDGE_KMS_KEY_NAME_RE = re.compile(
+    r'kms_key_name\s*=\s*google_kms_crypto_key\.([\w-]+)(?:\.\w+)?')
+_EDGE_KMS_MASTER_RE   = re.compile(
+    r'kms_master_key_id\s*=\s*(?:aws_kms_key|google_kms_crypto_key)\.([\w-]+)(?:\.\w+)?')
+_EDGE_SECRET_ARN_RE   = re.compile(
+    r'secrets_manager_secret_arn\s*=\s*aws_secretsmanager_secret\.([\w-]+)(?:\.\w+)?')
+_EDGE_SG_REF_RE       = re.compile(
+    r'(?:vpc_security_group_ids|security_groups)\s*=\s*\[[^\]]*aws_security_group\.([\w-]+)')
+_EDGE_GCP_SA_RE       = re.compile(
+    r'email\s*=\s*google_service_account\.([\w-]+)(?:\.\w+)?')
+_EDGE_GCS_BUCKET_RE   = re.compile(
+    r'\bbucket\s*=\s*google_storage_bucket\.([\w-]+)(?:\.\w+)?')
+
+
+def _is_internet_reachable(rtype: str, body: str) -> bool:
+    """Return True if the resource type + body suggests it is directly internet-reachable."""
+    if rtype == "aws_instance":
+        return bool(_INET_EC2_PUBLIC_IP_RE.search(body))
+    if rtype in {"aws_db_instance", "aws_rds_cluster", "aws_rds_cluster_instance"}:
+        return bool(_INET_RDS_PUBLIC_RE.search(body))
+    if rtype == "google_sql_database_instance":
+        return bool(_INET_SQL_PUBLIC_IP_RE.search(body))
+    if rtype == "aws_security_group":
+        return bool(_INET_SG_CIDR_RE.search(body) or _INET_SG_IPV6_RE.search(body))
+    if rtype == "google_cloud_run_v2_service":
+        return bool(_INET_CLOUDRUN_ALL_RE.search(body) or "ingress" not in body)
+    if rtype in {"aws_lb", "aws_alb"}:
+        return bool(_INET_ALB_FACING_RE.search(body))
+    if rtype == "google_compute_instance":
+        return bool(_INET_GCE_ACCESS_CFG_RE.search(body))
+    if rtype == "google_container_cluster":
+        return not bool(_INET_GKE_PRIVATE_RE.search(body))
+    return False
+
+
+def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
+    """Build a directed attack-path graph from internet-reachable nodes to crown jewels.
+
+    Returns a dict with keys: nodes, edges, critical_path, internet_node_id.
+    Nodes carry: id, type, label, file, line, findings, internet_reachable,
+    is_crown_jewel, on_critical_path.
+    Edges carry: from, to, label.
+    """
+    # Index findings by resource address
+    finding_by_resource: dict[str, list[str]] = {}
+    for f in findings:
+        res = f.get("resource", "")
+        if res:
+            finding_by_resource.setdefault(res, []).append(f["id"])
+
+    # Build nodes for every resource
+    nodes: dict[str, dict] = {}
+    for addr, res in resource_index.items():
+        rtype = res["type"]
+        reachable = _is_internet_reachable(rtype, res["body"])
+        nodes[addr] = {
+            "id": addr,
+            "type": _NODE_TYPE_MAP.get(rtype, "compute"),
+            "label": addr,
+            "file": res["file"],
+            "line": res["line"],
+            "findings": finding_by_resource.get(addr, []),
+            "internet_reachable": reachable,
+            "is_crown_jewel": rtype in _CROWN_JEWEL_TYPES,
+            "on_critical_path": False,
+        }
+
+    # Synthetic internet entry node
+    nodes["INTERNET"] = {
+        "id": "INTERNET",
+        "type": "internet",
+        "label": "Internet",
+        "file": "",
+        "line": 0,
+        "findings": [],
+        "internet_reachable": True,
+        "is_crown_jewel": False,
+        "on_critical_path": False,
+    }
+
+    # Infer edges from HCL reference patterns
+    edges: list[dict] = []
+
+    def _add_edge(src: str, dst: str, label: str) -> None:
+        if src in nodes and dst in nodes and src != dst:
+            edges.append({"from": src, "to": dst, "label": label})
+
+    for addr, res in resource_index.items():
+        body = res["body"]
+        rtype = res["type"]
+
+        for m in _EDGE_IAM_PROFILE_RE.finditer(body):
+            _add_edge(addr, f"aws_iam_instance_profile.{m.group(1)}", "iam_profile")
+        if rtype == "aws_iam_instance_profile":
+            for m in _EDGE_PROFILE_ROLE_RE.finditer(body):
+                _add_edge(addr, f"aws_iam_role.{m.group(1)}", "role")
+        elif rtype not in {"aws_iam_instance_profile"}:
+            for m in _EDGE_PROFILE_ROLE_RE.finditer(body):
+                _add_edge(addr, f"aws_iam_role.{m.group(1)}", "role")
+        for m in _EDGE_KMS_KEY_ID_RE.finditer(body):
+            _add_edge(addr, f"aws_kms_key.{m.group(1)}", "kms_key")
+        for m in _EDGE_KMS_KEY_NAME_RE.finditer(body):
+            _add_edge(addr, f"google_kms_crypto_key.{m.group(1)}", "kms_key")
+        for m in _EDGE_KMS_MASTER_RE.finditer(body):
+            if "aws_kms_key" in m.group(0):
+                _add_edge(addr, f"aws_kms_key.{m.group(1)}", "kms_master_key")
+            else:
+                _add_edge(addr, f"google_kms_crypto_key.{m.group(1)}", "kms_master_key")
+        for m in _EDGE_SECRET_ARN_RE.finditer(body):
+            _add_edge(addr, f"aws_secretsmanager_secret.{m.group(1)}", "secret_ref")
+        for m in _EDGE_SG_REF_RE.finditer(body):
+            _add_edge(addr, f"aws_security_group.{m.group(1)}", "security_group")
+        for m in _EDGE_GCP_SA_RE.finditer(body):
+            _add_edge(addr, f"google_service_account.{m.group(1)}", "service_account")
+        for m in _EDGE_GCS_BUCKET_RE.finditer(body):
+            _add_edge(addr, f"google_storage_bucket.{m.group(1)}", "bucket_ref")
+
+    # Connect internet-reachable nodes to INTERNET
+    for addr, node in list(nodes.items()):
+        if addr != "INTERNET" and node["internet_reachable"]:
+            edges.append({"from": "INTERNET", "to": addr, "label": "internet"})
+
+    # Propagate reachability: compute → SG (internet-reachable) → mark compute reachable
+    sg_reachable = {
+        e["to"] for e in edges
+        if e["from"] == "INTERNET" and nodes.get(e["to"], {}).get("type") == "network"
+    }
+    for e in edges:
+        if e["label"] == "security_group" and e["to"] in sg_reachable:
+            src = e["from"]
+            if src in nodes and not nodes[src]["internet_reachable"]:
+                nodes[src]["internet_reachable"] = True
+                edges.append({"from": "INTERNET", "to": src, "label": "internet (via sg)"})
+
+    # BFS: shortest path from INTERNET to each crown jewel
+    adj: dict[str, list[str]] = {}
+    for e in edges:
+        adj.setdefault(e["from"], []).append(e["to"])
+
+    from collections import deque
+
+    def _bfs(start: str, goal: str) -> list[str]:
+        queue: deque[list[str]] = deque([[start]])
+        visited: set[str] = {start}
+        while queue:
+            path = queue.popleft()
+            if path[-1] == goal:
+                return path
+            for nbr in adj.get(path[-1], []):
+                if nbr not in visited:
+                    visited.add(nbr)
+                    queue.append(path + [nbr])
+        return []
+
+    crown_jewels = [addr for addr, n in nodes.items() if n["is_crown_jewel"]]
+    critical_path: list[str] = []
+    for cj in crown_jewels:
+        path = _bfs("INTERNET", cj)
+        if path and (not critical_path or len(path) < len(critical_path)):
+            critical_path = path
+
+    for nid in critical_path:
+        if nid in nodes:
+            nodes[nid]["on_critical_path"] = True
+
+    # Prune to a manageable size for large repos (keep relevant nodes + neighbors)
+    node_list = list(nodes.values())
+    if len(node_list) > 60:
+        keep = set(critical_path)
+        keep.update(addr for addr, n in nodes.items() if n["internet_reachable"])
+        keep.update(addr for addr, n in nodes.items() if n["is_crown_jewel"])
+        keep.add("INTERNET")
+        # add immediate neighbors of keep set
+        for e in edges:
+            if e["from"] in keep:
+                keep.add(e["to"])
+            if e["to"] in keep:
+                keep.add(e["from"])
+        node_list = [n for n in node_list if n["id"] in keep]
+        edges = [e for e in edges if e["from"] in keep and e["to"] in keep]
+
+    return {
+        "nodes": node_list,
+        "edges": edges,
+        "critical_path": critical_path,
+        "internet_node_id": "INTERNET",
+    }
+
+
+def _mermaid_id(addr: str) -> str:
+    """Sanitize a resource address for use as a Mermaid node ID."""
+    return addr.replace(".", "_").replace("-", "_")
+
+
+def graph_to_mermaid(graph: dict) -> str:
+    """Convert an attack graph to a Mermaid flowchart string."""
+    crit_set = set(graph.get("critical_path", []))
+    lines = ["```mermaid", "flowchart LR"]
+    lines += [
+        "    classDef internet fill:#1a1a2e,color:#fff,stroke:#fff",
+        "    classDef critical fill:#c0392b,color:#fff,stroke:#ff4444,stroke-width:3px",
+        "    classDef crown fill:#6b0000,color:#ffd700,stroke:#ffd700",
+        "    classDef reachable fill:#d35400,color:#fff",
+        "    classDef iam fill:#6c5ce7,color:#fff",
+        "    classDef storage fill:#27ae60,color:#fff",
+        "    classDef secret fill:#e74c3c,color:#fff",
+        "    classDef key fill:#e67e22,color:#fff",
+        "    classDef network fill:#7f8c8d,color:#fff",
+        "    classDef compute fill:#2980b9,color:#fff",
+    ]
+
+    for node in graph["nodes"]:
+        nid = _mermaid_id(node["id"])
+        lbl = node["label"].replace('"', "'")
+        if node["is_crown_jewel"]:
+            lbl = f"👑 {lbl}"
+        if node["type"] == "internet":
+            shape = f'((("{lbl}")))'
+        elif node["type"] in {"secret", "key"}:
+            shape = f'{{"{lbl}"}}'
+        elif node["type"] == "storage":
+            shape = f'[("{lbl}")]'
+        else:
+            shape = f'["{lbl}"]'
+        lines.append(f"    {nid}{shape}")
+        if node["id"] in crit_set:
+            lines.append(f"    class {nid} critical")
+        elif node["is_crown_jewel"]:
+            lines.append(f"    class {nid} crown")
+        elif node["internet_reachable"] and node["id"] != "INTERNET":
+            lines.append(f"    class {nid} reachable")
+        else:
+            lines.append(f"    class {nid} {node['type']}")
+
+    for edge in graph["edges"]:
+        fid = _mermaid_id(edge["from"])
+        tid = _mermaid_id(edge["to"])
+        lbl = edge.get("label", "")
+        f_crit = edge["from"] in crit_set
+        t_crit = edge["to"] in crit_set
+        arrow = "==>" if (f_crit and t_crit) else "-->"
+        if lbl:
+            lines.append(f'    {fid} {arrow}|"{lbl}"| {tid}')
+        else:
+            lines.append(f"    {fid} {arrow} {tid}")
+
+    lines.append("```")
+    return "\n".join(lines)
+
+
+def _render_graph_html(graph: dict) -> str:
+    """Return self-contained HTML+JS for an interactive force-directed attack graph."""
+    import json as _json
+    graph_json = _json.dumps(graph)
+
+    return f"""<div style="margin-bottom:.5em">
+  <span style="font-size:12px;color:#666">
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1a1a2e;vertical-align:middle"></span> Internet &nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#2980b9;vertical-align:middle"></span> Compute &nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#6c5ce7;vertical-align:middle"></span> IAM &nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#27ae60;vertical-align:middle"></span> Storage &nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#e74c3c;vertical-align:middle"></span> Secret &nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#e67e22;vertical-align:middle"></span> Key &nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#7f8c8d;vertical-align:middle"></span> Network &nbsp;
+    <span style="border:2px solid #ff4444;display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle;background:#c0392b"></span> Critical path &nbsp;
+    <span style="border:2px solid #ffd700;display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle;background:#6b0000"></span> Crown jewel
+  </span>
+</div>
+<div id="ag-wrap" style="position:relative;width:100%;height:580px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">
+  <svg id="ag-svg" width="100%" height="100%" style="display:block;cursor:grab">
+    <defs>
+      <marker id="ag-arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#aaa"/>
+      </marker>
+      <marker id="ag-arr-red" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#c0392b"/>
+      </marker>
+    </defs>
+    <g id="ag-edges-g"></g>
+    <g id="ag-nodes-g"></g>
+  </svg>
+  <div id="ag-sb" style="position:absolute;right:0;top:0;width:270px;height:100%;background:rgba(255,255,255,.97);border-left:1px solid #ddd;padding:14px;box-sizing:border-box;overflow-y:auto;display:none;font-size:13px">
+    <button onclick="document.getElementById('ag-sb').style.display='none'"
+      style="float:right;border:none;background:none;font-size:16px;cursor:pointer;color:#666">✕</button>
+    <h4 id="ag-sb-title" style="margin:0 0 .6em;font-size:14px;word-break:break-all"></h4>
+    <div id="ag-sb-body"></div>
+  </div>
+</div>
+<script>
+(function(){{
+  var G={graph_json};
+  var CRIT=new Set(G.critical_path);
+  var svgEl=document.getElementById('ag-svg');
+  var W=svgEl.parentElement.clientWidth||900, H=580;
+  var NS='http://www.w3.org/2000/svg';
+  var COLORS={{internet:'#1a1a2e',compute:'#2980b9',iam:'#6c5ce7',storage:'#27ae60',
+               secret:'#e74c3c',key:'#e67e22',network:'#7f8c8d'}};
+  var R=22;
+  // initialise node positions
+  var nodes=G.nodes.map(function(n){{
+    return Object.assign({{}},n,{{
+      x:W/2+(Math.random()-.5)*350,
+      y:H/2+(Math.random()-.5)*250,
+      vx:0,vy:0
+    }});
+  }});
+  var byId={{}};
+  nodes.forEach(function(n){{byId[n.id]=n;}});
+  var edges=G.edges.map(function(e){{
+    return Object.assign({{}},e,{{s:byId[e.from],t:byId[e.to]}});
+  }}).filter(function(e){{return e.s&&e.t;}});
+
+  // force tick
+  var REP=3500,SL=130,SK=0.05,GV=0.012,DMP=0.84;
+  function tick(){{
+    var i,j,a,b,dx,dy,d,f,fx,fy;
+    for(i=0;i<nodes.length;i++){{
+      for(j=i+1;j<nodes.length;j++){{
+        a=nodes[i];b=nodes[j];
+        dx=a.x-b.x;dy=a.y-b.y;d=Math.sqrt(dx*dx+dy*dy)||1;
+        f=REP/(d*d);fx=f*dx/d;fy=f*dy/d;
+        a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;
+      }}
+    }}
+    edges.forEach(function(e){{
+      dx=e.t.x-e.s.x;dy=e.t.y-e.s.y;d=Math.sqrt(dx*dx+dy*dy)||1;
+      f=SK*(d-SL);fx=f*dx/d;fy=f*dy/d;
+      e.s.vx+=fx;e.s.vy+=fy;e.t.vx-=fx;e.t.vy-=fy;
+    }});
+    nodes.forEach(function(n){{
+      n.vx+=GV*(W/2-n.x);n.vy+=GV*(H/2-n.y);
+      n.vx*=DMP;n.vy*=DMP;n.x+=n.vx;n.y+=n.vy;
+      n.x=Math.max(R,Math.min(W-R,n.x));
+      n.y=Math.max(R,Math.min(H-R,n.y));
+    }});
+  }}
+  for(var _i=0;_i<200;_i++)tick();
+
+  // SVG helpers
+  function svgEl2(tag,attrs,parent){{
+    var e=document.createElementNS(NS,tag);
+    Object.keys(attrs).forEach(function(k){{e.setAttribute(k,attrs[k]);}});
+    if(parent)parent.appendChild(e);
+    return e;
+  }}
+  var egG=document.getElementById('ag-edges-g');
+  var ndG=document.getElementById('ag-nodes-g');
+
+  // draw edges
+  var lineEls=edges.map(function(e){{
+    var isCrit=CRIT.has(e.from)&&CRIT.has(e.to);
+    var line=svgEl2('line',{{
+      x1:e.s.x,y1:e.s.y,x2:e.t.x,y2:e.t.y,
+      stroke:isCrit?'#c0392b':'#ccc',
+      'stroke-width':isCrit?'2.5':'1.2',
+      'marker-end':isCrit?'url(#ag-arr-red)':'url(#ag-arr)'
+    }},egG);
+    var lbl=null;
+    if(e.label){{
+      lbl=svgEl2('text',{{
+        x:(e.s.x+e.t.x)/2,y:(e.s.y+e.t.y)/2,
+        'font-size':'9','fill':'#999','text-anchor':'middle','pointer-events':'none'
+      }},egG);
+      lbl.textContent=e.label;
+    }}
+    return {{line:line,lbl:lbl,e:e}};
+  }});
+
+  // draw nodes
+  var nodeEls=nodes.map(function(n){{
+    var g=svgEl2('g',{{'transform':'translate('+n.x+','+n.y+')','style':'cursor:pointer'}},ndG);
+    var fill=n.on_critical_path?'#c0392b':n.is_crown_jewel?'#6b0000':
+             n.internet_reachable&&n.id!=='INTERNET'?'#d35400':
+             (COLORS[n.type]||'#2980b9');
+    var stroke=n.is_crown_jewel?'#ffd700':'rgba(0,0,0,.15)';
+    var sw=n.is_crown_jewel?'2.5':'1';
+    svgEl2('circle',{{r:String(R),fill:fill,stroke:stroke,'stroke-width':sw}},g);
+    var lbl=n.label.length>18?n.label.slice(0,16)+'…':n.label;
+    var txt=svgEl2('text',{{'font-size':'8','text-anchor':'middle','dy':'3',
+      'fill':'#fff','pointer-events':'none'}},g);
+    txt.textContent=lbl;
+    g.addEventListener('click',function(){{showSb(n);}});
+    return {{g:g,n:n}};
+  }});
+
+  function redraw(){{
+    lineEls.forEach(function(el){{
+      el.line.setAttribute('x1',el.e.s.x);el.line.setAttribute('y1',el.e.s.y);
+      el.line.setAttribute('x2',el.e.t.x);el.line.setAttribute('y2',el.e.t.y);
+      if(el.lbl){{
+        el.lbl.setAttribute('x',(el.e.s.x+el.e.t.x)/2);
+        el.lbl.setAttribute('y',(el.e.s.y+el.e.t.y)/2);
+      }}
+    }});
+    nodeEls.forEach(function(el){{
+      el.g.setAttribute('transform','translate('+el.n.x+','+el.n.y+')');
+    }});
+  }}
+
+  // animation cool-down
+  var alpha=1;
+  function animate(){{
+    if(alpha>0.005){{
+      tick();tick();tick();redraw();
+      alpha*=0.96;
+      requestAnimationFrame(animate);
+    }}
+  }}
+  animate();
+
+  // drag
+  var dragging=null,dragOX=0,dragOY=0;
+  svgEl.addEventListener('mousedown',function(ev){{
+    var rect=svgEl.getBoundingClientRect();
+    var mx=ev.clientX-rect.left,my=ev.clientY-rect.top;
+    nodes.forEach(function(n){{
+      if(Math.sqrt((n.x-mx)*(n.x-mx)+(n.y-my)*(n.y-my))<R+4){{
+        dragging=n;dragOX=mx-n.x;dragOY=my-n.y;
+      }}
+    }});
+    if(dragging)ev.preventDefault();
+  }});
+  svgEl.addEventListener('mousemove',function(ev){{
+    if(!dragging)return;
+    var rect=svgEl.getBoundingClientRect();
+    dragging.x=ev.clientX-rect.left-dragOX;
+    dragging.y=ev.clientY-rect.top-dragOY;
+    dragging.vx=0;dragging.vy=0;
+    redraw();
+  }});
+  svgEl.addEventListener('mouseup',function(){{dragging=null;}});
+  svgEl.addEventListener('mouseleave',function(){{dragging=null;}});
+
+  // sidebar
+  function showSb(n){{
+    document.getElementById('ag-sb-title').textContent=n.label;
+    var html='<b>Type:</b> '+n.type+'<br>';
+    if(n.file)html+='<b>File:</b> <code style="font-size:11px">'+n.file+'</code>:'+n.line+'<br>';
+    if(n.is_crown_jewel)html+='<span style="color:#8b0000;font-weight:600">&#128081; Crown Jewel</span><br>';
+    if(n.on_critical_path)html+='<span style="color:#c0392b;font-weight:600">&#9888; On Critical Attack Path</span><br>';
+    if(n.internet_reachable&&n.id!=='INTERNET')html+='<span style="color:#d35400">&#127760; Internet-reachable</span><br>';
+    if(n.findings&&n.findings.length){{
+      html+='<br><b>Findings:</b><ul style="margin:.3em 0;padding-left:1.2em">';
+      n.findings.forEach(function(f){{html+='<li><code>'+f+'</code></li>';}});
+      html+='</ul>';
+    }}else{{html+='<br><i style="color:#999">No findings on this resource</i>';}}
+    document.getElementById('ag-sb-body').innerHTML=html;
+    document.getElementById('ag-sb').style.display='block';
+  }}
+}})();
+</script>"""
+
+
 # ---- SARIF output --------------------------------------------------------
 
 SARIF_HELP_URI_BASE = (
@@ -2109,19 +2613,192 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
     }
 
 
+# ---- adversarial scenario narratives ------------------------------------
+
+_ATTACK_NARRATIVES: dict[str, str] = {
+    "SEC-AWS-SSRF-001": (
+        "An attacker exploiting a Server-Side Request Forgery (SSRF) vulnerability in any "
+        "application running on {resource} can query the EC2 metadata endpoint "
+        "(http://169.254.169.254/) and retrieve temporary IAM credentials without "
+        "authentication — IMDSv1 requires no session token. "
+        "This was the exact attack vector in the 2019 Capital One breach, where a WAF "
+        "misconfiguration allowed an SSRF that exfiltrated 100M customer records via the "
+        "instance's over-privileged role. "
+        "Enforcing IMDSv2 (http_tokens = \"required\") breaks the chain because the "
+        "attacker's request must first complete a PUT handshake that a server-side forged "
+        "request cannot perform."
+    ),
+    "SEC-AWS-IAM-001": (
+        "A wildcard Resource in the IAM policy attached to {resource} grants the declared "
+        "actions against every AWS resource in the account — any credential theft, role "
+        "assumption, or confused-deputy exploit immediately yields account-wide blast radius. "
+        "In the 2019 Capital One breach a broad S3-read role attached to an EC2 instance "
+        "was the reason 100M records could be exfiltrated after SSRF retrieved the role's "
+        "STS token. "
+        "Scope the Resource ARN to the specific bucket, table, or secret the workload needs."
+    ),
+    "SEC-AWS-IAM-002": (
+        "{resource} grants the AdministratorAccess policy or equivalent wildcard, giving any "
+        "principal bound to it full control over every AWS service and resource in the account. "
+        "Compromise of a single workload using this role — via SSRF, code injection, or supply "
+        "chain attack — yields immediate account takeover with no further privilege escalation "
+        "required. "
+        "Replace with a least-privilege policy scoped to the exact API calls and resource ARNs "
+        "the workload uses."
+    ),
+    "SEC-GCP-IAM-001": (
+        "The broad project-level role granted by {resource} gives any principal bound to it "
+        "control over every resource in the GCP project — compute, storage, secrets, and IAM "
+        "itself. "
+        "An attacker who compromises a single workload service account inheriting this binding "
+        "can pivot to exfiltrate Cloud SQL databases, read Secret Manager secrets, and create "
+        "persistent backdoor service accounts, as demonstrated in multiple GCP supply-chain "
+        "incidents. "
+        "Replace with the narrowest resource-level role covering only the API surfaces the "
+        "workload calls."
+    ),
+    "SEC-AWS-S3-001": (
+        "Unencrypted data in {resource} is readable in plaintext by any AWS principal with "
+        "s3:GetObject, including anyone who obtains temporary credentials via SSRF, stolen "
+        "access keys, or a confused-deputy attack on an over-permissioned role. "
+        "The 2017 Verizon and 2017 Accenture incidents both involved S3 buckets with sensitive "
+        "data exposed without encryption, compounding the impact of misconfigured access controls. "
+        "Apply SSE-KMS with a customer-managed key so data at rest requires key access in "
+        "addition to bucket permissions."
+    ),
+    "SEC-AWS-SG-001": (
+        "The security group {resource} accepts ingress from 0.0.0.0/0, making every instance "
+        "in the group reachable from the public internet on the allowed port. "
+        "This directly expands the attack surface for brute-force, CVE exploitation, and lateral "
+        "movement — the 2020 SolarWinds attacker used internet-accessible management ports on "
+        "internal hosts as persistence anchors. "
+        "Restrict ingress to specific CIDR ranges, or use a bastion or SSM Session Manager to "
+        "eliminate the public attack surface entirely."
+    ),
+    "SEC-AWS-RDS-001": (
+        "Setting publicly_accessible = true on {resource} assigns the database a DNS name "
+        "resolvable from the internet, exposing the database port to any network adversary. "
+        "Combined with weak or default credentials, this is a trivially exploited attack path — "
+        "internet-scanning tools like Shodan index publicly accessible RDS endpoints within "
+        "minutes of provisioning. "
+        "Place the instance in private subnets and use a VPC-peered bastion or AWS Systems "
+        "Manager for administrative access."
+    ),
+    "SEC-AWS-CLOUDTRAIL-001": (
+        "A single-region CloudTrail on {resource} creates detection blind spots in every other "
+        "AWS region — an attacker deliberately operates in less-monitored regions to create IAM "
+        "backdoors, launch instances, or establish data exfiltration pipelines. "
+        "The 2020 SolarWinds-related AWS campaign specifically leveraged regions the victim had "
+        "not enabled CloudTrail in, delaying detection by weeks. "
+        "Enable is_multi_region_trail = true and include_global_service_events = true to capture "
+        "all IAM and STS calls regardless of region."
+    ),
+    "SEC-GCP-GKE-NETWORK-POLICY-001": (
+        "Without a network policy on {resource}, every pod in the cluster can reach every other "
+        "pod on every port — there is no namespace isolation or default-deny. "
+        "An attacker who compromises one container can scan and pivot to databases, metadata "
+        "servers, and control-plane endpoints without any network-layer barrier, as demonstrated "
+        "in the 2020 Tesla Kubernetes cryptomining incident where lateral movement from one "
+        "compromised pod was unrestricted. "
+        "Enable the built-in network policy provider and deploy default-deny egress policies in "
+        "every workload namespace."
+    ),
+    "SEC-AZURE-RBAC-001": (
+        "A subscription-scoped role assignment on {resource} grants the bound principal control "
+        "over every resource in the Azure subscription — VMs, storage accounts, Key Vaults, and "
+        "all other services. "
+        "Compromise of the assigned identity via token theft, phishing, or service principal "
+        "credential leak yields immediate lateral-movement capability across the entire "
+        "subscription boundary, as seen in multiple Azure post-exploitation chains. "
+        "Scope the assignment to the narrowest resource group or individual resource that "
+        "satisfies the use case."
+    ),
+    "SEC-GCP-COMPUTE-PUBLIC-IP-001": (
+        "{resource} has a public IP via an access_config block, making it directly reachable "
+        "from the internet and exposing any listening service to internet-scale scanners and "
+        "exploit attempts. "
+        "GCP instances with public IPs are routinely targeted within minutes of provisioning "
+        "by automated credential-stuffing and exploitation bots, as documented in multiple GCP "
+        "threat intelligence reports. "
+        "Remove the access_config block and use Cloud NAT for outbound traffic; use "
+        "Identity-Aware Proxy for authenticated inbound access."
+    ),
+    "SEC-AWS-KMS-001": (
+        "KMS key rotation is disabled on {resource}, meaning that if the key material is ever "
+        "compromised — via AWS account takeover, insider threat, or KMS API misuse — the "
+        "compromise is permanent with no rotation event to remediate it. "
+        "CIS AWS 2.8 requires annual key rotation as a compensating control for key exposure; "
+        "disabling rotation violates PCI-DSS 3.6.4 for cryptographic keys protecting cardholder "
+        "data. "
+        "Enable enable_key_rotation = true; AWS rotates automatically and retains old material "
+        "for decryption of previously encrypted data."
+    ),
+    "SEC-GCP-COMPUTE-SA-001": (
+        "{resource} uses the default Compute Engine service account, which holds roles/editor "
+        "project-wide — any workload code or attacker who gains code execution on this VM can "
+        "read every bucket, modify every Cloud SQL database, and impersonate other service "
+        "accounts. "
+        "The default SA pattern was the root cause in several GCP privilege-escalation chains "
+        "documented by Palo Alto Unit 42, where container escape led to project-wide compromise "
+        "via the VM's inherited credentials. "
+        "Bind a dedicated, narrowly scoped service account to every Compute instance."
+    ),
+    "SEC-HARDCODED-SECRET-001": (
+        "A hardcoded credential in {file} is stored in version control history permanently — "
+        "git filter-repo is required to fully purge it, and any fork or clone made before "
+        "remediation retains the value. "
+        "The 2022 Samsung source code leak and the 2021 Twitch leak both exposed hardcoded API "
+        "keys that were immediately weaponized by threat actors monitoring public repos with "
+        "automated credential-scanning tools. "
+        "Rotate the credential immediately, replace it with a Secrets Manager or Vault reference, "
+        "and add the pattern to a pre-commit hook to prevent recurrence."
+    ),
+    "SEC-GCP-SQL-PUBLIC-001": (
+        "{resource} has ipv4_enabled = true, assigning the Cloud SQL instance a public IP "
+        "reachable from the internet — even with authorized_networks set, a single misconfigured "
+        "network rule or future change exposes the database to direct attack. "
+        "Internet-exposed Cloud SQL instances are routinely targeted by automated "
+        "credential-stuffing attacks, and any SQL injection in the connected application can be "
+        "exploited without traversing VPC boundaries. "
+        "Set ipv4_enabled = false and use Private Service Connect or private IP allocation for "
+        "all database connectivity."
+    ),
+}
+
+
+def _narrative_for_finding(
+    rule_id: str,
+    resource: str = "",
+    file: str = "",
+) -> str | None:
+    """Return a formatted attack narrative for a rule ID, or None if unavailable."""
+    template = _ATTACK_NARRATIVES.get(rule_id)
+    if template is None:
+        return None
+    return template.format(
+        resource=resource or rule_id,
+        file=file or "unknown file",
+    )
+
+
 # ---- HTML output ---------------------------------------------------------
 
-def to_html(findings: list[dict], entries: list[dict], suppressed: list[dict]) -> str:
+def to_html(
+    findings: list[dict],
+    entries: list[dict],
+    suppressed: list[dict],
+    graph: dict | None = None,
+) -> str:
     """Produce a single-file HTML report, scalable to hundreds of findings.
 
-    Groups by catalogue ID, collapsible per group, sortable table header.
-    No external CSS/JS — self-contained for offline review.
+    Groups by catalogue ID, collapsible per group.  No external CSS/JS —
+    self-contained for offline review.  When `graph` is provided (from
+    build_attack_graph) an interactive Attack Graph tab is included.
     """
     entry_map = {e["id"]: e for e in entries}
     by_id: dict[str, list[dict]] = {}
     for f in findings:
         by_id.setdefault(f["id"], []).append(f)
-    # Sort groups by urgency then count
     urgency_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
     sorted_ids = sorted(
         by_id.keys(),
@@ -2131,23 +2808,40 @@ def to_html(findings: list[dict], entries: list[dict], suppressed: list[dict]) -
             i,
         ),
     )
+
+    def _make_detail_rows(eid: str, urgency: str, fs: list[dict]) -> str:
+        parts = []
+        for f in fs:
+            parts.append(
+                f"<tr><td><code>{f.get('file','')}</code>:{f.get('line','')}</td>"
+                f"<td><code>{f.get('resource','')}</code></td></tr>"
+            )
+            if urgency in ("HIGH", "CRITICAL"):
+                narrative = _narrative_for_finding(
+                    eid, f.get("resource", ""), f.get("file", "")
+                )
+                if narrative:
+                    parts.append(
+                        f"<tr><td colspan='2'>"
+                        f"<p class='narrative'>{narrative}</p>"
+                        f"</td></tr>"
+                    )
+        return "".join(parts)
+
     rows = []
     for eid in sorted_ids:
         entry = entry_map.get(eid, {})
         urgency = entry.get("default_urgency", "MEDIUM")
         title = entry.get("title", eid)
         fs = by_id[eid]
-        detail_rows = "".join(
-            f"<tr><td><code>{f.get('file','')}</code>:{f.get('line','')}</td>"
-            f"<td><code>{f.get('resource','')}</code></td></tr>"
-            for f in fs
-        )
+        detail_rows = _make_detail_rows(eid, urgency, fs)
         rows.append(
             f"<details><summary><span class='u u-{urgency.lower()}'>{urgency}</span> "
             f"<b>{eid}</b> — {title} ({len(fs)})</summary>"
             f"<table class='locs'><thead><tr><th>Location</th><th>Resource</th></tr></thead>"
             f"<tbody>{detail_rows}</tbody></table></details>"
         )
+
     suppressed_section = ""
     if suppressed:
         sups = "".join(
@@ -2156,10 +2850,36 @@ def to_html(findings: list[dict], entries: list[dict], suppressed: list[dict]) -
             for s in suppressed
         )
         suppressed_section = f"<h2>Suppressed ({len(suppressed)})</h2><ul>{sups}</ul>"
+
+    findings_panel = f"{''.join(rows)}\n{suppressed_section}"
+
+    tab_bar = ""
+    tab_js = ""
+    graph_panel_html = ""
+    graph_tab_style = ""
+    if graph is not None:
+        tab_bar = (
+            "<div class='tab-bar'>"
+            "<button class='tab-btn active' onclick='showTab(\"findings\",this)'>Findings</button>"
+            "<button class='tab-btn' onclick='showTab(\"graph\",this)'>&#128200; Attack Graph</button>"
+            "</div>"
+        )
+        graph_tab_style = "display:none"
+        graph_panel_html = _render_graph_html(graph)
+        tab_js = (
+            "<script>"
+            "function showTab(name,btn){"
+            "document.querySelectorAll('.tab-panel').forEach(function(p){p.style.display='none';});"
+            "document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});"
+            "document.getElementById('tp-'+name).style.display='';"
+            "btn.classList.add('active');}"
+            "</script>"
+        )
+
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><title>tf-analyze report</title>
 <style>
-body{{font:14px/1.5 -apple-system,system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em;color:#222}}
+body{{font:14px/1.5 -apple-system,system-ui,sans-serif;max-width:1100px;margin:2em auto;padding:0 1em;color:#222}}
 code{{font:12px/1.3 ui-monospace,monospace;background:#f4f4f4;padding:1px 4px;border-radius:3px}}
 details{{border:1px solid #e0e0e0;border-radius:6px;margin:.4em 0;padding:.6em 1em;background:#fafafa}}
 summary{{cursor:pointer;user-select:none}}
@@ -2167,12 +2887,23 @@ summary{{cursor:pointer;user-select:none}}
 .u-critical{{background:#7a0b0b}} .u-high{{background:#b02a2a}} .u-medium{{background:#c27a00}} .u-low{{background:#5a7b33}} .u-info{{background:#4a6a8a}}
 table.locs{{border-collapse:collapse;margin-top:.5em;width:100%;font-size:13px}}
 table.locs th,table.locs td{{text-align:left;padding:.3em .5em;border-bottom:1px solid #eee}}
-h1{{margin:0 0 .2em}} .meta{{color:#666;margin-bottom:1.5em}}
+h1{{margin:0 0 .2em}} .meta{{color:#666;margin-bottom:1em}}
+p.narrative{{font-size:12px;color:#555;border-left:3px solid #b02a2a;padding:.3em .7em;margin:.4em 0;font-style:italic;background:#fff8f8;border-radius:0 4px 4px 0}}
+.tab-bar{{border-bottom:2px solid #e0e0e0;margin-bottom:1em}}
+.tab-btn{{background:none;border:none;padding:.45em 1.4em;cursor:pointer;font-size:13px;border-bottom:3px solid transparent;margin-bottom:-2px;color:#555;font-weight:500}}
+.tab-btn.active{{border-bottom-color:#2980b9;color:#1a1a1a;font-weight:600}}
+.tab-btn:hover{{color:#1a1a1a}}
 </style></head><body>
 <h1>tf-analyze report</h1>
 <div class='meta'>{len(findings)} findings across {len(by_id)} rules.</div>
-{''.join(rows)}
-{suppressed_section}
+{tab_bar}
+<div id='tp-findings' class='tab-panel'>
+{findings_panel}
+</div>
+<div id='tp-graph' class='tab-panel' style='{graph_tab_style}'>
+{graph_panel_html}
+</div>
+{tab_js}
 </body></html>
 """
 
@@ -2597,6 +3328,9 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
                 errs.append(f"{source}: patterns[{i}] missing 'kind'")
     elif pats is not None:
         errs.append(f"{source}: 'patterns' must be a list")
+    narrative = data.get("narrative")
+    if narrative is not None and not isinstance(narrative, str):
+        errs.append(f"{source}: 'narrative' must be a string if present")
     fid = data.get("id")
     fname = Path(source).stem
     if fid and fid != fname:
@@ -3024,6 +3758,19 @@ def main():
         default="text",
     )
     ap.add_argument(
+        "--attack-graph",
+        action="store_true",
+        default=False,
+        help=(
+            "Build a directed attack-path graph from internet-reachable resources to "
+            "crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). "
+            "With --format html adds an interactive Attack Graph tab (force-directed SVG, "
+            "drag, click-to-inspect, critical path highlighted in red). "
+            "With --format text (default) appends a Mermaid flowchart block after findings. "
+            "Also enables adversarial scenario narratives for HIGH/CRITICAL findings."
+        ),
+    )
+    ap.add_argument(
         "--output",
         metavar="PATH",
         default=None,
@@ -3420,6 +4167,19 @@ def main():
             for sp in stubs_created:
                 print(f"#   {sp}", file=sys.stderr)
 
+    # Build attack graph when requested (consumes all_text + findings)
+    attack_graph: dict | None = None
+    if getattr(args, "attack_graph", False):
+        _ri_for_graph = _build_resource_index(all_text)
+        attack_graph = build_attack_graph(_ri_for_graph, findings)
+        n_nodes = len(attack_graph["nodes"])
+        n_path = len(attack_graph["critical_path"])
+        print(
+            f"# attack graph: {n_nodes} nodes, "
+            f"critical path length {n_path}",
+            file=sys.stderr,
+        )
+
     # Auto-compare: resolve most recent JSON report as the prior when set.
     compare_target = args.compare
     if args.auto_compare and not compare_target:
@@ -3440,7 +4200,7 @@ def main():
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph))
         else:
             if delta["new"]:
                 _emit("# NEW findings:")
@@ -3452,6 +4212,9 @@ def main():
                     _emit(f"  - {f['id']} {f['file']}:{f['line']} {f['resource']}")
             if delta["unchanged"]:
                 _emit(f"# {len(delta['unchanged'])} unchanged finding(s)")
+            if attack_graph:
+                _emit("\n## Attack Graph\n")
+                _emit(graph_to_mermaid(attack_graph))
     else:
         # Standard output
         if args.format == "json":
@@ -3463,14 +4226,26 @@ def main():
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph))
         else:
+            entry_map_out = {e["id"]: e for e in entries}
             for f in findings:
                 _emit(f"{f['id']} {f['file']}:{f['line']} {f['resource']}")
+                if attack_graph:
+                    e_out = entry_map_out.get(f["id"], {})
+                    if e_out.get("default_urgency") in ("HIGH", "CRITICAL"):
+                        narr = _narrative_for_finding(
+                            f["id"], f.get("resource", ""), f.get("file", "")
+                        )
+                        if narr:
+                            _emit(f"  # {narr}")
             if suppressed_findings:
                 print(f"# ({len(suppressed_findings)} suppressed)", file=sys.stderr)
             if not findings:
                 print("# no findings", file=sys.stderr)
+            if attack_graph:
+                _emit("\n## Attack Graph\n")
+                _emit(graph_to_mermaid(attack_graph))
 
     if _out_file is not None:
         _out_file.close()

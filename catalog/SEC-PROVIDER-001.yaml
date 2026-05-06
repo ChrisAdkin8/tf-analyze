@@ -21,4 +21,5 @@ verification: |
   the locked provider version in `.terraform.lock.hcl` is within the new
   range.
 fixtures:
+  - attack_graph_demo
   - wide_provider_constraint

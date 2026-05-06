@@ -32,4 +32,5 @@ verification: |
   `Status` is `Enabled`. Run `terraform plan` and verify no diff shows
   `status = "Suspended"` or `status = "Disabled"`.
 fixtures:
+  - attack_graph_demo
   - aws_s3_no_versioning

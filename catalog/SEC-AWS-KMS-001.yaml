@@ -28,4 +28,5 @@ verification: |
   `KeyRotationEnabled` is `true`. Run `terraform plan` and verify no diff
   shows `enable_key_rotation = false`.
 fixtures:
+  - attack_graph_demo
   - aws_kms_no_rotation

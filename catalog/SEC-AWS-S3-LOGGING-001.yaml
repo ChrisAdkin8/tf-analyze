@@ -49,4 +49,5 @@ verification: |
   `LoggingEnabled` key. After applying, confirm logs appear in the
   target bucket within a few minutes of S3 activity.
 fixtures:
+  - attack_graph_demo
   - aws_s3_no_logging

@@ -30,4 +30,5 @@ verification: |
   `aws s3api get-public-access-block --bucket <name>`
   must show all four settings as `true`.
 fixtures:
+  - attack_graph_demo
   - aws_s3_no_public_block

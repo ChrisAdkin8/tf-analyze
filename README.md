@@ -39,6 +39,7 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 - `json` — machine-readable findings list. Used by `--compare` and CI integrations.
 - `sarif` — SARIF v2.1.0 with `helpUri`, `partialFingerprints`, `security-severity` (9.5/7.5/5.0/3.0/1.0), CIS tags. GitHub Code Scanning renders these as line-level annotations on the PR diff. Schema documented in `SKILL.md`.
 - `html` — self-contained report with inline CSS, urgency-coloured badges, collapsible per-rule details. Right for sharing with non-CLI reviewers.
+- `--attack-graph` — (flag, works with any format) builds a directed attack-path graph from internet-reachable resources to crown jewels. HTML output adds an interactive second tab with a force-directed SVG layout; text/Markdown output appends a Mermaid flowchart block. HIGH/CRITICAL findings in HTML gain a bordered italic adversarial narrative paragraph referencing real-world breaches.
 
 ### Differentiators (vs tfsec / Checkov / KICS / tflint)
 
@@ -50,6 +51,8 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 6. **Cross-resource (graph) detector kind.** `pattern_kind: graph_check` invokes a registered Python function with a resource index — used for "all node pools must X", logging-target hardening, IAM breadth, KMS location parity. The scaffolding generalises; new graph rules are ~30 LoC each.
 7. **`scripts/detect.py --new-rule RULE-ID`** scaffolds catalogue YAML + fixture skeleton + self-test stub. Authoring a new rule is `--new-rule SEC-FOO-007` then editing the TODOs.
 8. **Optional `python-hcl2` fast-path** for heredoc-aware attribute extraction. Default install is stdlib-only; `--use-hcl2` (or `TF_ANALYZE_USE_HCL2=1`) opts in when `python-hcl2` is installed. Off by default to keep the install zero-pip-deps.
+9. **Attack-path graph.** `--attack-graph` infers directed edges from HCL references (IAM profiles → roles → policies, KMS key IDs, SG membership, GCP service account bindings) and runs BFS from internet-reachable resources to crown jewels (RDS, KMS, Secrets Manager, S3, Cloud SQL, Key Vault). The shortest path is highlighted as the "critical path." HTML output is a force-directed interactive SVG with drag, click-to-inspect sidebar, and color-coding by resource category. No other OSS scanner shows the lateral-movement chain.
+10. **Adversarial scenario narratives.** HIGH and CRITICAL findings in HTML reports include a pre-written 2-3 sentence attack scenario referencing a confirmed public breach (Capital One 2019, SolarWinds 2020, Tesla 2020 Kubernetes, Samsung 2022, Twitch 2021). Text mode appends them as inline comments when `--attack-graph` is active. The Claude skill's Step 16e generates a full Adversarial Scenarios table using these templates as anchors.
 
 ---
 

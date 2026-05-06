@@ -28,4 +28,5 @@ verification: |
   Run `aws ec2 describe-security-groups --group-ids <sg-id>` and confirm
   no ingress rules have `0.0.0.0/0` or `::/0` as source.
 fixtures:
+  - attack_graph_demo
   - aws_sg_open

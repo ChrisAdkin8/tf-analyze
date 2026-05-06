@@ -25,4 +25,5 @@ verification: |
   Run `terraform plan` and verify the policy document in the plan output
   has no `"Resource": "*"` statements.
 fixtures:
+  - attack_graph_demo
   - aws_iam_wildcard

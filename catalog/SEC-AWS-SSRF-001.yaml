@@ -36,4 +36,5 @@ verification: |
   `MetadataOptions.HttpTokens` is `required`. Run `terraform plan` and
   verify the metadata_options block is present with `http_tokens = "required"`.
 fixtures:
+  - attack_graph_demo
   - aws_ec2_imdsv1

@@ -24,4 +24,5 @@ verification: |
   Run `aws s3api get-bucket-encryption --bucket <name>` and confirm
   encryption is enabled.
 fixtures:
+  - attack_graph_demo
   - aws_s3_insecure

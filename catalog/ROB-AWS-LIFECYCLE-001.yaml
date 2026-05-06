@@ -44,4 +44,5 @@ escalation:
   - condition: "is_production_environment"
     new_urgency: CRITICAL
 fixtures:
+  - attack_graph_demo
   - aws_missing_prevent_destroy
