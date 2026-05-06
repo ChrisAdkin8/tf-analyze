@@ -1,0 +1,37 @@
+id: STK-AWS-ECS-001
+title: "ECS cluster Container Insights not configured"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_ecs_cluster
+    arg: setting
+    description: |
+      `aws_ecs_cluster` has no `setting` block. Without the
+      `containerInsights = "enabled"` setting, per-cluster and per-task
+      CPU, memory, network I/O, and storage metrics are not published to
+      CloudWatch. Capacity planning, right-sizing, and anomaly alerting
+      have no per-container data.
+recommendation: |
+  Add a `setting` block enabling Container Insights:
+
+      resource "aws_ecs_cluster" "app" {
+        name = "app"
+
+        setting {
+          name  = "containerInsights"
+          value = "enabled"
+        }
+      }
+
+  Container Insights is billed per metric per task, per month.
+  At low task counts the cost is negligible; evaluate for large
+  clusters before enabling in cost-sensitive environments.
+verification: |
+  `aws ecs describe-clusters --clusters <name> --include SETTINGS \
+    --query 'clusters[0].settings[?name==\`containerInsights\`].value'`
+  must return `["enabled"]`.
+fixtures:
+  - aws_ecs_no_container_insights

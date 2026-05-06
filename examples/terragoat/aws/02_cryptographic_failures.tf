@@ -24,11 +24,12 @@
 #     coffee-shop wifi.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-S3-001    HIGH  S3 bucket missing server-side encryption
-#   - SEC-AWS-RDS-002   HIGH  RDS instance storage not encrypted
-#   - SEC-AWS-KMS-001   HIGH  KMS key rotation disabled
-#   - SEC-AWS-EBS-001   HIGH  EBS volume not encrypted
-#   - STK-AWS-RDS-004   HIGH  RDS running end-of-life engine version
+#   - SEC-AWS-S3-001              HIGH    S3 bucket missing server-side encryption
+#   - SEC-AWS-RDS-002             HIGH    RDS instance storage not encrypted
+#   - SEC-AWS-KMS-001             HIGH    KMS key rotation disabled
+#   - SEC-AWS-EBS-001             HIGH    EBS volume not encrypted
+#   - STK-AWS-RDS-004             HIGH    RDS running end-of-life engine version
+#   - SEC-AWS-SECRETSMANAGER-001  MEDIUM  Secrets Manager secret without rotation (corpus-level)
 #
 # Fix summary: turn on every encryption flag explicitly; never rely
 # on AWS account defaults (they vary by region and by account age).
@@ -76,4 +77,12 @@ resource "aws_db_instance" "eol_engine" {
   username            = "admin"
   password            = "tempPASSWORD123!"
   skip_final_snapshot = true
+}
+
+# Secrets Manager secret without rotation — SEC-AWS-SECRETSMANAGER-001.
+# Because no aws_secretsmanager_secret_rotation resource exists anywhere
+# in this corpus, the resource_absent rule fires once at the corpus root.
+resource "aws_secretsmanager_secret" "app_creds" {
+  name        = "demo-app-creds"
+  description = "Application credentials — no rotation configured"
 }

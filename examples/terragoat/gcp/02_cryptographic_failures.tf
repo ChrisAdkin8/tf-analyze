@@ -26,6 +26,8 @@
 #   - STK-GCP-KMS-LOCATION-001  HIGH    CMEK consumer location mismatches key ring
 #   - SEC-SENSITIVE-001         HIGH    Sensitive output not marked sensitive=true
 #   - STK-GCP-PUBSUB-001        MEDIUM  Pub/Sub topic without customer-managed encryption key
+#   - SEC-GCP-REDIS-001         HIGH    Redis instance AUTH disabled
+#   - SEC-GCP-REDIS-002         HIGH    Redis instance transit encryption disabled
 #
 # Fix summary: add `rotation_period = "7776000s"` (90 days) on every
 # symmetric crypto key, co-locate consumers with their key rings, and
@@ -74,6 +76,17 @@ resource "google_storage_bucket" "encrypted_cross_region" {
 resource "google_pubsub_topic" "no_cmek" {
   name = "demo-events"
   # kms_key_name intentionally absent
+}
+
+# Redis instance with AUTH and transit encryption both disabled.
+# auth_enabled = false            → SEC-GCP-REDIS-001
+# transit_encryption_mode = DISABLED → SEC-GCP-REDIS-002
+resource "google_redis_instance" "insecure" {
+  name                    = "demo-insecure"
+  memory_size_gb          = 1
+  region                  = "us-central1"
+  auth_enabled            = false
+  transit_encryption_mode = "DISABLED"
 }
 
 variable "vault_token" {

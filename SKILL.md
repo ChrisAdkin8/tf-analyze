@@ -113,12 +113,12 @@ The skill is **GCP-first**. Catalogue entries, CIS mappings, the IAM compatibili
 
 | Cloud | Cloud-specific rules | Notes |
 |---|---|---|
-| **GCP** | 38 | IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, GCS, networking (SSH/RDP/database port world-open), Shielded VM, Audit Logs, service account key creation. Full CIS GCP Foundations Benchmark v4.0 coverage for documented controls. |
-| **AWS** | 39 | IAM wildcard, S3 (public access block/server access logging), RDS/Aurora (encryption/deletion-protection/backup retention/EOL engine), KMS, CloudTrail, SQS, SNS, ElastiCache, ECR (scan-on-push/lifecycle), VPC flow logs, EKS (private endpoint/logging/secrets/IRSA/partial log-type detection), launch template IMDSv2, GuardDuty, Route53 DNSSEC, CloudWatch cost controls, SG world-open ports |
-| **Azure** | 29 | RBAC, storage (versioning/HTTPS), Key Vault (network ACL/key rotation), AKS (Workload Identity/private/authorized IPs/network policy), SQL (firewall/TDE/deprecated single-server/SSL), App Service HTTPS, NSG flow logs, UAMI, ACR admin, subscription activity log |
+| **GCP** | 41 | IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, GCS, networking (SSH/RDP/database port world-open), Shielded VM, Audit Logs, service account key creation, Cloud Memorystore Redis auth/TLS, Artifact Registry CMEK. Full CIS GCP Foundations Benchmark v4.0 coverage for documented controls. |
+| **AWS** | 47 | IAM wildcard, S3 (public access block/server access logging), RDS/Aurora (encryption/deletion-protection/backup retention/EOL engine), KMS, CloudTrail, SQS, SNS, ElastiCache, ECR (scan-on-push/lifecycle), VPC flow logs, EKS (private endpoint/logging/secrets/IRSA/partial log-type detection), launch template IMDSv2, GuardDuty, Route53 DNSSEC, CloudWatch cost controls, SG world-open ports, CloudFront (allow-all HTTP policy/missing logging), Cognito user pool MFA, Secrets Manager missing rotation, API Gateway stage missing access logs, Lambda missing DLQ/X-Ray tracing, ECS container insights |
+| **Azure** | 30 | RBAC, storage (versioning/HTTPS), Key Vault (network ACL/key rotation), AKS (Workload Identity/private/authorized IPs/network policy), SQL (firewall/TDE/deprecated single-server/SSL), App Service HTTPS, NSG flow logs, UAMI, ACR admin, subscription activity log, Linux VM password authentication |
 | **Multi-cloud** | 36 | Secrets in HCL/tfvars, provisioner usage, module pinning, `required_providers` version pinning, lifecycle controls, count/for_each patterns, variable validation, sensitive outputs, provider aliases, backends, Vault data sources |
 
-Multi-cloud rules fire on any cloud stack; the 36 cloud-specific counts exclude them. Total: **142 active rules** (`python3 scripts/detect.py --list-rules` for the full enumeration).
+Multi-cloud rules fire on any cloud stack; the 36 cloud-specific counts exclude them. Total: **154 active rules** (`python3 scripts/detect.py --list-rules` for the full enumeration).
 
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.
 
@@ -143,6 +143,13 @@ For findings the catalogue does not yet cover (novel patterns the agent identifi
 Stubs are skipped by default during normal scans (`status: stub` is filtered in `load_catalog`). Use `--include-stubs` only when validating the YAML parses. Promote a stub by editing the YAML to `status: active`, adding a real detection pattern, writing a fixture under `fixtures/<name>/` referenced in `fixtures:`, and re-running `scripts/self_test.py`.
 
 In the report, note any new stubs under the **"Catalogue follow-ups"** section so the next operator can triage them.
+
+**`resource_arg` match modes — `regex` vs `not_regex`:** The `resource_arg` pattern kind supports two mutually-exclusive match modes that can both appear in the same `patterns:` list:
+
+- `regex` — fires when the attribute **value matches** the pattern. Use for "must equal exactly this value" checks (e.g., `auth_enabled = false`). **Important:** `block_arg_value` strips surrounding quotes from simple string attributes, so write `regex: 'DISABLED'` not `regex: '"DISABLED"'` for a value like `transit_encryption_mode = "DISABLED"`. Boolean and list values are not stripped.
+- `not_regex` — fires when the attribute is present but its value **does not match** the pattern. Use for partial-config detection: `not_regex: '"audit"'` on `enabled_cluster_log_types` fires when the list value doesn't contain the string `"audit"`. List values retain their surrounding brackets and inner quotes, so include the double-quote characters in the pattern.
+
+Both modes require at least one of `regex` or `not_regex`. When both are present in a single pattern entry, they are OR-combined (either condition fires the rule).
 
 ---
 

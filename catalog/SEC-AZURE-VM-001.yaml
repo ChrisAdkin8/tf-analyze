@@ -1,0 +1,49 @@
+id: SEC-AZURE-VM-001
+title: "Linux VM allows SSH password authentication"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "7.3"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_linux_virtual_machine
+    arg: disable_password_authentication
+    description: |
+      `azurerm_linux_virtual_machine` has no `disable_password_authentication`
+      argument. The default is `false` — SSH password logins are permitted.
+      Brute-force and credential-stuffing attacks against port 22 are
+      constant on Azure public IPs.
+  - kind: resource_arg
+    resource: azurerm_linux_virtual_machine
+    arg: disable_password_authentication
+    regex: 'false'
+    description: |
+      `azurerm_linux_virtual_machine` explicitly sets
+      `disable_password_authentication = false`. Password-based SSH
+      authentication is confirmed; the attack surface for brute-force
+      and leaked credential reuse is fully open.
+recommendation: |
+  Disable password authentication and supply an SSH public key:
+
+      resource "azurerm_linux_virtual_machine" "app" {
+        # ...
+        disable_password_authentication = true
+
+        admin_ssh_key {
+          username   = "azureuser"
+          public_key = data.azurerm_key_vault_secret.ssh_pubkey.value
+        }
+      }
+
+  Store SSH public keys in Key Vault (`data.azurerm_key_vault_secret`)
+  rather than hardcoding them in source or tfvars. Enforce across all VMs
+  via Azure Policy: `"Audit Linux machines that allow remote connections
+  from accounts without passwords"` (built-in policy definition).
+verification: |
+  `az vm show -g <rg> -n <name> \
+    --query osProfile.linuxConfiguration.disablePasswordAuthentication`
+  must return `true`.
+fixtures:
+  - azure_linux_vm_password_auth

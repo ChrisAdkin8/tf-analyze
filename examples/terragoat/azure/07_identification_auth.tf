@@ -26,6 +26,7 @@
 #   - SEC-AZURE-WEBAPP-001  HIGH    Web App using storage account key in app_settings
 #   - SEC-AZURE-WEBAPP-002  HIGH    Web App HTTPS not enforced (https_only absent)
 #   - SEC-AZURE-SQL-001     HIGH    SQL Server without Entra ID administrator
+#   - SEC-AZURE-VM-001      HIGH    Linux VM allows SSH password authentication
 #
 # Fix summary: use Managed Identity + RBAC for storage access; configure
 # `azuread_administrator` on every SQL Server; one UAMI per workload
@@ -80,4 +81,28 @@ resource "azurerm_mssql_server" "sql_only" {
   administrator_login          = "sqladmin"
   administrator_login_password = "ShouldBeKVRef!123"
   # No azuread_administrator block.
+}
+
+# Linux VM with password authentication enabled — SEC-AZURE-VM-001.
+resource "azurerm_linux_virtual_machine" "password_auth" {
+  name                            = "demo-password-auth"
+  resource_group_name             = azurerm_resource_group.demo.name
+  location                        = azurerm_resource_group.demo.location
+  size                            = "Standard_B1s"
+  admin_username                  = "azureuser"
+  disable_password_authentication = false
+  admin_password                  = "DemoP@ssw0rd123!"
+  network_interface_ids           = []
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
 }

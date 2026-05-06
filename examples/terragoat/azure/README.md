@@ -8,11 +8,11 @@
 |---|---|---|
 | [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | Subscription-scope `Contributor` role; storage with `allow_nested_items_to_be_public = true`; container with anonymous blob access |
 | [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | Storage `enable_https_traffic_only = false`; `min_tls_version = "TLS1_0"`; Key Vault without purge protection |
-| [`03_injection.tf`](03_injection.tf) | A03 | VM `custom_data` with unvalidated tfvar; `null_resource` shelling to `az` CLI |
+| [`03_injection.tf`](03_injection.tf) | A03 | VM `custom_data` with unvalidated tfvar; `null_resource` shelling to `az` CLI; Linux VM missing `disable_password_authentication` |
 | [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | Hardcoded admin password; orphan UAMI (no role_assignment); SQL Server without `prevent_destroy` |
 | [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | NSG with `source_address_prefix = "*"` on tcp:22 and tcp:3389; AKS with RBAC off and node public IPs; storage with `public_network_access_enabled = true` |
 | [`06_vulnerable_components.tf`](06_vulnerable_components.tf) | A06 | Function App on `dotnet:3.1` (EOL); AKS pinned to `1.21.7`; module without `version` |
-| [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | Web App using storage account key in app_settings; SQL Server without Entra ID admin |
+| [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | Web App using storage account key in app_settings; SQL Server without Entra ID admin; Linux VM with password authentication enabled |
 | [`08_data_integrity.tf`](08_data_integrity.tf) | A08 | Storage without versioning / soft delete; SQL DB without short-term retention |
 | [`09_logging_monitoring.tf`](09_logging_monitoring.tf) | A09 | Key Vault without `azurerm_monitor_diagnostic_setting`; NSG without flow logs |
 | [`10_ssrf.tf`](10_ssrf.tf) | A10 | Public-facing Web App with no IP restrictions; storage reachable directly from the internet |
@@ -20,7 +20,7 @@
 
 ## Expected findings
 
-85 findings across 34 unique rule IDs. From inside this directory:
+88 findings across 35 unique rule IDs. From inside this directory:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
@@ -51,6 +51,7 @@ Active rules that fire against this corpus:
 | `SEC-AZURE-SQL-002` | 05 | SQL Server firewall rule open to all IPs |
 | `SEC-AZURE-LOGGING-001` | 09 | Key Vault without diagnostic setting |
 | `SEC-AZURE-MONITOR-001` | — | Subscription missing activity log diagnostic setting (corpus-level) |
+| `SEC-AZURE-VM-001` | 03, 07 | Linux VM with `disable_password_authentication = false` or missing (CIS Azure 7.3) |
 | `SEC-AZURE-WEBAPP-001` | 07, 10 | App Service missing IP access restrictions |
 | `SEC-AZURE-WEBAPP-002` | 06, 07, 10 | App Service / Function App HTTPS not enforced |
 | `SEC-AZURE-MI-001` | 04 | Orphan UAMI — no role_assignment referencing its principal_id |

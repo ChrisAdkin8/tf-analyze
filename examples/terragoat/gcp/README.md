@@ -7,10 +7,10 @@
 | File | OWASP | What's vulnerable |
 |---|---|---|
 | [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | `roles/owner` at project; `allUsers` on a bucket; same SA at project + resource scope |
-| [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | KMS key with no `rotation_period`; bucket↔key-ring location mismatch; sensitive output unmarked |
+| [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | KMS key with no `rotation_period`; bucket↔key-ring location mismatch; sensitive output unmarked; Cloud Memorystore Redis with auth disabled and TLS disabled |
 | [`03_injection.tf`](03_injection.tf) | A03 | `null_resource` provisioner shelling out to a tfvar; `data.external` with user-controlled query |
 | [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | One SA used by every workload; stateful Spanner + state bucket without `prevent_destroy` |
-| [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | Default Compute SA; public-IP `access_config`; world-open SSH; world-open RDP; GCP firewall exposing PostgreSQL port (5432) to 0.0.0.0/0; Cloud SQL with `ipv4_enabled = true`; Cloud SQL without `deletion_protection`; Cloud SQL without `require_ssl`; bucket missing `public_access_prevention` and UBLA |
+| [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | Default Compute SA; public-IP `access_config`; world-open SSH; world-open RDP; GCP firewall exposing PostgreSQL port (5432) to 0.0.0.0/0; Cloud SQL with `ipv4_enabled = true`; Cloud SQL without `deletion_protection`; Cloud SQL without `require_ssl`; bucket missing `public_access_prevention` and UBLA; Artifact Registry repository without CMEK |
 | [`06_vulnerable_components.tf`](06_vulnerable_components.tf) | A06 | Module without `version`; Cloud SQL pinned to `POSTGRES_9_6` (EOL, triggers STK-GCP-CLOUDSQL-004 + STK-GCP-CLOUDSQL-005) |
 | [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | GKE missing Workload Identity, network_policy, node-pool secure-boot, and master authorized networks; static service account key created in Terraform |
 | [`08_data_integrity.tf`](08_data_integrity.tf) | A08 | Bucket without versioning; BigQuery dataset without CMEK; stale `moved` and `removed` blocks |
@@ -27,10 +27,12 @@ SEC-GCP-IAM-001, SEC-GCP-IAM-002, SEC-GCP-IAM-003,
 SEC-GCP-BUCKET-001, SEC-GCP-BUCKET-002,
 SEC-GCP-COMPUTE-SA-001, SEC-GCP-COMPUTE-PUBLIC-IP-001, SEC-GCP-COMPUTE-SHIELDED-001,
 SEC-GCP-NETWORK-001, SEC-GCP-NETWORK-002, SEC-GCP-NETWORK-003, SEC-GCP-NETWORK-004,
+SEC-GCP-REDIS-001, SEC-GCP-REDIS-002,
 SEC-GCP-SQL-PUBLIC-001, SEC-GCP-CLOUDRUN-001,
 SEC-GCP-LOGGING-001, SEC-GCP-SA-KEY-001, SEC-SENSITIVE-001,
 SEC-PROVISIONER-001, SEC-DATASOURCE-001,
 SEC-GCP-GKE-NETWORK-POLICY-001,
+STK-GCP-ARTIFACT-001,
 STK-GCP-BUCKET-001, STK-GCP-GCS-LOGGING-001,
 STK-GCP-GKE-001, STK-GCP-GKE-002, STK-GCP-GKE-003, STK-GCP-GKE-004, STK-GCP-GKE-NODEPOOL-001,
 STK-GCP-KMS-001, STK-GCP-KMS-LOCATION-001,
@@ -40,7 +42,7 @@ ROB-MOVED-001, ROB-REMOVED-001,
 MOD-PIN-001, OPS-ENV-001
 ```
 
-Plus the corpus-level rules (`CI-TEST-001`, `OPS-GCP-LABELS-001`, `STYLE-DESC-001`, `ROB-GCP-LIFECYCLE-001`, `ROB-VERSION-001`, `COST-GCP-RISK-001`) that fire as a function of the corpus shape rather than any specific anti-pattern. Total finding count: **77**.
+Plus the corpus-level rules (`CI-TEST-001`, `OPS-GCP-LABELS-001`, `STYLE-DESC-001`, `ROB-GCP-LIFECYCLE-001`, `ROB-VERSION-001`, `COST-GCP-RISK-001`) that fire as a function of the corpus shape rather than any specific anti-pattern. Total finding count: **80**.
 
 ## OWASP → GCP control mapping
 

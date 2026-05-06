@@ -2,7 +2,7 @@
 
 A multi-cloud, OWASP-Top-10-organised corpus of intentionally insecure Terraform. It serves three jobs:
 
-1. **Smoke test for the `tf-analyze` engine.** Running `python3 scripts/detect.py --target examples/terragoat` produces **260 findings** across 30 files. Drift in this count is a regression signal — the CI workflow gates on it.
+1. **Smoke test for the `tf-analyze` engine.** Running `python3 scripts/detect.py --target examples/terragoat` produces **274 findings** across 30 files. Drift in this count is a regression signal — the CI workflow gates on it.
 2. **Calibration target for new rules.** When you write a new detector, drop a triggering snippet into the cloud + OWASP slot it belongs in. Re-run the corpus scan; your new rule ID appears alongside the existing ones with no spurious cross-talk.
 3. **Live demo for first-time users.** Reports against the corpus are realistic-shaped (multi-cloud, multi-resource, OWASP-narrative-aware) rather than the isolated single-rule fixtures under `fixtures/`.
 
@@ -42,11 +42,11 @@ Each file:
 
 | Cloud | Unique rule IDs exercised | Findings | Notes |
 |---|---|---|---|
-| **GCP** | 45 | 76 | Densest per-file coverage — the catalogue is GCP-first. Includes SA key creation (A07) and DB port firewall exposure (A05). |
-| **AWS** | 37 | 91 | Full coverage of EKS (incl. partial log-type detection), RDS/Aurora, EC2, S3 (incl. access logging), CloudTrail, KMS, SQS/SNS, ECR, GuardDuty, launch template IMDSv2. |
-| **Azure** | 29 | 80 | Full coverage of AKS, Key Vault, Storage, SQL, App Service, RBAC, NSG, ACR, and Azure Monitor. |
-| **Corpus-level** | 13 | 13 | `resource_absent` rules that fire once per scan: GuardDuty, ECR lifecycle, VPC flow logs, S3 public-access block, S3 access logging, EKS IRSA, Route53 DNSSEC, Azure Monitor, Azure SQL AAD, NSG flow logs, SQL TDE, GCP Audit Logs. |
-| **Total** | **115 unique IDs** | **260** | Drift > ±5 should be investigated. The canonical count is `python3 scripts/detect.py --target examples/terragoat --format json \| python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["findings"]))'`. |
+| **GCP** | 48 | 79 | Densest per-file coverage — the catalogue is GCP-first. Includes SA key creation (A07), DB port firewall exposure (A05), Redis auth/TLS (A02), and Artifact Registry CMEK (A05). |
+| **AWS** | 44 | 98 | Full coverage of EKS (incl. partial log-type detection), RDS/Aurora, EC2, S3 (incl. access logging), CloudTrail, KMS, SQS/SNS, ECR, GuardDuty, launch template IMDSv2, CloudFront, Cognito, API Gateway, Lambda, ECS. |
+| **Azure** | 30 | 83 | Full coverage of AKS, Key Vault, Storage, SQL, App Service, RBAC, NSG, ACR, Azure Monitor, and Linux VM password authentication. |
+| **Corpus-level** | 14 | 14 | `resource_absent` rules that fire once per scan: GuardDuty, ECR lifecycle, VPC flow logs, S3 public-access block, S3 access logging, EKS IRSA, Route53 DNSSEC, Azure Monitor, Azure SQL AAD, NSG flow logs, SQL TDE, GCP Audit Logs, Secrets Manager rotation. |
+| **Total** | **127 unique IDs** | **274** | Drift > ±5 should be investigated. The canonical count is `python3 scripts/detect.py --target examples/terragoat --format json \| python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["findings"]))'`. |
 
 ## Per-file finding counts
 
@@ -56,41 +56,41 @@ Each file:
 | `aws/02_cryptographic_failures.tf` | 21 |
 | `aws/03_injection.tf` | 3 |
 | `aws/04_insecure_design.tf` | 4 |
-| `aws/05_security_misconfiguration.tf` | 14 |
-| `aws/06_vulnerable_components.tf` | 10 |
-| `aws/07_identification_auth.tf` | 1 |
+| `aws/05_security_misconfiguration.tf` | 16 |
+| `aws/06_vulnerable_components.tf` | 12 |
+| `aws/07_identification_auth.tf` | 2 |
 | `aws/08_data_integrity.tf` | 12 |
-| `aws/09_logging_monitoring.tf` | 12 |
+| `aws/09_logging_monitoring.tf` | 14 |
 | `aws/10_ssrf.tf` | 4 |
 | `aws/versions.tf` | 3 |
 | `azure/01_broken_access_control.tf` | 7 |
 | `azure/02_cryptographic_failures.tf` | 10 |
-| `azure/03_injection.tf` | 1 |
+| `azure/03_injection.tf` | 2 |
 | `azure/04_insecure_design.tf` | 3 |
 | `azure/05_security_misconfiguration.tf` | 18 |
 | `azure/06_vulnerable_components.tf` | 17 |
-| `azure/07_identification_auth.tf` | 8 |
+| `azure/07_identification_auth.tf` | 10 |
 | `azure/08_data_integrity.tf` | 6 |
 | `azure/09_logging_monitoring.tf` | 2 |
 | `azure/10_ssrf.tf` | 6 |
 | `azure/versions.tf` | 2 |
 | `gcp/01_broken_access_control.tf` | 4 |
-| `gcp/02_cryptographic_failures.tf` | 7 |
+| `gcp/02_cryptographic_failures.tf` | 9 |
 | `gcp/03_injection.tf` | 3 |
 | `gcp/04_insecure_design.tf` | 3 |
-| `gcp/05_security_misconfiguration.tf` | 23 |
+| `gcp/05_security_misconfiguration.tf` | 24 |
 | `gcp/06_vulnerable_components.tf` | 7 |
 | `gcp/07_identification_auth.tf` | 9 |
 | `gcp/08_data_integrity.tf` | 6 |
 | `gcp/09_logging_monitoring.tf` | 7 |
 | `gcp/10_ssrf.tf` | 6 |
 | `gcp/versions.tf` | 1 |
-| corpus-level (`resource_absent` rules) | 13 |
+| corpus-level (`resource_absent` rules) | 14 |
 
 ## Running the corpus
 
 ```sh
-# Whole corpus — should print 260
+# Whole corpus — should print 274
 python3 scripts/detect.py --target examples/terragoat --format json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["findings"]))'
 

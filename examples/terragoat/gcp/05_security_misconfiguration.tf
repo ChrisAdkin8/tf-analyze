@@ -38,6 +38,7 @@
 #   - SEC-GCP-BUCKET-001              HIGH       GCS bucket missing public_access_prevention=enforced
 #   - SEC-GCP-BUCKET-002              MEDIUM     GCS bucket missing uniform_bucket_level_access
 #   - OPS-ENV-001                     HIGH       Prod-scoped resource lacks deletion_protection
+#   - STK-GCP-ARTIFACT-001            MEDIUM     Artifact Registry repository missing CMEK
 #
 # Fix summary: each fix is one-to-three lines. The catalogue
 # recommendations link the relevant gcloud verification commands.
@@ -151,4 +152,12 @@ resource "google_compute_firewall" "open_postgres" {
   }
 
   source_ranges = ["0.0.0.0/0"]
+}
+
+# Artifact Registry repository without CMEK — STK-GCP-ARTIFACT-001.
+resource "google_artifact_registry_repository" "no_cmek" {
+  location      = "us-central1"
+  repository_id = "demo-no-cmek"
+  format        = "DOCKER"
+  # kms_key_name intentionally omitted
 }

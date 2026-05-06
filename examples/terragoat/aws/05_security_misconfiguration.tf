@@ -14,8 +14,10 @@
 #      — HTTP requests served without redirect.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-SG-001        HIGH   Security group allows ingress from 0.0.0.0/0
-#   - ROB-AWS-LIFECYCLE-002 HIGH   S3 bucket has force_destroy = true
+#   - SEC-AWS-SG-001          HIGH    Security group allows ingress from 0.0.0.0/0
+#   - ROB-AWS-LIFECYCLE-002   HIGH    S3 bucket has force_destroy = true
+#   - SEC-AWS-CLOUDFRONT-001  HIGH    CloudFront viewer_protocol_policy = "allow-all"
+#   - SEC-AWS-CLOUDFRONT-002  MEDIUM  CloudFront distribution missing access logging
 #
 # Fix summary: every SG ingress rule needs a CIDR or a security-
 # group reference, never `0.0.0.0/0` for sensitive ports. Public IPs
@@ -58,6 +60,39 @@ resource "aws_instance" "public" {
 resource "aws_s3_bucket" "force_destroyable" {
   bucket        = "demo-force-destroyable"
   force_destroy = true
+}
+
+# CloudFront with HTTP allowed and no access logging.
+# viewer_protocol_policy = "allow-all" → SEC-AWS-CLOUDFRONT-001
+# missing logging_config              → SEC-AWS-CLOUDFRONT-002
+resource "aws_cloudfront_distribution" "http_allowed" {
+  enabled = true
+
+  origin {
+    domain_name = aws_s3_bucket.force_destroyable.bucket_domain_name
+    origin_id   = "s3origin"
+  }
+
+  default_cache_behavior {
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "s3origin"
+    viewer_protocol_policy = "allow-all"
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
+  }
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+  # logging_config intentionally omitted — SEC-AWS-CLOUDFRONT-002 also fires
 }
 
 # RDS publicly accessible.

@@ -5,6 +5,48 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 12 — 2026-05-06
+
+**Rules added (+12):**
+
+AWS (8):
+- `SEC-AWS-CLOUDFRONT-001` — CloudFront distribution with `viewer_protocol_policy = "allow-all"` (HTTP permitted); `resource_body_contains` on the raw block
+- `SEC-AWS-CLOUDFRONT-002` — CloudFront distribution missing `logging_config` block; `resource_missing_arg`
+- `SEC-AWS-COGNITO-001` — Cognito user pool MFA disabled or absent; `resource_missing_arg` + `resource_arg regex: 'OFF'`
+- `SEC-AWS-SECRETSMANAGER-001` — Secrets Manager secret has no `aws_secretsmanager_secret_rotation` resource; `resource_absent` scope:repo
+- `SEC-AWS-APIGW-001` — API Gateway stage missing `access_log_settings` block; `resource_missing_arg`
+- `STK-AWS-LAMBDA-002` — Lambda function missing `dead_letter_config` (DLQ); `resource_missing_arg`
+- `STK-AWS-LAMBDA-003` — Lambda function missing `tracing_config` (X-Ray); `resource_missing_arg`
+- `STK-AWS-ECS-001` — ECS cluster missing `setting` block (container insights disabled); `resource_missing_arg`
+
+GCP (3):
+- `SEC-GCP-REDIS-001` — Cloud Memorystore Redis instance with `auth_enabled = false` or missing; `resource_missing_arg` + `resource_arg regex: 'false'`
+- `SEC-GCP-REDIS-002` — Cloud Memorystore Redis instance with `transit_encryption_mode = "DISABLED"` or missing; `resource_missing_arg` + `resource_arg regex: 'DISABLED'`
+- `STK-GCP-ARTIFACT-001` — Artifact Registry repository missing `kms_key_name` (CMEK); `resource_missing_arg`
+
+Azure (1):
+- `SEC-AZURE-VM-001` — Linux VM with `disable_password_authentication = false` or missing (CIS Azure 7.3); `resource_missing_arg` + `resource_arg regex: 'false'`
+
+**Corpus changes:**
+- `aws/05_security_misconfiguration.tf` — added `aws_cloudfront_distribution` (allow-all + no logging_config); fires CLOUDFRONT-001/002
+- `aws/06_vulnerable_components.tf` — existing Lambda fires STK-AWS-LAMBDA-002/003 automatically (no explicit snippet needed but header comment updated)
+- `aws/07_identification_auth.tf` — added `aws_cognito_user_pool` (no mfa_configuration); fires COGNITO-001
+- `aws/02_cryptographic_failures.tf` — added `aws_secretsmanager_secret` (no rotation); fires SECRETSMANAGER-001 corpus-level
+- `aws/09_logging_monitoring.tf` — added `aws_api_gateway_stage` + `aws_ecs_cluster`; fires APIGW-001/ECS-001
+- `gcp/02_cryptographic_failures.tf` — added `google_redis_instance` (auth=false, TLS=DISABLED); fires REDIS-001/002
+- `gcp/05_security_misconfiguration.tf` — added `google_artifact_registry_repository` (no kms_key_name); fires ARTIFACT-001
+- `azure/07_identification_auth.tf` — added `azurerm_linux_virtual_machine` (disable_password_authentication=false); fires AZURE-VM-001
+- `azure/03_injection.tf` — existing `azurerm_linux_virtual_machine.user_data_inject` (no disable_password_authentication) fires AZURE-VM-001 via `resource_missing_arg`
+
+**Fixtures added (+11):** `aws_cloudfront_allow_all`, `aws_cognito_no_mfa`, `aws_secretsmanager_no_rotation`, `aws_apigw_no_access_logs`, `aws_lambda_no_dlq`, `aws_lambda_no_tracing`, `aws_ecs_no_container_insights`, `gcp_redis_no_auth`, `gcp_redis_no_tls`, `gcp_artifact_no_cmek`, `azure_linux_vm_password_auth`
+
+**Documentation:**
+- `SKILL.md` — added `resource_arg` match modes section documenting `regex` vs `not_regex` and `block_arg_value` quote-stripping behaviour
+
+**Corpus:** 260 → 274 findings. **Rules:** 142 → 154. **Self-test:** 140 → 151/151.
+
+---
+
 ## Round 11 — 2026-05-06
 
 **Rules added (+4):**

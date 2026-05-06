@@ -1,0 +1,42 @@
+id: SEC-GCP-REDIS-001
+title: "Cloud Memorystore Redis instance AUTH disabled"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: google_redis_instance
+    arg: auth_enabled
+    description: |
+      `google_redis_instance` has no `auth_enabled` argument. The default
+      is `false` — any client that can reach the Redis port can issue
+      commands (GET, SET, FLUSHALL, CONFIG) without a password.
+  - kind: resource_arg
+    resource: google_redis_instance
+    arg: auth_enabled
+    regex: 'false'
+    description: |
+      `google_redis_instance` explicitly sets `auth_enabled = false`.
+      Password-free Redis access is permitted to any host on the VPC.
+recommendation: |
+  Enable AUTH on the instance:
+
+      resource "google_redis_instance" "cache" {
+        name           = "cache"
+        memory_size_gb = 1
+        auth_enabled   = true
+        transit_encryption_mode = "SERVER_AUTHENTICATION"
+      }
+
+  AUTH is available on Redis 6.x and above (`redis_version = "REDIS_6_X"`
+  or higher). After `terraform apply`, retrieve the AUTH string via
+  `gcloud redis instances get-auth-string <name> --region=<region>` and
+  inject it into consuming workloads via Secret Manager — do not emit it
+  as a Terraform output.
+verification: |
+  `gcloud redis instances describe <name> --region=<region> \
+    --format='value(authEnabled)'`
+  must return `True`.
+fixtures:
+  - gcp_redis_no_auth

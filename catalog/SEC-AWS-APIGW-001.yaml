@@ -1,0 +1,44 @@
+id: SEC-AWS-APIGW-001
+title: "API Gateway stage missing access log destination"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_api_gateway_stage
+    arg: access_log_settings
+    description: |
+      `aws_api_gateway_stage` has no `access_log_settings` block. Without
+      access logs, HTTP method, resource path, caller IP, authentication
+      outcome, integration latency, and error codes are not recorded.
+      API-layer evidence is unavailable for incident response, abuse
+      investigation, and compliance reporting.
+recommendation: |
+  Add an `access_log_settings` block pointing to a CloudWatch log group:
+
+      resource "aws_cloudwatch_log_group" "apigw" {
+        name              = "/aws/apigateway/${var.api_name}"
+        retention_in_days = 90
+      }
+
+      resource "aws_api_gateway_stage" "api" {
+        stage_name    = "prod"
+        rest_api_id   = aws_api_gateway_rest_api.main.id
+        deployment_id = aws_api_gateway_deployment.main.id
+
+        access_log_settings {
+          destination_arn = aws_cloudwatch_log_group.apigw.arn
+        }
+
+        xray_tracing_enabled = true
+      }
+
+  Also set `method_settings { logging_level = "INFO" }` to capture
+  execution logs (request/response bodies at INFO level).
+verification: |
+  `aws apigateway get-stage --rest-api-id <id> --stage-name <name> \
+    --query 'accessLogSettings.destinationArn'`
+  must return a non-null CloudWatch log group ARN.
+fixtures:
+  - aws_apigw_no_access_logs

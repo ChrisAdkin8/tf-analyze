@@ -1,0 +1,45 @@
+id: SEC-GCP-REDIS-002
+title: "Cloud Memorystore Redis instance transit encryption disabled"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: google_redis_instance
+    arg: transit_encryption_mode
+    description: |
+      `google_redis_instance` has no `transit_encryption_mode` argument.
+      The default is `"DISABLED"` — all Redis client-to-server traffic is
+      unencrypted within the VPC. A compromised node, VPC route, or
+      misconfigured peering can capture every command and response,
+      including AUTH credentials.
+  - kind: resource_arg
+    resource: google_redis_instance
+    arg: transit_encryption_mode
+    regex: 'DISABLED'
+    description: |
+      `google_redis_instance` explicitly sets
+      `transit_encryption_mode = "DISABLED"`. All Redis traffic is
+      cleartext within the VPC.
+recommendation: |
+  Enable TLS for in-transit encryption:
+
+      resource "google_redis_instance" "cache" {
+        name                    = "cache"
+        memory_size_gb          = 1
+        transit_encryption_mode = "SERVER_AUTHENTICATION"
+        auth_enabled            = true
+      }
+
+  `SERVER_AUTHENTICATION` requires clients to trust the server TLS
+  certificate (CA bundle available via the instance `server_ca_certs`
+  output). `CLIENT_AUTHENTICATION` additionally requires a client cert.
+  Update all consumer connection strings to use `rediss://` (TLS) before
+  enabling to avoid connection failures.
+verification: |
+  `gcloud redis instances describe <name> --region=<region> \
+    --format='value(transitEncryptionMode)'`
+  must return `SERVER_AUTHENTICATION`.
+fixtures:
+  - gcp_redis_no_tls

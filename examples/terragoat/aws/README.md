@@ -7,20 +7,20 @@
 | File | OWASP | What's vulnerable |
 |---|---|---|
 | [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | IAM policy with `Action:*, Resource:*`; bucket without public-access block; role assumed by `Principal: "*"` |
-| [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | S3 without SSE; RDS `storage_encrypted = false`; EBS without `encrypted`; KMS key without `enable_key_rotation` |
+| [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | S3 without SSE; RDS `storage_encrypted = false`; EBS without `encrypted`; KMS key without `enable_key_rotation`; Secrets Manager secret with no rotation resource |
 | [`03_injection.tf`](03_injection.tf) | A03 | EC2 `user_data` constructed from unvalidated tfvar; `null_resource` shelling out with interpolated input |
 | [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | Hardcoded API key in HCL; one shared Lambda role with `AdministratorAccess`; DynamoDB without `prevent_destroy` |
-| [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | Security group `0.0.0.0/0` on tcp:22; EC2 with `associate_public_ip_address = true`; RDS `publicly_accessible = true` |
-| [`06_vulnerable_components.tf`](06_vulnerable_components.tf) | A06 | Lambda on EOL `nodejs10.x`; hardcoded AMI; module without `version` |
-| [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | Long-lived IAM user with access key; inline `*/*` policy; weak `aws_iam_account_password_policy` |
+| [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | Security group `0.0.0.0/0` on tcp:22; EC2 with `associate_public_ip_address = true`; RDS `publicly_accessible = true`; CloudFront with `allow-all` HTTP policy and no access logging |
+| [`06_vulnerable_components.tf`](06_vulnerable_components.tf) | A06 | Lambda on EOL `nodejs10.x`; hardcoded AMI; module without `version`; Lambda missing dead-letter queue and X-Ray tracing |
+| [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | Long-lived IAM user with access key; inline `*/*` policy; weak `aws_iam_account_password_policy`; Cognito user pool with MFA disabled |
 | [`08_data_integrity.tf`](08_data_integrity.tf) | A08 | S3 without versioning; RDS `backup_retention_period = 0`; ECR without image scanning |
-| [`09_logging_monitoring.tf`](09_logging_monitoring.tf) | A09 | CloudTrail single-region, no log-file validation; VPC without flow logs; S3 without server access logging; EKS with partial control-plane log types (missing `audit`/`authenticator`); CloudWatch log group without retention |
+| [`09_logging_monitoring.tf`](09_logging_monitoring.tf) | A09 | CloudTrail single-region, no log-file validation; VPC without flow logs; S3 without server access logging; EKS with partial control-plane log types (missing `audit`/`authenticator`); CloudWatch log group without retention; API Gateway stage missing access log settings; ECS cluster with container insights disabled |
 | [`10_ssrf.tf`](10_ssrf.tf) | A10 | EC2 without `metadata_options.http_tokens = "required"` (IMDSv1) — the Capital One shape |
 | [`versions.tf`](versions.tf) | — | Pins `~> 5.50` aws provider, `>= 1.10.0` Terraform |
 
 ## Expected findings
 
-96 findings across 44 unique rule IDs. From inside this directory:
+106 findings across 52 unique rule IDs. From inside this directory:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
@@ -38,12 +38,12 @@ You should see at least one instance of each of:
 
 | Domain | Rule IDs |
 |---|---|
-| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
+| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-APIGW-001`, `SEC-AWS-CLOUDFRONT-001/002`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-COGNITO-001`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
 | ROB | `ROB-AWS-BACKEND-001`, `ROB-AWS-LIFECYCLE-001/002`, `ROB-AWS-RDS-001/002/003`, `ROB-AWS-S3-001`, `ROB-VERSION-001/003` |
-| STK | `STK-AWS-EKS-001/002/003/004/005`, `STK-AWS-LAMBDA-001`, `STK-AWS-LAUNCH-TEMPLATE-001`, `STK-AWS-RDS-004`, `STK-AWS-ROUTE53-001` |
+| STK | `STK-AWS-ECS-001`, `STK-AWS-EKS-001/002/003/004/005`, `STK-AWS-LAMBDA-001/002/003`, `STK-AWS-LAUNCH-TEMPLATE-001`, `STK-AWS-RDS-004`, `STK-AWS-ROUTE53-001` |
 | OPS/COST/MOD | `OPS-AWS-TAGS-001`, `COST-AWS-RISK-001`, `MOD-PIN-001`, `CI-TEST-001` |
 
-`SEC-AWS-ECR-002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `STK-AWS-EKS-004`, `STK-AWS-ROUTE53-001` are corpus-level `resource_absent` rules — they fire once per scan of this directory, not per file.
+`SEC-AWS-ECR-002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `STK-AWS-EKS-004`, `STK-AWS-ROUTE53-001` are corpus-level `resource_absent` rules — they fire once per scan of this directory, not per file.
 
 ## OWASP → AWS control mapping
 

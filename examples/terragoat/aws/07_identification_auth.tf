@@ -20,9 +20,10 @@
 #     TTL would have shrunk the blast radius to near zero.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-IAM-001  HIGH  IAM policy with wildcard resource
-#                            (the pattern below also triggers it
-#                            because the inline policy is `*`/`*`)
+#   - SEC-AWS-IAM-001      HIGH  IAM policy with wildcard resource
+#                                (the pattern below also triggers it
+#                                because the inline policy is `*`/`*`)
+#   - SEC-AWS-COGNITO-001  HIGH  Cognito user pool MFA not configured
 #
 # Fix summary: replace human IAM users with SSO + role assumption;
 # replace service IAM users with IAM roles + STS AssumeRole; declare
@@ -61,4 +62,10 @@ resource "aws_iam_account_password_policy" "weak" {
   require_numbers              = false
   require_symbols              = false
   password_reuse_prevention    = 1
+}
+
+# Cognito user pool without MFA — SEC-AWS-COGNITO-001.
+resource "aws_cognito_user_pool" "no_mfa" {
+  name = "demo-no-mfa"
+  # mfa_configuration intentionally omitted — defaults to OFF
 }

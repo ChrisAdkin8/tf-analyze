@@ -18,12 +18,15 @@
 #     running unmaintained code in production.
 #
 # Expected tf-analyze findings:
-#   - MOD-PIN-001        MEDIUM  Registry module source missing version
+#   - MOD-PIN-001                 MEDIUM  Registry module source missing version
 #   - STK-AWS-EKS-001             HIGH    EKS endpoint_private_access not enabled
 #   - STK-AWS-EKS-002             HIGH    EKS control plane logging not enabled
 #   - STK-AWS-EKS-003             HIGH    EKS secrets encryption not configured
 #   - STK-AWS-EKS-004             HIGH    EKS OIDC provider absent (no IRSA)
 #   - STK-AWS-LAUNCH-TEMPLATE-001 HIGH    Launch template does not enforce IMDSv2
+#   - STK-AWS-LAMBDA-001          HIGH    Lambda function on EOL runtime (nodejs10.x)
+#   - STK-AWS-LAMBDA-002          MEDIUM  Lambda function missing dead-letter queue
+#   - STK-AWS-LAMBDA-003          LOW     Lambda function missing X-Ray tracing
 #
 # Fix summary: pin Lambda runtimes to a non-deprecated version
 # (consult the AWS Lambda runtimes page); use `data "aws_ami"` with

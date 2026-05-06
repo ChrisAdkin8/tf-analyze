@@ -16,6 +16,7 @@
 #
 # Expected tf-analyze findings:
 #   - SEC-PROVISIONER-001  HIGH   Provisioner block used for shell execution
+#   - SEC-AZURE-VM-001     HIGH   Linux VM missing disable_password_authentication
 #
 # Fix summary: keep cloud-init scripts out of unvalidated tfvar paths;
 # use `validation { condition = ... }` blocks on variables; for

@@ -33,6 +33,8 @@
 #   - STK-AWS-ROUTE53-001        HIGH    Route53 zone without DNSSEC key-signing key
 #   - SEC-AWS-S3-LOGGING-001     MEDIUM  S3 bucket missing server access logging
 #   - STK-AWS-EKS-005            HIGH    EKS cluster missing audit/authenticator log types
+#   - SEC-AWS-APIGW-001          MEDIUM  API Gateway stage missing access log destination
+#   - STK-AWS-ECS-001            MEDIUM  ECS cluster Container Insights not configured
 #
 # Fix summary: one CloudTrail trail with `is_multi_region_trail = true`
 # and `enable_log_file_validation = true` per organisation; flow logs
@@ -88,4 +90,26 @@ resource "aws_cloudwatch_log_group" "no_retention" {
 resource "aws_route53_zone" "no_dnssec" {
   name = "demo.example.com"
   # No aws_route53_key_signing_key companion resource.
+}
+
+# API Gateway stage without access logging — SEC-AWS-APIGW-001.
+resource "aws_api_gateway_rest_api" "demo" {
+  name = "demo-api"
+}
+
+resource "aws_api_gateway_deployment" "demo" {
+  rest_api_id = aws_api_gateway_rest_api.demo.id
+}
+
+resource "aws_api_gateway_stage" "no_access_logs" {
+  stage_name    = "prod"
+  rest_api_id   = aws_api_gateway_rest_api.demo.id
+  deployment_id = aws_api_gateway_deployment.demo.id
+  # access_log_settings intentionally omitted
+}
+
+# ECS cluster without Container Insights — STK-AWS-ECS-001.
+resource "aws_ecs_cluster" "no_insights" {
+  name = "demo-no-insights"
+  # setting block intentionally omitted — Container Insights disabled by default
 }
