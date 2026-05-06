@@ -25,6 +25,8 @@
 # Expected tf-analyze findings:
 #   - SEC-GCP-LOGGING-001         HIGH   Cloud Audit Logs not configured
 #   - STK-GCP-GCS-LOGGING-001     HIGH   GCS bucket logging target lacks public_access_prevention
+#   - SEC-GCP-NETWORK-003         HIGH   VPC subnet missing flow logs
+#   - STK-GCP-DNS-001             HIGH   Cloud DNS managed zone missing DNSSEC
 #
 # Fix summary: declare `google_project_iam_audit_config` for
 # allServices in the root module; lock down every bucket that
@@ -66,3 +68,21 @@ resource "google_storage_bucket" "audit_target" {
 
 # google_project_iam_audit_config intentionally omitted at the project
 # level — SEC-GCP-LOGGING-001 fires.
+
+# Subnet without flow logs — SEC-GCP-NETWORK-003.
+resource "google_compute_subnetwork" "no_flow_logs" {
+  name          = "demo-no-flow-logs"
+  ip_cidr_range = "10.10.0.0/24"
+  region        = "us-central1"
+  network       = "default"
+
+  # log_config intentionally omitted — SEC-GCP-NETWORK-003 fires.
+}
+
+# DNS managed zone without DNSSEC — STK-GCP-DNS-001.
+resource "google_dns_managed_zone" "no_dnssec" {
+  name     = "demo-no-dnssec"
+  dns_name = "demo.example.com."
+
+  # dnssec_config intentionally omitted — STK-GCP-DNS-001 fires.
+}

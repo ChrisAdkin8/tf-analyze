@@ -10,11 +10,11 @@
 | [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | KMS key with no `rotation_period`; bucket↔key-ring location mismatch; sensitive output unmarked |
 | [`03_injection.tf`](03_injection.tf) | A03 | `null_resource` provisioner shelling out to a tfvar; `data.external` with user-controlled query |
 | [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | One SA used by every workload; stateful Spanner + state bucket without `prevent_destroy` |
-| [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | Default Compute SA; public-IP `access_config`; world-open SSH; Cloud SQL with `ipv4_enabled = true`; bucket missing `public_access_prevention` and UBLA |
+| [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | Default Compute SA; public-IP `access_config`; world-open SSH; world-open RDP; Cloud SQL with `ipv4_enabled = true`; Cloud SQL without `deletion_protection`; bucket missing `public_access_prevention` and UBLA |
 | [`06_vulnerable_components.tf`](06_vulnerable_components.tf) | A06 | Module without `version`; Cloud SQL pinned to `POSTGRES_9_6` (EOL) |
 | [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | GKE missing Workload Identity, network_policy, and node-pool secure-boot |
 | [`08_data_integrity.tf`](08_data_integrity.tf) | A08 | Bucket without versioning; stale `moved` and `removed` blocks |
-| [`09_logging_monitoring.tf`](09_logging_monitoring.tf) | A09 | No `google_project_iam_audit_config`; logging-target bucket lacks `public_access_prevention` |
+| [`09_logging_monitoring.tf`](09_logging_monitoring.tf) | A09 | No `google_project_iam_audit_config`; logging-target bucket lacks `public_access_prevention`; VPC subnet without flow logs; DNS zone without DNSSEC |
 | [`10_ssrf.tf`](10_ssrf.tf) | A10 | Cloud SQL public IPv4; Cloud Run with `INGRESS_TRAFFIC_ALL` |
 | [`versions.tf`](versions.tf) | — | Pins `required_version >= 1.10.0` so `SEC-EPHEMERAL-001` is in scope; `~> 5.40` google provider |
 
@@ -26,18 +26,19 @@ Running `python3 ../../../scripts/detect.py --target . --format json | jq -r '.f
 SEC-GCP-IAM-001, SEC-GCP-IAM-002, SEC-GCP-IAM-003,
 SEC-GCP-BUCKET-001, SEC-GCP-BUCKET-002,
 SEC-GCP-COMPUTE-SA-001, SEC-GCP-COMPUTE-PUBLIC-IP-001,
-SEC-GCP-NETWORK-001, SEC-GCP-SQL-PUBLIC-001,
-SEC-GCP-LOGGING-001, SEC-SENSITIVE-001,
+SEC-GCP-NETWORK-001, SEC-GCP-NETWORK-002, SEC-GCP-NETWORK-003,
+SEC-GCP-SQL-PUBLIC-001, SEC-GCP-LOGGING-001, SEC-SENSITIVE-001,
 SEC-PROVISIONER-001, SEC-DATASOURCE-001,
 SEC-GCP-GKE-NETWORK-POLICY-001,
 STK-GCP-BUCKET-001, STK-GCP-GCS-LOGGING-001,
-STK-GCP-GKE-002, STK-GCP-GKE-NODEPOOL-001,
+STK-GCP-GKE-001, STK-GCP-GKE-002, STK-GCP-GKE-003, STK-GCP-GKE-NODEPOOL-001,
 STK-GCP-KMS-001, STK-GCP-KMS-LOCATION-001,
+STK-GCP-CLOUDSQL-003, STK-GCP-DNS-001,
 ROB-MOVED-001, ROB-REMOVED-001,
 MOD-PIN-001, OPS-ENV-001
 ```
 
-Plus the corpus-level rules (`CI-TEST-001`, `OPS-GCP-LABELS-001`, `STYLE-DESC-001`, `ROB-GCP-LIFECYCLE-001`, `ROB-VERSION-001`, `COST-GCP-RISK-001`) that fire as a function of the corpus shape rather than any specific anti-pattern. Total finding count: **~54** (subject to ±2 drift as the catalogue evolves).
+Plus the corpus-level rules (`CI-TEST-001`, `OPS-GCP-LABELS-001`, `STYLE-DESC-001`, `ROB-GCP-LIFECYCLE-001`, `ROB-VERSION-001`, `COST-GCP-RISK-001`) that fire as a function of the corpus shape rather than any specific anti-pattern. Total finding count: **~60** (subject to ±2 drift as the catalogue evolves).
 
 ## OWASP → GCP control mapping
 

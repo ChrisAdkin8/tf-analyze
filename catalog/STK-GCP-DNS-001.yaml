@@ -3,7 +3,7 @@ title: "Cloud DNS managed zone missing DNSSEC"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
-status: stub
+status: active
 cis:
   - "3.9"
 patterns:
@@ -11,9 +11,21 @@ patterns:
     resource: google_dns_managed_zone
     nested_path: dnssec_config.state
 recommendation: |
-  Add `dnssec_config { state = "on" }`. DNSSEC protects against
-  cache-poisoning attacks that can redirect resolvers to attacker
-  endpoints.
+  Add `dnssec_config { state = "on" }`:
+
+      resource "google_dns_managed_zone" "prod" {
+        name     = "prod-zone"
+        dns_name = "example.com."
+
+        dnssec_config {
+          state = "on"
+        }
+      }
+
+  DNSSEC protects against cache-poisoning attacks that redirect resolvers
+  to attacker-controlled endpoints. Required by CIS GCP 3.9.
 verification: |
   `gcloud dns managed-zones describe <name> --format='value(dnssecConfig.state)'`
   must return `on`.
+fixtures:
+  - dns_no_dnssec

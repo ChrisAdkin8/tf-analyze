@@ -1,0 +1,50 @@
+id: ROB-AZURE-LIFECYCLE-001
+title: "Stateful Azure resource missing lifecycle.prevent_destroy"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_mssql_database
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: azurerm_sql_database
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: azurerm_postgresql_server
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: azurerm_postgresql_flexible_server
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: azurerm_mysql_server
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: azurerm_storage_account
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: azurerm_key_vault
+    nested_path: lifecycle.prevent_destroy
+recommendation: |
+  Add `lifecycle { prevent_destroy = true }` to any resource that holds
+  irrecoverable state:
+
+      resource "azurerm_mssql_database" "app" {
+        # ...
+        lifecycle {
+          prevent_destroy = true
+        }
+      }
+
+  Azure SQL databases, storage accounts, and Key Vaults do not have
+  a Terraform-provider-level deletion protection flag equivalent to GCP's
+  `deletion_protection`. The `lifecycle` block is the only guard.
+verification: |
+  Run `terraform plan -destroy` and confirm Terraform refuses to destroy
+  the resource with an error citing the prevent_destroy lifecycle rule.
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: CRITICAL
+fixtures:
+  - azure_missing_prevent_destroy

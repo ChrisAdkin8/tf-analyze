@@ -30,10 +30,12 @@
 #   - SEC-GCP-COMPUTE-SA-001          HIGH       Compute instance uses default Compute SA
 #   - SEC-GCP-COMPUTE-PUBLIC-IP-001   HIGH       Compute instance has public IP via access_config
 #   - SEC-GCP-NETWORK-001             CRITICAL   SSH (tcp:22) exposed to 0.0.0.0/0
+#   - SEC-GCP-NETWORK-002             CRITICAL   RDP (tcp:3389) exposed to 0.0.0.0/0
 #   - SEC-GCP-SQL-PUBLIC-001          HIGH       Cloud SQL instance permits public IPv4
+#   - STK-GCP-CLOUDSQL-003            HIGH       Cloud SQL instance missing deletion_protection
 #   - SEC-GCP-BUCKET-001              HIGH       GCS bucket missing public_access_prevention=enforced
 #   - SEC-GCP-BUCKET-002              MEDIUM     GCS bucket missing uniform_bucket_level_access
-#   - OPS-ENV-001                 HIGH       Prod-scoped resource lacks deletion_protection
+#   - OPS-ENV-001                     HIGH       Prod-scoped resource lacks deletion_protection
 #
 # Fix summary: each fix is one-to-three lines. The catalogue
 # recommendations link the relevant gcloud verification commands.
@@ -73,6 +75,20 @@ resource "google_compute_firewall" "ssh_open" {
   }
 }
 
+# World-open RDP — SEC-GCP-NETWORK-002.
+resource "google_compute_firewall" "rdp_open" {
+  name      = "demo-rdp-open"
+  network   = "default"
+  direction = "INGRESS"
+
+  source_ranges = ["0.0.0.0/0"]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["3389"]
+  }
+}
+
 resource "google_sql_database_instance" "main" {
   name             = "demo-main"
   region           = "us-central1"
@@ -89,6 +105,25 @@ resource "google_sql_database_instance" "main" {
   }
 
   deletion_protection = true
+}
+
+# Cloud SQL without deletion_protection — STK-GCP-CLOUDSQL-003.
+resource "google_sql_database_instance" "no_dp" {
+  name             = "demo-no-dp"
+  region           = "us-central1"
+  database_version = "POSTGRES_15"
+
+  settings {
+    tier = "db-custom-2-7680"
+    ip_configuration {
+      ipv4_enabled = false
+    }
+    backup_configuration {
+      enabled = true
+    }
+  }
+
+  # deletion_protection intentionally omitted — STK-GCP-CLOUDSQL-003 fires.
 }
 
 # Bucket labeled prod, no enforced public access prevention, no UBLA,

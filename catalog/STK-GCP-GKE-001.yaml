@@ -3,7 +3,7 @@ title: "GKE cluster missing private nodes"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
-status: stub
+status: active
 cis:
   - "8.5.3"
 patterns:
@@ -14,6 +14,14 @@ recommendation: |
   Add a `private_cluster_config { enable_private_nodes = true ... }` block.
   Public node IPs widen the attack surface and prevent VPC Service Controls
   from constraining outbound traffic.
+
+      private_cluster_config {
+        enable_private_nodes    = true
+        enable_private_endpoint = false
+        master_ipv4_cidr_block  = "172.16.0.0/28"
+      }
 verification: |
   `gcloud container clusters describe <name> --format='value(privateClusterConfig.enablePrivateNodes)'`
   must return `True`.
+fixtures:
+  - gke_no_private_nodes

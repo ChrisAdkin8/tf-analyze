@@ -20,7 +20,7 @@
 
 ## Expected findings
 
-The Azure catalogue currently has 1 active rule (`SEC-AZURE-RBAC-001`) and 4 stubs (`SEC-AZURE-STORAGE-001`, `SEC-AZURE-KV-001`, `STK-AZURE-NSG-001`, `SEC-AZURE-MI-001`). The stubs aren't loaded by default, so they won't fire on a normal run. From inside this directory:
+The Azure catalogue has active rules for: `SEC-AZURE-RBAC-001`, `SEC-AZURE-STORAGE-001/002`, `SEC-AZURE-KV-001`, `SEC-AZURE-AKS-001`, `SEC-AZURE-SQL-001`, `SEC-AZURE-LOGGING-001`, `SEC-AZURE-WEBAPP-001`, `STK-AZURE-NSG-001`, `ROB-AZURE-LIFECYCLE-001`, `ROB-AZURE-SQL-001`, `ROB-AZURE-STORAGE-001`, `OPS-AZURE-TAGS-001`. `SEC-AZURE-MI-001` remains a stub. From inside this directory:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
@@ -34,7 +34,7 @@ print(f"---\n{len(fs)} total")
 '
 ```
 
-You'll see at least: `SEC-AZURE-RBAC-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`. Note: `ROB-LIFECYCLE-001` was renamed `ROB-GCP-LIFECYCLE-001` as it targets GCP resources only; Azure-equivalent lifecycle rules are pending. To exercise the stubs (which have placeholder patterns):
+You'll see at least: `SEC-AZURE-RBAC-001`, `SEC-AZURE-STORAGE-001`, `SEC-AZURE-KV-001`, `STK-AZURE-NSG-001`, `ROB-AZURE-LIFECYCLE-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`, plus corpus-level rules. `SEC-AZURE-MI-001` is still a stub; to exercise it:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --include-stubs --format text
@@ -91,11 +91,8 @@ python3 ../../../scripts/detect.py --target . --include-stubs --format text  # e
 
 ## Catalogue expansion roadmap
 
-Promoting the four Azure stubs is the next obvious step:
+Three of the original four Azure stubs have been promoted to active rules (`SEC-AZURE-STORAGE-001`, `SEC-AZURE-KV-001`, `STK-AZURE-NSG-001`). The remaining stub:
 
-1. **`SEC-AZURE-STORAGE-001`** — fires on `enable_https_traffic_only = false` or `min_tls_version` < `TLS1_2`. Triggered by `02_cryptographic_failures.tf`.
-2. **`SEC-AZURE-KV-001`** — fires on `purge_protection_enabled = false` or missing soft-delete retention. Triggered by `02_cryptographic_failures.tf`.
-3. **`STK-AZURE-NSG-001`** — fires on NSG rules with `source_address_prefix = "*"` and a sensitive port range. Triggered by `05_security_misconfiguration.tf`.
-4. **`SEC-AZURE-MI-001`** — fires on UAMI without role assignments (orphan) or with subscription-scope role assignments (over-broad). Triggered by `04_insecure_design.tf`.
+1. **`SEC-AZURE-MI-001`** — fires on UAMI with subscription-scope role assignments (over-broad). Triggered by `04_insecure_design.tf`. Pattern: check `azurerm_role_assignment` blocks referencing `data.azurerm_subscription.current.id` as `scope` where the principal is a user-assigned managed identity.
 
-For each: edit the YAML to `status: active`, fill in the `patterns:` field, add a triggering fixture under `fixtures/<slug>/`, run `python3 scripts/self_test.py`, and confirm the rule fires here.
+To promote: edit `catalog/SEC-AZURE-MI-001.yaml` to `status: active`, fill in the `patterns:` field, add a triggering fixture under `fixtures/azure_mi_over_broad/`, run `python3 scripts/self_test.py`, and confirm the rule fires here.

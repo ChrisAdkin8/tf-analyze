@@ -1,0 +1,30 @@
+id: SEC-AWS-VPC-FLOWLOGS-001
+title: "AWS VPC missing flow log resource"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_absent
+    resource: aws_flow_log
+    when_present: aws_vpc
+    scope: repo
+recommendation: |
+  Add an `aws_flow_log` resource targeting every VPC:
+
+      resource "aws_flow_log" "vpc" {
+        vpc_id          = aws_vpc.main.id
+        traffic_type    = "ALL"
+        iam_role_arn    = aws_iam_role.flow_log.arn
+        log_destination = aws_cloudwatch_log_group.flow_log.arn
+      }
+
+  VPC flow logs are the primary network-layer evidence source for
+  post-incident investigation and anomaly detection. Without them,
+  lateral movement within the VPC is invisible.
+verification: |
+  In the AWS console, VPC → Your VPCs → select VPC → Flow logs tab.
+  At least one active flow log must be present. Or:
+  `aws ec2 describe-flow-logs --filter Name=resource-id,Values=<vpc-id>`
+fixtures:
+  - aws_vpc_no_flow_logs

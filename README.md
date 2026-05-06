@@ -10,13 +10,13 @@ The skill is invoked from Claude Code as `/tf-analyze`. The detection engine (`s
 
 This is the upfront list — what the skill detects, what outputs it produces, and what it does that the OSS-tool field generally doesn't. If a capability isn't here, it isn't there.
 
-### Detection (catalogue-anchored, ~84 rules)
+### Detection (catalogue-anchored, ~95 rules)
 
 | Domain | Coverage |
 |---|---|
-| **Security (`SEC-*`)** | Overly broad IAM (project-level admin roles), public IAM (`allUsers`/`allAuthenticatedUsers`), member-at-both-scopes, sensitive outputs/variable leaks, `data.external` injection risks, hardcoded secrets in `.tfvars`, Azure subscription-scope role assignments, GCS public_access_prevention/UBLA, GCE default-SA + public-IP, Cloud SQL public IPv4, GKE network policy, Vault `data` source on TF 1.10+ (recommend `ephemeral`), `.tfstate` in repo, world-open SSH (tcp:22). |
-| **Robustness (`ROB-*`)** | Missing `lifecycle.prevent_destroy` on stateful resources, `count = X ? 1 : 0` boolean-count pattern, `count`/`for_each` mix, unguarded `[count.index]` references, `for_each` over a `tolist`, unused variables/outputs, deprecated `template_file`, stale `moved` (TF 1.5) and `removed` (TF 1.7) blocks, missing variable validation, `ignore_changes = all`, provider alias mismatches, inconsistent backends, stale remote state, `check` block missing `assert` (TF 1.5+), `precondition` missing `error_message`. |
-| **Stack (`STK-*`)** | GKE: missing Workload Identity, missing node-pool secure-boot/integrity-monitoring, deletion protection. GCS: missing versioning, logging-target leak. KMS: missing rotation period, key/keyring location parity. CloudSQL: deprecated attributes, missing backups. DNSSEC, BigQuery (stub coverage). |
+| **Security (`SEC-*`)** | Overly broad IAM (project-level admin roles), public IAM (`allUsers`/`allAuthenticatedUsers`), member-at-both-scopes, sensitive outputs/variable leaks, `data.external` injection risks, hardcoded secrets/API keys/passwords (SEC-SECRETS-001), Azure subscription-scope role assignments, GCS public_access_prevention/UBLA, GCE default-SA + public-IP, Cloud SQL public IPv4, GKE network policy, VPC subnet flow logs (GCP + AWS), Vault `data` source on TF 1.10+ (recommend `ephemeral`), `.tfstate` in repo, world-open SSH (tcp:22) and RDP (tcp:3389), ECR scan-on-push. |
+| **Robustness (`ROB-*`)** | Missing `lifecycle.prevent_destroy` on stateful GCP, AWS, and Azure resources, `count = X ? 1 : 0` boolean-count pattern, `count`/`for_each` mix, unguarded `[count.index]` references, `for_each` over a `tolist`, unused variables/outputs, deprecated `template_file`, stale `moved` (TF 1.5) and `removed` (TF 1.7) blocks, missing variable validation, `ignore_changes = all`, provider alias mismatches, inconsistent backends, stale remote state, `check` block missing `assert` (TF 1.5+), `precondition` missing `error_message`. |
+| **Stack (`STK-*`)** | GKE: missing Workload Identity, private nodes, secrets encryption, node-pool secure-boot/integrity-monitoring. GCS: missing versioning, logging-target leak. KMS: missing rotation period, key/keyring location parity. CloudSQL: deprecated attributes, missing backups, missing deletion protection. DNSSEC. |
 | **Cross-resource (`graph_check`)** | Cluster→all-node-pools assertions, KMS key-ring↔consumer location parity, IAM project+resource breadth, GCS logging-target hardening. New graph functions register in `_GRAPH_CHECKS` in `detect.py`. |
 | **Operational (`OPS-*`, `STYLE-*`, `MOD-*`, `COST-*`, `CI-TEST-*`)** | Missing labels, prod-scoped deletion protection, missing variable descriptions, unpinned modules, expensive resources without cost controls, modules without `*.tftest.hcl`. |
 | **CIS mapping** | Findings carry the relevant CIS GCP Foundations Benchmark v4.0 control where one applies (1.6, 5.1, 6.6.7, 8.5.2, etc.) for compliance reporting. |
@@ -109,11 +109,11 @@ The skill files (`SKILL.md`, `catalog/`, `scripts/`, `fixtures/`, `integrations/
 
 ## Demo corpus — `examples/terragoat/`
 
-A three-cloud intentionally-vulnerable Terraform corpus (GCP, AWS, Azure) organised by OWASP Top 10, modelled on Bridgecrew's [`terragoat`](https://github.com/bridgecrewio/terragoat). 30 files across the three clouds trigger 127 findings against the current rule set, covering SEC, ROB, STK, OPS, and COST rules for all three providers.
+A three-cloud intentionally-vulnerable Terraform corpus (GCP, AWS, Azure) organised by OWASP Top 10, modelled on Bridgecrew's [`terragoat`](https://github.com/bridgecrewio/terragoat). 30 files across the three clouds trigger 162 findings against the current rule set, covering SEC, ROB, STK, OPS, and COST rules for all three providers.
 
 It serves three jobs:
 
-1. **Smoke test for the engine.** `python3 scripts/detect.py --target examples/terragoat --format json | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['findings']))"` should equal **127**. Drift in this number is a regression signal.
+1. **Smoke test for the engine.** `python3 scripts/detect.py --target examples/terragoat --format json | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['findings']))"` should equal **162**. Drift in this number is a regression signal.
 2. **Calibration target for new rules.** When you write a new detector, add a triggering snippet to the relevant `examples/terragoat/*.tf` file and re-run — your new ID should appear alongside the existing ones with no spurious cross-talk.
 3. **Live demo for first-time users.** Reports against this corpus are realistic-shaped (multi-file, GCP+Azure+Vault, real cross-resource interactions) rather than the isolated single-rule fixtures under `fixtures/`.
 

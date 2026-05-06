@@ -1,0 +1,47 @@
+id: ROB-AWS-LIFECYCLE-001
+title: "Stateful AWS resource missing lifecycle.prevent_destroy"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_dynamodb_table
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: aws_db_instance
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: aws_rds_cluster
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: aws_s3_bucket
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: aws_elasticache_cluster
+    nested_path: lifecycle.prevent_destroy
+  - kind: resource_missing_arg
+    resource: aws_elasticache_replication_group
+    nested_path: lifecycle.prevent_destroy
+recommendation: |
+  Add `lifecycle { prevent_destroy = true }` to any resource that holds
+  irrecoverable state:
+
+      resource "aws_dynamodb_table" "orders" {
+        # ...
+        lifecycle {
+          prevent_destroy = true
+        }
+      }
+
+  The block forces operators to remove the line intentionally before a
+  destroy plan can succeed — a deliberate friction that prevents
+  accidental data loss on `terraform destroy` or workspace deletion.
+verification: |
+  Run `terraform plan -destroy` and confirm Terraform refuses to destroy
+  the resource with an error citing the prevent_destroy lifecycle rule.
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: CRITICAL
+fixtures:
+  - aws_missing_prevent_destroy

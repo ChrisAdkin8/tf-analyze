@@ -20,7 +20,7 @@
 
 ## Expected findings
 
-The AWS catalogue currently has 3 active rules: `SEC-AWS-IAM-001`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`. Every other anti-pattern in this corpus is **documented** for OWASP coverage but not yet **caught** by `tf-analyze`. From inside this directory:
+The AWS catalogue has grown significantly. Active rules now include: `SEC-AWS-IAM-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-EBS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-CLOUDTRAIL-001`, `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-AWS-ECR-001`, `SEC-SECRETS-001`, `ROB-AWS-LIFECYCLE-001`, `ROB-AWS-RDS-001/002`, `ROB-AWS-S3-001`, `STK-AWS-LAMBDA-001`. From inside this directory:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
@@ -34,7 +34,7 @@ print(f"---\n{len(fs)} total")
 '
 ```
 
-You should see at least: `SEC-AWS-IAM-001`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`. Plus corpus-level rules (`CI-TEST-001`, etc.). Note: `ROB-LIFECYCLE-001` was renamed `ROB-GCP-LIFECYCLE-001` as it targets GCP resources only; AWS-equivalent lifecycle rules are pending. The AWS rule density is intentionally lower than GCP's — closing this gap is on the roadmap.
+You should see: `SEC-AWS-IAM-001`, `SEC-AWS-IAM-002`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-AWS-ECR-001`, `SEC-SECRETS-001`, `ROB-AWS-LIFECYCLE-001`, `ROB-AWS-RDS-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`, plus corpus-level rules (`CI-TEST-001`, `STYLE-DESC-001`, etc.).
 
 ## OWASP → AWS control mapping
 
