@@ -41,6 +41,16 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 - `html` — self-contained report with inline CSS, urgency-coloured badges, collapsible per-rule details. Right for sharing with non-CLI reviewers.
 - `--attack-graph` — (flag, works with any format) builds a directed attack-path graph from internet-reachable resources to crown jewels. HTML output adds an interactive second tab with a force-directed SVG layout; text/Markdown output appends a Mermaid flowchart block. HIGH/CRITICAL findings in HTML gain a bordered italic adversarial narrative paragraph referencing real-world breaches.
 
+### Screenshots
+
+**Findings tab** — urgency-badged collapsible rules; HIGH/CRITICAL findings show a bordered adversarial narrative paragraph citing a real-world breach:
+
+![Findings tab with adversarial narrative](docs/images/findings-narrative.png)
+
+**Attack Graph tab** — interactive force-directed SVG (46-node AWS corpus). Pills are colour-coded by resource category; the critical path (internet → `ssh_open` SG → `public_db` RDS) is highlighted in red; crown jewels have a gold border. Click any node for a file:line sidebar; drag to reposition.
+
+![Attack Graph — 46-node AWS corpus](docs/images/attack-graph-view.png)
+
 ### Differentiators (vs tfsec / Checkov / KICS / tflint)
 
 1. **Recommendation verification.** Every recommendation can be validated by writing the proposed HCL into a sentinel `terraform init`-ed tempdir and running `terraform validate`. No other scanner self-checks its own fix suggestions.

@@ -1,5 +1,4 @@
-# wrote docs/cli.md
-ference
+# `detect.py` CLI reference
 
 **Auto-generated** by `scripts/gen-cli-docs.py` from `scripts/detect.py`'s argparse. Do not edit by hand — re-run the generator after changing flags.
 
@@ -137,6 +136,18 @@ show this help message and exit
 ### `--attack-graph`
 
 Build a directed attack-path graph from internet-reachable resources to crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). With --format html adds an interactive Attack Graph tab (force-directed SVG, drag, click-to-inspect, critical path highlighted in red). With --format text (default) appends a Mermaid flowchart block after findings. Also enables adversarial scenario narratives for HIGH/CRITICAL findings.
+
+**Example — Attack Graph tab (46-node AWS corpus, terragoat):**
+
+![Attack Graph view](../docs/images/attack-graph-view.png)
+
+Node colours: Internet (black) · Compute (blue) · IAM (purple) · Storage (green) · Secret (red) · Key (orange) · Network (grey). Critical-path nodes and edges are highlighted in red; crown jewels have a gold border. Click any node to open a sidebar showing the resource type, file, line number, and all finding IDs that touch it. Drag nodes to rearrange.
+
+**Example — Findings tab with adversarial narrative:**
+
+![Findings with narrative](../docs/images/findings-narrative.png)
+
+HIGH and CRITICAL findings display a bordered italic paragraph that names a confirmed real-world breach using the same attack vector (Capital One 2019, SolarWinds 2020, Tesla 2020, Samsung 2022, Twitch 2021).
 
 ### `--output`
 

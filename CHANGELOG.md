@@ -5,6 +5,56 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 13 — 2026-05-06
+
+**New features:**
+
+### Attack-path graph (`--attack-graph`)
+
+`python3 scripts/detect.py --target <dir> --format html --attack-graph --output report.html`
+
+Builds a directed graph from every internet-reachable resource to crown jewels (RDS/Aurora, Cloud SQL, Secrets Manager, KMS keys, S3/GCS buckets, Azure Key Vault/SQL/Storage). Runs BFS to find the shortest path to any crown jewel — the **critical path** — then renders it in two ways:
+
+- **HTML** — second tab in the report with an interactive force-directed SVG. Nodes are pill-shaped, colour-coded by resource category (Compute/IAM/Storage/Secret/Key/Network), with two-line labels (resource name bold on top, type prefix dimmed below). Edges are clipped to pill boundaries so arrowheads land at the node border. Critical-path nodes/edges are red; crown jewels have a gold border. Click any node to open a sidebar showing file, line, and all finding IDs. Drag to reposition. Collision resolution prevents node overlap by computing each pair's minimum separation distance via the ellipse-approximated Minkowski sum of their pill bounding boxes.
+- **Text/Markdown** — Mermaid `flowchart LR` block appended after the findings section.
+
+Internet-reachability heuristics: EC2 `associate_public_ip_address`, RDS/Cloud SQL `publicly_accessible`/`ipv4_enabled`, security groups with `0.0.0.0/0` or `::/0` ingress, Cloud Run `INGRESS_TRAFFIC_ALL`, ALB `internet-facing` scheme, GCE `access_config` block, GKE without `private_cluster_config`.
+
+Edge inference from HCL references: `iam_instance_profile`, `role`, `kms_key_id`, `kms_key_name`, `kms_master_key_id`, `secrets_manager_secret_arn`, `vpc_security_group_ids`, GCP service account `email`, GCS `bucket`.
+
+### Adversarial scenario narratives
+
+HIGH and CRITICAL findings in HTML reports gain a bordered italic paragraph citing a confirmed real-world breach that used the same attack vector. 14 rule IDs are covered: `SEC-AWS-SSRF-001`, `SEC-AWS-IAM-001`, `SEC-AWS-IAM-002`, `SEC-GCP-IAM-001`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `SEC-AWS-RDS-001`, `SEC-AWS-CLOUDTRAIL-001`, `SEC-GCP-GKE-NETWORK-POLICY-001`, `SEC-AZURE-RBAC-001`, `SEC-GCP-COMPUTE-PUBLIC-IP-001`, `SEC-AWS-KMS-001`, `SEC-GCP-COMPUTE-SA-001`, `SEC-HARDCODED-SECRET-001`, `SEC-GCP-SQL-PUBLIC-001`. Breaches referenced: Capital One 2019, SolarWinds 2020, Tesla 2020 Kubernetes, Samsung 2022, Twitch 2021, Verizon 2017, Accenture 2017.
+
+In text mode, narratives appear as inline `# ...` comments on each HIGH/CRITICAL finding when `--attack-graph` is active.
+
+### SKILL.md §16e — Adversarial Scenarios (Step 16)
+
+New subsection inside Step 16 (Generate Report) instructs the Claude skill to produce an **Adversarial Scenarios** table for HIGH/CRITICAL findings, using the `_ATTACK_NARRATIVES` dict as templates for the 14 covered rule IDs and generating fresh prose for others. When a `critical_path` is present, a "Critical Attack Path" paragraph precedes the table describing the end-to-end chain in narrative prose.
+
+**New fixture:**
+- `fixtures/attack_graph_demo/` — `aws_instance.web` (public IP + IMDSv1) → `aws_security_group.open` (0.0.0.0/0) → IAM profile → role → policy with `resources = ["*"]`, `aws_s3_bucket.data` (no SSE), `aws_kms_key.data_key` (no rotation). Tags on all resources suppress OPS-AWS-TAGS-001.
+
+**Catalogue updates:** `attack_graph_demo` fixture added to `fixtures:` in `CI-TEST-001`, `ROB-AWS-LIFECYCLE-001`, `ROB-AWS-S3-001`, `SEC-AWS-IAM-001`, `SEC-AWS-KMS-001`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SG-001`, `SEC-AWS-SSRF-001`, `SEC-PROVIDER-001`.
+
+**Layout improvements (follow-up commit):**
+- Replaced fixed-radius Coulomb repulsion with pill-aware collision resolution: each tick computes the minimum separation distance for every node pair using the ellipse-approximated Minkowski sum of their pill bounding boxes and applies a restoring force proportional to overlap depth.
+- Pill dimensions (`_hw`/`_hh`) are now precomputed before the 400-tick warmup so collision resolution has correct values during the settle phase.
+- Replaced random initial placement with type-ordered column layout (Internet → Compute → Network → IAM → Storage → Secret → Key).
+- Boundary clamp uses per-node pill half-dims instead of a fixed margin.
+- Physics tuning: REP 3500→4000, SL 130→140, SK 0.05→0.04, GV 0.012→0.008, DMP 0.84→0.82.
+
+**Documentation:**
+- `docs/images/attack-graph-view.png` — screenshot of the Attack Graph tab (46-node AWS/terragoat corpus).
+- `docs/images/findings-narrative.png` — screenshot of a HIGH finding expanded to show the adversarial narrative.
+- `docs/images/attack-graph-demo.png` — screenshot of the Findings tab (demo fixture).
+- `docs/cli.md` — `--attack-graph` section updated with screenshots and node colour legend.
+- `README.md` — Screenshots section added with both images; `--attack-graph` entry in Output Formats; items 9–10 in Differentiators.
+
+**Self-test:** 152/152 fixtures passing. Rules: 154 (unchanged). No corpus changes.
+
+---
+
 ## Round 12 — 2026-05-06
 
 **Rules added (+12):**
