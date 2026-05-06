@@ -2340,14 +2340,32 @@ def _render_graph_html(graph: dict) -> str:
   var NS='http://www.w3.org/2000/svg';
   var COLORS={{internet:'#1a1a2e',compute:'#2980b9',iam:'#6c5ce7',storage:'#27ae60',
                secret:'#e74c3c',key:'#e67e22',network:'#7f8c8d'}};
-  var R=22;
+  // Compute pill dimensions for a node (resource name + type prefix, two lines)
+  function pillDims(n){{
+    var parts=n.label.split('.');
+    var name=parts.length>1?parts[parts.length-1]:n.label;
+    var typeStr=parts.length>1?parts.slice(0,-1).join('.'):'';
+    var dispName=name.length>18?name.slice(0,16)+'…':name;
+    var dispType=typeStr.length>24?typeStr.slice(0,22)+'…':typeStr;
+    var twoLine=typeStr.length>0;
+    // approximate char widths: name at 10px bold ~6.2px, type at 7.5px ~4.6px
+    var pw=Math.max(dispName.length*6.2+24,twoLine?dispType.length*4.6+24:0,62);
+    var ph=twoLine?36:26;
+    return {{hw:pw/2,hh:ph/2,pw:pw,ph:ph,dispName:dispName,dispType:dispType,twoLine:twoLine}};
+  }}
+  // Clip line endpoint to the rectangular pill boundary of a node
+  function clipPt(sx,sy,tx,ty,hw,hh){{
+    var dx=sx-tx,dy=sy-ty,dist=Math.sqrt(dx*dx+dy*dy)||1;
+    var nx=dx/dist,ny=dy/dist;
+    var tc=Math.abs(nx)>1e-9?hw/Math.abs(nx):1e9;
+    var tcc=Math.abs(ny)>1e-9?hh/Math.abs(ny):1e9;
+    var t=Math.min(tc,tcc);
+    return [tx+nx*t,ty+ny*t];
+  }}
   // initialise node positions
+  var TYPE_ORDER={{internet:0,compute:1,network:2,iam:3,storage:4,secret:5,key:6}};
   var nodes=G.nodes.map(function(n){{
-    return Object.assign({{}},n,{{
-      x:W/2+(Math.random()-.5)*350,
-      y:H/2+(Math.random()-.5)*250,
-      vx:0,vy:0
-    }});
+    return Object.assign({{}},n,{{x:W/2,y:H/2,vx:0,vy:0}});
   }});
   var byId={{}};
   nodes.forEach(function(n){{byId[n.id]=n;}});
@@ -2355,10 +2373,31 @@ def _render_graph_html(graph: dict) -> str:
     return Object.assign({{}},e,{{s:byId[e.from],t:byId[e.to]}});
   }}).filter(function(e){{return e.s&&e.t;}});
 
-  // force tick
-  var REP=3500,SL=130,SK=0.05,GV=0.012,DMP=0.84;
+  // Pill dims must be ready before tick() so collision resolution can use them
+  nodes.forEach(function(n){{var d=pillDims(n);n._hw=d.hw;n._hh=d.hh;}});
+
+  // Structured initial placement: one column per resource type, rows within each group.
+  // This gives the physics a much better starting configuration than a random blob.
+  (function(){{
+    var groups={{}};
+    nodes.forEach(function(n){{(groups[n.type]=groups[n.type]||[]).push(n);}});
+    var types=Object.keys(groups).sort(function(a,b){{
+      return (TYPE_ORDER[a]!==undefined?TYPE_ORDER[a]:5)-(TYPE_ORDER[b]!==undefined?TYPE_ORDER[b]:5);
+    }});
+    var nc=types.length||1;
+    types.forEach(function(t,ti){{
+      var g=groups[t];
+      g.forEach(function(n,i){{
+        n.x=W*(ti+0.5)/nc+(Math.random()-.5)*18;
+        n.y=H*(i+0.5)/g.length+(Math.random()-.5)*10;
+      }});
+    }});
+  }})();
+
+  // force tick: Coulomb repulsion + Hooke spring + pill collision resolution + gravity
+  var REP=4000,SL=140,SK=0.04,GV=0.008,DMP=0.82,CPAD=14;
   function tick(){{
-    var i,j,a,b,dx,dy,d,f,fx,fy;
+    var i,j,a,b,dx,dy,d,f,fx,fy,nx2,ny2,hwS,hhS,sep,push;
     for(i=0;i<nodes.length;i++){{
       for(j=i+1;j<nodes.length;j++){{
         a=nodes[i];b=nodes[j];
@@ -2372,14 +2411,33 @@ def _render_graph_html(graph: dict) -> str:
       f=SK*(d-SL);fx=f*dx/d;fy=f*dy/d;
       e.s.vx+=fx;e.s.vy+=fy;e.t.vx-=fx;e.t.vy-=fy;
     }});
+    // Pill collision: if two nodes are closer than their combined pill extents (+padding),
+    // push them apart with a force proportional to the overlap. The minimum separation
+    // in direction (nx2,ny2) is derived from the ellipse-approximated Minkowski sum of
+    // the two pill bounding boxes.
+    for(i=0;i<nodes.length;i++){{
+      for(j=i+1;j<nodes.length;j++){{
+        a=nodes[i];b=nodes[j];
+        dx=a.x-b.x;dy=a.y-b.y;d=Math.sqrt(dx*dx+dy*dy)||1;
+        nx2=dx/d;ny2=dy/d;
+        hwS=a._hw+b._hw+CPAD;
+        hhS=a._hh+b._hh+CPAD;
+        sep=hwS*hhS/Math.sqrt(hhS*hhS*nx2*nx2+hwS*hwS*ny2*ny2);
+        if(d<sep){{
+          push=(sep-d)*0.55;
+          a.vx+=push*nx2;a.vy+=push*ny2;
+          b.vx-=push*nx2;b.vy-=push*ny2;
+        }}
+      }}
+    }}
     nodes.forEach(function(n){{
       n.vx+=GV*(W/2-n.x);n.vy+=GV*(H/2-n.y);
       n.vx*=DMP;n.vy*=DMP;n.x+=n.vx;n.y+=n.vy;
-      n.x=Math.max(R,Math.min(W-R,n.x));
-      n.y=Math.max(R,Math.min(H-R,n.y));
+      n.x=Math.max(n._hw+8,Math.min(W-n._hw-8,n.x));
+      n.y=Math.max(n._hh+8,Math.min(H-n._hh-8,n.y));
     }});
   }}
-  for(var _i=0;_i<200;_i++)tick();
+  for(var _i=0;_i<400;_i++)tick();
 
   // SVG helpers
   function svgEl2(tag,attrs,parent){{
@@ -2388,15 +2446,18 @@ def _render_graph_html(graph: dict) -> str:
     if(parent)parent.appendChild(e);
     return e;
   }}
+
   var egG=document.getElementById('ag-edges-g');
   var ndG=document.getElementById('ag-nodes-g');
 
-  // draw edges
+  // draw edges clipped to pill boundaries so arrowheads land at the node border
   var lineEls=edges.map(function(e){{
     var isCrit=CRIT.has(e.from)&&CRIT.has(e.to);
+    var p1=clipPt(e.t.x,e.t.y,e.s.x,e.s.y,e.s._hw,e.s._hh);
+    var p2=clipPt(e.s.x,e.s.y,e.t.x,e.t.y,e.t._hw,e.t._hh);
     var line=svgEl2('line',{{
-      x1:e.s.x,y1:e.s.y,x2:e.t.x,y2:e.t.y,
-      stroke:isCrit?'#c0392b':'#ccc',
+      x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1],
+      stroke:isCrit?'#c0392b':'#bbb',
       'stroke-width':isCrit?'2.5':'1.2',
       'marker-end':isCrit?'url(#ag-arr-red)':'url(#ag-arr)'
     }},egG);
@@ -2404,34 +2465,52 @@ def _render_graph_html(graph: dict) -> str:
     if(e.label){{
       lbl=svgEl2('text',{{
         x:(e.s.x+e.t.x)/2,y:(e.s.y+e.t.y)/2,
-        'font-size':'9','fill':'#999','text-anchor':'middle','pointer-events':'none'
+        'font-size':'8.5','fill':'#aaa','text-anchor':'middle','pointer-events':'none'
       }},egG);
       lbl.textContent=e.label;
     }}
     return {{line:line,lbl:lbl,e:e}};
   }});
 
-  // draw nodes
+  // draw nodes as pill-shaped rectangles with two-line labels
   var nodeEls=nodes.map(function(n){{
+    var d=pillDims(n);
     var g=svgEl2('g',{{'transform':'translate('+n.x+','+n.y+')','style':'cursor:pointer'}},ndG);
     var fill=n.on_critical_path?'#c0392b':n.is_crown_jewel?'#6b0000':
              n.internet_reachable&&n.id!=='INTERNET'?'#d35400':
              (COLORS[n.type]||'#2980b9');
-    var stroke=n.is_crown_jewel?'#ffd700':'rgba(0,0,0,.15)';
+    var stroke=n.is_crown_jewel?'#ffd700':'rgba(0,0,0,.18)';
     var sw=n.is_crown_jewel?'2.5':'1';
-    svgEl2('circle',{{r:String(R),fill:fill,stroke:stroke,'stroke-width':sw}},g);
-    var lbl=n.label.length>18?n.label.slice(0,16)+'…':n.label;
-    var txt=svgEl2('text',{{'font-size':'8','text-anchor':'middle','dy':'3',
-      'fill':'#fff','pointer-events':'none'}},g);
-    txt.textContent=lbl;
+    svgEl2('rect',{{x:-d.hw,y:-d.hh,width:d.pw,height:d.ph,rx:d.hh,
+      fill:fill,stroke:stroke,'stroke-width':sw}},g);
+    // primary label: resource name, bold
+    var nameEl=svgEl2('text',{{'text-anchor':'middle','fill':'#fff','pointer-events':'none'}},g);
+    var ns1=document.createElementNS(NS,'tspan');
+    ns1.setAttribute('x','0');
+    ns1.setAttribute('dy',d.twoLine?'-3':'4');
+    ns1.setAttribute('font-size','10');
+    ns1.setAttribute('font-weight','600');
+    ns1.textContent=d.dispName;
+    nameEl.appendChild(ns1);
+    if(d.twoLine){{
+      var ns2=document.createElementNS(NS,'tspan');
+      ns2.setAttribute('x','0');
+      ns2.setAttribute('dy','13');
+      ns2.setAttribute('font-size','7.5');
+      ns2.setAttribute('fill','rgba(255,255,255,0.62)');
+      ns2.textContent=d.dispType;
+      nameEl.appendChild(ns2);
+    }}
     g.addEventListener('click',function(){{showSb(n);}});
     return {{g:g,n:n}};
   }});
 
   function redraw(){{
     lineEls.forEach(function(el){{
-      el.line.setAttribute('x1',el.e.s.x);el.line.setAttribute('y1',el.e.s.y);
-      el.line.setAttribute('x2',el.e.t.x);el.line.setAttribute('y2',el.e.t.y);
+      var p1=clipPt(el.e.t.x,el.e.t.y,el.e.s.x,el.e.s.y,el.e.s._hw,el.e.s._hh);
+      var p2=clipPt(el.e.s.x,el.e.s.y,el.e.t.x,el.e.t.y,el.e.t._hw,el.e.t._hh);
+      el.line.setAttribute('x1',p1[0]);el.line.setAttribute('y1',p1[1]);
+      el.line.setAttribute('x2',p2[0]);el.line.setAttribute('y2',p2[1]);
       if(el.lbl){{
         el.lbl.setAttribute('x',(el.e.s.x+el.e.t.x)/2);
         el.lbl.setAttribute('y',(el.e.s.y+el.e.t.y)/2);
@@ -2459,7 +2538,7 @@ def _render_graph_html(graph: dict) -> str:
     var rect=svgEl.getBoundingClientRect();
     var mx=ev.clientX-rect.left,my=ev.clientY-rect.top;
     nodes.forEach(function(n){{
-      if(Math.sqrt((n.x-mx)*(n.x-mx)+(n.y-my)*(n.y-my))<R+4){{
+      if(Math.abs(n.x-mx)<n._hw+4&&Math.abs(n.y-my)<n._hh+4){{
         dragging=n;dragOX=mx-n.x;dragOY=my-n.y;
       }}
     }});
