@@ -1,0 +1,47 @@
+id: COST-AWS-RISK-001
+title: "AWS resource missing cost control"
+section: ops
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_cloudwatch_log_group
+    arg: retention_in_days
+    description: |
+      CloudWatch log group without `retention_in_days`. Logs are retained
+      indefinitely by default — CloudWatch storage is billed per GB/month
+      and log groups without retention are a routine source of cost drift
+      in large accounts.
+  - kind: resource_missing_arg
+    resource: aws_autoscaling_group
+    arg: max_size
+    description: |
+      Auto Scaling Group without explicit `max_size`. Without a cap,
+      a runaway scale-out event can generate thousands of instances and
+      tens of thousands of dollars before anyone notices.
+recommendation: |
+  Add explicit cost controls:
+
+      # CloudWatch log group — expire logs after 90 days (adjust per retention policy)
+      resource "aws_cloudwatch_log_group" "app" {
+        name              = "/app/logs"
+        retention_in_days = 90
+      }
+
+      # ASG — always set an explicit max_size
+      resource "aws_autoscaling_group" "app" {
+        min_size = 1
+        max_size = 10   # explicit upper bound
+        # ...
+      }
+
+  Pair with AWS Budgets alerts so cost anomalies page on-call before
+  the bill arrives.
+verification: |
+  For log groups: `aws logs describe-log-groups --log-group-name-prefix /app \
+    --query 'logGroups[?retentionInDays==null].logGroupName'`
+  must return empty.
+  For ASGs: confirm `max_size` is set and reasonable in `terraform show`.
+fixtures:
+  - aws_no_cost_controls

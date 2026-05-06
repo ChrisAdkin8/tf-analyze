@@ -1,0 +1,33 @@
+id: SEC-AWS-SQS-001
+title: "SQS queue missing server-side encryption"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_sqs_queue
+    arg: kms_master_key_id
+    description: |
+      `aws_sqs_queue` without `kms_master_key_id` and without
+      `sqs_managed_sse_enabled = true`. Messages at rest are unencrypted.
+recommendation: |
+  Enable encryption using either a customer-managed KMS key or SQS-managed SSE:
+
+      # Option A — customer-managed KMS (preferred for compliance)
+      resource "aws_sqs_queue" "app" {
+        name              = "app"
+        kms_master_key_id = aws_kms_key.sqs.arn
+      }
+
+      # Option B — SQS-managed SSE (simpler, still encrypts at rest)
+      resource "aws_sqs_queue" "app" {
+        name                    = "app"
+        sqs_managed_sse_enabled = true
+      }
+verification: |
+  `aws sqs get-queue-attributes --queue-url <url> \
+    --attribute-names KmsMasterKeyId SqsManagedSseEnabled`
+  must return one of the two attributes set.
+fixtures:
+  - aws_sqs_unencrypted

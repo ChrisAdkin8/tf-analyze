@@ -1,6 +1,6 @@
 # Azure — OWASP Top 10 corpus
 
-10 deliberately vulnerable Terraform files demonstrating OWASP 2021 categories on Azure. Azure-specific catalogue coverage in `tf-analyze` is currently 1 active rule + 4 stubs, so the corpus does heavier documentation lifting and serves as a roadmap for promoting the stubs.
+10 deliberately vulnerable Terraform files demonstrating OWASP 2021 categories on Azure.
 
 ## File layout
 
@@ -9,7 +9,7 @@
 | [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | Subscription-scope `Contributor` role; storage with `allow_nested_items_to_be_public = true`; container with anonymous blob access |
 | [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | Storage `enable_https_traffic_only = false`; `min_tls_version = "TLS1_0"`; Key Vault without purge protection |
 | [`03_injection.tf`](03_injection.tf) | A03 | VM `custom_data` with unvalidated tfvar; `null_resource` shelling to `az` CLI |
-| [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | Hardcoded admin password; one shared UAMI; SQL Server without `prevent_destroy` |
+| [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | Hardcoded admin password; orphan UAMI (no role_assignment); SQL Server without `prevent_destroy` |
 | [`05_security_misconfiguration.tf`](05_security_misconfiguration.tf) | A05 | NSG with `source_address_prefix = "*"` on tcp:22 and tcp:3389; AKS with RBAC off and node public IPs; storage with `public_network_access_enabled = true` |
 | [`06_vulnerable_components.tf`](06_vulnerable_components.tf) | A06 | Function App on `dotnet:3.1` (EOL); AKS pinned to `1.21.7`; module without `version` |
 | [`07_identification_auth.tf`](07_identification_auth.tf) | A07 | Web App using storage account key in app_settings; SQL Server without Entra ID admin |
@@ -19,8 +19,6 @@
 | [`versions.tf`](versions.tf) | — | `~> 3.100` azurerm; `>= 1.10.0` Terraform; declares the demo resource group |
 
 ## Expected findings
-
-The Azure catalogue has active rules for: `SEC-AZURE-RBAC-001`, `SEC-AZURE-STORAGE-001/002`, `SEC-AZURE-KV-001`, `SEC-AZURE-AKS-001`, `SEC-AZURE-SQL-001`, `SEC-AZURE-LOGGING-001`, `SEC-AZURE-WEBAPP-001`, `STK-AZURE-NSG-001`, `ROB-AZURE-LIFECYCLE-001`, `ROB-AZURE-SQL-001`, `ROB-AZURE-STORAGE-001`, `OPS-AZURE-TAGS-001`. `SEC-AZURE-MI-001` remains a stub. From inside this directory:
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format json \
@@ -34,65 +32,71 @@ print(f"---\n{len(fs)} total")
 '
 ```
 
-You'll see at least: `SEC-AZURE-RBAC-001`, `SEC-AZURE-STORAGE-001`, `SEC-AZURE-KV-001`, `STK-AZURE-NSG-001`, `ROB-AZURE-LIFECYCLE-001`, `SEC-PROVISIONER-001`, `MOD-PIN-001`, plus corpus-level rules. `SEC-AZURE-MI-001` is still a stub; to exercise it:
+Active rules that fire against this corpus:
 
-```sh
-python3 ../../../scripts/detect.py --target . --include-stubs --format text
-```
+| Rule ID | File | What it catches |
+|---|---|---|
+| `SEC-AZURE-RBAC-001` | 01 | Subscription-scope role assignment |
+| `SEC-AZURE-STORAGE-001` | 02, 05, 10 | Storage without HTTPS / min TLS / public access |
+| `SEC-AZURE-KV-001` | 02 | Key Vault without purge protection |
+| `SEC-AZURE-AKS-001` | 05 | AKS with RBAC disabled |
+| `SEC-AZURE-SQL-001` | 07 | SQL Server without Entra admin |
+| `SEC-AZURE-LOGGING-001` | 09 | Key Vault without diagnostic setting |
+| `SEC-AZURE-WEBAPP-001` | 07 | Web App using storage account key |
+| `SEC-AZURE-MI-001` | 04 | Orphan UAMI — no role_assignment referencing its principal_id |
+| `STK-AZURE-NSG-FLOWLOG-001` | 05, 09 | NSG present with no `azurerm_network_watcher_flow_log` in repo |
+| `ROB-AZURE-LIFECYCLE-001` | 04 | SQL Server without `lifecycle.prevent_destroy` |
+| `ROB-AZURE-SQL-001` | 04 | SQL Server missing `prevent_destroy` |
+| `ROB-AZURE-STORAGE-001` | 08 | Storage without soft delete |
+| `OPS-AZURE-TAGS-001` | various | Resources missing `tags` |
+| `SEC-PROVISIONER-001` | 03 | `null_resource` with shell provisioner |
+| `MOD-PIN-001` | 06 | Module reference without `version` |
+| `SEC-SECRETS-001` | 04 | Hardcoded admin password in HCL |
 
 ## OWASP → Azure control mapping
 
 ### A01 — Broken Access Control
 
-The single most common Azure misconfiguration in the Bridgecrew/tfsec public datasets is "role assignment at subscription scope". The Azure RBAC model is hierarchical (management group → subscription → resource group → resource), and a Contributor at subscription scope is effectively Owner-minus-IAM. The corpus also demonstrates anonymous blob access, which has caused several high-profile public-cloud data leaks.
+Subscription-scope role assignments are the single most common Azure misconfiguration in public datasets. A `Contributor` at subscription scope is effectively Owner-minus-IAM. The corpus also demonstrates anonymous blob access, which has caused several high-profile data leaks.
 
 ### A02 — Cryptographic Failures
 
-Three explicit opt-outs that would otherwise default safely on a current `azurerm` provider — but defaults vary by provider version, and this is a routine finding. Key Vault purge protection is a particularly important defence in depth: without it, an attacker who reaches the vault can delete a secret and recreate it under the same name with attacker-controlled value, bypassing audit if logging isn't separately on.
+Three opt-outs that override safe defaults — `enable_https_traffic_only = false`, `min_tls_version = "TLS1_0"`, Key Vault without purge protection. Defaults vary by provider version; these are routine findings in real accounts.
 
 ### A03 — Injection
 
-Same shape as AWS / GCP. The Azure-specific vector is `custom_data` on Linux VMs (cloud-init) and the Windows analogue.
+Azure-specific vector: `custom_data` on Linux VMs (cloud-init) and `null_resource` provisioners shelling to the `az` CLI without input validation.
 
 ### A04 — Insecure Design
 
-Hardcoded admin passwords are unfortunately routine in Azure Terraform — `random_password` + Key Vault is the standard mitigation but adds boilerplate. Step 0a credential pattern detection in `tf-analyze` flags any matching pattern; pair with `azurerm_key_vault_secret` references in app settings.
+Hardcoded admin passwords are unfortunately routine. The orphan UAMI pattern (`SEC-AZURE-MI-001`) catches identities that were created for a workload that was later removed — they accumulate silently and widen blast radius.
 
 ### A05 — Security Misconfiguration
 
-NSG rules with `source_address_prefix = "*"` are the Azure analogue of AWS security groups with `0.0.0.0/0` ingress. AKS RBAC off is a configuration error that completely defeats the cluster's authorization layer; it's an opt-out flag the operator usually doesn't realise they've set.
+NSG rules with `source_address_prefix = "*"` are the Azure analogue of AWS security groups with `0.0.0.0/0`. AKS RBAC off completely defeats the cluster's authorization layer.
 
 ### A06 — Vulnerable and Outdated Components
 
-Microsoft publishes the runtime support calendar for App Service / Function App; staying on a supported runtime is a quarterly upkeep task. AKS is N-2 supported — anything older loses Microsoft support and stops receiving CVE patches.
+Microsoft publishes runtime support calendars for App Service / Function App. AKS is N-2 supported — anything older stops receiving CVE patches.
 
 ### A07 — Identification and Authentication Failures
 
-Storage account keys in App Settings are the Azure-specific shape — they're long-lived, shared, and embedded in app config. Replacing with Managed Identity + RBAC is a multi-line change but eliminates the credential entirely. SQL servers without Entra integration force shared SQL logins, which become single-points-of-compromise.
+Storage account keys in App Settings are long-lived and shared. Replace with Managed Identity + RBAC. SQL servers without Entra integration force shared SQL logins.
 
 ### A08 — Software and Data Integrity Failures
 
-Soft delete + versioning on storage accounts; short-term retention on SQL databases. These are increasingly important as ransomware playbooks specifically target Azure storage soft-delete features as a precursor to encryption.
+Soft delete + versioning on storage; short-term retention on SQL databases. Ransomware playbooks specifically target disabling soft delete before encryption.
 
 ### A09 — Security Logging and Monitoring Failures
 
-`azurerm_monitor_diagnostic_setting` is the universal "ship audit logs to Log Analytics" resource. Without one per audit-critical resource (Key Vault, NSG, SQL Server), post-incident investigation has no evidence beyond the default 90-day Activity Log retention.
+`azurerm_monitor_diagnostic_setting` ships audit logs to Log Analytics. Without one per audit-critical resource, post-incident investigation has no evidence beyond the default 90-day Activity Log. NSG flow logs (`STK-AZURE-NSG-FLOWLOG-001`) are the Azure equivalent of VPC flow logs — the primary network-layer evidence source.
 
 ### A10 — Server-Side Request Forgery
 
-Azure's SSRF surface centres on IMDS (same shape as AWS) and on PaaS services reachable directly from the internet. Private Endpoints (`azurerm_private_endpoint`) plus `public_network_access_enabled = false` on the target are the standard mitigation; this corpus demonstrates the inverse.
+Azure's SSRF surface: IMDS (same shape as AWS) and PaaS services reachable from the internet. Mitigate with `azurerm_private_endpoint` + `public_network_access_enabled = false`.
 
 ## Running it
 
 ```sh
 python3 ../../../scripts/detect.py --target . --format text
-python3 ../../../scripts/detect.py --target . --include-stubs --format text  # exercise stubs
 ```
-
-## Catalogue expansion roadmap
-
-Three of the original four Azure stubs have been promoted to active rules (`SEC-AZURE-STORAGE-001`, `SEC-AZURE-KV-001`, `STK-AZURE-NSG-001`). The remaining stub:
-
-1. **`SEC-AZURE-MI-001`** — fires on UAMI with subscription-scope role assignments (over-broad). Triggered by `04_insecure_design.tf`. Pattern: check `azurerm_role_assignment` blocks referencing `data.azurerm_subscription.current.id` as `scope` where the principal is a user-assigned managed identity.
-
-To promote: edit `catalog/SEC-AZURE-MI-001.yaml` to `status: active`, fill in the `patterns:` field, add a triggering fixture under `fixtures/azure_mi_over_broad/`, run `python3 scripts/self_test.py`, and confirm the rule fires here.

@@ -1,0 +1,46 @@
+id: STK-AZURE-NSG-FLOWLOG-001
+title: "Azure NSG missing flow log resource"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_absent
+    resource: azurerm_network_watcher_flow_log
+    when_present: azurerm_network_security_group
+    scope: repo
+recommendation: |
+  Add an `azurerm_network_watcher_flow_log` resource for every NSG:
+
+      resource "azurerm_network_watcher_flow_log" "nsg" {
+        network_watcher_name = azurerm_network_watcher.main.name
+        resource_group_name  = azurerm_resource_group.main.name
+        name                 = "nsg-flow-log"
+
+        network_security_group_id = azurerm_network_security_group.main.id
+        storage_account_id        = azurerm_storage_account.flow_logs.id
+        enabled                   = true
+
+        retention_policy {
+          enabled = true
+          days    = 90
+        }
+
+        traffic_analytics {
+          enabled               = true
+          workspace_id          = azurerm_log_analytics_workspace.main.workspace_id
+          workspace_region      = azurerm_log_analytics_workspace.main.location
+          workspace_resource_id = azurerm_log_analytics_workspace.main.id
+          interval_in_minutes   = 10
+        }
+      }
+
+  NSG flow logs are the Azure equivalent of AWS VPC flow logs — the primary
+  source of network-layer evidence for post-incident investigation. Without
+  them, lateral movement and data exfiltration within a subnet are invisible.
+verification: |
+  In the Azure portal: Network Watcher → Flow logs → confirm all NSGs have
+  an active flow log. Or:
+  `az network watcher flow-log list --location <region>`
+fixtures:
+  - azure_nsg_no_flowlog

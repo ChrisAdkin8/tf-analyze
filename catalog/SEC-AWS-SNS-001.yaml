@@ -1,0 +1,28 @@
+id: SEC-AWS-SNS-001
+title: "SNS topic missing KMS encryption"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_sns_topic
+    arg: kms_master_key_id
+recommendation: |
+  Add a `kms_master_key_id` to encrypt messages at rest:
+
+      resource "aws_sns_topic" "alerts" {
+        name              = "alerts"
+        kms_master_key_id = aws_kms_key.sns.arn
+      }
+
+  Without encryption, messages stored in the topic buffer — including
+  payloads with PII, credentials, or other sensitive data — are stored
+  in plaintext. Use the AWS-managed key `alias/aws/sns` as a minimum if
+  a customer-managed key is not yet in place.
+verification: |
+  `aws sns get-topic-attributes --topic-arn <arn> \
+    --query 'Attributes.KmsMasterKeyId'`
+  must return a key ARN or alias.
+fixtures:
+  - aws_sns_unencrypted

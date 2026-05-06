@@ -24,8 +24,8 @@
 #     as a contributing factor.
 #
 # Expected tf-analyze findings:
-#   - (no AWS-specific catalogue rule fires here today; documented
-#    as roadmap)
+#   - SEC-AWS-VPC-FLOWLOGS-001 (VPC without aws_flow_log)
+#   - COST-AWS-RISK-001 (CloudWatch log group without retention_in_days)
 #
 # Fix summary: one CloudTrail trail with `is_multi_region_trail = true`
 # and `enable_log_file_validation = true` per organisation; flow logs
@@ -53,4 +53,10 @@ resource "aws_vpc" "unmonitored" {
 resource "aws_s3_bucket" "unlogged" {
   bucket = "demo-unlogged"
   # No aws_s3_bucket_logging resource.
+}
+
+# CloudWatch log group without retention — billed per GB forever.
+resource "aws_cloudwatch_log_group" "no_retention" {
+  name = "/demo/app"
+  # missing retention_in_days — logs never expire, cost drifts unbounded
 }

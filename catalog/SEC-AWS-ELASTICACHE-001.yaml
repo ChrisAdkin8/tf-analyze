@@ -1,0 +1,42 @@
+id: SEC-AWS-ELASTICACHE-001
+title: "ElastiCache replication group missing encryption"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_elasticache_replication_group
+    arg: at_rest_encryption_enabled
+  - kind: hcl_attr
+    resource: aws_elasticache_replication_group
+    path: at_rest_encryption_enabled
+    not_equal: true
+  - kind: resource_missing_arg
+    resource: aws_elasticache_replication_group
+    arg: transit_encryption_enabled
+  - kind: hcl_attr
+    resource: aws_elasticache_replication_group
+    path: transit_encryption_enabled
+    not_equal: true
+recommendation: |
+  Enable both at-rest and in-transit encryption:
+
+      resource "aws_elasticache_replication_group" "app" {
+        replication_group_id = "app"
+        description          = "App cache"
+
+        at_rest_encryption_enabled = true
+        transit_encryption_enabled = true
+        auth_token                 = var.redis_auth_token
+      }
+
+  In-transit encryption (TLS) requires `auth_token` to be set as well.
+  Without both flags, cache traffic and data are visible to anyone with
+  network access to the cluster endpoint.
+verification: |
+  `aws elasticache describe-replication-groups --replication-group-id <id> \
+    --query 'ReplicationGroups[0].{AtRest:AtRestEncryptionEnabled,InTransit:TransitEncryptionEnabled}'`
+  both values must be `true`.
+fixtures:
+  - aws_elasticache_no_encryption

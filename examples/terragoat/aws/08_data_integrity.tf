@@ -22,13 +22,15 @@
 #     ship to production without ECR scanning.
 #
 # Expected tf-analyze findings:
-#   - (no AWS-specific catalogue rule fires here today; documented
-#    as roadmap)
+#   - SEC-AWS-ECR-001 (ECR without scan_on_push)
+#   - SEC-AWS-SQS-001 (SQS queue without server-side encryption)
+#   - SEC-AWS-SNS-001 (SNS topic without KMS encryption)
 #
 # Fix summary: turn on versioning + a lifecycle rule that expires
 # non-current versions after N days; set
 # `backup_retention_period = 7` (or longer) on every database; turn
-# on `image_scanning_configuration.scan_on_push` on every ECR repo.
+# on `image_scanning_configuration.scan_on_push` on every ECR repo;
+# add `kms_master_key_id` to SQS and SNS resources.
 
 # S3 bucket without versioning.
 resource "aws_s3_bucket" "no_versioning" {
@@ -58,4 +60,16 @@ resource "aws_ecr_repository" "unscanned" {
   name = "demo-unscanned"
   # image_scanning_configuration { scan_on_push = true } intentionally
   # omitted — supply-chain CVEs ship to production silently.
+}
+
+# SQS queue without server-side encryption.
+resource "aws_sqs_queue" "unencrypted" {
+  name = "demo-unencrypted"
+  # missing kms_master_key_id and sqs_managed_sse_enabled
+}
+
+# SNS topic without KMS encryption.
+resource "aws_sns_topic" "unencrypted" {
+  name = "demo-alerts-unencrypted"
+  # missing kms_master_key_id — message payloads stored in plaintext
 }

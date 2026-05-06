@@ -1,0 +1,323 @@
+{
+  "findings": [
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob"
+    },
+    {
+      "id": "SEC-AZURE-RBAC-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 35,
+      "resource": "azurerm_role_assignment.subscription_contributor"
+    },
+    {
+      "id": "SEC-AZURE-STORAGE-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 33,
+      "resource": "azurerm_storage_account.for_app"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 73,
+      "resource": "azurerm_mssql_server.sql_only"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 33,
+      "resource": "azurerm_storage_account.for_app"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 33,
+      "resource": "azurerm_storage_account.for_app"
+    },
+    {
+      "id": "SEC-AZURE-WEBAPP-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 51,
+      "resource": "azurerm_linux_web_app.key_based"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 79,
+      "resource": ""
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 81,
+      "resource": "azurerm_storage_account.open_storage"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 61,
+      "resource": "azurerm_kubernetes_cluster.no_rbac"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 81,
+      "resource": "azurerm_storage_account.open_storage"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 81,
+      "resource": "azurerm_storage_account.open_storage"
+    },
+    {
+      "id": "SEC-AZURE-AKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 61,
+      "resource": "azurerm_kubernetes_cluster.no_rbac"
+    },
+    {
+      "id": "SEC-AZURE-AKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 61,
+      "resource": "azurerm_kubernetes_cluster.no_rbac"
+    },
+    {
+      "id": "STK-AZURE-NSG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 7,
+      "resource": ""
+    },
+    {
+      "id": "STK-AZURE-NSG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 42,
+      "resource": ""
+    },
+    {
+      "id": "STK-AZURE-NSG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 54,
+      "resource": ""
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 62,
+      "resource": "azurerm_storage_account.ssrf_target"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 62,
+      "resource": "azurerm_storage_account.ssrf_target"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 62,
+      "resource": "azurerm_storage_account.ssrf_target"
+    },
+    {
+      "id": "SEC-AZURE-WEBAPP-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 46,
+      "resource": "azurerm_linux_web_app.publicly_reachable"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/versions.tf",
+      "line": 26,
+      "resource": "azurerm_resource_group.demo"
+    },
+    {
+      "id": "ROB-VERSION-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/versions.tf",
+      "line": 9,
+      "resource": ""
+    },
+    {
+      "id": "MOD-PIN-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 86,
+      "resource": "module.unpinned_aks"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "azurerm_storage_account.fnapp"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 67,
+      "resource": "azurerm_kubernetes_cluster.old_k8s"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "azurerm_storage_account.fnapp"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "azurerm_storage_account.fnapp"
+    },
+    {
+      "id": "SEC-AZURE-AKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 67,
+      "resource": "azurerm_kubernetes_cluster.old_k8s"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/09_logging_monitoring.tf",
+      "line": 34,
+      "resource": "azurerm_key_vault.unaudited"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 35,
+      "resource": "azurerm_storage_account.weak_tls"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 35,
+      "resource": "azurerm_storage_account.weak_tls"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 48,
+      "resource": "azurerm_key_vault.no_purge_protection"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 35,
+      "resource": "azurerm_storage_account.weak_tls"
+    },
+    {
+      "id": "SEC-AZURE-KV-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 48,
+      "resource": "azurerm_key_vault.no_purge_protection"
+    },
+    {
+      "id": "SEC-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 35,
+      "resource": "azurerm_storage_account.weak_tls"
+    },
+    {
+      "id": "SEC-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 35,
+      "resource": "azurerm_storage_account.weak_tls"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 30,
+      "resource": "azurerm_storage_account.no_soft_delete"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 45,
+      "resource": "azurerm_mssql_database.no_retention"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 30,
+      "resource": "azurerm_storage_account.no_soft_delete"
+    },
+    {
+      "id": "ROB-AZURE-SQL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 45,
+      "resource": "azurerm_mssql_database.no_retention"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 30,
+      "resource": "azurerm_storage_account.no_soft_delete"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+      "line": 46,
+      "resource": "azurerm_mssql_server.stateful"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+      "line": 35,
+      "resource": ""
+    },
+    {
+      "id": "SEC-PROVISIONER-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/03_injection.tf",
+      "line": 65,
+      "resource": ""
+    },
+    {
+      "id": "CI-TEST-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 1,
+      "resource": "<module:azure>"
+    },
+    {
+      "id": "SEC-AZURE-LOGGING-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_monitor_diagnostic_setting>"
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+      "line": 39,
+      "resource": "azurerm_user_assigned_identity.monolith",
+      "context": "UAMI has no azurerm_role_assignment binding \u2014 orphan identity widens blast radius without granting intent",
+      "id": "SEC-AZURE-MI-001"
+    },
+    {
+      "id": "SEC-AZURE-SQL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_mssql_server_azure_ad_administrator>"
+    },
+    {
+      "id": "STK-AZURE-NSG-FLOWLOG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_network_watcher_flow_log>"
+    }
+  ]
+}

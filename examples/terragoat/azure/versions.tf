@@ -1,10 +1,9 @@
 # Azure corpus — provider + Terraform version pinning.
 #
-# Azure-specific catalogue coverage in tf-analyze is currently 1
-# active rule (SEC-AZURE-RBAC-001) plus 4 stubs (SEC-AZURE-STORAGE-001,
-# SEC-AZURE-KV-001, STK-AZURE-NSG-001, SEC-AZURE-MI-001). The corpus
-# documents OWASP categories with realistic Azure anti-patterns and
-# serves as a roadmap for promoting the stubs.
+# Azure catalogue coverage: SEC-AZURE-RBAC-001, SEC-AZURE-STORAGE-001,
+# SEC-AZURE-KV-001, SEC-AZURE-MI-001, STK-AZURE-NSG-FLOWLOG-001,
+# ROB-AZURE-LIFECYCLE-001, SEC-SECRETS-001, and more.
+# See the expected-findings comments in each .tf file.
 
 terraform {
   required_version = ">= 1.10.0"

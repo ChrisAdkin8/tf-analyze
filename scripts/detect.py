@@ -1866,11 +1866,50 @@ def _graph_iam_member_breadth(index: dict, all_files_text: dict) -> list[dict]:
     return out
 
 
+_UAMI_PRINCIPAL_REF = re.compile(
+    r'azurerm_user_assigned_identity\.([\w-]+)\.principal_id'
+)
+
+
+def _graph_azure_uami_orphan(index: dict, all_files_text: dict) -> list[dict]:
+    """Detect azurerm_user_assigned_identity resources with no
+    azurerm_role_assignment referencing their principal_id — an orphan
+    identity that grants no permissions yet still widens the blast radius
+    of a tenant compromise (an attacker who can assign roles can weaponise it).
+    """
+    out: list[dict] = []
+    uamis = {k: v for k, v in index.items()
+             if v["type"] == "azurerm_user_assigned_identity"}
+    if not uamis:
+        return out
+    referenced: set[str] = set()
+    for addr, res in index.items():
+        if res["type"] != "azurerm_role_assignment":
+            continue
+        for m in _UAMI_PRINCIPAL_REF.finditer(res["body"]):
+            referenced.add(m.group(1))
+    for addr, res in uamis.items():
+        if res["name"] not in referenced:
+            out.append(
+                {
+                    "file": res["file"],
+                    "line": res["line"],
+                    "resource": addr,
+                    "context": (
+                        "UAMI has no azurerm_role_assignment binding — "
+                        "orphan identity widens blast radius without granting intent"
+                    ),
+                }
+            )
+    return out
+
+
 _GRAPH_CHECKS = {
     "logging_target_public": _graph_logging_target_public,
     "gke_nodepool_secure_boot": _graph_gke_nodepool_secure_boot,
     "kms_location_parity": _graph_kms_location_parity,
     "iam_member_breadth": _graph_iam_member_breadth,
+    "azure_uami_orphan": _graph_azure_uami_orphan,
 }
 
 

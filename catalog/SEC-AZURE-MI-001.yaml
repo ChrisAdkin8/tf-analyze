@@ -1,21 +1,40 @@
 id: SEC-AZURE-MI-001
-title: "Azure user-assigned identity grants without explicit scope"
+title: "Azure user-assigned identity with no role assignment (orphan UAMI)"
 section: security
 default_urgency: MEDIUM
 blast_radius: module
-status: stub
+status: active
 patterns:
-  - kind: resource_present
-    resource: azurerm_user_assigned_identity
+  - kind: graph_check
+    function: azure_uami_orphan
+    description: |
+      An `azurerm_user_assigned_identity` resource is defined but no
+      `azurerm_role_assignment` references its `principal_id`. The identity
+      is an orphan — it was likely created for a workload that was removed
+      or never wired up. Orphan identities accumulate over time and widen
+      the blast radius of a credential compromise because an attacker who
+      gains their token can enumerate entitlements that engineers have
+      forgotten are still live.
 recommendation: |
-  TODO: stub. Cross-reference `azurerm_user_assigned_identity` blocks
-  with their `azurerm_role_assignment` consumers. Flag identities that
-  have no role_assignment at all (orphan identity — likely dead code)
-  AND identities with role_assignments at subscription scope (covered
-  separately by SEC-AZURE-RBAC-001).
+  Either attach the identity to a role assignment with minimum-privilege
+  scope, or delete it if it is no longer needed:
 
-  Will likely be implemented as a graph_check function once the Azure
-  resource volume in the corpus justifies the engineering cost.
+      # Option A — wire to a scoped role assignment
+      resource "azurerm_role_assignment" "app" {
+        scope                = azurerm_resource_group.app.id
+        role_definition_name = "Storage Blob Data Reader"
+        principal_id         = azurerm_user_assigned_identity.app.principal_id
+      }
+
+      # Option B — remove the orphan identity entirely
+      # (delete the azurerm_user_assigned_identity block)
+
+  Audit existing role assignments with:
+  `az role assignment list --assignee <principal-id> -o table`
 verification: |
-  TODO
-fixtures: []
+  `az identity list --resource-group <rg> --query '[].{Name:name,PrincipalId:principalId}' -o table`
+  then for each principal ID:
+  `az role assignment list --assignee <principal-id> -o table`
+  must return at least one row.
+fixtures:
+  - azure_uami_orphan

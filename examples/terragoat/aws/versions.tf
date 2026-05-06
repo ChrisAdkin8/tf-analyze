@@ -1,14 +1,20 @@
 # AWS corpus — provider + Terraform version pinning.
 #
-# AWS-specific catalogue coverage in tf-analyze is intentionally
-# narrower than GCP (3 active SEC rules at the time of writing). The
-# corpus focuses on documenting OWASP categories with realistic AWS
-# anti-patterns rather than maximising rule fires — many of these
-# anti-patterns are flagged today by tfsec/Checkov but not yet by
-# tf-analyze, and serve as a roadmap for catalogue expansion.
+# AWS catalogue coverage: SEC-AWS-ECR-001, SEC-AWS-VPC-FLOWLOGS-001,
+# SEC-AWS-S3-PUBLIC-BLOCK-001, SEC-AWS-SQS-001, SEC-AWS-SNS-001,
+# ROB-AWS-BACKEND-001, COST-AWS-RISK-001, SEC-SECRETS-001, and more.
+# See the expected-findings comments in each .tf file.
 
 terraform {
   required_version = ">= 1.10.0"
+
+  # S3 backend without DynamoDB state locking — ROB-AWS-BACKEND-001
+  backend "s3" {
+    bucket = "demo-tf-state"
+    key    = "terragoat/aws/terraform.tfstate"
+    region = "us-east-1"
+    # dynamodb_table intentionally omitted — concurrent applies can corrupt state
+  }
 
   required_providers {
     aws = {
