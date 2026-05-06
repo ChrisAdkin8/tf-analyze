@@ -1,0 +1,41 @@
+id: STK-AZURE-AKS-003
+title: "AKS cluster workload identity not enabled"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: workload_identity_enabled
+    description: |
+      `azurerm_kubernetes_cluster` without `workload_identity_enabled = true`.
+      Without Workload Identity, pods that need Azure API access must use
+      a service principal stored in a Secret, or inherit the node pool's
+      managed identity. Workload Identity issues short-lived tokens per pod
+      via Azure AD federation — equivalent to GKE Workload Identity or
+      AWS IRSA.
+  - kind: hcl_attr
+    resource: azurerm_kubernetes_cluster
+    path: workload_identity_enabled
+    not_equal: true
+recommendation: |
+  Enable Workload Identity and the OIDC issuer on the cluster:
+
+      resource "azurerm_kubernetes_cluster" "app" {
+        oidc_issuer_enabled       = true
+        workload_identity_enabled = true
+      }
+
+  Then bind a User-Assigned Managed Identity to a Kubernetes ServiceAccount
+  via a `azurerm_federated_identity_credential` resource. Pods annotated
+  with `azure.workload.identity/client-id` receive short-lived Azure AD
+  tokens scoped to that identity's role assignments.
+verification: |
+  `az aks show --name <cluster> --resource-group <rg> \
+    --query 'oidcIssuerProfile.enabled'`
+  and
+  `az aks show ... --query 'securityProfile.workloadIdentity.enabled'`
+  both must return `true`.
+fixtures:
+  - azure_aks_no_workload_identity

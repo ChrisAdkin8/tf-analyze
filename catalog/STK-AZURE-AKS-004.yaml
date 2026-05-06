@@ -1,0 +1,38 @@
+id: STK-AZURE-AKS-004
+title: "AKS cluster API server is publicly accessible"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: private_cluster_enabled
+    description: |
+      `azurerm_kubernetes_cluster` without `private_cluster_enabled = true`.
+      The Kubernetes API server is reachable over the internet. Any credential
+      (service account token, kubeconfig) leaked from CI or developer machines
+      can be used to reach the API from anywhere.
+  - kind: hcl_attr
+    resource: azurerm_kubernetes_cluster
+    path: private_cluster_enabled
+    not_equal: true
+recommendation: |
+  Enable the private cluster feature so the API server is only reachable
+  from within the VNet:
+
+      resource "azurerm_kubernetes_cluster" "app" {
+        private_cluster_enabled             = true
+        private_cluster_public_fqdn_enabled = false
+      }
+
+  When the cluster is private, `kubectl` must run from a jumpbox or VPN
+  host inside (or peered with) the cluster VNet. Integrate with Azure
+  Private DNS for internal FQDN resolution. Equivalent to GKE
+  `private_cluster_config.enable_private_endpoint = true`.
+verification: |
+  `az aks show --name <cluster> --resource-group <rg> \
+    --query 'enablePrivateCluster'`
+  must return `true`.
+fixtures:
+  - azure_aks_not_private

@@ -1,0 +1,39 @@
+id: ROB-AWS-RDS-003
+title: "RDS instance missing deletion protection"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_db_instance
+    arg: deletion_protection
+    description: |
+      RDS instance without deletion_protection. A terraform destroy or
+      accidental module removal will permanently delete the database
+      without any safeguard.
+  - kind: hcl_attr
+    resource: aws_db_instance
+    path: deletion_protection
+    not_equal: true
+    description: |
+      deletion_protection = false explicitly removes the guard against
+      accidental database deletion.
+recommendation: |
+  Set `deletion_protection = true` on every production RDS instance:
+
+      resource "aws_db_instance" "app" {
+        deletion_protection = true
+        # ...
+      }
+
+  Pair with `lifecycle { prevent_destroy = true }` in Terraform for a
+  two-layer guard: AWS-level deletion protection requires a manual disable
+  step before destruction, while the lifecycle hook prevents `terraform
+  destroy` from even attempting it.
+verification: |
+  `aws rds describe-db-instances --db-instance-identifier <id> \
+    --query 'DBInstances[0].DeletionProtection'`
+  must return `true`.
+fixtures:
+  - aws_rds_no_deletion_protection

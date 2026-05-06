@@ -1,0 +1,53 @@
+id: SEC-AZURE-SQL-002
+title: "Azure SQL Server firewall rule allows access from all IPs"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: azurerm_mssql_firewall_rule
+    arg: start_ip_address
+    regex: '^0\.0\.0\.0$'
+    description: |
+      `azurerm_mssql_firewall_rule` with `start_ip_address = "0.0.0.0"`.
+      This is the Azure convention for "Allow Azure services and resources
+      to access this server" — but it also opens the SQL endpoint to any
+      Azure-hosted attacker (a shared IP range). Combined with weak
+      credentials, it becomes internet-exposed.
+  - kind: resource_arg
+    resource: azurerm_mssql_firewall_rule
+    arg: end_ip_address
+    regex: '^255\.255\.255\.255$'
+    description: |
+      `azurerm_mssql_firewall_rule` with `end_ip_address = "255.255.255.255"`
+      — a world-open rule accepting connections from every IP address.
+recommendation: |
+  Replace world-open firewall rules with the narrowest CIDR your workload
+  needs. Prefer Private Endpoints over firewall rules for production:
+
+      # Preferred: Private Endpoint (no public network access)
+      resource "azurerm_mssql_server" "app" {
+        public_network_access_enabled = false
+      }
+
+      resource "azurerm_private_endpoint" "sql" {
+        # ... connect the SQL server to a private VNet subnet
+      }
+
+      # If public access is required, use minimum CIDR:
+      resource "azurerm_mssql_firewall_rule" "app_ci" {
+        server_id        = azurerm_mssql_server.app.id
+        name             = "ci-runner"
+        start_ip_address = "203.0.113.10"
+        end_ip_address   = "203.0.113.10"
+      }
+
+  Equivalent to GCP `SEC-GCP-SQL-PUBLIC-001` (Cloud SQL authorizing
+  all networks via `ipv4_enabled = true`).
+verification: |
+  `az sql server firewall-rule list --server <server> --resource-group <rg>`
+  must show no rules with `startIpAddress = 0.0.0.0` or
+  `endIpAddress = 255.255.255.255`.
+fixtures:
+  - azure_sql_open_firewall

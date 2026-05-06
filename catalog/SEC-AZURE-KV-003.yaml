@@ -1,0 +1,44 @@
+id: SEC-AZURE-KV-003
+title: "Azure Key Vault key missing rotation policy"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_key_vault_key
+    nested_path: rotation_policy.automatic.time_before_expiry
+    description: |
+      `azurerm_key_vault_key` without a `rotation_policy { automatic {} }`
+      block. The key material never rotates — a compromised key can decrypt
+      all data encrypted with it, past and future, until the key is
+      manually rotated. Equivalent to GCP `STK-GCP-KMS-001` (KMS rotation
+      period missing) and AWS `SEC-AWS-KMS-001` (enable_key_rotation).
+recommendation: |
+  Add a rotation policy to every Key Vault key:
+
+      resource "azurerm_key_vault_key" "app" {
+        name         = "app-key"
+        key_vault_id = azurerm_key_vault.app.id
+        key_type     = "RSA"
+        key_size     = 2048
+        key_opts     = ["decrypt", "encrypt", "sign", "verify"]
+
+        rotation_policy {
+          automatic {
+            time_before_expiry = "P30D"  # rotate 30 days before expiry
+          }
+          expire_after         = "P90D"  # 90-day key lifetime
+          notify_before_expiry = "P29D"
+        }
+      }
+
+  `time_before_expiry` uses ISO 8601 duration format (P30D = 30 days).
+  Set the key lifetime (`expire_after`) to ≤ 90 days for CIS compliance.
+verification: |
+  `az keyvault key show --vault-name <vault> --name <key> \
+    --query 'attributes.{Expires:expires,Created:created}'`
+  Confirm a rotation policy exists in the Azure Portal:
+  Key Vault → Keys → <key> → Rotation policy.
+fixtures:
+  - azure_kv_key_no_rotation

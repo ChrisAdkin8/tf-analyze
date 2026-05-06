@@ -1,0 +1,42 @@
+id: STK-AWS-EKS-003
+title: "EKS cluster Kubernetes Secrets not encrypted with KMS"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_eks_cluster
+    nested_path: encryption_config.provider.key_arn
+    description: |
+      `aws_eks_cluster` without an `encryption_config { provider { key_arn } }`
+      block. Kubernetes Secrets — including service account tokens, TLS
+      certificates, and application credentials — are stored in etcd
+      encrypted only at the EBS volume level (AWS-managed key). Without
+      envelope encryption at the application layer, anyone who can read the
+      EBS snapshot or the etcd backup can access every Secret in the cluster.
+recommendation: |
+  Add an `encryption_config` block pointing to a customer-managed KMS key:
+
+      resource "aws_eks_cluster" "app" {
+        encryption_config {
+          resources = ["secrets"]
+          provider {
+            key_arn = aws_kms_key.eks.arn
+          }
+        }
+      }
+
+      resource "aws_kms_key" "eks" {
+        description             = "EKS secrets encryption"
+        enable_key_rotation     = true
+        deletion_window_in_days = 30
+      }
+
+  Equivalent to GKE `database_encryption { state = "ENCRYPTED" }`.
+verification: |
+  `aws eks describe-cluster --name <name> \
+    --query 'cluster.encryptionConfig'`
+  must return a non-empty list with `resources: ["secrets"]`.
+fixtures:
+  - aws_eks_no_secrets_encrypt

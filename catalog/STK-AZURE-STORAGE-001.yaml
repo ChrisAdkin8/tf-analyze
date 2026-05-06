@@ -1,0 +1,44 @@
+id: STK-AZURE-STORAGE-001
+title: "Azure storage account missing blob versioning"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_storage_account
+    nested_path: blob_properties.versioning_enabled
+    description: |
+      `azurerm_storage_account` without
+      `blob_properties { versioning_enabled = true }`. Object overwrites and
+      deletes are permanent. A ransomware playbook or accidental
+      `az storage blob delete` is unrecoverable without versioning.
+  - kind: hcl_attr
+    resource: azurerm_storage_account
+    path: blob_properties.versioning_enabled
+    not_equal: true
+recommendation: |
+  Enable versioning in the `blob_properties` block:
+
+      resource "azurerm_storage_account" "app" {
+        blob_properties {
+          versioning_enabled = true
+          delete_retention_policy {
+            days = 7
+          }
+          container_delete_retention_policy {
+            days = 7
+          }
+        }
+      }
+
+  Pair with a lifecycle management rule to expire non-current versions
+  after N days to control storage costs. Azure Storage versioning is
+  equivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning
+  (STK-GCP-BUCKET-001).
+verification: |
+  `az storage account blob-service-properties show \
+    --account-name <name> --query 'isVersioningEnabled'`
+  must return `true`.
+fixtures:
+  - azure_storage_no_versioning

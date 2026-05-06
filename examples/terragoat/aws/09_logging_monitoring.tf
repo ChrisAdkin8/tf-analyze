@@ -1,7 +1,7 @@
 # OWASP A09:2021 — Security Logging and Monitoring Failures
 # Cloud: AWS
 #
-# Five AWS-specific shapes:
+# Six AWS-specific shapes:
 #
 #   1. No CloudTrail in the account, or CloudTrail without
 #      multi-region enabled. The log of every API call is the
@@ -16,6 +16,8 @@
 #      instance.
 #   5. S3 bucket without `aws_s3_bucket_logging` — read/write
 #      access to objects is unaudited.
+#   6. Route53 public zone without DNSSEC key-signing key —
+#      DNS responses cannot be cryptographically validated.
 #
 # Real-world impact:
 #   - Without CloudTrail multi-region: an attacker who pivots into
@@ -28,6 +30,7 @@
 #   - SEC-AWS-CLOUDTRAIL-001     HIGH    CloudTrail not multi-region
 #   - SEC-AWS-CLOUDTRAIL-002     HIGH    CloudTrail log file validation disabled
 #   - COST-AWS-RISK-001          MEDIUM  CloudWatch log group without retention_in_days
+#   - STK-AWS-ROUTE53-001        HIGH    Route53 zone without DNSSEC key-signing key
 #
 # Fix summary: one CloudTrail trail with `is_multi_region_trail = true`
 # and `enable_log_file_validation = true` per organisation; flow logs
@@ -61,4 +64,12 @@ resource "aws_s3_bucket" "unlogged" {
 resource "aws_cloudwatch_log_group" "no_retention" {
   name = "/demo/app"
   # missing retention_in_days — logs never expire, cost drifts unbounded
+}
+
+# Route53 public zone without DNSSEC. Without a key-signing key and
+# the zone-signing infrastructure, resolvers cannot validate responses
+# and DNS poisoning is undetectable.
+resource "aws_route53_zone" "no_dnssec" {
+  name = "demo.example.com"
+  # No aws_route53_key_signing_key companion resource.
 }

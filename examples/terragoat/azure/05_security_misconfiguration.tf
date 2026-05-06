@@ -22,10 +22,12 @@
 #   - STK-AZURE-NSG-001    HIGH  NSG rule open to the internet on sensitive ports
 #   - SEC-AZURE-AKS-001    HIGH  AKS RBAC disabled / node public IPs
 #   - SEC-AZURE-AKS-002    HIGH  AKS cluster missing network policy
+#   - SEC-AZURE-SQL-002    HIGH  Azure SQL Server firewall rule allows all IPs
 #
 # Fix summary: every NSG rule needs a specific CIDR or service tag
 # (`AzureCloud`, `Storage`, `VirtualNetwork`); RBAC on for every AKS
-# cluster; `https_only = true` on every web workload.
+# cluster; `https_only = true` on every web workload; SQL firewall
+# rules restricted to application CIDRs, not 0.0.0.0–255.255.255.255.
 
 # NSG rule with world-open SSH — the canonical anti-pattern.
 resource "azurerm_network_security_group" "open_ssh" {
@@ -77,6 +79,24 @@ resource "azurerm_kubernetes_cluster" "no_rbac" {
   identity {
     type = "SystemAssigned"
   }
+}
+
+# SQL Server with a world-open firewall rule.
+resource "azurerm_mssql_server" "demo" {
+  name                         = "demo-sql-server"
+  resource_group_name          = azurerm_resource_group.demo.name
+  location                     = azurerm_resource_group.demo.location
+  version                      = "12.0"
+  administrator_login          = "sqladmin"
+  administrator_login_password = "PlaceholderP@ss1"
+}
+
+resource "azurerm_mssql_firewall_rule" "allow_all" {
+  name             = "allow-all"
+  server_id        = azurerm_mssql_server.demo.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "255.255.255.255"
+  # World-open — any IP can attempt SQL connections
 }
 
 # Storage account with no network rules + public access on.

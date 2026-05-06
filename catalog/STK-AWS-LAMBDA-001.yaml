@@ -8,7 +8,7 @@ patterns:
   - kind: resource_arg
     resource: aws_lambda_function
     arg: runtime
-    regex: "^(nodejs10\.x|nodejs12\.x|nodejs14\.x|python2\.7|python3\.6|python3\.7|ruby2\.5|java8|go1\.x|dotnetcore2\.1|dotnetcore3\.1)$"
+    regex: '^(nodejs10\.x|nodejs12\.x|nodejs14\.x|python2\.7|python3\.6|python3\.7|ruby2\.5|java8|go1\.x|dotnetcore2\.1|dotnetcore3\.1)$'
     description: Lambda function using an end-of-life runtime no longer patched by AWS
 recommendation: |
   Upgrade the `runtime` to a currently supported version. EOL runtimes

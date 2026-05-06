@@ -1,0 +1,46 @@
+id: STK-AZURE-DB-001
+title: "Azure MySQL/PostgreSQL server missing SSL enforcement"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_mysql_server
+    arg: ssl_enforcement_enabled
+    description: |
+      `azurerm_mysql_server` without `ssl_enforcement_enabled`. Client
+      connections can be made over plaintext, exposing credentials and
+      query results on the network.
+  - kind: hcl_attr
+    resource: azurerm_mysql_server
+    path: ssl_enforcement_enabled
+    not_equal: true
+  - kind: resource_missing_arg
+    resource: azurerm_postgresql_server
+    arg: ssl_enforcement_enabled
+  - kind: hcl_attr
+    resource: azurerm_postgresql_server
+    path: ssl_enforcement_enabled
+    not_equal: true
+recommendation: |
+  Set `ssl_enforcement_enabled = true` on every MySQL and PostgreSQL
+  Single Server resource:
+
+      resource "azurerm_mysql_server" "app" {
+        ssl_enforcement_enabled          = true
+        ssl_minimal_tls_version_enforced = "TLS1_2"
+        # ...
+      }
+
+  For Flexible Server (the preferred, non-deprecated resource), SSL is
+  enforced by default and controlled via `azurerm_mysql_flexible_server_configuration`
+  with the `require_secure_transport` parameter.
+
+  Equivalent to GCP `STK-GCP-CLOUDSQL-004` (require_ssl).
+verification: |
+  `az mysql server show --name <server> --resource-group <rg> \
+    --query 'sslEnforcement'`
+  must return `"Enabled"`.
+fixtures:
+  - azure_db_no_ssl

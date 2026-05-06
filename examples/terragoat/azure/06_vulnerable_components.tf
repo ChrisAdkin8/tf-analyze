@@ -1,7 +1,7 @@
 # OWASP A06:2021 — Vulnerable and Outdated Components
 # Cloud: Azure
 #
-# Three Azure-shaped vulnerable-component anti-patterns:
+# Five Azure-shaped vulnerable-component anti-patterns:
 #
 #   1. Function App / Web App on a deprecated runtime (`dotnet:3.1`,
 #      `node:10`, `python:3.7`, `java:8`). Microsoft publishes a
@@ -12,6 +12,12 @@
 #      patches and lose support.
 #   3. Module sources without `version` constraint — same as every
 #      other cloud's A06.
+#   4. `azurerm_mysql_server` / `azurerm_postgresql_server` (deprecated
+#      single-server resources) — replaced by Flexible Server. Azure
+#      is retiring the single-server APIs.
+#   5. Container Registry with `admin_enabled = true` — the admin
+#      credential is a single shared secret. Service principals with
+#      the minimum AcrPull role are the recommended alternative.
 #
 # Real-world impact:
 #   - Functions on EOL runtimes are a CVE-exposure shape: once
@@ -24,10 +30,14 @@
 #   - MOD-PIN-001          MEDIUM  Registry module source missing version
 #   - SEC-AZURE-AKS-002    HIGH    AKS cluster missing network policy
 #   - SEC-AZURE-WEBAPP-002 HIGH    Function App HTTPS not enforced
+#   - STK-AZURE-SQL-001    HIGH    Deprecated MySQL/PostgreSQL single-server resource
+#   - STK-AZURE-DB-001     HIGH    MySQL/PostgreSQL server missing SSL enforcement
+#   - SEC-AZURE-ACR-001    HIGH    Container Registry admin account enabled
 #
 # Fix summary: pin every runtime to a non-deprecated version and
 # subscribe to the deprecation calendar; pin AKS to N-1 at most;
-# pin every module to an exact version.
+# pin every module to an exact version; migrate to Flexible Server;
+# disable ACR admin account and use service principals.
 
 # Function App on dotnet 3.1 — long-EOL.
 resource "azurerm_service_plan" "linux_plan" {
@@ -82,6 +92,32 @@ resource "azurerm_kubernetes_cluster" "old_k8s" {
   identity {
     type = "SystemAssigned"
   }
+}
+
+# Deprecated single-server MySQL — fires STK-AZURE-SQL-001.
+# Also has no ssl_enforcement_enabled — fires STK-AZURE-DB-001.
+resource "azurerm_mysql_server" "deprecated" {
+  name                = "demo-mysql-deprecated"
+  resource_group_name = azurerm_resource_group.demo.name
+  location            = azurerm_resource_group.demo.location
+  sku_name            = "B_Gen5_1"
+  version             = "8.0"
+
+  administrator_login          = "mysqladmin"
+  administrator_login_password = "PlaceholderP@ss1"
+
+  # ssl_enforcement_enabled not set — fires STK-AZURE-DB-001
+  # Deprecated resource type (azurerm_mysql_server) — fires STK-AZURE-SQL-001
+}
+
+# Container Registry with admin account enabled — fires SEC-AZURE-ACR-001.
+resource "azurerm_container_registry" "admin_on" {
+  name                = "demoadminregistry"
+  resource_group_name = azurerm_resource_group.demo.name
+  location            = azurerm_resource_group.demo.location
+  sku                 = "Basic"
+  admin_enabled       = true
+  # Admin credential is a single shared secret — use service principals instead
 }
 
 # Module without version pin.

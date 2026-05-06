@@ -14,7 +14,8 @@
 #      — HTTP requests served without redirect.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-SG-001   HIGH   Security group allows ingress from 0.0.0.0/0
+#   - SEC-AWS-SG-001        HIGH   Security group allows ingress from 0.0.0.0/0
+#   - ROB-AWS-LIFECYCLE-002 HIGH   S3 bucket has force_destroy = true
 #
 # Fix summary: every SG ingress rule needs a CIDR or a security-
 # group reference, never `0.0.0.0/0` for sensitive ports. Public IPs
@@ -49,6 +50,14 @@ resource "aws_instance" "public" {
   subnet_id                   = "subnet-12345678"
   associate_public_ip_address = true
   vpc_security_group_ids      = [aws_security_group.ssh_open.id]
+}
+
+# S3 bucket with force_destroy — a terraform destroy wipes all objects
+# with no recycle bin. One typo in a workspace name and the bucket
+# and everything in it is gone.
+resource "aws_s3_bucket" "force_destroyable" {
+  bucket        = "demo-force-destroyable"
+  force_destroy = true
 }
 
 # RDS publicly accessible.

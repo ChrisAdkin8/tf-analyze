@@ -1,0 +1,32 @@
+id: STK-AWS-RDS-004
+title: "RDS instance uses end-of-life database engine version"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_db_instance
+    arg: engine_version
+    regex: '^(5\.6|9\.6|10\.|11\.|12\.)'
+    description: |
+      RDS instance using MySQL 5.6, PostgreSQL 9.6, 10, 11, or 12 — all
+      past or approaching end of standard support. AWS stops publishing
+      security patches for EOL versions; known CVEs accumulate silently.
+recommendation: |
+  Upgrade to a supported engine version. AWS maintains a support calendar
+  at https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/MySQL.Concepts.VersionMgmt.html
+
+  Common upgrades:
+  - MySQL 5.6 → MySQL 8.0 (major version upgrade, test thoroughly)
+  - PostgreSQL 9.6 → PostgreSQL 16 (multiple hops: 9.6→11→14→16)
+  - PostgreSQL 10/11/12 → PostgreSQL 16
+
+  Use `aws rds describe-db-engine-versions` to enumerate supported
+  versions for your region and instance class.
+verification: |
+  `aws rds describe-db-instances --db-instance-identifier <id> \
+    --query 'DBInstances[0].EngineVersion'`
+  must return a currently supported version string.
+fixtures:
+  - aws_rds_eol_version

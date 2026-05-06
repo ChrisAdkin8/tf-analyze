@@ -1,0 +1,44 @@
+id: SEC-AZURE-ACR-001
+title: "Azure Container Registry admin account enabled"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: hcl_attr
+    resource: azurerm_container_registry
+    path: admin_enabled
+    not_equal: false
+    description: |
+      `azurerm_container_registry` with `admin_enabled = true`. The admin
+      account uses a shared username and password with full read/write
+      access to all repositories in the registry. It cannot be scoped,
+      audited per-user, or rotated without re-pushing credentials to all
+      consumers. Equivalent to keeping the root account active in an IAM
+      system. Use Entra ID service principals or managed identities with
+      AcrPull / AcrPush role assignments instead.
+recommendation: |
+  Disable the admin account and use Entra ID authentication:
+
+      resource "azurerm_container_registry" "app" {
+        name                = "acrapp"
+        resource_group_name = azurerm_resource_group.app.name
+        location            = azurerm_resource_group.app.location
+        sku                 = "Standard"
+        admin_enabled       = false
+      }
+
+      resource "azurerm_role_assignment" "aks_pull" {
+        scope                = azurerm_container_registry.app.id
+        role_definition_name = "AcrPull"
+        principal_id         = azurerm_kubernetes_cluster.app.kubelet_identity[0].object_id
+      }
+
+  ACR supports task identities, managed identities for Azure services,
+  and service principal tokens — none of which need the admin account.
+verification: |
+  `az acr show --name <registry> --resource-group <rg> \
+    --query 'adminUserEnabled'`
+  must return `false`.
+fixtures:
+  - azure_acr_admin_enabled

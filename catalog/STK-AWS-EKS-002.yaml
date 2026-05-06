@@ -1,0 +1,40 @@
+id: STK-AWS-EKS-002
+title: "EKS cluster control plane logging not enabled"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_eks_cluster
+    arg: enabled_cluster_log_types
+    description: |
+      `aws_eks_cluster` without `enabled_cluster_log_types`. Control-plane
+      logs (API server, audit, authenticator, controller manager, scheduler)
+      are not shipped to CloudWatch Logs. Post-incident investigation and
+      compliance auditing have no evidence of API activity, authentication
+      events, or resource modifications.
+recommendation: |
+  Enable all five control-plane log types:
+
+      resource "aws_eks_cluster" "app" {
+        enabled_cluster_log_types = [
+          "api",
+          "audit",
+          "authenticator",
+          "controllerManager",
+          "scheduler",
+        ]
+      }
+
+  The `audit` log type is the most critical — it captures every API call
+  made to the Kubernetes API server, including by pods with service account
+  tokens. The other types are necessary for diagnosing control-plane issues
+  and tracing scheduler or controller-manager behaviour.
+verification: |
+  `aws eks describe-cluster --name <name> \
+    --query 'cluster.logging.clusterLogging[?enabled==\`true\`].types'`
+  must include `api`, `audit`, `authenticator`, `controllerManager`,
+  `scheduler`.
+fixtures:
+  - aws_eks_no_logging

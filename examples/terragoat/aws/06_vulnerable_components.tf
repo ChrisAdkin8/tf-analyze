@@ -18,12 +18,17 @@
 #     running unmaintained code in production.
 #
 # Expected tf-analyze findings:
-#   - MOD-PIN-001  MEDIUM  Registry module source missing version
+#   - MOD-PIN-001        MEDIUM  Registry module source missing version
+#   - STK-AWS-EKS-001    HIGH    EKS endpoint_private_access not enabled
+#   - STK-AWS-EKS-002    HIGH    EKS control plane logging not enabled
+#   - STK-AWS-EKS-003    HIGH    EKS secrets encryption not configured
+#   - STK-AWS-EKS-004    HIGH    EKS OIDC provider absent (no IRSA)
 #
 # Fix summary: pin Lambda runtimes to a non-deprecated version
 # (consult the AWS Lambda runtimes page); use `data "aws_ami"` with
 # `most_recent = true` and an owner filter rather than a hardcoded
-# AMI ID; pin every module to an exact version.
+# AMI ID; pin every module to an exact version. Enable private endpoint,
+# logging, secrets encryption, and IRSA on every EKS cluster.
 
 # Lambda on an EOL runtime.
 resource "aws_lambda_function" "eol_runtime" {
@@ -45,6 +50,22 @@ resource "aws_instance" "frozen_ami" {
   ami           = "ami-0c55b159cbfafe1f0" # Ubuntu 18.04 from 2018
   instance_type = "t3.micro"
 }
+
+# EKS cluster with no private endpoint, no logging, no secrets encryption.
+# Missing OIDC provider means workloads cannot use IAM Roles for
+# Service Accounts (IRSA) — they fall back to the node's instance role.
+resource "aws_eks_cluster" "insecure" {
+  name     = "demo-insecure"
+  role_arn = "arn:aws:iam::123456789012:role/eks-role"
+
+  vpc_config {
+    subnet_ids = ["subnet-aaa", "subnet-bbb"]
+    # endpoint_private_access not set — public API endpoint only
+  }
+  # enabled_cluster_log_types not set — no audit/API server logging
+  # encryption_config not set — secrets unencrypted in etcd
+}
+# No aws_iam_openid_connect_provider — IRSA impossible
 
 # Module without version constraint.
 module "unpinned_vpc" {

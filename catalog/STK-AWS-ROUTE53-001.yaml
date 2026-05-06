@@ -1,0 +1,46 @@
+id: STK-AWS-ROUTE53-001
+title: "Route 53 hosted zone missing DNSSEC signing"
+section: stack
+default_urgency: MEDIUM
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_absent
+    resource: aws_route53_key_signing_key
+    when_present: aws_route53_zone
+    scope: repo
+    description: |
+      `aws_route53_zone` present but no `aws_route53_key_signing_key` in the
+      repository. Without DNSSEC, DNS responses for the zone can be spoofed
+      by a man-in-the-middle — an attacker who can intercept DNS traffic can
+      redirect users to attacker-controlled infrastructure. DNSSEC signs all
+      DNS records, allowing resolvers to detect tampered responses.
+recommendation: |
+  Enable DNSSEC on the hosted zone:
+
+      resource "aws_kms_key" "dnssec" {
+        customer_master_key_spec = "ECC_NIST_P256"
+        deletion_window_in_days  = 7
+        key_usage                = "SIGN_VERIFY"
+        policy = data.aws_iam_policy_document.dnssec.json
+      }
+
+      resource "aws_route53_key_signing_key" "main" {
+        hosted_zone_id             = aws_route53_zone.main.zone_id
+        key_management_service_arn = aws_kms_key.dnssec.arn
+        name                       = "main"
+      }
+
+      resource "aws_route53_hosted_zone_dnssec" "main" {
+        hosted_zone_id = aws_route53_key_signing_key.main.hosted_zone_id
+        depends_on     = [aws_route53_key_signing_key.main]
+      }
+
+  After enabling, submit the DS record to your domain registrar so the
+  parent zone can verify the chain of trust.
+verification: |
+  `aws route53 get-dnssec --hosted-zone-id <id> \
+    --query 'Status.ServedSigning'`
+  must return `"SIGNING"`.
+fixtures:
+  - aws_route53_no_dnssec

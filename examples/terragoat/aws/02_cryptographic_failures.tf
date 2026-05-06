@@ -1,7 +1,7 @@
 # OWASP A02:2021 — Cryptographic Failures
 # Cloud: AWS
 #
-# Five common AWS cryptographic failure modes:
+# Six common AWS cryptographic failure modes:
 #
 #   1. S3 bucket without `server_side_encryption_configuration` —
 #      objects land in cleartext (well, at-rest with the AWS-owned
@@ -28,6 +28,7 @@
 #   - SEC-AWS-RDS-002   HIGH  RDS instance storage not encrypted
 #   - SEC-AWS-KMS-001   HIGH  KMS key rotation disabled
 #   - SEC-AWS-EBS-001   HIGH  EBS volume not encrypted
+#   - STK-AWS-RDS-004   HIGH  RDS running end-of-life engine version
 #
 # Fix summary: turn on every encryption flag explicitly; never rely
 # on AWS account defaults (they vary by region and by account age).
@@ -63,4 +64,16 @@ resource "aws_kms_key" "no_rotation" {
   description             = "demo key, rotation off"
   deletion_window_in_days = 7
   enable_key_rotation     = false
+}
+
+# RDS on a MySQL 5.6 EOL engine version.
+resource "aws_db_instance" "eol_engine" {
+  identifier          = "demo-eol-engine"
+  engine              = "mysql"
+  engine_version      = "5.6.51"
+  instance_class      = "db.t3.micro"
+  allocated_storage   = 20
+  username            = "admin"
+  password            = "tempPASSWORD123!"
+  skip_final_snapshot = true
 }

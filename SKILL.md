@@ -114,8 +114,8 @@ The skill is **GCP-first**. Catalogue entries, CIS mappings, the IAM compatibili
 | Cloud | Active rules | Notes |
 |---|---|---|
 | **GCP** | ~90 | Full CIS GCP v4.0 coverage for the documented controls; IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, Cloud Armor, GCS, networking |
-| **AWS** | ~30 | IAM wildcard, S3, RDS, KMS, CloudTrail, SQS, SNS, ElastiCache, ECR, VPC flow logs, CloudWatch cost controls, SG world-open ports, secrets |
-| **Azure** | ~20 | RBAC, storage, Key Vault, AKS, SQL, App Service, NSG flow logs, UAMI, TDE, HTTPS enforcement |
+| **AWS** | ~38 | IAM wildcard, S3, RDS (encryption/deletion-protection/EOL engine), KMS, CloudTrail, SQS, SNS, ElastiCache, ECR, VPC flow logs, EKS (private endpoint/logging/secrets/IRSA), Route53 DNSSEC, CloudWatch cost controls, SG world-open ports, secrets |
+| **Azure** | ~29 | RBAC, storage (versioning/HTTPS), Key Vault (network ACL/key rotation), AKS (Workload Identity/private/authorized IPs/network policy), SQL (firewall/TDE/deprecated single-server/SSL), App Service HTTPS, NSG flow logs, UAMI, ACR admin account |
 | **Multi-cloud** | ~5 | Secrets in HCL/tfvars, provisioner usage, module pinning, lifecycle controls |
 
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.

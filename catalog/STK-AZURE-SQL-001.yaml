@@ -1,0 +1,54 @@
+id: STK-AZURE-SQL-001
+title: "Azure MySQL/PostgreSQL single server is deprecated"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_present
+    resource: azurerm_mysql_server
+    description: |
+      `azurerm_mysql_server` (Azure Database for MySQL — Single Server)
+      is deprecated. Microsoft ended support for the Single Server SKU on
+      September 16, 2024. Deprecated servers no longer receive security
+      patches. Migrate to `azurerm_mysql_flexible_server`.
+  - kind: resource_present
+    resource: azurerm_postgresql_server
+    description: |
+      `azurerm_postgresql_server` (Azure Database for PostgreSQL — Single
+      Server) is retired. Microsoft ended support for Single Server on
+      March 28, 2025. Migrate to `azurerm_postgresql_flexible_server`.
+recommendation: |
+  Migrate to the Flexible Server SKU:
+
+      # MySQL
+      resource "azurerm_mysql_flexible_server" "app" {
+        name                   = "mysql-app"
+        resource_group_name    = azurerm_resource_group.app.name
+        location               = azurerm_resource_group.app.location
+        administrator_login    = "mysqladmin"
+        administrator_password = var.mysql_password
+        backup_retention_days  = 7
+        sku_name               = "B_Standard_B1ms"
+        version                = "8.0.21"
+      }
+
+      # PostgreSQL
+      resource "azurerm_postgresql_flexible_server" "app" {
+        name                   = "psql-app"
+        resource_group_name    = azurerm_resource_group.app.name
+        location               = azurerm_resource_group.app.location
+        administrator_login    = "psqladmin"
+        administrator_password = var.psql_password
+        sku_name               = "B_Standard_B1ms"
+        version                = "16"
+      }
+
+  Equivalent to GCP `STK-GCP-CLOUDSQL-005` (EOL engine version).
+verification: |
+  Confirm no `azurerm_mysql_server` or `azurerm_postgresql_server` resources
+  remain in any Terraform state file. Check the Azure Portal: "Azure Database
+  for MySQL — Single Server" and "Azure Database for PostgreSQL — Single
+  Server" should show no instances.
+fixtures:
+  - azure_sql_deprecated_server

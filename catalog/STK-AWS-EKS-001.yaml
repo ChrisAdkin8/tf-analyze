@@ -1,0 +1,43 @@
+id: STK-AWS-EKS-001
+title: "EKS cluster API endpoint private access not enabled"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_eks_cluster
+    nested_path: vpc_config.endpoint_private_access
+    description: |
+      `aws_eks_cluster` without `vpc_config { endpoint_private_access = true }`.
+      Without private endpoint access, workloads running in the cluster VPC
+      must reach the API server over the internet rather than a private
+      endpoint, increasing exposure.
+  - kind: hcl_attr
+    resource: aws_eks_cluster
+    path: vpc_config.endpoint_private_access
+    not_equal: true
+    description: |
+      `endpoint_private_access = false` means nodes communicate with the
+      API server over the public internet even from within the cluster VPC.
+recommendation: |
+  Enable private endpoint access and restrict (or disable) public access:
+
+      resource "aws_eks_cluster" "app" {
+        vpc_config {
+          endpoint_private_access = true
+          endpoint_public_access  = false  # disable public entirely, or...
+          # endpoint_public_access  = true  # ...keep public but restrict CIDRs:
+          # public_access_cidrs     = ["203.0.113.0/24"]
+        }
+      }
+
+  With both access types enabled, use `public_access_cidrs` to limit which
+  CIDRs can reach the public endpoint (e.g., your CI runner egress IPs only).
+  Equivalent to GKE `private_cluster_config.enable_private_endpoint`.
+verification: |
+  `aws eks describe-cluster --name <name> \
+    --query 'cluster.resourcesVpcConfig.endpointPrivateAccess'`
+  must return `true`.
+fixtures:
+  - aws_eks_public_endpoint
