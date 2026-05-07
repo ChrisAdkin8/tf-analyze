@@ -39,11 +39,13 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 - `json` — machine-readable findings list. Used by `--compare` and CI integrations.
 - `sarif` — SARIF v2.1.0 with `helpUri`, `partialFingerprints`, `security-severity` (9.5/7.5/5.0/3.0/1.0), CIS tags. GitHub Code Scanning renders these as line-level annotations on the PR diff. Schema documented in `SKILL.md`.
 - `html` — self-contained report with inline CSS, urgency-coloured badges, collapsible per-rule details. Right for sharing with non-CLI reviewers.
-- `--attack-graph` — (flag, works with any format) builds a directed attack-path graph from internet-reachable resources to crown jewels. HTML output adds an interactive second tab with a force-directed SVG layout; text/Markdown output appends a Mermaid flowchart block. HIGH/CRITICAL findings in HTML gain a bordered italic adversarial narrative paragraph referencing real-world breaches. Findings on critical-path resources are promoted one urgency tier; findings on resources unreachable from the internet are demoted one tier.
-- `--show-fixes` — renders catalogue `fix_hcl` snippets alongside each finding. HTML: dark-themed `<pre>` block inside the finding detail. Text: indented HCL below the finding line.
+- `--attack-graph` — (flag, works with any format) builds a directed attack-path graph from internet-reachable resources to crown jewels. HTML output adds interactive Attack Graph, Executive View, and Fix Priority tabs; text/Markdown output appends a Mermaid flowchart block. HIGH/CRITICAL findings gain adversarial narrative paragraphs referencing real-world breaches. Findings on critical-path resources are promoted one urgency tier.
+- `--show-fixes` — renders catalogue `fix_hcl` snippets alongside each finding with a coloured **Fix Disruption** badge (`Non-disruptive` / `Plan required` / `Forces replacement`). HTML: dark-themed `<pre>` inside the finding detail. Text: disruption note + indented HCL below the finding line.
 - `--gen-tests OUTDIR` — generates native `terraform test` (`.tftest.hcl`) assertion files for each finding whose catalogue entry defines a `test_template`. Converts static findings into permanent regression guards.
+- `--compliance` / `--format compliance` — maps findings against CIS AWS v3.0, GCP v4.0, and Azure v2.0 benchmark controls declared in catalogue `cis:` fields. HTML (`--compliance`): adds a Compliance tab with per-framework progress bars + PASS/FAIL tables. Text (`--format compliance`): outputs a plain grouped table. `--oscal PATH` writes an OSCAL Assessment Results JSON alongside any format (FedRAMP-compatible).
 - `--mode fleet` — scans multiple repos (`--target` repeated or `--targets-file`), cross-correlates findings that appear in more than one repository, and outputs a fleet summary table.
 - `--mode trend --lookback N` — walks N days of git history (default 30), reconstructs `.tf` content at each commit via `git show`, re-runs the pattern engine, and outputs a date-by-date new/resolved/net/total table.
+- `--mode pr-review` — posts findings as inline GitHub PR review comments via the REST API. Findings with `fix_hcl` appear as `` ```suggestion ``` `` blocks (one-click apply). Requires `GITHUB_TOKEN` env var, `--repo OWNER/REPO`, and `--pr-number N`.
 
 ### Screenshots
 
@@ -58,6 +60,18 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 **Executive View tab** — findings reorganised into Entry Points / Lateral Movement / Crown Jewels at Risk / Blind Spots attack stages, with a critical-path narrative banner:
 
 ![Executive View tab](docs/images/executive-view.png)
+
+**Fix Priority tab** — findings ranked by attack-path centrality. Crown jewels blocked, score, and CRITICAL-PATH / INET-REACHABLE badges (`--attack-graph`):
+
+![Fix Priority tab](docs/images/fix-priority.png)
+
+**Fix Disruption badge** — coloured disruption classification inline with the suggested fix (`--show-fixes`):
+
+![Fix disruption badge in show-fixes](docs/images/fix-disruption.png)
+
+**Compliance tab** — CIS benchmark PASS/FAIL per control with progress bars across AWS, GCP, and Azure (`--compliance`):
+
+![Compliance Gap Report tab](docs/images/compliance-report.png)
 
 ### Differentiators (vs tfsec / Checkov / KICS / tflint)
 
@@ -78,6 +92,10 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 15. **Generated `terraform test` files (`--gen-tests`).** Converts findings into native Terraform test assertions (`.tftest.hcl`). Running `terraform test` in CI then permanently guards against the same misconfiguration being re-introduced. No other scanner produces native test artefacts.
 16. **Fleet mode (`--mode fleet`).** Scans multiple repos in one invocation and cross-correlates findings — the same misconfiguration in multiple repos is flagged `FLEET-WIDE` so you can fix it organisation-wide at once.
 17. **Risk trend (`--mode trend`).** Walks git history and outputs a per-commit new/resolved/net/total findings table. Shows whether your security posture is improving or degrading over time — CISO-grade longitudinal visibility.
+18. **Fix centrality scoring.** `--attack-graph` now also ranks findings by attack-path impact: BFS simulation removes each finding's resource from the graph and counts how many crown-jewel resources become unreachable. HTML adds a **Fix Priority** tab with ranked table — "fix this first" for time-constrained engineers. No other scanner does attack-graph-aware remediation prioritisation.
+19. **Safe-to-fix disruption classification.** Every catalogue `fix_hcl` snippet now carries a `fix_disruption` tag (`none` / `plan_required` / `forces_replacement`). `--show-fixes` displays a coloured badge and optional note so engineers know whether applying the fix requires a maintenance window before they act.
+20. **CIS compliance gap report.** `--compliance` / `--format compliance` maps all 70 CIS-mapped catalogue rules against benchmark controls and reports PASS/FAIL per control, grouped by framework. `--oscal PATH` outputs OSCAL Assessment Results JSON (v1.1.2) for FedRAMP and GRC tool ingestion. The only OSS Terraform scanner with native OSCAL output.
+21. **GitHub PR Suggestions (`--mode pr-review`).** Posts findings as inline GitHub PR review comments with one-click `` ```suggestion ``` `` fix blocks. Engineers can accept a `metadata_options` IMDSv2 fix, a security group restriction, or a KMS rotation flag directly from the PR review UI, without opening a separate ticket.
 
 ---
 

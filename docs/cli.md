@@ -19,7 +19,7 @@ Catalog directory
 
 ### `--format FORMAT`
 
-**Choices:** `text`, `json`, `sarif`, `html`
+**Choices:** `text`, `json`, `sarif`, `html`, `compliance`
 
 **Default:** `text`
 
@@ -32,7 +32,7 @@ Reports directory (default: <skill>/reports). Used for auto-discovery in --compa
 
 ### `--mode MODE`
 
-**Choices:** `static`, `diff`, `verify-fixed`, `fleet`, `trend`
+**Choices:** `static`, `diff`, `verify-fixed`, `fleet`, `trend`, `pr-review`
 
 **Default:** `static`
 
@@ -140,6 +140,22 @@ File containing one target directory path per line (for --mode fleet).
 ### `--attack-graph`
 
 Build a directed attack-path graph from internet-reachable resources to crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). With --format html adds an interactive Attack Graph tab (force-directed SVG, drag, click-to-inspect, critical path highlighted in red). With --format text (default) appends a Mermaid flowchart block after findings. Also enables adversarial scenario narratives for HIGH/CRITICAL findings.
+
+### `--repo`
+
+GitHub repository (owner/repo) for --mode pr-review.
+
+### `--pr-number`
+
+GitHub pull request number for --mode pr-review.
+
+### `--compliance`
+
+Add a CIS compliance gap report tab to HTML output, or (with --format compliance) output a plain-text compliance table. Maps findings against CIS AWS/GCP/Azure benchmark controls defined in catalogue cis: fields.
+
+### `--oscal`
+
+Write an OSCAL Assessment Results JSON file to PATH. Requires --compliance. Compatible with any --format.
 
 ### `--gen-tests`
 

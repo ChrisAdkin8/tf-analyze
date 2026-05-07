@@ -52,3 +52,5 @@ fix_hcl: |
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
   }
+fix_disruption: forces_replacement
+fix_disruption_note: "Changing metadata_options on a running EC2 instance forces replacement in Terraform. Schedule this change during a maintenance window."

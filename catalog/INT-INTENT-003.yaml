@@ -24,3 +24,5 @@ fix_hcl: |
       Environment = "production"
     }
   }
+fix_disruption: plan_required
+fix_disruption_note: "Enabling deletion_protection on an existing resource is an in-place modification; no replacement is triggered."

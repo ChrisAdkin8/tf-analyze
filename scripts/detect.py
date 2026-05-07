@@ -2308,6 +2308,74 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
     }
 
 
+def _score_fix_centrality(graph: dict, findings: list[dict]) -> list[dict]:
+    """Rank findings by how many crown-jewel attack paths they block when fixed.
+
+    For each finding's resource, remove that node from the graph and re-run BFS
+    from INTERNET to each crown jewel.  The drop in reachable crown jewels is the
+    primary 'crowns_blocked' score; secondary signals reward critical-path and
+    internet-reachable nodes.  Returns a list sorted by impact (descending).
+    """
+    if not graph or not graph.get("nodes"):
+        return []
+
+    nodes_by_id = {n["id"]: n for n in graph["nodes"]}
+    edges = graph["edges"]
+    adj: dict[str, list[str]] = {}
+    for e in edges:
+        adj.setdefault(e["from"], []).append(e["to"])
+
+    crown_jewels: frozenset[str] = frozenset(
+        n["id"] for n in graph["nodes"] if n.get("is_crown_jewel")
+    )
+
+    def _reachable_crowns(exclude: str) -> int:
+        visited: set[str] = set()
+        queue = ["INTERNET"]
+        count = 0
+        while queue:
+            cur = queue.pop(0)
+            if cur in visited or cur == exclude:
+                continue
+            visited.add(cur)
+            if cur in crown_jewels:
+                count += 1
+            for nxt in adj.get(cur, []):
+                if nxt not in visited and nxt != exclude:
+                    queue.append(nxt)
+        return count
+
+    baseline = _reachable_crowns("")
+    if baseline == 0:
+        return []
+
+    results: list[dict] = []
+    seen: set[str] = set()
+    for f in findings:
+        res = f.get("resource", "")
+        if not res or res in seen or res not in nodes_by_id:
+            continue
+        seen.add(res)
+        after = _reachable_crowns(res)
+        blocked = baseline - after
+        node = nodes_by_id[res]
+        score = blocked * 10
+        if node.get("on_critical_path"):
+            score += 5
+        if node.get("internet_reachable"):
+            score += 3
+        results.append({
+            "finding_id": f["id"],
+            "resource": res,
+            "impact": score,
+            "crowns_blocked": blocked,
+            "on_critical_path": node.get("on_critical_path", False),
+            "internet_reachable": node.get("internet_reachable", False),
+        })
+
+    return sorted(results, key=lambda x: (-x["impact"], x["finding_id"]))
+
+
 def _apply_reachability_urgency(
     findings: list[dict],
     graph: dict,
@@ -3075,12 +3143,260 @@ def _render_executive_view(
     return cp_note + stage1 + stage2 + stage3 + stage4
 
 
+# ---- Feature 2: Safe-to-Fix Disruption Classification ------------------
+
+_VALID_FIX_DISRUPTIONS = {"none", "plan_required", "forces_replacement"}
+
+_FIX_DISRUPTION_LABELS = {
+    "none": ("&#9989; Non-disruptive", "#27ae60"),
+    "plan_required": ("&#9888;&#65039; Plan required", "#c27a00"),
+    "forces_replacement": ("&#128293; Forces replacement", "#b02a2a"),
+}
+
+
+def _disruption_badge(disruption: str) -> str:
+    label, color = _FIX_DISRUPTION_LABELS.get(disruption, ("", ""))
+    if not label:
+        return ""
+    return (
+        f"<span style='background:{color};color:#fff;padding:1px 7px;"
+        f"border-radius:3px;font-size:11px;font-weight:600;"
+        f"margin-left:6px'>{label}</span>"
+    )
+
+
+# ---- Feature 3: Compliance Gap Report ----------------------------------
+
+_CIS_FRAMEWORK_PREFIXES = [
+    ("SEC-AWS", "CIS AWS Foundations Benchmark v3.0"),
+    ("ROB-AWS", "CIS AWS Foundations Benchmark v3.0"),
+    ("SEC-GCP", "CIS GCP Foundations Benchmark v4.0"),
+    ("ROB-GCP", "CIS GCP Foundations Benchmark v4.0"),
+    ("SEC-AZURE", "CIS Azure Foundations Benchmark v2.0"),
+    ("ROB-AZURE", "CIS Azure Foundations Benchmark v2.0"),
+]
+
+
+def _infer_cis_framework(rule_id: str) -> str:
+    for prefix, fw in _CIS_FRAMEWORK_PREFIXES:
+        if rule_id.startswith(prefix):
+            return fw
+    return "Other"
+
+
+def _compliance_gap_report(findings: list[dict], entries: list[dict]) -> dict:
+    """Map CIS controls against fired findings; return {framework: [control_dicts]}.
+
+    Each control dict: {control, rules, status ('PASS'|'FAIL'), failed_rules}.
+    Controls with no catalogue coverage are omitted (they are NOT-ASSESSABLE).
+    """
+    fired_ids = {f["id"] for f in findings}
+    control_map: dict[str, dict] = {}
+    for entry in entries:
+        cis_list = entry.get("cis", [])
+        if not isinstance(cis_list, list):
+            cis_list = [cis_list] if cis_list else []
+        if not cis_list:
+            continue
+        fw = _infer_cis_framework(entry.get("id", ""))
+        for ctrl in cis_list:
+            key = f"{fw}::{ctrl}"
+            if key not in control_map:
+                control_map[key] = {
+                    "framework": fw,
+                    "control": str(ctrl),
+                    "rules": [],
+                    "failed_rules": [],
+                    "status": "PASS",
+                }
+            control_map[key]["rules"].append(entry["id"])
+
+    for item in control_map.values():
+        failed = [r for r in item["rules"] if r in fired_ids]
+        item["failed_rules"] = failed
+        item["status"] = "FAIL" if failed else "PASS"
+
+    by_fw: dict[str, list[dict]] = {}
+    for item in control_map.values():
+        by_fw.setdefault(item["framework"], []).append(item)
+
+    def _ctrl_sort_key(c: dict) -> list:
+        return [int(x) if x.isdigit() else x for x in c["control"].split(".")]
+
+    for fw in by_fw:
+        by_fw[fw].sort(key=_ctrl_sort_key)
+
+    return by_fw
+
+
+def _render_compliance_text(by_fw: dict) -> str:
+    lines: list[str] = ["## CIS Compliance Gap Report", ""]
+    for fw in sorted(by_fw):
+        controls = by_fw[fw]
+        total = len(controls)
+        passed = sum(1 for c in controls if c["status"] == "PASS")
+        failed = total - passed
+        lines.append(f"### {fw}")
+        lines.append(f"Coverage: {passed}/{total} PASS, {failed} FAIL")
+        lines.append("")
+        lines.append(f"{'Control':<14}{'Status':<10}Rules")
+        lines.append("-" * 70)
+        for ctrl in controls:
+            rules_str = ", ".join(ctrl["rules"])
+            fail_str = (
+                f"  [FAIL: {', '.join(ctrl['failed_rules'])}]"
+                if ctrl["failed_rules"] else ""
+            )
+            lines.append(f"{ctrl['control']:<14}{ctrl['status']:<10}{rules_str}{fail_str}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _render_compliance_html(by_fw: dict) -> str:
+    sections: list[str] = []
+    for fw in sorted(by_fw):
+        controls = by_fw[fw]
+        total = len(controls)
+        passed = sum(1 for c in controls if c["status"] == "PASS")
+        failed = total - passed
+        pct = int(100 * passed / total) if total else 0
+        bar_color = "#27ae60" if pct >= 80 else ("#c27a00" if pct >= 50 else "#b02a2a")
+        rows: list[str] = []
+        for ctrl in controls:
+            sbadge = (
+                "<span style='background:#27ae60;color:#fff;padding:1px 8px;"
+                "border-radius:3px;font-size:11px;font-weight:600'>PASS</span>"
+                if ctrl["status"] == "PASS" else
+                "<span style='background:#b02a2a;color:#fff;padding:1px 8px;"
+                "border-radius:3px;font-size:11px;font-weight:600'>FAIL</span>"
+            )
+            rules_html = ", ".join(f"<code>{r}</code>" for r in ctrl["rules"])
+            fail_html = ""
+            if ctrl["failed_rules"]:
+                fail_html = (
+                    " <span style='color:#b02a2a'>("
+                    + ", ".join(f"<code>{r}</code>" for r in ctrl["failed_rules"])
+                    + " fired)</span>"
+                )
+            rows.append(
+                f"<tr><td style='font-family:monospace'>{ctrl['control']}</td>"
+                f"<td>{sbadge}</td>"
+                f"<td>{rules_html}{fail_html}</td></tr>"
+            )
+        sections.append(
+            f"<h3>{fw}</h3>"
+            f"<p style='color:#555;font-size:13px'>"
+            f"{passed}/{total} controls PASS ({pct}%) — {failed} FAIL</p>"
+            f"<div style='background:#eee;border-radius:4px;height:8px;margin-bottom:.8em'>"
+            f"<div style='background:{bar_color};width:{pct}%;height:8px;border-radius:4px'>"
+            f"</div></div>"
+            f"<table class='locs'>"
+            f"<thead><tr><th>Control</th><th>Status</th><th>Mapped Rules</th></tr></thead>"
+            f"<tbody>{''.join(rows)}</tbody></table>"
+        )
+    return (
+        "<h2 style='margin-top:.5em'>CIS Compliance Gap Report</h2>"
+        "<p style='color:#555;font-size:13px;margin-bottom:.8em'>"
+        "Controls derived from catalogue <code>cis:</code> fields. "
+        "PASS = no finding fired. FAIL = at least one finding fired. "
+        "Controls without catalogue coverage are NOT-ASSESSABLE and omitted.</p>"
+        + "".join(sections)
+    )
+
+
+def _compliance_to_oscal(by_fw: dict, target_dir: str = "") -> dict:
+    """Produce a minimal OSCAL Assessment Results JSON structure."""
+    import datetime as _dt
+    ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    findings_oscal: list[dict] = []
+    for fw, controls in sorted(by_fw.items()):
+        for ctrl in controls:
+            findings_oscal.append({
+                "control-id": ctrl["control"],
+                "framework": fw,
+                "status": ctrl["status"].lower(),
+                "related-observations": [
+                    {"observation-uuid": r} for r in ctrl["failed_rules"]
+                ],
+            })
+    return {
+        "assessment-results": {
+            "uuid": f"tf-analyze-{ts}",
+            "metadata": {
+                "title": "tf-analyze CIS Compliance Assessment",
+                "last-modified": ts,
+                "version": "1.0",
+                "oscal-version": "1.1.2",
+                "remarks": f"Generated by tf-analyze for target: {target_dir}",
+            },
+            "results": [
+                {
+                    "uuid": f"result-{ts}",
+                    "title": f"tf-analyze scan",
+                    "start": ts,
+                    "findings": findings_oscal,
+                }
+            ],
+        }
+    }
+
+
+# ---- Feature 1 (cont): Fix Priority HTML rendering ----------------------
+
+def _render_fix_priority_html(scored: list[dict]) -> str:
+    """Render the Fix Priority ranked table as an HTML panel."""
+    if not scored:
+        return (
+            "<p style='color:#888;font-style:italic;padding:1em'>"
+            "No attack-graph data available. Run with <code>--attack-graph</code> "
+            "to enable centrality scoring.</p>"
+        )
+    rows = []
+    for i, item in enumerate(scored, 1):
+        score = item["impact"]
+        score_cls = "critical" if score >= 15 else ("high" if score >= 8 else "medium")
+        cp_badge = (
+            "<span class='badge-cp'>CRITICAL-PATH</span>"
+            if item["on_critical_path"] else ""
+        )
+        ir_badge = (
+            "<span style='background:#d35400;color:#fff;padding:1px 6px;"
+            "border-radius:3px;font-size:10px;font-weight:700;margin-left:4px'>"
+            "INET-REACHABLE</span>"
+            if item["internet_reachable"] else ""
+        )
+        rows.append(
+            f"<tr>"
+            f"<td style='font-weight:700;text-align:center;width:2.5em'>{i}</td>"
+            f"<td><code>{item['finding_id']}</code></td>"
+            f"<td><code>{item['resource']}</code>{cp_badge}{ir_badge}</td>"
+            f"<td style='text-align:center'>{item['crowns_blocked']}</td>"
+            f"<td style='text-align:center'>"
+            f"<span class='u u-{score_cls}'>{score}</span></td>"
+            f"</tr>"
+        )
+    return (
+        "<h2 style='margin-top:.5em'>Fix Priority</h2>"
+        "<p style='color:#555;font-size:13px;margin-bottom:.8em'>"
+        "Findings ranked by attack-path impact. "
+        "<em>Crowns Blocked</em> = crown-jewel resources (RDS, S3, KMS, Secrets Manager) "
+        "that become unreachable from the internet when this finding is fixed.</p>"
+        "<table class='locs'><thead><tr>"
+        "<th>#</th><th>Rule</th><th>Resource</th>"
+        "<th>Crowns Blocked</th><th>Score</th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
 def to_html(
     findings: list[dict],
     entries: list[dict],
     suppressed: list[dict],
     graph: dict | None = None,
     show_fixes: bool = False,
+    centrality: list[dict] | None = None,
+    compliance_data: dict | None = None,
 ) -> str:
     """Produce a single-file HTML report, scalable to hundreds of findings.
 
@@ -3123,9 +3439,14 @@ def to_html(
                     )
             if show_fixes and entry_local.get("fix_hcl"):
                 hcl = entry_local["fix_hcl"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                disruption = entry_local.get("fix_disruption", "")
+                d_badge = _disruption_badge(disruption)
+                d_note = entry_local.get("fix_disruption_note", "")
+                d_note_html = f"<p style='color:#888;font-size:11px;margin:.2em 0 .4em'>{d_note}</p>" if d_note else ""
                 parts.append(
                     f"<tr><td colspan='2'>"
-                    f"<details><summary style='cursor:pointer;color:#27ae60;font-size:12px;margin-top:.4em'>&#9654; Suggested fix</summary>"
+                    f"<details><summary style='cursor:pointer;color:#27ae60;font-size:12px;margin-top:.4em'>&#9654; Suggested fix{d_badge}</summary>"
+                    f"{d_note_html}"
                     f"<pre class='fix-hcl'>{hcl}</pre></details>"
                     f"</td></tr>"
                 )
@@ -3165,14 +3486,27 @@ def to_html(
     graph_panel_html = ""
     graph_tab_style = ""
     exec_panel_html = ""
+    fixpri_panel_html = ""
+    compliance_panel_html = ""
     if graph is not None:
         exec_content = _render_executive_view(findings, entries, graph)
         exec_panel_html = f"<div id='tp-exec' class='tab-panel' style='display:none;padding:1em'>{exec_content}</div>"
+        fp_btn = (
+            "<button class='tab-btn' onclick='showTab(\"fixpri\",this)'>"
+            "&#127381; Fix Priority</button>"
+            if centrality is not None else ""
+        )
+        comp_btn = (
+            "<button class='tab-btn' onclick='showTab(\"compliance\",this)'>"
+            "&#9989; Compliance</button>"
+            if compliance_data is not None else ""
+        )
         tab_bar = (
             "<div class='tab-bar'>"
             "<button class='tab-btn active' onclick='showTab(\"findings\",this)'>Findings</button>"
             "<button class='tab-btn' onclick='showTab(\"graph\",this)'>&#128200; Attack Graph</button>"
             "<button class='tab-btn' onclick='showTab(\"exec\",this)'>&#127919; Executive View</button>"
+            f"{fp_btn}{comp_btn}"
             "</div>"
         )
         graph_tab_style = "display:none"
@@ -3186,6 +3520,48 @@ def to_html(
             "btn.classList.add('active');}"
             "</script>"
         )
+        fixpri_panel_html = (
+            f"<div id='tp-fixpri' class='tab-panel' style='display:none;padding:1em'>"
+            f"{_render_fix_priority_html(centrality)}"
+            f"</div>"
+            if centrality is not None else ""
+        )
+        compliance_panel_html = (
+            f"<div id='tp-compliance' class='tab-panel' style='display:none;padding:1em'>"
+            f"{_render_compliance_html(compliance_data)}"
+            f"</div>"
+            if compliance_data is not None else ""
+        )
+
+    if compliance_data is not None and graph is None:
+        comp_btn = (
+            "<button class='tab-btn' onclick='showTab(\"compliance\",this)'>"
+            "&#9989; Compliance</button>"
+        )
+        tab_bar = (
+            "<div class='tab-bar'>"
+            "<button class='tab-btn active' onclick='showTab(\"findings\",this)'>Findings</button>"
+            f"{comp_btn}"
+            "</div>"
+        )
+        compliance_panel_html = (
+            f"<div id='tp-compliance' class='tab-panel' style='display:none;padding:1em'>"
+            f"{_render_compliance_html(compliance_data)}"
+            f"</div>"
+        )
+        tab_js = (
+            "<script>"
+            "function showTab(name,btn){"
+            "document.querySelectorAll('.tab-panel').forEach(function(p){p.style.display='none';});"
+            "document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});"
+            "document.getElementById('tp-'+name).style.display='';"
+            "btn.classList.add('active');}"
+            "</script>"
+        )
+        fixpri_panel_html = ""
+        exec_panel_html = ""
+        graph_tab_style = "display:none"
+        graph_panel_html = ""
 
     return f"""<!doctype html>
 <html><head><meta charset='utf-8'><title>tf-analyze report</title>
@@ -3217,6 +3593,8 @@ pre.fix-hcl{{background:#1a1a2e;color:#a8d8a8;padding:.8em 1em;border-radius:4px
 {graph_panel_html}
 </div>
 {exec_panel_html}
+{fixpri_panel_html}
+{compliance_panel_html}
 {tab_js}
 </body></html>
 """
@@ -3683,6 +4061,15 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     fix_hcl = data.get("fix_hcl")
     if fix_hcl is not None and not isinstance(fix_hcl, str):
         errs.append(f"{source}: 'fix_hcl' must be a string if present")
+    fix_disruption = data.get("fix_disruption")
+    if fix_disruption is not None and fix_disruption not in _VALID_FIX_DISRUPTIONS:
+        errs.append(
+            f"{source}: fix_disruption '{fix_disruption}' not in "
+            f"{sorted(_VALID_FIX_DISRUPTIONS)}"
+        )
+    fix_disruption_note = data.get("fix_disruption_note")
+    if fix_disruption_note is not None and not isinstance(fix_disruption_note, str):
+        errs.append(f"{source}: 'fix_disruption_note' must be a string if present")
     fid = data.get("id")
     fname = Path(source).stem
     if fid and fid != fname:
@@ -4299,6 +4686,166 @@ def _render_trend_table(rows: list[dict], fmt: str) -> str:
     return "\n".join(lines)
 
 
+# ---- Feature 4: GitHub PR Review Mode ----------------------------------
+
+def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> None:
+    """Post findings as GitHub PR inline review comments.
+
+    Requires GITHUB_TOKEN env var and --repo / --pr-number flags.
+    Findings with fix_hcl are posted as GitHub suggestion blocks (one-click apply).
+    Only findings whose lines appear in the PR diff are posted.
+    """
+    import urllib.request
+    import urllib.error
+
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
+        print("ERROR: GITHUB_TOKEN environment variable is not set", file=sys.stderr)
+        sys.exit(2)
+
+    repo = getattr(args, "repo", None)
+    pr_number = getattr(args, "pr_number", None)
+    if not repo or not pr_number:
+        print(
+            "ERROR: --repo and --pr-number are required for --mode pr-review",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    entry_map = {e["id"]: e for e in entries}
+    api_headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+    }
+    base_url = f"https://api.github.com/repos/{repo}"
+
+    def _gh(url: str, method: str = "GET", payload: dict | None = None) -> dict | list | None:
+        data = json.dumps(payload).encode() if payload else None
+        req = urllib.request.Request(url, data=data, headers=api_headers, method=method)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors="replace")
+            print(
+                f"ERROR: GitHub API {method} {url}: HTTP {exc.code} — {body[:300]}",
+                file=sys.stderr,
+            )
+            return None
+
+    pr_data = _gh(f"{base_url}/pulls/{pr_number}")
+    if not pr_data:
+        sys.exit(2)
+    head_sha = pr_data["head"]["sha"]  # type: ignore[index]
+
+    pr_files = _gh(f"{base_url}/pulls/{pr_number}/files?per_page=100")
+    if not pr_files:
+        sys.exit(2)
+
+    # Build {filename: {new_file_line: diff_position}} from unified diffs
+    file_positions: dict[str, dict[int, int]] = {}
+    for pf in pr_files:  # type: ignore[union-attr]
+        fname = pf["filename"]
+        patch = pf.get("patch", "")
+        if not patch:
+            continue
+        pos: dict[int, int] = {}
+        position = 0
+        cur_line = 0
+        for dl in patch.splitlines():
+            position += 1
+            if dl.startswith("@@"):
+                m = re.search(r"\+(\d+)", dl)
+                if m:
+                    cur_line = int(m.group(1)) - 1
+            elif dl.startswith("+"):
+                cur_line += 1
+                pos[cur_line] = position
+            elif not dl.startswith("-"):
+                cur_line += 1
+                pos[cur_line] = position
+        file_positions[fname] = pos
+
+    # Build inline comments
+    targets: list[str] = getattr(args, "targets", None) or []
+    comments: list[dict] = []
+    for f in findings:
+        entry = entry_map.get(f["id"], {})
+        file_path = str(f.get("file", ""))
+        line_no = int(f.get("line", 0))
+        # Resolve relative path vs repo root
+        rel_path = file_path
+        for tgt in targets:
+            tp = str(Path(tgt).resolve()) + "/"
+            abs_fp = str(Path(file_path).resolve())
+            if abs_fp.startswith(tp):
+                rel_path = abs_fp[len(tp):]
+                break
+        pos_map = file_positions.get(rel_path, {})
+        position = pos_map.get(line_no)
+        if position is None:
+            continue
+
+        title = entry.get("title", f["id"])
+        urgency = _effective_urgency(f, entry)
+        recommendation = (entry.get("recommendation") or "").strip()
+        body_lines = [
+            f"**[tf-analyze] {f['id']}** — {title}",
+            f"",
+            f"**Urgency:** {urgency}",
+            f"",
+            recommendation,
+        ]
+        fix_hcl = (entry.get("fix_hcl") or "").strip()
+        if fix_hcl:
+            body_lines += ["", "```suggestion", fix_hcl, "```"]
+        disruption = entry.get("fix_disruption", "")
+        if disruption:
+            labels = {
+                "none": "Non-disruptive",
+                "plan_required": "Requires terraform plan/apply",
+                "forces_replacement": "⚠️ Forces resource replacement",
+            }
+            body_lines.append(f"\n> **Fix disruption:** {labels.get(disruption, disruption)}")
+
+        comments.append({
+            "path": rel_path,
+            "position": position,
+            "body": "\n".join(body_lines),
+        })
+
+    if not comments:
+        print(
+            f"# pr-review: 0 findings map to PR #{pr_number} diff — "
+            "ensure --target points to a checkout of the PR branch",
+            file=sys.stderr,
+        )
+        return
+
+    review_payload = {
+        "commit_id": head_sha,
+        "body": (
+            f"tf-analyze found **{len(comments)} finding(s)** in this PR. "
+            "See inline comments for details and one-click suggested fixes."
+        ),
+        "event": "COMMENT",
+        "comments": comments,
+    }
+    result = _gh(f"{base_url}/pulls/{pr_number}/reviews", "POST", review_payload)
+    if result:
+        print(
+            f"# pr-review: posted {len(comments)} comment(s) on PR #{pr_number}",
+            file=sys.stderr,
+        )
+        html_url = (result or {}).get("html_url", "")  # type: ignore[union-attr]
+        if html_url:
+            print(f"# review URL: {html_url}", file=sys.stderr)
+    else:
+        sys.exit(2)
+
+
 # ---- Main ---------------------------------------------------------------
 
 def main():
@@ -4326,7 +4873,7 @@ def main():
     )
     ap.add_argument(
         "--format",
-        choices=["text", "json", "sarif", "html"],
+        choices=["text", "json", "sarif", "html", "compliance"],
         default="text",
     )
     ap.add_argument(
@@ -4340,6 +4887,39 @@ def main():
             "drag, click-to-inspect, critical path highlighted in red). "
             "With --format text (default) appends a Mermaid flowchart block after findings. "
             "Also enables adversarial scenario narratives for HIGH/CRITICAL findings."
+        ),
+    )
+    ap.add_argument(
+        "--repo",
+        default=None,
+        metavar="OWNER/REPO",
+        help="GitHub repository (owner/repo) for --mode pr-review.",
+    )
+    ap.add_argument(
+        "--pr-number",
+        type=int,
+        default=None,
+        metavar="N",
+        help="GitHub pull request number for --mode pr-review.",
+    )
+    ap.add_argument(
+        "--compliance",
+        action="store_true",
+        default=False,
+        help=(
+            "Add a CIS compliance gap report tab to HTML output, or (with "
+            "--format compliance) output a plain-text compliance table. "
+            "Maps findings against CIS AWS/GCP/Azure benchmark controls "
+            "defined in catalogue cis: fields."
+        ),
+    )
+    ap.add_argument(
+        "--oscal",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write an OSCAL Assessment Results JSON file to PATH. "
+            "Requires --compliance. Compatible with any --format."
         ),
     )
     ap.add_argument(
@@ -4375,7 +4955,7 @@ def main():
     )
     ap.add_argument(
         "--mode",
-        choices=["static", "diff", "verify-fixed", "fleet", "trend"],
+        choices=["static", "diff", "verify-fixed", "fleet", "trend", "pr-review"],
         default="static",
         help="Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history.",
     )
@@ -4815,6 +5395,37 @@ def main():
         )
         _apply_reachability_urgency(findings, attack_graph, {e["id"]: e for e in entries})
 
+    # Fix centrality scoring (requires attack graph)
+    centrality_scores: list[dict] | None = None
+    if attack_graph and getattr(args, "attack_graph", False):
+        centrality_scores = _score_fix_centrality(attack_graph, findings)
+        if centrality_scores:
+            print(
+                f"# fix centrality: top fix is '{centrality_scores[0]['finding_id']}' "
+                f"(blocks {centrality_scores[0]['crowns_blocked']} crown jewel(s))",
+                file=sys.stderr,
+            )
+
+    # Compliance gap report
+    compliance_report: dict | None = None
+    if getattr(args, "compliance", False) or args.format == "compliance":
+        compliance_report = _compliance_gap_report(findings, entries)
+        if getattr(args, "oscal", None):
+            oscal_data = _compliance_to_oscal(
+                compliance_report,
+                str(args.targets[0]) if args.targets else "",
+            )
+            oscal_path = Path(args.oscal)
+            oscal_path.write_text(json.dumps(oscal_data, indent=2))
+            print(f"# OSCAL written to {oscal_path}", file=sys.stderr)
+
+    # PR review mode — post inline comments and exit
+    if args.mode == "pr-review":
+        _pr_review_mode(args, findings, entries)
+        if _out_file is not None:
+            _out_file.close()
+        return
+
     if getattr(args, "gen_tests", None):
         written = generate_tftest(findings, entries, Path(args.gen_tests))
         print(f"# gen-tests: wrote {len(written)} file(s) to {args.gen_tests}", file=sys.stderr)
@@ -4839,7 +5450,12 @@ def main():
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False)))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report))
+        elif args.format == "compliance":
+            if compliance_report:
+                _emit(_render_compliance_text(compliance_report))
+            else:
+                _emit("# No CIS-mapped catalogue entries found.")
         else:
             if delta["new"]:
                 _emit("# NEW findings:")
@@ -4854,6 +5470,9 @@ def main():
             if attack_graph:
                 _emit("\n## Attack Graph\n")
                 _emit(graph_to_mermaid(attack_graph))
+            if compliance_report and args.format == "text":
+                _emit("\n")
+                _emit(_render_compliance_text(compliance_report))
     else:
         # Standard output
         if args.format == "json":
@@ -4865,7 +5484,12 @@ def main():
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False)))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report))
+        elif args.format == "compliance":
+            if compliance_report:
+                _emit(_render_compliance_text(compliance_report))
+            else:
+                _emit("# No CIS-mapped catalogue entries found.")
         else:
             entry_map_out = {e["id"]: e for e in entries}
             for f in findings:
@@ -4881,6 +5505,17 @@ def main():
                 if getattr(args, "show_fixes", False):
                     e_out = entry_map_out.get(f["id"], {})
                     if e_out.get("fix_hcl"):
+                        disruption = e_out.get("fix_disruption", "")
+                        if disruption:
+                            _disruption_labels = {
+                                "none": "Non-disruptive",
+                                "plan_required": "Requires plan/apply",
+                                "forces_replacement": "Forces resource replacement",
+                            }
+                            _emit(f"  # Fix disruption: {_disruption_labels.get(disruption, disruption)}")
+                            d_note = e_out.get("fix_disruption_note", "")
+                            if d_note:
+                                _emit(f"  # {d_note}")
                         for fix_line in e_out["fix_hcl"].strip().splitlines():
                             _emit(f"    {fix_line}")
             if suppressed_findings:
@@ -4890,6 +5525,9 @@ def main():
             if attack_graph:
                 _emit("\n## Attack Graph\n")
                 _emit(graph_to_mermaid(attack_graph))
+            if compliance_report and args.format == "text":
+                _emit("\n")
+                _emit(_render_compliance_text(compliance_report))
 
     if _out_file is not None:
         _out_file.close()

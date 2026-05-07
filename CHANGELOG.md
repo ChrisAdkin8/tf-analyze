@@ -5,6 +5,56 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 15 — 2026-05-07
+
+**Four new enterprise features (+~550 lines detect.py, fix_disruption on 8 catalogue entries):**
+
+### 1. Fix Centrality Scoring
+
+When `--attack-graph` is active, findings are now ranked by **attack-path impact**: a BFS simulation removes each finding's resource node from the graph and counts how many crown-jewel resources (RDS, S3, KMS, Secrets Manager) become unreachable from the internet. The result is a scored "Fix Priority" ranked table.
+
+- HTML (`--format html --attack-graph`): new **Fix Priority** tab alongside Findings / Attack Graph / Executive View. Table columns: Priority rank, Rule, Resource (with CRITICAL-PATH and INET-REACHABLE badges), Crown Jewels Blocked, Score.
+- Text: fix centrality summary printed to stderr (`# fix centrality: top fix is '...'`).
+- New function: `_score_fix_centrality(graph, findings) -> list[dict]`.
+- New renderer: `_render_fix_priority_html(scored) -> str`.
+
+### 2. Safe-to-Fix Disruption Classification
+
+New `fix_disruption` field (`none` / `plan_required` / `forces_replacement`) and optional `fix_disruption_note` added to 8 catalogue entries with `fix_hcl`. Validated in `validate_catalog_entry()`.
+
+- HTML (`--show-fixes`): coloured badge appears in the "Suggested fix" summary line — green for non-disruptive, amber for plan-required, red for forces-replacement. Disruption note rendered as small italic below the badge.
+- Text (`--show-fixes`): disruption level and note printed as `# Fix disruption: ...` comment above the HCL snippet.
+- Updated entries: `SEC-AWS-KMS-001` (plan), `SEC-AWS-S3-001` (plan), `SEC-AWS-SG-001` (plan), `ROB-AWS-LIFECYCLE-001` (none), `SEC-AWS-SSRF-001` (forces replacement), `SEC-AWS-IAM-001` (plan), `SEC-AWS-RDS-001` (plan), `INT-INTENT-003` (plan).
+- New helpers: `_VALID_FIX_DISRUPTIONS`, `_FIX_DISRUPTION_LABELS`, `_disruption_badge(disruption) -> str`.
+
+### 3. CIS Compliance Gap Report
+
+New `--compliance` flag and `--format compliance` output mode. Maps every finding against CIS benchmark controls declared in catalogue `cis:` fields (70 entries across AWS v3.0, GCP v4.0, Azure v2.0). Reports PASS (no finding fired), FAIL (finding fired), or omits NOT-ASSESSABLE controls.
+
+- `--format compliance`: plain-text table grouped by framework with coverage summary line.
+- `--format html --compliance`: new **Compliance** tab with per-framework progress bar + PASS/FAIL table (also works standalone without `--attack-graph`).
+- `--oscal PATH`: writes an OSCAL Assessment Results JSON alongside any other format. OSCAL v1.1.2 structure with control findings list.
+- New functions: `_infer_cis_framework()`, `_compliance_gap_report()`, `_render_compliance_text()`, `_render_compliance_html()`, `_compliance_to_oscal()`.
+- When `--compliance` is used with `--format text`, compliance table is appended after the Mermaid attack graph block.
+
+### 4. GitHub PR Suggestions (`--mode pr-review`)
+
+New `--mode pr-review` that posts findings as inline GitHub PR review comments via the GitHub REST API. Findings with `fix_hcl` are posted as `` ```suggestion ``` `` blocks — reviewers can apply fixes with one click.
+
+- Requires `GITHUB_TOKEN` env var, `--repo OWNER/REPO`, and `--pr-number N`.
+- Fetches PR diff to build `{filename: {line: diff_position}}` position map; only findings whose lines appear in the PR diff are posted.
+- Review body summarises total finding count; each inline comment includes urgency, recommendation, suggestion block, and disruption level.
+- New function: `_pr_review_mode(args, findings, entries) -> None`.
+- New argparse flags: `--repo`, `--pr-number`.
+
+### Infrastructure
+
+- `--mode` choices extended: `pr-review` added.
+- `--format` choices extended: `compliance` added.
+- `docs/cli.md` regenerated via `scripts/gen-cli-docs.py`.
+
+---
+
 ## Round 14 — 2026-05-07
 
 **Eight major new features (+~700 lines detect.py, +7 catalogue rules, +7 fixtures, +3 screenshots):**

@@ -58,3 +58,5 @@ fix_hcl: |
   lifecycle {
     prevent_destroy = true
   }
+fix_disruption: none
+fix_disruption_note: "Adding a lifecycle rule is a non-destructive metadata change; no resource replacement is triggered."

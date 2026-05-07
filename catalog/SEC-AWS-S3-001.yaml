@@ -43,3 +43,5 @@ fix_hcl: |
       }
     }
   }
+fix_disruption: plan_required
+fix_disruption_note: "Enabling server-side encryption does not re-encrypt existing objects; new objects are encrypted. Requires plan/apply."

@@ -43,3 +43,5 @@ fix_hcl: |
     description         = "..."
     enable_key_rotation = true
   }
+fix_disruption: plan_required
+fix_disruption_note: "Enabling key rotation does not replace the key; existing ciphertext remains decryptable. Requires a terraform plan/apply cycle."

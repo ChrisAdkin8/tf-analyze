@@ -43,3 +43,5 @@ fix_hcl: |
     storage_encrypted = true
     kms_key_id        = aws_kms_key.rds.arn
   }
+fix_disruption: plan_required
+fix_disruption_note: "Enabling deletion protection is an in-place RDS modification; no replacement or downtime is required."

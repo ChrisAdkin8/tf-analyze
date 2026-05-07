@@ -40,3 +40,5 @@ fix_hcl: |
     actions   = ["s3:GetObject", "s3:PutObject"]
     resources = ["arn:aws:s3:::my-bucket/*"]
   }
+fix_disruption: plan_required
+fix_disruption_note: "Narrowing the resource ARN is an in-place policy update; no replacement is required but IAM propagation may take up to 60 seconds."
