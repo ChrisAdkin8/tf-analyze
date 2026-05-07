@@ -1,0 +1,19 @@
+id: MOD-SUPPLY-002
+title: "Module uses raw git source instead of registry"
+section: module
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'source\s*=\s*"git::'
+    description: Module sourced from raw git URL rather than Terraform Registry
+recommendation: |
+  Prefer Terraform Registry sources (`namespace/module/provider`) over raw
+  git URLs. Registry modules are integrity-hashed in `.terraform.lock.hcl`;
+  raw git sources bypass the digest check.
+verification: |
+  Replace `git::` sources with registry equivalents where available.
+fixtures:
+  - mod_supply_git_source

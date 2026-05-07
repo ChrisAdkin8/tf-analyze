@@ -46,3 +46,15 @@ escalation:
 fixtures:
   - attack_graph_demo
   - aws_missing_prevent_destroy
+test_template: |
+  run "lifecycle_prevent_destroy_{rule_id}" {
+    command = plan
+    assert {
+      condition     = aws_instance.{resource}.lifecycle[0].prevent_destroy == true
+      error_message = "{resource} must have lifecycle.prevent_destroy = true (ROB-AWS-LIFECYCLE-001)."
+    }
+  }
+fix_hcl: |
+  lifecycle {
+    prevent_destroy = true
+  }

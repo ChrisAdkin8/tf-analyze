@@ -39,17 +39,25 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 - `json` — machine-readable findings list. Used by `--compare` and CI integrations.
 - `sarif` — SARIF v2.1.0 with `helpUri`, `partialFingerprints`, `security-severity` (9.5/7.5/5.0/3.0/1.0), CIS tags. GitHub Code Scanning renders these as line-level annotations on the PR diff. Schema documented in `SKILL.md`.
 - `html` — self-contained report with inline CSS, urgency-coloured badges, collapsible per-rule details. Right for sharing with non-CLI reviewers.
-- `--attack-graph` — (flag, works with any format) builds a directed attack-path graph from internet-reachable resources to crown jewels. HTML output adds an interactive second tab with a force-directed SVG layout; text/Markdown output appends a Mermaid flowchart block. HIGH/CRITICAL findings in HTML gain a bordered italic adversarial narrative paragraph referencing real-world breaches.
+- `--attack-graph` — (flag, works with any format) builds a directed attack-path graph from internet-reachable resources to crown jewels. HTML output adds an interactive second tab with a force-directed SVG layout; text/Markdown output appends a Mermaid flowchart block. HIGH/CRITICAL findings in HTML gain a bordered italic adversarial narrative paragraph referencing real-world breaches. Findings on critical-path resources are promoted one urgency tier; findings on resources unreachable from the internet are demoted one tier.
+- `--show-fixes` — renders catalogue `fix_hcl` snippets alongside each finding. HTML: dark-themed `<pre>` block inside the finding detail. Text: indented HCL below the finding line.
+- `--gen-tests OUTDIR` — generates native `terraform test` (`.tftest.hcl`) assertion files for each finding whose catalogue entry defines a `test_template`. Converts static findings into permanent regression guards.
+- `--mode fleet` — scans multiple repos (`--target` repeated or `--targets-file`), cross-correlates findings that appear in more than one repository, and outputs a fleet summary table.
+- `--mode trend --lookback N` — walks N days of git history (default 30), reconstructs `.tf` content at each commit via `git show`, re-runs the pattern engine, and outputs a date-by-date new/resolved/net/total table.
 
 ### Screenshots
 
-**Findings tab** — urgency-badged collapsible rules; HIGH/CRITICAL findings show a bordered adversarial narrative paragraph citing a real-world breach:
+**Findings tab** — urgency-badged collapsible rules; HIGH/CRITICAL findings show adversarial narrative and a "Suggested fix" HCL block (`--show-fixes`):
 
-![Findings tab with adversarial narrative](docs/images/findings-narrative.png)
+![Findings tab with fix suggestions](docs/images/show-fixes.png)
 
-**Attack Graph tab** — interactive force-directed SVG (46-node AWS corpus). Pills are colour-coded by resource category; the critical path (internet → `ssh_open` SG → `public_db` RDS) is highlighted in red; crown jewels have a gold border. Click any node for a file:line sidebar; drag to reposition.
+**Attack Graph tab** — interactive force-directed SVG (46-node AWS corpus). Pills are colour-coded by resource category; the critical path is highlighted in red; crown jewels have a gold border.
 
 ![Attack Graph — 46-node AWS corpus](docs/images/attack-graph-view.png)
+
+**Executive View tab** — findings reorganised into Entry Points / Lateral Movement / Crown Jewels at Risk / Blind Spots attack stages, with a critical-path narrative banner:
+
+![Executive View tab](docs/images/executive-view.png)
 
 ### Differentiators (vs tfsec / Checkov / KICS / tflint)
 
@@ -61,8 +69,15 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 6. **Cross-resource (graph) detector kind.** `pattern_kind: graph_check` invokes a registered Python function with a resource index — used for "all node pools must X", logging-target hardening, IAM breadth, KMS location parity. The scaffolding generalises; new graph rules are ~30 LoC each.
 7. **`scripts/detect.py --new-rule RULE-ID`** scaffolds catalogue YAML + fixture skeleton + self-test stub. Authoring a new rule is `--new-rule SEC-FOO-007` then editing the TODOs.
 8. **Optional `python-hcl2` fast-path** for heredoc-aware attribute extraction. Default install is stdlib-only; `--use-hcl2` (or `TF_ANALYZE_USE_HCL2=1`) opts in when `python-hcl2` is installed. Off by default to keep the install zero-pip-deps.
-9. **Attack-path graph.** `--attack-graph` infers directed edges from HCL references (IAM profiles → roles → policies, KMS key IDs, SG membership, GCP service account bindings) and runs BFS from internet-reachable resources to crown jewels (RDS, KMS, Secrets Manager, S3, Cloud SQL, Key Vault). The shortest path is highlighted as the "critical path." HTML output is a force-directed interactive SVG with drag, click-to-inspect sidebar, and color-coding by resource category. No other OSS scanner shows the lateral-movement chain.
-10. **Adversarial scenario narratives.** HIGH and CRITICAL findings in HTML reports include a pre-written 2-3 sentence attack scenario referencing a confirmed public breach (Capital One 2019, SolarWinds 2020, Tesla 2020 Kubernetes, Samsung 2022, Twitch 2021). Text mode appends them as inline comments when `--attack-graph` is active. The Claude skill's Step 16e generates a full Adversarial Scenarios table using these templates as anchors.
+9. **Attack-path graph.** `--attack-graph` infers directed edges from HCL references (IAM profiles → roles → policies, KMS key IDs, SG membership, GCP service account bindings) and runs BFS from internet-reachable resources to crown jewels. The critical path is highlighted; findings on path nodes are promoted one urgency tier. HTML output is a force-directed interactive SVG; text output is Mermaid.
+10. **Adversarial scenario narratives.** HIGH and CRITICAL findings in HTML reports include a pre-written 2-3 sentence attack scenario referencing a confirmed public breach (Capital One 2019, SolarWinds 2020, Tesla 2020 Kubernetes, Samsung 2022, Twitch 2021).
+11. **Attacker's Eye View.** `--attack-graph --format html` adds an "Executive View" tab that reorganises findings into 4 attack stages (Entry Points, Lateral Movement, Crown Jewels at Risk, Blind Spots) with a critical-path narrative banner. Makes risk comprehensible to non-technical stakeholders.
+12. **Intent-implementation gap detection (INT-*).** New rule family that flags when Terraform code contradicts its own stated intent — variable names/descriptions signalling security requirements that default to false, prod-tagged resources with `deletion_protection=false` or `force_destroy=true`. Only possible with semantic name analysis; no grep-based scanner does this.
+13. **Module supply-chain analysis (MOD-SUPPLY-*).** Flags modules pinned to mutable git refs (`?ref=main`), raw git sources that bypass registry integrity hashing, and registry modules missing `version` constraints. Guards against dependency confusion and supply-chain injection.
+14. **Reachability-aware urgency.** When `--attack-graph` is active, findings on critical-path resources are promoted one urgency tier and get a `CRITICAL-PATH` badge in HTML. Findings on resources with no internet-reachable path are demoted one tier. Urgency reflects topology, not just rule severity.
+15. **Generated `terraform test` files (`--gen-tests`).** Converts findings into native Terraform test assertions (`.tftest.hcl`). Running `terraform test` in CI then permanently guards against the same misconfiguration being re-introduced. No other scanner produces native test artefacts.
+16. **Fleet mode (`--mode fleet`).** Scans multiple repos in one invocation and cross-correlates findings — the same misconfiguration in multiple repos is flagged `FLEET-WIDE` so you can fix it organisation-wide at once.
+17. **Risk trend (`--mode trend`).** Walks git history and outputs a per-commit new/resolved/net/total findings table. Shows whether your security posture is improving or degrading over time — CISO-grade longitudinal visibility.
 
 ---
 

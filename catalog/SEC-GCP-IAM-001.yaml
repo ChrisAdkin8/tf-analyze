@@ -30,3 +30,11 @@ escalation:
     new_urgency: CRITICAL
 fixtures:
   - iam_too_broad
+test_template: |
+  run "no_project_iam_admin_{rule_id}" {
+    command = plan
+    assert {
+      condition     = !contains(["roles/owner", "roles/editor"], google_project_iam_member.{resource}.role)
+      error_message = "{resource} must not assign roles/owner or roles/editor (SEC-GCP-IAM-001)."
+    }
+  }

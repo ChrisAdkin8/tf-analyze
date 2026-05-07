@@ -26,3 +26,20 @@ verification: |
 fixtures:
   - attack_graph_demo
   - aws_s3_insecure
+test_template: |
+  run "s3_encryption_enabled_{rule_id}" {
+    command = plan
+    assert {
+      condition     = length(aws_s3_bucket_server_side_encryption_configuration.{resource}) > 0
+      error_message = "{resource} must have server-side encryption configured (SEC-AWS-S3-001)."
+    }
+  }
+fix_hcl: |
+  resource "aws_s3_bucket_server_side_encryption_configuration" "example" {
+    bucket = aws_s3_bucket.example.id
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "aws:kms"
+      }
+    }
+  }

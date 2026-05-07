@@ -27,3 +27,16 @@ verification: |
 fixtures:
   - attack_graph_demo
   - aws_iam_wildcard
+test_template: |
+  run "iam_no_wildcard_resource_{rule_id}" {
+    command = plan
+    assert {
+      condition     = !can(regex("\\*", data.aws_iam_policy_document.{resource}.json))
+      error_message = "{resource} IAM policy must not use wildcard Resource (SEC-AWS-IAM-001)."
+    }
+  }
+fix_hcl: |
+  statement {
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["arn:aws:s3:::my-bucket/*"]
+  }

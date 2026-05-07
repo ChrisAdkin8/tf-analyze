@@ -30,3 +30,19 @@ verification: |
 fixtures:
   - attack_graph_demo
   - aws_sg_open
+test_template: |
+  run "sg_no_open_ingress_{rule_id}" {
+    command = plan
+    assert {
+      condition     = !contains([for rule in aws_security_group.{resource}.ingress : rule.cidr_blocks], ["0.0.0.0/0"])
+      error_message = "{resource} must not allow ingress from 0.0.0.0/0 (SEC-AWS-SG-001)."
+    }
+  }
+fix_hcl: |
+  # Replace 0.0.0.0/0 with a specific CIDR range:
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/8"]
+  }

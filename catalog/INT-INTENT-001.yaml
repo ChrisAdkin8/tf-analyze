@@ -1,0 +1,22 @@
+id: INT-INTENT-001
+title: "Security-intent variable defaults to false/null/0"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: intent_gap
+    subkind: var_name_false_default
+    description: >
+      Variable whose name/description signals security intent
+      (prod, secure, require, enforce, encrypt, tls, ssl, auth)
+      but defaults to false, null, or 0
+recommendation: |
+  Set `default = true` or remove the default and require explicit
+  assignment. Add a `validation` block to prevent callers from passing
+  false when the intent is to enforce the control.
+verification: |
+  Confirm the variable has `default = true` or no default, and a
+  `validation` block enforces the constraint.
+fixtures:
+  - int_intent_var_false_default

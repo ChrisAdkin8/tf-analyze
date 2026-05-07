@@ -54,3 +54,11 @@ verification: |
   must return the resource. Or review the AWS Tag Editor in the console.
 fixtures:
   - aws_resource_no_tags
+test_template: |
+  run "resource_has_tags_{rule_id}" {
+    command = plan
+    assert {
+      condition     = length(keys(local.required_tags)) > 0
+      error_message = "Resources must have required tags (OPS-AWS-TAGS-001)."
+    }
+  }

@@ -1705,6 +1705,60 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                                     "resource": f"data.{blk['groups'][0]}.{blk['groups'][1]}",
                                 }
                             )
+            elif kind == "intent_gap":
+                subkind = pat.get("subkind", "")
+                if subkind == "var_name_false_default":
+                    for fp, ftext in all_files_text.items():
+                        for blk in find_blocks(ftext, VARIABLE_START):
+                            name = blk["groups"][0]
+                            desc = block_arg_value(blk["body"], "description") or ""
+                            if _INTENT_SECURITY_NAME_RE.search(name) or _INTENT_SECURITY_NAME_RE.search(desc):
+                                if _INTENT_FALSE_DEFAULT_RE.search(blk["body"]):
+                                    findings.append({
+                                        "id": eid,
+                                        "file": str(fp),
+                                        "line": blk["start_line"],
+                                        "resource": f"variable.{name}",
+                                    })
+                elif subkind == "var_desc_must_no_validation":
+                    for fp, ftext in all_files_text.items():
+                        for blk in find_blocks(ftext, VARIABLE_START):
+                            name = blk["groups"][0]
+                            desc = block_arg_value(blk["body"], "description") or ""
+                            if _INTENT_MUST_TRUE_RE.search(desc):
+                                if not _INTENT_VALIDATION_RE.search(blk["body"]):
+                                    findings.append({
+                                        "id": eid,
+                                        "file": str(fp),
+                                        "line": blk["start_line"],
+                                        "resource": f"variable.{name}",
+                                    })
+                elif subkind == "prod_tag_no_deletion_protection":
+                    for fp, ftext in all_files_text.items():
+                        for blk in find_blocks(ftext, RESOURCE_START):
+                            btype, bname = blk["groups"]
+                            if _INTENT_PROD_TAG_RE.search(blk["body"]):
+                                if _INTENT_DEL_PROT_FALSE_RE.search(blk["body"]):
+                                    addr = f"{btype}.{bname}"
+                                    findings.append({
+                                        "id": eid,
+                                        "file": str(fp),
+                                        "line": blk["start_line"],
+                                        "resource": addr,
+                                    })
+                elif subkind == "prod_tag_force_destroy":
+                    for fp, ftext in all_files_text.items():
+                        for blk in find_blocks(ftext, RESOURCE_START):
+                            btype, bname = blk["groups"]
+                            if _INTENT_PROD_TAG_RE.search(blk["body"]):
+                                if _INTENT_FORCE_DESTROY_TRUE_RE.search(blk["body"]):
+                                    addr = f"{btype}.{bname}"
+                                    findings.append({
+                                        "id": eid,
+                                        "file": str(fp),
+                                        "line": blk["start_line"],
+                                        "resource": addr,
+                                    })
             elif kind == "graph_check":
                 # Cross-resource detector. The pattern names a registered
                 # graph function; we dispatch to it with a uniform index of
@@ -2057,6 +2111,28 @@ _EDGE_GCS_BUCKET_RE   = re.compile(
     r'\bbucket\s*=\s*google_storage_bucket\.([\w-]+)(?:\.\w+)?')
 
 
+# ---- intent-gap detection ------------------------------------------------
+_INTENT_SECURITY_NAME_RE = re.compile(
+    r'(?i)(prod|secure|require|enforce|encrypt|tls|ssl|auth)', re.IGNORECASE
+)
+_INTENT_FALSE_DEFAULT_RE = re.compile(
+    r'(?m)^\s*default\s*=\s*(false|null|0)\s*$'
+)
+_INTENT_MUST_TRUE_RE = re.compile(
+    r'(?i)(must\s+be\s+true|required|enforced|mandatory)', re.IGNORECASE
+)
+_INTENT_PROD_TAG_RE = re.compile(
+    r'(?i)Environment\s*=\s*"?(prod|production)', re.IGNORECASE
+)
+_INTENT_DEL_PROT_FALSE_RE = re.compile(
+    r'(?m)^\s*deletion_protection\s*=\s*false'
+)
+_INTENT_FORCE_DESTROY_TRUE_RE = re.compile(
+    r'(?m)^\s*force_destroy\s*=\s*true'
+)
+_INTENT_VALIDATION_RE = re.compile(r'\bvalidation\s*\{')
+
+
 def _is_internet_reachable(rtype: str, body: str) -> bool:
     """Return True if the resource type + body suggests it is directly internet-reachable."""
     if rtype == "aws_instance":
@@ -2230,6 +2306,31 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
         "critical_path": critical_path,
         "internet_node_id": "INTERNET",
     }
+
+
+def _apply_reachability_urgency(
+    findings: list[dict],
+    graph: dict,
+    entry_map: dict[str, dict],
+) -> None:
+    """Promote findings on critical-path resources by one urgency tier;
+    demote findings on resources unreachable from INTERNET by one tier."""
+    critical_path_set = set(graph.get("critical_path", []))
+    internet_reachable_set = {
+        n["id"] for n in graph.get("nodes", []) if n.get("internet_reachable")
+    }
+    for f in findings:
+        resource = f.get("resource", "")
+        entry = entry_map.get(f["id"], {})
+        base = entry.get("default_urgency", "MEDIUM")
+        idx = _URGENCY_TIERS.index(base) if base in _URGENCY_TIERS else 1
+        if resource and resource in critical_path_set:
+            f["urgency"] = _URGENCY_TIERS[min(idx + 1, len(_URGENCY_TIERS) - 1)]
+            f["on_critical_path"] = True
+        elif resource and resource not in internet_reachable_set:
+            f["urgency"] = _URGENCY_TIERS[max(idx - 1, 0)]
+        else:
+            f["urgency"] = base
 
 
 def _mermaid_id(addr: str) -> str:
@@ -2602,6 +2703,11 @@ def _sarif_fingerprint(finding: dict) -> dict:
     }
 
 
+def _effective_urgency(finding: dict, entry: dict) -> str:
+    """Return the urgency for a finding: reachability-adjusted if present, else catalogue default."""
+    return finding.get("urgency") or entry.get("default_urgency", "MEDIUM")
+
+
 def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
     """Convert findings to SARIF v2.1.0 format."""
     rules = []
@@ -2862,11 +2968,119 @@ def _narrative_for_finding(
 
 # ---- HTML output ---------------------------------------------------------
 
+def _render_executive_view(
+    findings: list[dict],
+    entries: list[dict],
+    graph: dict | None,
+) -> str:
+    """Render the Executive View tab body — findings reorganised by attack stage."""
+    entry_map = {e["id"]: e for e in entries}
+
+    # Build node membership sets from graph
+    internet_set: set[str] = set()
+    crown_set: set[str] = set()
+    iam_net_set: set[str] = set()
+    if graph:
+        for n in graph.get("nodes", []):
+            nid = n["id"]
+            if n.get("internet_reachable"):
+                internet_set.add(nid)
+            if n.get("is_crown_jewel"):
+                crown_set.add(nid)
+            if n.get("type") in ("iam", "network"):
+                iam_net_set.add(nid)
+
+    # Classify each finding into a stage
+    entry_points: list[dict] = []
+    lateral_movement: list[dict] = []
+    crown_jewels: list[dict] = []
+    blind_spots: list[dict] = []
+    for f in findings:
+        res = f.get("resource", "")
+        entry = entry_map.get(f["id"], {})
+        section = entry.get("section", "")
+        if section == "ops":
+            blind_spots.append(f)
+        elif res in crown_set:
+            crown_jewels.append(f)
+        elif res in internet_set:
+            entry_points.append(f)
+        elif res in iam_net_set:
+            lateral_movement.append(f)
+        else:
+            blind_spots.append(f)  # unclassified → blind spots bucket
+
+    def _stage_html(title: str, colour: str, prose: str, stage_findings: list[dict]) -> str:
+        if not stage_findings:
+            return f"<div style='margin-bottom:1.4em'><h3 style='color:{colour};margin-bottom:.3em'>{title}</h3><p style='color:#888;font-size:13px'>No findings in this stage.</p></div>"
+        rows = []
+        for f in stage_findings:
+            entry = entry_map.get(f["id"], {})
+            urgency = _effective_urgency(f, entry)
+            urg_colour = {"CRITICAL": "#7b0000", "HIGH": "#b02a2a", "MEDIUM": "#b07800", "LOW": "#5a7a00"}.get(urgency, "#555")
+            rows.append(
+                f"<li style='margin:.3em 0;font-size:13px'>"
+                f"<span style='background:{urg_colour};color:#fff;padding:1px 7px;border-radius:3px;"
+                f"font-size:11px;font-weight:700;margin-right:.5em'>{urgency}</span>"
+                f"<b>{f['id']}</b> — {entry.get('title','')}"
+                f"<span style='color:#888;margin-left:.5em'>{f.get('resource','')}</span>"
+                f"<span style='color:#aaa;font-size:11px;margin-left:.5em'>{f.get('file','').rsplit('/',2)[-1]}:{f.get('line','')}</span>"
+                f"</li>"
+            )
+        rows_html = "\n".join(rows)
+        return (
+            f"<div style='margin-bottom:1.8em'>"
+            f"<h3 style='color:{colour};margin:.6em 0 .3em'>{title} "
+            f"<span style='font-size:13px;font-weight:400;color:#666'>({len(stage_findings)} finding{'s' if len(stage_findings)!=1 else ''})</span></h3>"
+            f"<p style='color:#555;font-size:13px;font-style:italic;margin-bottom:.6em'>{prose}</p>"
+            f"<ul style='list-style:none;padding:0;margin:0'>{rows_html}</ul>"
+            f"</div>"
+        )
+
+    cp_note = ""
+    if graph and graph.get("critical_path"):
+        path = graph["critical_path"]
+        cp_note = (
+            f"<div style='background:#fff3f3;border-left:4px solid #c0392b;padding:.7em 1em;"
+            f"border-radius:0 6px 6px 0;margin-bottom:1.4em;font-size:13px'>"
+            f"<b style='color:#c0392b'>Critical Attack Path detected</b> — "
+            f"the shortest route from the internet to a crown jewel passes through "
+            f"<b>{len(path)}</b> resource{'s' if len(path)!=1 else ''}: "
+            f"{' → '.join(f'<code>{r}</code>' for r in path)}. "
+            f"Findings on these resources are promoted one urgency tier."
+            f"</div>"
+        )
+
+    stage1 = _stage_html(
+        "&#9889; Stage 1 — Entry Points", "#d35400",
+        "Internet-reachable resources with active findings. These are where an attacker gains initial access.",
+        entry_points,
+    )
+    stage2 = _stage_html(
+        "&#8596; Stage 2 — Lateral Movement", "#6c5ce7",
+        "IAM roles, policies, and network resources with findings. A foothold in Stage 1 can pivot here.",
+        lateral_movement,
+    )
+    stage3 = _stage_html(
+        "&#128142; Stage 3 — Crown Jewels at Risk", "#6b0000",
+        "Databases, secret stores, and encryption keys with findings. These are the targets.",
+        crown_jewels,
+    )
+    stage4 = _stage_html(
+        "&#128263; Stage 4 — Blind Spots", "#555",
+        "Logging, monitoring, and operational findings. An attacker exploiting earlier stages would likely go undetected.",
+        blind_spots,
+    )
+
+    return cp_note + stage1 + stage2 + stage3 + stage4
+
+
 def to_html(
     findings: list[dict],
     entries: list[dict],
     suppressed: list[dict],
     graph: dict | None = None,
+    show_fixes: bool = False,
 ) -> str:
     """Produce a single-file HTML report, scalable to hundreds of findings.
 
@@ -2889,11 +3103,13 @@ def to_html(
     )
 
     def _make_detail_rows(eid: str, urgency: str, fs: list[dict]) -> str:
+        entry_local = entry_map.get(eid, {})
         parts = []
         for f in fs:
+            cp_badge = "<span class='badge-cp'>CRITICAL-PATH</span>" if f.get("on_critical_path") else ""
             parts.append(
                 f"<tr><td><code>{f.get('file','')}</code>:{f.get('line','')}</td>"
-                f"<td><code>{f.get('resource','')}</code></td></tr>"
+                f"<td><code>{f.get('resource','')}</code>{cp_badge}</td></tr>"
             )
             if urgency in ("HIGH", "CRITICAL"):
                 narrative = _narrative_for_finding(
@@ -2905,17 +3121,29 @@ def to_html(
                         f"<p class='narrative'>{narrative}</p>"
                         f"</td></tr>"
                     )
+            if show_fixes and entry_local.get("fix_hcl"):
+                hcl = entry_local["fix_hcl"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                parts.append(
+                    f"<tr><td colspan='2'>"
+                    f"<details><summary style='cursor:pointer;color:#27ae60;font-size:12px;margin-top:.4em'>&#9654; Suggested fix</summary>"
+                    f"<pre class='fix-hcl'>{hcl}</pre></details>"
+                    f"</td></tr>"
+                )
         return "".join(parts)
 
     rows = []
     for eid in sorted_ids:
         entry = entry_map.get(eid, {})
-        urgency = entry.get("default_urgency", "MEDIUM")
-        title = entry.get("title", eid)
         fs = by_id[eid]
-        detail_rows = _make_detail_rows(eid, urgency, fs)
+        # Use effective urgency: per-finding reachability-adjusted urgency if available,
+        # else catalogue default. Take the highest urgency among all findings for the summary badge.
+        urgency = entry.get("default_urgency", "MEDIUM")
+        eff_urgencies = [_effective_urgency(f, entry) for f in fs]
+        display_urgency = max(eff_urgencies, key=lambda u: {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}.get(u, 2)) if eff_urgencies else urgency
+        title = entry.get("title", eid)
+        detail_rows = _make_detail_rows(eid, display_urgency, fs)
         rows.append(
-            f"<details><summary><span class='u u-{urgency.lower()}'>{urgency}</span> "
+            f"<details><summary><span class='u u-{display_urgency.lower()}'>{display_urgency}</span> "
             f"<b>{eid}</b> — {title} ({len(fs)})</summary>"
             f"<table class='locs'><thead><tr><th>Location</th><th>Resource</th></tr></thead>"
             f"<tbody>{detail_rows}</tbody></table></details>"
@@ -2936,11 +3164,15 @@ def to_html(
     tab_js = ""
     graph_panel_html = ""
     graph_tab_style = ""
+    exec_panel_html = ""
     if graph is not None:
+        exec_content = _render_executive_view(findings, entries, graph)
+        exec_panel_html = f"<div id='tp-exec' class='tab-panel' style='display:none;padding:1em'>{exec_content}</div>"
         tab_bar = (
             "<div class='tab-bar'>"
             "<button class='tab-btn active' onclick='showTab(\"findings\",this)'>Findings</button>"
             "<button class='tab-btn' onclick='showTab(\"graph\",this)'>&#128200; Attack Graph</button>"
+            "<button class='tab-btn' onclick='showTab(\"exec\",this)'>&#127919; Executive View</button>"
             "</div>"
         )
         graph_tab_style = "display:none"
@@ -2964,6 +3196,7 @@ details{{border:1px solid #e0e0e0;border-radius:6px;margin:.4em 0;padding:.6em 1
 summary{{cursor:pointer;user-select:none}}
 .u{{padding:1px 8px;border-radius:3px;font-size:11px;font-weight:600;color:#fff}}
 .u-critical{{background:#7a0b0b}} .u-high{{background:#b02a2a}} .u-medium{{background:#c27a00}} .u-low{{background:#5a7b33}} .u-info{{background:#4a6a8a}}
+.badge-cp{{background:#c0392b;color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle}}
 table.locs{{border-collapse:collapse;margin-top:.5em;width:100%;font-size:13px}}
 table.locs th,table.locs td{{text-align:left;padding:.3em .5em;border-bottom:1px solid #eee}}
 h1{{margin:0 0 .2em}} .meta{{color:#666;margin-bottom:1em}}
@@ -2972,6 +3205,7 @@ p.narrative{{font-size:12px;color:#555;border-left:3px solid #b02a2a;padding:.3e
 .tab-btn{{background:none;border:none;padding:.45em 1.4em;cursor:pointer;font-size:13px;border-bottom:3px solid transparent;margin-bottom:-2px;color:#555;font-weight:500}}
 .tab-btn.active{{border-bottom-color:#2980b9;color:#1a1a1a;font-weight:600}}
 .tab-btn:hover{{color:#1a1a1a}}
+pre.fix-hcl{{background:#1a1a2e;color:#a8d8a8;padding:.8em 1em;border-radius:4px;font-size:12px;overflow-x:auto;margin:.5em 0;border-left:3px solid #27ae60}}
 </style></head><body>
 <h1>tf-analyze report</h1>
 <div class='meta'>{len(findings)} findings across {len(by_id)} rules.</div>
@@ -2982,6 +3216,7 @@ p.narrative{{font-size:12px;color:#555;border-left:3px solid #b02a2a;padding:.3e
 <div id='tp-graph' class='tab-panel' style='{graph_tab_style}'>
 {graph_panel_html}
 </div>
+{exec_panel_html}
 {tab_js}
 </body></html>
 """
@@ -3150,6 +3385,37 @@ verification: |
 """
     stub_path.write_text(content)
     return stub_path
+
+
+def generate_tftest(
+    findings: list[dict],
+    entries: list[dict],
+    out_dir: "Path",
+) -> list["Path"]:
+    """For each finding whose catalogue entry has a `test_template` field,
+    render and write a .tftest.hcl assertion file to out_dir."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    entry_map = {e["id"]: e for e in entries}
+    written: list[Path] = []
+    seen: set[str] = set()
+    for f in findings:
+        entry = entry_map.get(f["id"])
+        if not entry:
+            continue
+        tmpl = entry.get("test_template")
+        if not tmpl:
+            continue
+        resource = f.get("resource", "unknown")
+        safe = re.sub(r"[^a-zA-Z0-9_]", "_", resource)
+        key = f"{f['id']}_{safe}"
+        if key in seen:
+            continue
+        seen.add(key)
+        rendered = tmpl.replace("{resource}", resource).replace("{rule_id}", f["id"])
+        out_path = out_dir / f"{key}.tftest.hcl"
+        out_path.write_text(rendered)
+        written.append(out_path)
+    return written
 
 
 # ---- Diff-mode file filtering -------------------------------------------
@@ -3353,6 +3619,7 @@ _VALID_SECTIONS = {
     "security", "robustness", "dry", "style", "simplicity",
     "ops", "cicd", "module", "stack", "verification",
 }
+_URGENCY_TIERS: list[str] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 _VALID_URGENCIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
 _VALID_BLAST_RADIUS = {
     "single-resource", "module", "environment", "infrastructure-wide",
@@ -3410,6 +3677,12 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     narrative = data.get("narrative")
     if narrative is not None and not isinstance(narrative, str):
         errs.append(f"{source}: 'narrative' must be a string if present")
+    test_template = data.get("test_template")
+    if test_template is not None and not isinstance(test_template, str):
+        errs.append(f"{source}: 'test_template' must be a string if present")
+    fix_hcl = data.get("fix_hcl")
+    if fix_hcl is not None and not isinstance(fix_hcl, str):
+        errs.append(f"{source}: 'fix_hcl' must be a string if present")
     fid = data.get("id")
     fname = Path(source).stem
     if fid and fid != fname:
@@ -3818,6 +4091,214 @@ fixtures:
     return 0
 
 
+# ---- Fleet and trend helpers --------------------------------------------
+
+def _resolve_fleet_targets(args) -> list[Path]:
+    """Collect and resolve all target directories for fleet mode."""
+    targets: list[Path] = [Path(t).resolve() for t in (args.targets or [])]
+    if getattr(args, "targets_file", None):
+        tf_path = Path(args.targets_file)
+        if tf_path.exists():
+            for line in tf_path.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    targets.append(Path(line).resolve())
+    return targets
+
+
+def _fleet_scan(targets: list[Path], entries: list[dict]) -> dict:
+    """Scan multiple repos and cross-correlate findings.
+
+    Returns:
+        {
+          "by_target": {str(target): [findings]},
+          "fleet_wide": [findings with fleet_count > 1],
+          "summary": {str(target): int},
+        }
+    """
+    by_target: dict[str, list[dict]] = {}
+    for target in targets:
+        tf_files = [p for p in target.rglob("*.tf") if ".terraform" not in p.parts]
+        all_text: dict = {}
+        for fp in tf_files:
+            try:
+                all_text[fp] = _read_normalized(fp)
+            except Exception:
+                continue
+        target_findings = detect_corpus(target, all_text, entries)
+        for fp, text in all_text.items():
+            target_findings.extend(detect_in_file(fp, text, entries))
+        by_target[str(target)] = target_findings
+
+    # Cross-correlate: same (rule_id, resource_name) across >1 target
+    # Use sets so the same finding appearing multiple times in one repo is
+    # only counted once per repo for cross-repo correlation purposes.
+    sig_targets: dict[tuple, set[str]] = {}
+    for tgt, fs in by_target.items():
+        for f in fs:
+            sig = (f["id"], f.get("resource", ""), f.get("file", "").rsplit("/", 1)[-1])
+            sig_targets.setdefault(sig, set()).add(tgt)
+
+    fleet_wide: list[dict] = []
+    seen_fleet: set[tuple] = set()
+    for tgt, fs in by_target.items():
+        for f in fs:
+            sig = (f["id"], f.get("resource", ""), f.get("file", "").rsplit("/", 1)[-1])
+            repos = list(sig_targets.get(sig, set()))
+            if len(repos) > 1 and sig not in seen_fleet:
+                seen_fleet.add(sig)
+                fleet_wide.append({
+                    **f,
+                    "fleet_count": len(repos),
+                    "fleet_repos": repos,
+                })
+
+    return {
+        "by_target": by_target,
+        "fleet_wide": fleet_wide,
+        "summary": {t: len(fs) for t, fs in by_target.items()},
+    }
+
+
+def _render_fleet_report(fleet_result: dict, fmt: str) -> str:
+    """Render fleet scan results as markdown table or JSON."""
+    if fmt == "json":
+        import json as _json
+        return _json.dumps(fleet_result, indent=2, default=str)
+
+    lines: list[str] = ["# Fleet Scan Report\n"]
+    lines.append("## Per-Repo Summary\n")
+    lines.append("| Repository | Findings |")
+    lines.append("|---|---|")
+    for tgt, count in fleet_result["summary"].items():
+        lines.append(f"| `{tgt}` | {count} |")
+
+    fleet_wide = fleet_result.get("fleet_wide", [])
+    lines.append(f"\n## Fleet-Wide Findings ({len(fleet_wide)} across multiple repos)\n")
+    if fleet_wide:
+        lines.append("| Rule | Resource | Count | Repos |")
+        lines.append("|---|---|---|---|")
+        for f in fleet_wide:
+            repos_short = ", ".join(r.rsplit("/", 1)[-1] for r in f.get("fleet_repos", []))
+            lines.append(f"| {f['id']} | `{f.get('resource','')}` | {f.get('fleet_count',0)} | {repos_short} |")
+    else:
+        lines.append("_No findings appear in more than one repository._")
+
+    # Per-repo detail
+    lines.append("\n## Per-Repo Findings\n")
+    for tgt, fs in fleet_result["by_target"].items():
+        lines.append(f"### `{tgt}` ({len(fs)} finding{'s' if len(fs) != 1 else ''})\n")
+        for f in fs[:50]:  # cap at 50 per repo to keep output readable
+            lines.append(f"- `{f['id']}` {f.get('file','').rsplit('/',2)[-1]}:{f.get('line','')} `{f.get('resource','')}`")
+        if len(fs) > 50:
+            lines.append(f"- _...and {len(fs)-50} more_")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _trend_get_commits(target: Path, lookback_days: int) -> list[tuple[str, str]]:
+    """Return (sha, date) pairs for commits touching .tf files in last N days, oldest first."""
+    import subprocess as _sp
+    result = _sp.run(
+        ["git", "log", "--format=%H %as", f"--since={lookback_days} days ago",
+         "--reverse", "--", "*.tf"],
+        capture_output=True, text=True, cwd=str(target),
+    )
+    if result.returncode != 0:
+        return []
+    pairs: list[tuple[str, str]] = []
+    for line in result.stdout.strip().splitlines():
+        parts = line.split(" ", 1)
+        if len(parts) == 2:
+            pairs.append((parts[0], parts[1].strip()))
+    return pairs
+
+
+def _trend_tf_files_at_sha(target: Path, sha: str) -> list[str]:
+    """List .tf files tracked at a given commit SHA."""
+    import subprocess as _sp
+    result = _sp.run(
+        ["git", "ls-tree", "-r", "--name-only", sha],
+        capture_output=True, text=True, cwd=str(target),
+    )
+    return [p for p in result.stdout.strip().splitlines() if p.endswith(".tf")]
+
+
+def _trend_scan_at_sha(
+    target: Path, sha: str, entries: list[dict]
+) -> set[tuple[str, str, int]]:
+    """Return a set of (rule_id, rel_path, line) for a commit SHA.
+    Reads file content via `git show` without checkout."""
+    import subprocess as _sp
+    findings_set: set[tuple[str, str, int]] = set()
+    for rel_path in _trend_tf_files_at_sha(target, sha):
+        show = _sp.run(
+            ["git", "show", f"{sha}:{rel_path}"],
+            capture_output=True, text=True, cwd=str(target),
+        )
+        if show.returncode != 0:
+            continue
+        text = show.stdout
+        fake_path = target / rel_path
+        try:
+            for f in detect_in_file(fake_path, text, entries):
+                findings_set.add((f["id"], rel_path, f.get("line", 0)))
+        except Exception:
+            continue
+    return findings_set
+
+
+def run_trend(target: Path, entries: list[dict], lookback_days: int) -> list[dict]:
+    """Walk git history and compute per-commit finding deltas."""
+    commits = _trend_get_commits(target, lookback_days)
+    if not commits:
+        return []
+    rows: list[dict] = []
+    prev: set[tuple[str, str, int]] = set()
+    for sha, date in commits:
+        curr = _trend_scan_at_sha(target, sha, entries)
+        new_count = len(curr - prev)
+        resolved = len(prev - curr)
+        rows.append({
+            "date": date,
+            "sha": sha[:8],
+            "new": new_count,
+            "resolved": resolved,
+            "net": new_count - resolved,
+            "total": len(curr),
+        })
+        prev = curr
+    return rows
+
+
+def _render_trend_table(rows: list[dict], fmt: str) -> str:
+    """Render trend rows as markdown table or JSON."""
+    if fmt == "json":
+        import json as _json
+        return _json.dumps(rows, indent=2)
+    if not rows:
+        return "_No commits touching .tf files found in the specified lookback window._"
+    lines = [
+        "# Risk Trend\n",
+        "| Date | SHA | New | Resolved | Net | Total |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        net_str = f"+{r['net']}" if r["net"] > 0 else str(r["net"])
+        lines.append(
+            f"| {r['date']} | `{r['sha']}` | +{r['new']} | -{r['resolved']} | {net_str} | {r['total']} |"
+        )
+    # Summary line
+    if rows:
+        total_new = sum(r["new"] for r in rows)
+        total_res = sum(r["resolved"] for r in rows)
+        net = total_new - total_res
+        net_str = f"+{net}" if net > 0 else str(net)
+        lines.append(f"\n**{len(rows)} commits analysed. Net change: {net_str} ({total_new} introduced, {total_res} resolved).**")
+    return "\n".join(lines)
+
+
 # ---- Main ---------------------------------------------------------------
 
 def main():
@@ -3825,7 +4306,19 @@ def main():
     # --target is required for scan modes but not for the meta-commands
     # (--list-rules / --explain / --new-rule). Validation happens after
     # parse so users can `--list-rules` without supplying a target.
-    ap.add_argument("--target", help="Directory to scan (required for scans)")
+    ap.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        metavar="DIR",
+        help="Directory to scan. May be specified multiple times for fleet mode.",
+    )
+    ap.add_argument(
+        "--targets-file",
+        default=None,
+        metavar="FILE",
+        help="File containing one target directory path per line (for --mode fleet).",
+    )
     ap.add_argument(
         "--catalog",
         default=str(Path(__file__).parent.parent / "catalog"),
@@ -3850,6 +4343,27 @@ def main():
         ),
     )
     ap.add_argument(
+        "--gen-tests",
+        default=None,
+        metavar="OUTDIR",
+        help=(
+            "Generate .tftest.hcl assertion files for each finding whose "
+            "catalogue entry defines a `test_template` field. Files are "
+            "written to OUTDIR (created if absent). Native Terraform test "
+            "format (requires Terraform >= 1.6)."
+        ),
+    )
+    ap.add_argument(
+        "--show-fixes",
+        action="store_true",
+        default=False,
+        help=(
+            "When a catalogue entry carries a `fix_hcl` snippet, render it "
+            "alongside each finding. HTML: syntax-highlighted block inside "
+            "the finding detail. Text: indented snippet below the finding line."
+        ),
+    )
+    ap.add_argument(
         "--output",
         metavar="PATH",
         default=None,
@@ -3861,9 +4375,16 @@ def main():
     )
     ap.add_argument(
         "--mode",
-        choices=["static", "diff", "verify-fixed"],
+        choices=["static", "diff", "verify-fixed", "fleet", "trend"],
         default="static",
-        help="Execution mode. verify-fixed parses a prior report and re-probes.",
+        help="Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history.",
+    )
+    ap.add_argument(
+        "--lookback",
+        type=int,
+        default=30,
+        metavar="N",
+        help="Days of git history to analyse in --mode trend (default: 30).",
     )
     ap.add_argument(
         "--prior-report",
@@ -4028,6 +4549,10 @@ def main():
 
     catalog_dir = Path(args.catalog).resolve()
 
+    # Normalise targets list (args.targets is None or a list due to action="append")
+    if args.targets is None:
+        args.targets = []
+
     # Meta-commands run on the catalogue alone — no target needed.
     if args.list_rules:
         _cmd_list_rules(catalog_dir, args.focus, args.include_stubs)
@@ -4037,14 +4562,13 @@ def main():
     if args.new_rule:
         sys.exit(_cmd_new_rule(args.new_rule))
 
-    if not args.target:
+    if not args.targets and args.mode not in ("fleet",):
         print(
             "ERROR: --target is required for scan modes. "
             "Use --list-rules / --explain / --new-rule for catalogue ops.",
             file=sys.stderr,
         )
         sys.exit(2)
-    target = Path(args.target).resolve()
 
     entries = load_catalog(
         catalog_dir,
@@ -4067,6 +4591,37 @@ def main():
                 file=sys.stderr,
             )
             sys.exit(2)
+
+    # Fleet mode — scan multiple repos and cross-correlate
+    if args.mode == "fleet":
+        fleet_targets = _resolve_fleet_targets(args)
+        if not fleet_targets:
+            print("ERROR: --mode fleet requires at least one --target or --targets-file", file=sys.stderr)
+            sys.exit(2)
+        fleet_result = _fleet_scan(fleet_targets, entries)
+        total = sum(fleet_result["summary"].values())
+        print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
+        _emit(_render_fleet_report(fleet_result, args.format))
+        if _out_file is not None:
+            _out_file.close()
+        sys.exit(0)
+
+    # Trend mode — walk git history and compute per-commit finding deltas
+    if args.mode == "trend":
+        trend_target = Path(args.targets[0]).resolve() if args.targets else None
+        if not trend_target:
+            print("ERROR: --mode trend requires --target <git-repo-dir>", file=sys.stderr)
+            sys.exit(2)
+        lookback = getattr(args, "lookback", 30)
+        print(f"# trend: analysing {lookback} days of git history in {trend_target}", file=sys.stderr)
+        rows = run_trend(trend_target, entries, lookback)
+        print(f"# trend: {len(rows)} commits analysed", file=sys.stderr)
+        _emit(_render_trend_table(rows, args.format))
+        if _out_file is not None:
+            _out_file.close()
+        sys.exit(0)
+
+    target = Path(args.targets[0]).resolve()
 
     # Reports directory — used for auto-compare and verify-fixed discovery
     reports_dir = (
@@ -4258,6 +4813,11 @@ def main():
             f"critical path length {n_path}",
             file=sys.stderr,
         )
+        _apply_reachability_urgency(findings, attack_graph, {e["id"]: e for e in entries})
+
+    if getattr(args, "gen_tests", None):
+        written = generate_tftest(findings, entries, Path(args.gen_tests))
+        print(f"# gen-tests: wrote {len(written)} file(s) to {args.gen_tests}", file=sys.stderr)
 
     # Auto-compare: resolve most recent JSON report as the prior when set.
     compare_target = args.compare
@@ -4279,7 +4839,7 @@ def main():
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False)))
         else:
             if delta["new"]:
                 _emit("# NEW findings:")
@@ -4305,7 +4865,7 @@ def main():
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False)))
         else:
             entry_map_out = {e["id"]: e for e in entries}
             for f in findings:
@@ -4318,6 +4878,11 @@ def main():
                         )
                         if narr:
                             _emit(f"  # {narr}")
+                if getattr(args, "show_fixes", False):
+                    e_out = entry_map_out.get(f["id"], {})
+                    if e_out.get("fix_hcl"):
+                        for fix_line in e_out["fix_hcl"].strip().splitlines():
+                            _emit(f"    {fix_line}")
             if suppressed_findings:
                 print(f"# ({len(suppressed_findings)} suppressed)", file=sys.stderr)
             if not findings:
@@ -4337,7 +4902,7 @@ def main():
         for f in findings:
             entry = entry_map.get(f["id"])
             if entry:
-                finding_rank = urgency_rank.get(entry.get("default_urgency", "MEDIUM"), 3)
+                finding_rank = urgency_rank.get(_effective_urgency(f, entry), 3)
                 if finding_rank <= threshold:
                     sys.exit(1)
 

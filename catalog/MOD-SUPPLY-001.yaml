@@ -1,0 +1,20 @@
+id: MOD-SUPPLY-001
+title: "Module pinned to mutable git ref (main or master)"
+section: module
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'source\s*=\s*"[^"]*\?ref=(main|master)"'
+    description: Module source URL contains ?ref=main or ?ref=master
+recommendation: |
+  Replace `?ref=main` with a full commit SHA or semver tag:
+    source = "git::https://github.com/org/module.git?ref=v1.2.3"
+  Mutable refs can silently introduce breaking changes or malicious code
+  on the next `terraform init -upgrade`.
+verification: |
+  Verify all git-sourced module URLs use a pinned tag or SHA, not main/master.
+fixtures:
+  - mod_supply_mutable_ref

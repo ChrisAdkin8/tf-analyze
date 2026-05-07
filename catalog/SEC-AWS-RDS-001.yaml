@@ -30,3 +30,16 @@ verification: |
   no diff shows `publicly_accessible = true`.
 fixtures:
   - aws_rds_public
+test_template: |
+  run "rds_encryption_at_rest_{rule_id}" {
+    command = plan
+    assert {
+      condition     = aws_db_instance.{resource}.storage_encrypted == true
+      error_message = "{resource} must have storage_encrypted = true (SEC-AWS-RDS-001)."
+    }
+  }
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    storage_encrypted = true
+    kms_key_id        = aws_kms_key.rds.arn
+  }

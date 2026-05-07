@@ -1,0 +1,23 @@
+id: INT-INTENT-002
+title: "Variable description says 'must be true' but has no validation block"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: intent_gap
+    subkind: var_desc_must_no_validation
+    description: >
+      Variable description contains "must be true", "required", "enforced",
+      or "mandatory" but the block has no `validation {}` to enforce it
+recommendation: |
+  Add a `validation` block:
+    validation {
+      condition     = var.X == true
+      error_message = "X must be true."
+    }
+verification: |
+  Run `terraform validate` with a violating tfvars and confirm the
+  validation error fires.
+fixtures:
+  - int_intent_desc_no_validation

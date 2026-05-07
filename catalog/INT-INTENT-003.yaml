@@ -1,0 +1,26 @@
+id: INT-INTENT-003
+title: "Prod-tagged resource has deletion_protection=false"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: intent_gap
+    subkind: prod_tag_no_deletion_protection
+    description: >
+      Resource tagged Environment=prod/production has
+      deletion_protection=false, contradicting the production intent signal
+recommendation: |
+  Set `deletion_protection = true` on all prod-tagged resources, or
+  remove the prod tag if this is genuinely a non-production resource.
+verification: |
+  Confirm no prod-tagged resource carries `deletion_protection = false`.
+fixtures:
+  - int_intent_prod_deletion
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    deletion_protection = true
+    tags = {
+      Environment = "production"
+    }
+  }

@@ -1,0 +1,19 @@
+id: INT-INTENT-004
+title: "Prod-tagged resource has force_destroy=true"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: intent_gap
+    subkind: prod_tag_force_destroy
+    description: >
+      Resource tagged Environment=prod/production has force_destroy=true,
+      allowing data destruction without confirmation
+recommendation: |
+  Remove `force_destroy = true` from prod-tagged resources. Use
+  `lifecycle { prevent_destroy = true }` instead.
+verification: |
+  Confirm no prod-tagged resource carries `force_destroy = true`.
+fixtures:
+  - int_intent_prod_force_destroy

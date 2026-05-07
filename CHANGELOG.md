@@ -5,6 +5,77 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 14 — 2026-05-07
+
+**Eight major new features (+~700 lines detect.py, +7 catalogue rules, +7 fixtures, +3 screenshots):**
+
+### 1. Reachability-aware urgency
+
+When `--attack-graph` is active, findings are now dynamically re-tiered by network topology:
+- Resources on the BFS critical path (shortest internet→crown-jewel route): urgency promoted one tier (HIGH→CRITICAL, MEDIUM→HIGH, etc.) and tagged with a `CRITICAL-PATH` HTML badge.
+- Resources with no inbound path from the INTERNET node: urgency demoted one tier.
+- `--fail-on` CI gate uses effective urgency, so a MEDIUM finding on a critical-path resource will trip a `--fail-on HIGH` gate.
+
+New function: `_apply_reachability_urgency(findings, graph, entry_map)`. New helper: `_effective_urgency(f, entry)` used throughout HTML, SARIF, and text output.
+
+### 2. Intent-implementation gap detection (`INT-*`)
+
+New `intent_gap` pattern kind and 4 catalogue rules that catch when Terraform code contradicts its own stated intent:
+- `INT-INTENT-001` — variable with security-intent name/description (`prod`, `secure`, `require`, `enforce`, `encrypt`, `tls`, `ssl`, `auth`) that defaults to `false`, `null`, or `0`
+- `INT-INTENT-002` — variable description contains "must be true"/"required"/"enforced"/"mandatory" but no `validation {}` block enforces it
+- `INT-INTENT-003` — resource tagged `Environment=prod/production` with `deletion_protection=false` (HIGH)
+- `INT-INTENT-004` — resource tagged `Environment=prod/production` with `force_destroy=true` (HIGH)
+
+Engine: `intent_gap` dispatch in `detect_corpus()` using 7 new `_INTENT_*` regex constants. Fixtures: `int_intent_var_false_default`, `int_intent_desc_no_validation`, `int_intent_prod_deletion`, `int_intent_prod_force_destroy`.
+
+### 3. Module supply-chain analysis (`MOD-SUPPLY-*`)
+
+3 new catalogue rules using existing `grep` kind:
+- `MOD-SUPPLY-001` — module `source` URL contains `?ref=main` or `?ref=master` (mutable git ref, HIGH)
+- `MOD-SUPPLY-002` — module using `git::` raw source instead of Terraform Registry (LOW)
+- `MOD-SUPPLY-003` — registry-style module source (`namespace/module/provider`) without `version` constraint (HIGH)
+
+Fixtures: `mod_supply_mutable_ref`, `mod_supply_git_source`, `mod_supply_no_version`. No engine changes — pure catalogue additions.
+
+### 4. Generated `terraform test` files (`--gen-tests OUTDIR`)
+
+New CLI flag. Reads optional `test_template` field from catalogue entries, substitutes `{resource}` and `{rule_id}` placeholders, writes `.tftest.hcl` assertion files to OUTDIR. Native Terraform test format (TF ≥ 1.6). `test_template` added to 10 catalogue entries: `SEC-AWS-KMS-001`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `ROB-AWS-LIFECYCLE-001`, `SEC-AWS-RDS-001`, `SEC-GCP-IAM-001`, `SEC-AWS-IAM-001`, `ROB-AWS-RDS-001`, `SEC-AWS-SSRF-001`, `OPS-AWS-TAGS-001`. Validated as optional string in `validate_catalog_entry()`.
+
+### 5. "Attacker's Eye View" Executive HTML tab
+
+When `--attack-graph --format html`, a third "Executive View" tab is added alongside Findings and Attack Graph. Findings are classified into 4 attack stages using graph node membership:
+- **Stage 1 — Entry Points**: findings on internet-reachable resources
+- **Stage 2 — Lateral Movement**: findings on IAM/network-type resources
+- **Stage 3 — Crown Jewels at Risk**: findings on crown-jewel nodes
+- **Stage 4 — Blind Spots**: findings in `ops` section (logging/monitoring/tagging) plus unclassified
+
+When a critical path exists, a red-bordered banner identifies the end-to-end attack chain above the stage list. Implemented via `_render_executive_view(findings, entries, graph)`.
+
+### 6. HCL fix suggestions (`--show-fixes`)
+
+New CLI flag. Reads optional `fix_hcl` field from catalogue entries. HTML output: dark-themed `<pre class='fix-hcl'>` block inside a `<details>` disclosure widget inside each finding row. Text output: indented HCL block below the finding line. `fix_hcl` added to 8 catalogue entries: `SEC-AWS-KMS-001`, `SEC-AWS-S3-001`, `SEC-AWS-SG-001`, `ROB-AWS-LIFECYCLE-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-IAM-001`, `SEC-AWS-RDS-001`, `INT-INTENT-003`. Validated as optional string in `validate_catalog_entry()`.
+
+### 7. Fleet mode (`--mode fleet`)
+
+`--target` now accepts multiple values (`action="append"`). `--targets-file FILE` added for file-based target lists. `--mode fleet` scans all targets, cross-correlates findings by `(rule_id, resource, filename)` signature across repos, and reports fleet-wide findings (same misconfiguration in multiple repos) separately from per-repo detail. Output: markdown table (default) or JSON. Implemented via `_fleet_scan()`, `_render_fleet_report()`, `_resolve_fleet_targets()`.
+
+### 8. Risk trend (`--mode trend --lookback N`)
+
+Walks git history without checkout: `git log` enumerates commit SHAs touching `.tf` files; `git show SHA:path` reads historical file content; `detect_in_file()` re-runs the pattern engine at each point. Outputs a per-commit new/resolved/net/total markdown table and summary. `--lookback N` controls window (default 30 days). Implemented via `_trend_get_commits()`, `_trend_tf_files_at_sha()`, `_trend_scan_at_sha()`, `run_trend()`, `_render_trend_table()`. Read-only (never modifies working tree).
+
+**SKILL.md additions:**
+- §16f: "New features to use in reports" — guidance for all 8 features in Claude skill mode, including when to recommend `--show-fixes`, `--gen-tests`, fleet scans, and trend reports.
+
+**Documentation:**
+- `docs/images/executive-view.png` — screenshot of Executive View tab (46-node AWS corpus).
+- `docs/images/show-fixes.png` — screenshot of Findings tab with fix disclosure and three-tab bar.
+- `docs/cli.md` regenerated with all new flags documented.
+- `README.md`: Output formats section updated with all new flags; Screenshots section updated with two new images; Differentiators expanded from 10 to 17 items.
+
+**Self-test:** 159/159 fixtures passing. Rules: 161 (was 154, +7 new: INT-INTENT-001–004, MOD-SUPPLY-001–003).
+
+---
+
 ## Round 13 — 2026-05-06
 
 **New features:**

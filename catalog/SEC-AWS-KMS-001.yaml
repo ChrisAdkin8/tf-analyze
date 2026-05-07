@@ -30,3 +30,16 @@ verification: |
 fixtures:
   - attack_graph_demo
   - aws_kms_no_rotation
+test_template: |
+  run "kms_rotation_enabled_{rule_id}" {
+    command = plan
+    assert {
+      condition     = aws_kms_key.{resource}.enable_key_rotation == true
+      error_message = "{resource} must have key rotation enabled (SEC-AWS-KMS-001)."
+    }
+  }
+fix_hcl: |
+  resource "aws_kms_key" "example" {
+    description         = "..."
+    enable_key_rotation = true
+  }

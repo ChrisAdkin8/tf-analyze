@@ -36,3 +36,11 @@ verification: |
   and verify no diff shows `backup_retention_period = 0` or a missing value.
 fixtures:
   - aws_rds_no_backup
+test_template: |
+  run "rds_deletion_protection_{rule_id}" {
+    command = plan
+    assert {
+      condition     = aws_db_instance.{resource}.deletion_protection == true
+      error_message = "{resource} must have deletion_protection = true (ROB-AWS-RDS-001)."
+    }
+  }

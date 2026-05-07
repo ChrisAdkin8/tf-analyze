@@ -1193,6 +1193,26 @@ Rules:
   attacker is, what resource they compromise first, how they pivot to the crown jewel, and what
   data or capability they gain.
 
+### 16f. New features to use in reports
+
+The following CLI features are available and should be recommended or invoked where relevant:
+
+**`--show-fixes`** — When a catalogue entry has a `fix_hcl` field, the HTML and text reports include the actual corrected HCL block. In Claude skill mode: for every finding you recommend fixing, include the corrected resource block as a fenced HCL snippet under the recommendation.
+
+**`--gen-tests OUTDIR`** — Generates native `terraform test` (`.tftest.hcl`) assertion files for each finding with a `test_template`. Recommend this to teams that use Terraform ≥ 1.6 so fixes become permanent regression guards. In Claude skill mode: after resolving a finding, offer to write the equivalent `tftest.hcl` assertion.
+
+**`--attack-graph --format html`** — Adds three tabs: Findings, Attack Graph (interactive SVG), and Executive View (findings organised into Entry Points / Lateral Movement / Crown Jewels at Risk / Blind Spots). The Executive View is ideal for sharing with non-technical stakeholders who need to understand risk without reading rule IDs. In Claude skill mode: always produce the Adversarial Scenarios table (§16e) and, when a critical path exists, prepend the "Critical Attack Path" paragraph.
+
+**`--mode fleet --target dir1 --target dir2`** — Scans multiple repos and cross-correlates findings. Findings appearing in more than one repo are tagged FLEET-WIDE. Use when the user has asked to audit multiple workspaces or an entire organisation's Terraform. In Claude skill mode: if the user provides multiple repo paths, note that a fleet scan would identify shared misconfigurations.
+
+**`--mode trend --lookback 30`** — Walks git history to show how the risk profile has changed over the last 30 days. Use when the user asks "is our security posture improving?" or requests a risk trend report. In Claude skill mode: include the trend table in the Appendix and note whether the net finding count is increasing or decreasing.
+
+**Reachability-aware urgency** — When `--attack-graph` is active, findings on critical-path resources show a `CRITICAL-PATH` badge and have been promoted one urgency tier. In Claude skill mode: call these out explicitly in the Executive Summary — they represent the highest-priority fixes because they are on a confirmed attack path.
+
+**INT-INTENT-* rules** — New rule family detecting intent-implementation gaps: variables signalling security intent that default to false/null/0, prod-tagged resources with `deletion_protection=false` or `force_destroy=true`. Include these findings in the Executive Summary when found — they represent developer intent that was never enforced.
+
+**MOD-SUPPLY-* rules** — New rule family for module supply-chain risks: mutable git refs (`?ref=main`), raw git sources, registry modules without `version`. Flag these in the Action Plan under "Supply Chain Hygiene."
+
 ### Report structure
 
 ```markdown

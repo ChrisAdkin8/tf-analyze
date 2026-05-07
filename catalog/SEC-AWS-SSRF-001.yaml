@@ -38,3 +38,17 @@ verification: |
 fixtures:
   - attack_graph_demo
   - aws_ec2_imdsv1
+test_template: |
+  run "ec2_imdsv2_enforced_{rule_id}" {
+    command = plan
+    assert {
+      condition     = aws_instance.{resource}.metadata_options[0].http_tokens == "required"
+      error_message = "{resource} must enforce IMDSv2 (http_tokens = required) (SEC-AWS-SSRF-001)."
+    }
+  }
+fix_hcl: |
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }

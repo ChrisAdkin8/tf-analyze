@@ -1,0 +1,20 @@
+id: MOD-SUPPLY-003
+title: "Registry module missing version constraint"
+section: module
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'source\s*=\s*"[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*"'
+    description: Module block without a version = "..." argument
+recommendation: |
+  Add `version = "~> X.Y"` to every registry module block. Without a
+  version constraint, `terraform init` resolves the latest available
+  version making builds non-reproducible.
+verification: |
+  Confirm every module block referencing a registry source has a `version`
+  argument.
+fixtures:
+  - mod_supply_no_version

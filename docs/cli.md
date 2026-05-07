@@ -4,9 +4,9 @@
 
 ## Scan target
 
-### `--target TARGET`
+### `--target DIR`
 
-Directory to scan (required for scans)
+Directory to scan. May be specified multiple times for fleet mode.
 
 ### `--catalog CATALOG`
 
@@ -32,11 +32,11 @@ Reports directory (default: <skill>/reports). Used for auto-discovery in --compa
 
 ### `--mode MODE`
 
-**Choices:** `static`, `diff`, `verify-fixed`
+**Choices:** `static`, `diff`, `verify-fixed`, `fleet`, `trend`
 
 **Default:** `static`
 
-Execution mode. verify-fixed parses a prior report and re-probes.
+Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history.
 
 ### `--prior-report PRIOR_REPORT`
 
@@ -133,23 +133,27 @@ Scaffold a new catalogue entry and fixture skeleton for the given ID (must match
 
 show this help message and exit
 
+### `--targets-file`
+
+File containing one target directory path per line (for --mode fleet).
+
 ### `--attack-graph`
 
 Build a directed attack-path graph from internet-reachable resources to crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). With --format html adds an interactive Attack Graph tab (force-directed SVG, drag, click-to-inspect, critical path highlighted in red). With --format text (default) appends a Mermaid flowchart block after findings. Also enables adversarial scenario narratives for HIGH/CRITICAL findings.
 
-**Example — Attack Graph tab (46-node AWS corpus, terragoat):**
+### `--gen-tests`
 
-![Attack Graph view](../docs/images/attack-graph-view.png)
+Generate .tftest.hcl assertion files for each finding whose catalogue entry defines a `test_template` field. Files are written to OUTDIR (created if absent). Native Terraform test format (requires Terraform >= 1.6).
 
-Node colours: Internet (black) · Compute (blue) · IAM (purple) · Storage (green) · Secret (red) · Key (orange) · Network (grey). Critical-path nodes and edges are highlighted in red; crown jewels have a gold border. Click any node to open a sidebar showing the resource type, file, line number, and all finding IDs that touch it. Drag nodes to rearrange.
+### `--show-fixes`
 
-**Example — Findings tab with adversarial narrative:**
-
-![Findings with narrative](../docs/images/findings-narrative.png)
-
-HIGH and CRITICAL findings display a bordered italic paragraph that names a confirmed real-world breach using the same attack vector (Capital One 2019, SolarWinds 2020, Tesla 2020, Samsung 2022, Twitch 2021).
+When a catalogue entry carries a `fix_hcl` snippet, render it alongside each finding. HTML: syntax-highlighted block inside the finding detail. Text: indented snippet below the finding line.
 
 ### `--output`
 
 Write report output to PATH instead of stdout. The file is created or overwritten. stderr (progress, counts, errors) is unaffected.
+
+### `--lookback`
+
+Days of git history to analyse in --mode trend (default: 30).
 
