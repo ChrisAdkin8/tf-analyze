@@ -15,5 +15,15 @@ recommendation: |
 verification: |
   Run `terraform plan` and confirm the resource graph is unchanged. If you
   removed the alias, callers that relied on the default provider still work.
+fix_hcl: |
+  # Option A — remove the unused alias entirely
+  # provider "aws" { alias = "eu_west" ... }  <-- delete this block
+
+  # Option B — wire it to the modules that need it
+  module "eu_app" {
+    source    = "./modules/app"
+    providers = { aws = aws.eu_west }
+  }
+fix_disruption: none
 fixtures:
   - provider_alias_unused

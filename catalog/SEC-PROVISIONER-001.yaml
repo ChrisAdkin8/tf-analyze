@@ -26,5 +26,24 @@ recommendation: |
 verification: |
   Search for `provisioner` blocks in the codebase. Confirm each remaining
   provisioner is documented with a justification comment or suppression.
+fix_hcl: |
+  # Replace remote-exec with user_data / cloud-init
+  resource "aws_instance" "app" {
+    ami           = data.aws_ami.ubuntu.id
+    instance_type = "t3.micro"
+
+    user_data = templatefile("${path.module}/cloud-init.sh.tpl", {
+      environment = var.environment
+    })
+  }
+
+  # Replace local-exec trigger with terraform_data
+  resource "terraform_data" "init" {
+    triggers_replace = [aws_instance.app.id]
+    provisioner "local-exec" {
+      command = "echo 'only use as last resort — document why'"
+    }
+  }
+fix_disruption: none
 fixtures:
   - provisioner_usage

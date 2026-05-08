@@ -26,5 +26,15 @@ recommendation: |
 verification: |
   Set the count condition to false and run `terraform plan`. The plan
   should succeed without index errors.
+fix_hcl: |
+  output "instance_id" {
+    value = try(aws_instance.optional[0].id, null)
+  }
+
+  # Or with explicit length guard
+  output "instance_ip" {
+    value = length(aws_instance.optional) > 0 ? aws_instance.optional[0].public_ip : null
+  }
+fix_disruption: none
 fixtures:
   - unguarded_count_ref

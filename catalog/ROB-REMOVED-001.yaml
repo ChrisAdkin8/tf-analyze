@@ -25,5 +25,14 @@ verification: |
   `terraform plan` to confirm still-no-changes.
 related:
   - ROB-MOVED-001
+fix_hcl: |
+  # Remove the removed block after terraform apply has executed it:
+  # Delete the block below once the resource has been destroyed/forgotten.
+  #
+  # removed {
+  #   from = aws_instance.legacy
+  #   lifecycle { destroy = false }
+  # }
+fix_disruption: none
 fixtures:
   - stale_removed_block

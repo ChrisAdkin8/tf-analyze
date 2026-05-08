@@ -37,5 +37,24 @@ recommendation: |
 verification: |
   Run `terraform validate` and `terraform plan` — no deprecation warnings
   should appear.
+fix_hcl: |
+  resource "google_container_cluster" "app" {
+    # Remove deprecated enable_legacy_abac — ABAC is disabled by default
+    # Remove deprecated logging_service / monitoring_service — use blocks instead
+    logging_config {
+      enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
+    }
+    monitoring_config {
+      enable_components = ["SYSTEM_COMPONENTS"]
+    }
+  }
+
+  resource "google_compute_instance" "app" {
+    metadata = {
+      "startup-script" = file("${path.module}/startup.sh")
+    }
+    # Remove deprecated metadata_startup_script argument
+  }
+fix_disruption: none
 fixtures:
   - deprecated_attributes

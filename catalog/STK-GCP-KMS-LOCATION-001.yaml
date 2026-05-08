@@ -29,5 +29,26 @@ verification: |
   to confirm STK-KMS-LOCATION-001 stays silent.
 related:
   - SEC-BUCKET-001
+fix_hcl: |
+  # Co-locate key ring and consumer resource in the same region
+  resource "google_kms_key_ring" "app" {
+    name     = "app"
+    location = "us-central1"
+  }
+
+  resource "google_kms_crypto_key" "app" {
+    name     = "app"
+    key_ring = google_kms_key_ring.app.id
+  }
+
+  resource "google_storage_bucket" "app" {
+    name     = "app-data"
+    location = "us-central1"   # must match key ring location
+
+    encryption {
+      default_kms_key_name = google_kms_crypto_key.app.id
+    }
+  }
+fix_disruption: none
 fixtures:
   - kms_location_mismatch

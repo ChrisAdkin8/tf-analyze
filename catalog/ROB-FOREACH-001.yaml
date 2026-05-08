@@ -21,5 +21,13 @@ recommendation: |
 verification: |
   Run `terraform plan` after the change — if stable keys were already in use,
   diff should be zero.
+fix_hcl: |
+  # Before: for_each = ["alice", "bob"]  — list, order-sensitive
+  # After: wrap in toset() for stable keys
+  resource "aws_iam_user" "team" {
+    for_each = toset(var.usernames)
+    name     = each.key
+  }
+fix_disruption: forces_replacement
 fixtures:
   - foreach_list_antipattern

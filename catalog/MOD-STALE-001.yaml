@@ -25,4 +25,11 @@ verification: |
   Run `terraform init -upgrade` and inspect `.terraform.lock.hcl` — the upgraded version
   should match the latest from `terraform.io/registry/v1/modules/{ns}/{name}/{provider}`.
   Confirm `terraform plan` shows no unintended resource replacements after the upgrade.
+fix_hcl: |
+  # Update the version constraint to the latest (check with --check-registry)
+  module "vpc" {
+    source  = "terraform-aws-modules/vpc/aws"
+    version = "~> 5.1"   # was ~> 3.0
+  }
+fix_disruption: plan_required
 fixtures: []

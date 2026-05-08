@@ -21,5 +21,17 @@ verification: |
   Grep for `count\s*=.*\?\s*1\s*:\s*0` in .tf files. Confirm all
   conditional resources use for_each instead. Re-run tf-analyze and
   confirm ROB-COUNT-001 is RESOLVED.
+fix_hcl: |
+  # Replace count = var.enabled ? 1 : 0 with for_each
+  resource "aws_security_group" "app" {
+    for_each = var.enabled ? toset(["this"]) : toset([])
+    name     = "app"
+  }
+
+  # Reference via one() to avoid [0] index
+  output "sg_id" {
+    value = one(values(aws_security_group.app)[*].id)
+  }
+fix_disruption: forces_replacement
 fixtures:
   - count_bool_pattern

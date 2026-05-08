@@ -16,5 +16,18 @@ verification: |
   After the refactor, `terraform plan` diff should be zero for the
   unchanged resources (use `moved {}` blocks to teach Terraform that
   `aws_instance.web[0]` is now `aws_instance.web["primary"]`).
+fix_hcl: |
+  # Unify all iteration to for_each; use moved{} to avoid destroy+create
+  resource "aws_instance" "web" {
+    for_each      = toset(var.names)
+    ami           = data.aws_ami.ubuntu.id
+    instance_type = "t3.micro"
+  }
+
+  moved {
+    from = aws_instance.web[0]
+    to   = aws_instance.web["primary"]
+  }
+fix_disruption: forces_replacement
 fixtures:
   - count_foreach_mix

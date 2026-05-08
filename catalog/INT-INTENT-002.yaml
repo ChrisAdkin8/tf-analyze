@@ -19,5 +19,16 @@ recommendation: |
 verification: |
   Run `terraform validate` with a violating tfvars and confirm the
   validation error fires.
+fix_hcl: |
+  variable "require_mfa" {
+    type        = bool
+    description = "MFA must be enabled for all users"
+
+    validation {
+      condition     = var.require_mfa == true
+      error_message = "require_mfa must be true — MFA cannot be disabled"
+    }
+  }
+fix_disruption: none
 fixtures:
   - int_intent_desc_no_validation

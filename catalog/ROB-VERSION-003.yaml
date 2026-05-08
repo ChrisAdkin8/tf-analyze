@@ -38,5 +38,20 @@ verification: |
 related:
   - ROB-VERSION-001
   - ROB-VERSION-002
+fix_hcl: |
+  terraform {
+    required_version = ">= 1.5.0, < 2.0"
+    required_providers {
+      aws = {
+        source  = "hashicorp/aws"
+        version = "~> 5.0"
+      }
+      azurerm = {
+        source  = "hashicorp/azurerm"
+        version = "~> 3.0"
+      }
+    }
+  }
+fix_disruption: none
 fixtures:
   - providers_no_version

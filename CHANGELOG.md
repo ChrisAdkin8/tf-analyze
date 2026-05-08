@@ -5,6 +5,63 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 21 — 2026-05-08
+
+**100% fix_hcl coverage, pre-commit hook, VS Code extension, SKILL.md re-scan (192/192 fixtures):**
+
+### 1. fix_hcl coverage: 100% (was 80%)
+
+Added `fix_hcl` and `fix_disruption` to all 38 remaining catalogue rules that lacked them. Every rule now has a canonical HCL snippet showing the correct configuration. Rules where the fix is "remove code" (ROB-UNUSED-001/002, ROB-MOVED-001, ROB-REMOVED-001) include commented-before/after patterns showing the removal intent.
+
+**Categories covered:**
+- Cost controls: `COST-AWS-RISK-001`, `COST-GCP-RISK-001`
+- Module supply chain: `MOD-SUPPLY-002`, `MOD-STALE-001`
+- Robustness: `ROB-BACKEND-001`, `ROB-MOVED-001`, `ROB-REMOVED-001`, `ROB-VALIDATION-002`, `ROB-VERSION-002/003`, `ROB-COUNT-001/002`, `ROB-COUNTREF-001/002`, `ROB-FOREACH-001`, `ROB-PROVIDER-ALIAS-001/002`, `ROB-UNUSED-001/002`
+- Security: `SEC-AWS-ACCESSKEY-001`, `SEC-EPHEMERAL-001`, `SEC-GCP-SA-KEY-001`, `SEC-DATASOURCE-001/002`, `SEC-SENSITIVE-001/002/003`, `SEC-SECRETS-001`, `SEC-STATE-001`, `SEC-PROVISIONER-001`, `SEC-GCP-IAM-003`
+- Intent: `INT-INTENT-001/002/004`
+- GCP stack: `STK-GCP-DEPRECATION-001`, `STK-GCP-KMS-LOCATION-001`
+- Style/CI: `STYLE-DESC-001`, `CI-TEST-001`
+
+### 2. Pre-commit hook
+
+Added `.pre-commit-hooks.yaml` at the repo root defining three hook variants:
+- `tf-analyze` — all sections, fail on HIGH+
+- `tf-analyze-security` — security section only, fail on HIGH+
+- `tf-analyze-critical` — all sections, fail on CRITICAL only
+
+See `docs/pre-commit.md` for setup and CI integration instructions.
+
+### 3. VS Code Extension (`vscode-extension/`)
+
+New TypeScript VS Code extension (`vscode-extension/src/extension.ts`):
+- Inline diagnostics (error/warning/info by urgency threshold)
+- Quick Fix (⌘.) to insert `fix_hcl` snippets at the affected line
+- "View recommendation" code action opens a webview with full details
+- **Findings tree** in the Explorer sidebar, grouped by catalogue section
+- **Status bar** showing `C/H/M` counts; click to re-run
+- **Auto-scan on save** for `.tf` files (configurable via `tf-analyze.runOnSave`)
+- Settings: `tf-analyze.scriptPath`, `tf-analyze.failOn`, `tf-analyze.section`, `tf-analyze.extraArgs`
+
+See `docs/vscode-extension.md` for installation and architecture.
+
+### 4. Documentation
+
+- `docs/pre-commit.md` — pre-commit setup, CI usage, hook customisation
+- `docs/vscode-extension.md` — extension installation, features, configuration, architecture
+- `README.md` — new "Integrations" section covering pre-commit + VS Code extension
+- `SKILL.md` — Roadmap expanded with 5 new items: dynamic block detection, MITRE ATT&CK mapping, `--only-new` baseline mode, VS Code extension GA, HCP Terraform Run Task integration
+
+### 5. SKILL.md deep re-scan
+
+Re-analysed SKILL.md for gaps and improvements. Additions:
+- **Dynamic block detection** (roadmap) — the regex scanner misses `dynamic` blocks that conditionally emit security attributes; structured HCL parsing or two-pass regex would close this gap.
+- **MITRE ATT&CK mapping** (roadmap) — adding `mitre_attack:` fields to catalogue entries enables red/blue team framing in reports.
+- **`--only-new` baseline mode** (roadmap) — `--baseline <prior.json>` to suppress already-known findings, enabling diff-mode scans without git.
+- **VS Code extension GA** (roadmap) — attack-graph webview (d3.js), terraform-ls co-location, Marketplace publication.
+- **HCP Terraform Run Task** (roadmap) — webhook integration so findings appear in HCP Terraform UI.
+
+---
+
 ## Round 20 — 2026-05-08
 
 **Detection quality, fix_hcl coverage, and new cloud service rules (192/192 fixtures):**

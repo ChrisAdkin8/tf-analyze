@@ -15,5 +15,15 @@ recommendation: |
   `lifecycle { prevent_destroy = true }` instead.
 verification: |
   Confirm no prod-tagged resource carries `force_destroy = true`.
+fix_hcl: |
+  resource "aws_s3_bucket" "data" {
+    bucket = "myorg-prod-data"
+    tags   = { Environment = "prod" }
+    # Remove: force_destroy = true
+    lifecycle {
+      prevent_destroy = true
+    }
+  }
+fix_disruption: none
 fixtures:
   - int_intent_prod_force_destroy

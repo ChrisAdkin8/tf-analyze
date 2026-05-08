@@ -24,6 +24,26 @@ recommendation: |
   ```
 verification: |
   Run `terraform test` in the module directory.
+fix_hcl: |
+  # Create a <module>.tftest.hcl file in the module directory
+  run "creates_resource" {
+    command = plan
+
+    assert {
+      condition     = aws_s3_bucket.main.bucket != ""
+      error_message = "bucket must be created with a non-empty name"
+    }
+  }
+
+  run "apply_and_verify" {
+    command = apply
+
+    assert {
+      condition     = aws_s3_bucket.main.region == "us-east-1"
+      error_message = "bucket must be in us-east-1"
+    }
+  }
+fix_disruption: none
 fixtures:
   - attack_graph_demo
   - missing_tests

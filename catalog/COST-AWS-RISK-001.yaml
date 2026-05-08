@@ -43,5 +43,17 @@ verification: |
     --query 'logGroups[?retentionInDays==null].logGroupName'`
   must return empty.
   For ASGs: confirm `max_size` is set and reasonable in `terraform show`.
+fix_hcl: |
+  resource "aws_cloudwatch_log_group" "app" {
+    name              = "/app/logs"
+    retention_in_days = 90
+  }
+
+  resource "aws_autoscaling_group" "app" {
+    min_size         = 1
+    max_size         = 10
+    desired_capacity = 2
+  }
+fix_disruption: none
 fixtures:
   - aws_no_cost_controls

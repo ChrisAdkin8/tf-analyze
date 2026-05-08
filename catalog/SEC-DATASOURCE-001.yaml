@@ -25,5 +25,17 @@ recommendation: |
 verification: |
   Grep for `data "external"` and `data "http"` blocks. Confirm each is
   documented with a justification or replaced with a native alternative.
+fix_hcl: |
+  # Replace data.external with a native provider data source where possible
+  data "aws_ssm_parameter" "config" {
+    name = "/app/config"
+  }
+
+  # If data.http is required, document intent and pin with a suppression comment
+  # # tf-analyze:ignore SEC-DATASOURCE-001 — internal metadata endpoint, reviewed 2025-01
+  # data "http" "metadata" {
+  #   url = "http://169.254.169.254/latest/meta-data/instance-id"
+  # }
+fix_disruption: none
 fixtures:
   - dangerous_datasource

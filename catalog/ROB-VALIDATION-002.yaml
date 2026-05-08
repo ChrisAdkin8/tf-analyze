@@ -15,5 +15,21 @@ verification: |
   Run `terraform validate` and confirm no warning. Pass a deliberately
   wrong-typed value via `-var` and confirm Terraform rejects it at parse
   time.
+fix_hcl: |
+  variable "environment" {
+    type        = string
+    description = "Deployment environment name"
+    validation {
+      condition     = contains(["dev", "staging", "prod"], var.environment)
+      error_message = "environment must be dev, staging, or prod"
+    }
+  }
+
+  variable "tags" {
+    type        = map(string)
+    description = "Resource tags"
+    default     = {}
+  }
+fix_disruption: none
 fixtures:
   - no_validation_blocks

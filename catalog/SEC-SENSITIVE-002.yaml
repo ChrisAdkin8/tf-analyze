@@ -16,5 +16,13 @@ recommendation: |
 verification: |
   Run `terraform plan` in the parent and confirm the value is shown
   as `<sensitive>` in any module output that references the variable.
+fix_hcl: |
+  # In the child module — mark the variable sensitive
+  variable "db_password" {
+    type        = string
+    description = "Database password"
+    sensitive   = true
+  }
+fix_disruption: none
 fixtures:
   - sensitive_leak

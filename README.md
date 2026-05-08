@@ -196,14 +196,49 @@ Schema reference at [`catalog/README.md`](catalog/README.md). Pattern kinds: `gr
 
 ---
 
-## CI integration
+## Integrations
 
-The skill ships with two ready-to-use configs under `integrations/`:
+### CI / pre-commit
 
-- **`integrations/pre-commit-hook.yaml`** — diff-mode hook (~<2s on a 5k-file repo). Resolves the skill via `$TF_ANALYZE_SKILL_ROOT` with a fallback to the install path, so non-standard install locations work.
+The skill ships with ready-to-use configs under `integrations/`:
+
+- **`integrations/pre-commit-hook.yaml`** — diff-mode hook (~<2s on a 5k-file repo). Resolves the skill via `$TF_ANALYZE_SKILL_ROOT` with a fallback to the install path.
 - **`integrations/github-action.yml`** — full Actions workflow with SARIF upload to Code Scanning + HTML artefact. PR runs are diff-mode + fail-on-HIGH; pushes to main are full static scans.
+- **`.pre-commit-hooks.yaml`** (repo root) — standard [pre-commit](https://pre-commit.com) hook declaration. See [`docs/pre-commit.md`](docs/pre-commit.md) for setup.
 
-The repo's own CI (`.github/workflows/ci.yml`) gates the skill itself: `self_test.py`, `test_schema.py`, `gen-cli-docs.py --check`, `stub-status.py --age 180d`. See `integrations/README.md` for adapting to GitLab / CircleCI / Buildkite (single-line `python3` invocation works anywhere).
+**Quick start (pre-commit):**
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/example/tf-analyze
+    rev: v0.1.0
+    hooks:
+      - id: tf-analyze          # fail on HIGH+
+      # - id: tf-analyze-critical   # fail on CRITICAL only
+```
+
+The repo's own CI (`.github/workflows/ci.yml`) gates the skill itself: `self_test.py`, `test_schema.py`, `gen-cli-docs.py --check`, `stub-status.py --age 180d`. See `integrations/README.md` for adapting to GitLab / CircleCI / Buildkite.
+
+### VS Code Extension
+
+The `vscode-extension/` directory contains a TypeScript extension that wraps
+`detect.py` with IDE integration:
+
+- **Inline squiggles** on affected lines (error / warning / info by urgency)
+- **Quick Fix** (⌘.) to insert `fix_hcl` snippets inline
+- **Findings tree** in the Explorer sidebar, grouped by section
+- **Webview panel** with full recommendation + disruption level
+- **Auto-scan on save** (configurable)
+- **Status bar** summary showing `C/H/M` counts
+
+```bash
+cd vscode-extension
+npm install && npm run compile
+# Press F5 in VS Code to launch the Extension Development Host
+# Or: npm run package && code --install-extension tf-analyze-0.1.0.vsix
+```
+
+See [`docs/vscode-extension.md`](docs/vscode-extension.md) for full documentation.
 
 ---
 

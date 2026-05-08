@@ -56,5 +56,17 @@ verification: |
 related:
   - SEC-SENSITIVE-001
   - SEC-STATE-001
+fix_hcl: |
+  ephemeral "vault_kv_secret_v2" "creds" {
+    mount = "secret"
+    name  = "app/db"
+  }
+
+  resource "google_sql_user" "app" {
+    name     = "app"
+    instance = google_sql_database_instance.app.name
+    password = ephemeral.vault_kv_secret_v2.creds.data["password"]
+  }
+fix_disruption: none
 fixtures:
   - vault_data_source_no_ephemeral

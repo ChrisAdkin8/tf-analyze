@@ -30,5 +30,20 @@ recommendation: |
 verification: |
   Review `terraform plan` output to confirm the cost control arguments are
   set. Check billing alerts are configured for the project.
+fix_hcl: |
+  resource "google_spanner_instance" "app" {
+    config           = "regional-us-central1"
+    display_name     = "app"
+    processing_units = 100
+  }
+
+  resource "google_sql_database_instance" "app" {
+    settings {
+      tier                   = "db-f1-micro"
+      disk_autoresize        = true
+      disk_autoresize_limit  = 50
+    }
+  }
+fix_disruption: none
 fixtures:
   - expensive_no_controls

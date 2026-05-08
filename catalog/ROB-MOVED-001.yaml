@@ -14,5 +14,14 @@ recommendation: |
 verification: |
   Run `terraform plan` — if the plan shows no changes related to the moved
   resource, the block is safe to remove.
+fix_hcl: |
+  # Remove the moved block after terraform apply has reconciled state:
+  # Delete the block below — it is no longer needed once state is updated.
+  #
+  # moved {
+  #   from = aws_instance.old
+  #   to   = aws_instance.new
+  # }
+fix_disruption: none
 fixtures:
   - stale_moved_block

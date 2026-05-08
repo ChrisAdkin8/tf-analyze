@@ -16,5 +16,11 @@ recommendation: |
 verification: |
   Run `terraform output <name>` and confirm the value is masked as
   `<sensitive>`. Re-run tf-analyze in mode:verify-fixed.
+fix_hcl: |
+  output "db_password" {
+    value     = module.db.password
+    sensitive = true
+  }
+fix_disruption: none
 fixtures:
   - sensitive_leak

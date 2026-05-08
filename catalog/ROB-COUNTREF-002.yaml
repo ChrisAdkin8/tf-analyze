@@ -17,5 +17,17 @@ recommendation: |
 verification: |
   Remove an element from `var.x`, run `terraform plan`, confirm Terraform
   does not produce spurious destroy/create plans for unrelated elements.
+fix_hcl: |
+  # Prefer for_each with name-keyed instances (stable across removals)
+  resource "aws_instance" "web" {
+    for_each      = toset(var.names)
+    ami           = data.aws_ami.ubuntu.id
+    instance_type = "t3.micro"
+  }
+
+  output "first_ip" {
+    value = try(values(aws_instance.web)[0].public_ip, null)
+  }
+fix_disruption: forces_replacement
 fixtures:
   - count_length_unguarded

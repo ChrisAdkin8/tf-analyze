@@ -23,5 +23,10 @@ recommendation: |
 verification: |
   Run `terraform init` inside the submodule directory (if it is callable
   in isolation) — it should enforce the new constraint.
+fix_hcl: |
+  terraform {
+    required_version = ">= 1.6, < 2.0"
+  }
+fix_disruption: none
 fixtures:
   - submodule_no_version

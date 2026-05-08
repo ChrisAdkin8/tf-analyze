@@ -1,0 +1,40 @@
+- id: tf-analyze
+  name: tf-analyze — Terraform security and stack analysis
+  description: >
+    Runs tf-analyze against the staged Terraform files. Fails the commit
+    when any finding meets or exceeds the configured urgency threshold.
+  language: python
+  entry: python3 scripts/detect.py
+  args: ["--target", ".", "--fail-on", "HIGH"]
+  types: [file]
+  files: '\.(tf|tfvars)$'
+  pass_filenames: false
+  require_serial: false
+
+- id: tf-analyze-security
+  name: tf-analyze — security findings only
+  description: >
+    Same as tf-analyze but scoped to the security section. Useful when
+    you want a fast gate that only blocks on security issues while ops/
+    robustness findings are informational.
+  language: python
+  entry: python3 scripts/detect.py
+  args: ["--target", ".", "--fail-on", "HIGH", "--section", "security"]
+  types: [file]
+  files: '\.(tf|tfvars)$'
+  pass_filenames: false
+  require_serial: false
+
+- id: tf-analyze-critical
+  name: tf-analyze — CRITICAL findings only
+  description: >
+    Hard gate: fails only on CRITICAL-urgency findings. Suitable as a
+    mandatory check that blocks merges without generating noise from
+    MEDIUM/LOW items.
+  language: python
+  entry: python3 scripts/detect.py
+  args: ["--target", ".", "--fail-on", "CRITICAL"]
+  types: [file]
+  files: '\.(tf|tfvars)$'
+  pass_filenames: false
+  require_serial: false

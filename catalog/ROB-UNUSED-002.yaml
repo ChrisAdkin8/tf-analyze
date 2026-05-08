@@ -14,5 +14,14 @@ recommendation: |
 verification: |
   Run `terraform validate` after removing the output. Search for any
   external references (CI scripts, other repos) before deleting.
+fix_hcl: |
+  # Remove the unused output declaration entirely
+  # Before (delete this block):
+  # output "legacy_endpoint" {
+  #   value = aws_instance.app.public_ip
+  # }
+
+  # After: output is gone; verify no external CI scripts reference it
+fix_disruption: none
 fixtures:
   - unused_variable

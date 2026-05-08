@@ -19,5 +19,21 @@ verification: |
   Run `terraform plan` and check that the rendered template value
   shows as `(sensitive value)` in the plan output. If it shows in
   cleartext, the leak is confirmed.
+fix_hcl: |
+  # Separate sensitive values — don't pass them through templatefile()
+  locals {
+    # Non-sensitive config rendered by templatefile
+    user_data = templatefile("${path.module}/init.sh.tpl", {
+      region = var.region
+      name   = var.name
+    })
+  }
+
+  # Pass password separately via a write_only argument or secrets manager reference
+  resource "aws_instance" "app" {
+    user_data = local.user_data
+    # password is injected via metadata or secrets manager, not template
+  }
+fix_disruption: none
 fixtures:
   - sensitive_templatefile

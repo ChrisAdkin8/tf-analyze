@@ -31,5 +31,25 @@ verification: |
   exist, or that existing keys were created within the last 90 days.
   Search the codebase for `aws_iam_access_key` resources and ensure
   removal is tracked in a migration plan.
+fix_hcl: |
+  # Replace long-lived access key with an IAM instance profile (EC2 example)
+  resource "aws_iam_role" "app" {
+    name = "app"
+    assume_role_policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Action    = "sts:AssumeRole"
+        Effect    = "Allow"
+        Principal = { Service = "ec2.amazonaws.com" }
+      }]
+    })
+  }
+
+  resource "aws_iam_instance_profile" "app" {
+    name = "app"
+    role = aws_iam_role.app.name
+  }
+  # Remove the aws_iam_access_key resource entirely
+fix_disruption: none
 fixtures:
   - aws_iam_access_key

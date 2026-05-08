@@ -14,5 +14,15 @@ recommendation: |
 verification: |
   Run `terraform validate` after removing the variable. If any .tfvars file
   sets it, remove that assignment too.
+fix_hcl: |
+  # Remove the unused variable declaration entirely
+  # Before (delete this block):
+  # variable "deprecated_flag" {
+  #   type    = bool
+  #   default = false
+  # }
+
+  # After: variable is gone; no .tfvars assignment needed
+fix_disruption: none
 fixtures:
   - unused_variable

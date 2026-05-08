@@ -28,5 +28,16 @@ recommendation: |
 verification: |
   `terraform validate` succeeds, and `terraform plan` shows resources landing
   in the intended region/account.
+fix_hcl: |
+  provider "aws" {
+    alias  = "eu_west"
+    region = "eu-west-1"
+  }
+
+  module "eu_stack" {
+    source    = "./modules/stack"
+    providers = { aws = aws.eu_west }
+  }
+fix_disruption: none
 fixtures:
   - provider_alias_mismatch

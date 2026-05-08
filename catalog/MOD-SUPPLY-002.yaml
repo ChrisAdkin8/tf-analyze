@@ -17,5 +17,15 @@ verification: |
   Replace `git::` sources with registry equivalents where available.
 soc2_cc:
   - "CC9.2"
+fix_hcl: |
+  # Before: module sourced from raw git
+  # source = "git::https://github.com/example/terraform-aws-vpc.git"
+
+  # After: registry source with version pin
+  module "vpc" {
+    source  = "terraform-aws-modules/vpc/aws"
+    version = "~> 5.0"
+  }
+fix_disruption: none
 fixtures:
   - mod_supply_git_source

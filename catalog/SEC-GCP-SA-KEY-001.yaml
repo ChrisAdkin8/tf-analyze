@@ -52,5 +52,20 @@ verification: |
   `gcloud iam service-accounts keys list --iam-account <SA_EMAIL>` should
   return only system-managed keys (type = SYSTEM_MANAGED). Re-run tf-analyze
   — SEC-GCP-SA-KEY-001 must not fire.
+fix_hcl: |
+  # Replace service account key with Workload Identity (GKE example)
+  resource "google_service_account_iam_member" "wi" {
+    service_account_id = google_service_account.app.name
+    role               = "roles/iam.workloadIdentityUser"
+    member             = "serviceAccount:${var.project}.svc.id.goog[${var.namespace}/${var.ksa}]"
+  }
+
+  resource "google_container_cluster" "app" {
+    workload_identity_config {
+      workload_pool = "${var.project}.svc.id.goog"
+    }
+  }
+  # Remove the google_service_account_key resource entirely
+fix_disruption: none
 fixtures:
   - gcp_sa_key

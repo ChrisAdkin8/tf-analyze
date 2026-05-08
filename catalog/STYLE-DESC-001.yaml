@@ -18,5 +18,16 @@ verification: |
   Run `grep -rn 'variable\|output' *.tf` and confirm each block has a
   `description` line. Or run `terraform-docs markdown .` and check for
   blank description columns.
+fix_hcl: |
+  variable "environment" {
+    type        = string
+    description = "Deployment environment: dev, staging, or prod"
+  }
+
+  output "instance_id" {
+    description = "EC2 instance ID of the application server"
+    value       = aws_instance.app.id
+  }
+fix_disruption: none
 fixtures:
   - missing_description

@@ -24,5 +24,15 @@ verification: |
   Diff the `program = [ ... ]` array: no `var.*` or `local.*` interpolation
   in positions 1..N. If kept, pin the program path to a repo-local script
   whose contents are reviewed alongside the Terraform.
+fix_hcl: |
+  # Pass variable data via stdin (query map), not via argv
+  data "external" "lookup" {
+    program = ["python3", "${path.module}/scripts/lookup.py"]
+    query = {
+      environment = var.environment
+      region      = var.region
+    }
+  }
+fix_disruption: none
 fixtures:
   - data_external_injection

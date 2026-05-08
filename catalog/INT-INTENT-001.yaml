@@ -18,5 +18,17 @@ recommendation: |
 verification: |
   Confirm the variable has `default = true` or no default, and a
   `validation` block enforces the constraint.
+fix_hcl: |
+  variable "enable_encryption" {
+    type        = bool
+    description = "Encrypt data at rest (must be true in production)"
+    default     = true
+
+    validation {
+      condition     = var.enable_encryption == true
+      error_message = "enable_encryption must be true — encryption cannot be disabled"
+    }
+  }
+fix_disruption: none
 fixtures:
   - int_intent_var_false_default

@@ -33,5 +33,14 @@ verification: |
 related:
   - SEC-IAM-001
   - SEC-IAM-002
+fix_hcl: |
+  # Remove the project-level binding; keep only resource-level bindings
+  resource "google_storage_bucket_iam_member" "app" {
+    bucket = google_storage_bucket.app.name
+    role   = "roles/storage.objectViewer"
+    member = "serviceAccount:${google_service_account.app.email}"
+  }
+  # Delete: google_project_iam_member for the same service account
+fix_disruption: none
 fixtures:
   - iam_member_breadth
