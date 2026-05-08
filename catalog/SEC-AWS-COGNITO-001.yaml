@@ -40,5 +40,15 @@ verification: |
   `aws cognito-idp describe-user-pool --user-pool-id <id> \
     --query 'UserPool.MfaConfiguration'`
   must return `ON`.
+fix_hcl: |
+  resource "aws_cognito_user_pool" "example" {
+    # ... other arguments ...
+    mfa_configuration = "ON"
+    software_token_mfa_configuration {
+      enabled = true
+    }
+  }
+fix_disruption: plan_required
+
 fixtures:
   - aws_cognito_no_mfa

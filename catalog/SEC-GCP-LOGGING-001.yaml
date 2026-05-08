@@ -19,5 +19,9 @@ recommendation: |
 verification: |
   Run `gcloud logging read 'logName="projects/<project>/logs/cloudaudit.googleapis.com%2Fdata_access"' --limit 1`
   and confirm at least one event is returned.
+pci_dss:
+  - "Req-10.2"
+soc2_cc:
+  - "CC7.2"
 fixtures:
   - audit_logs_missing

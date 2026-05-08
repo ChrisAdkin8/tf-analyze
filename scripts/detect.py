@@ -64,11 +64,14 @@ Pattern kinds supported:
 from __future__ import annotations
 
 import argparse
+import difflib
+import hashlib
 import io
 import json
 import fnmatch
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -440,6 +443,8 @@ COUNT_ATTR_RE = re.compile(r'(?m)^\s*count\s*=')
 FOREACH_ATTR_RE = re.compile(r'(?m)^\s*for_each\s*=')
 VALIDATION_BLOCK_RE = re.compile(r'(?m)^\s*validation\s*\{')
 VAR_REF_RE = re.compile(r'\bvar\.([\w-]+)\b')
+# Matches when the entire (stripped) attribute value is a plain var.X reference.
+_VAR_PLAIN_REF_RE = re.compile(r'^var\.([\w-]+)$')
 MODULE_REF_RE = re.compile(r'\bmodule\.([\w-]+)\.([\w-]+)')
 INLINE_IGNORE_RE = re.compile(r'#\s*tf-analyze:ignore\s+([\w-]+)')
 BOOL_COUNT_RE = re.compile(
@@ -536,8 +541,12 @@ def find_simple_blocks(text: str, regex: re.Pattern) -> list[dict]:
 
 
 def block_has_arg(body: str, arg: str) -> bool:
-    """Check if a block body has a top-level argument named `arg`."""
-    pat = re.compile(rf'(?m)^\s*{re.escape(arg)}\s*=', re.MULTILINE)
+    """Check if a block body has a top-level argument named `arg`.
+
+    Matches both attribute assignments (`arg = value`) and nested block
+    declarations (`arg {`), since some arguments appear as blocks in HCL.
+    """
+    pat = re.compile(rf'(?m)^\s*{re.escape(arg)}\s*[={{]', re.MULTILINE)
     return bool(pat.search(body))
 
 
@@ -580,6 +589,43 @@ def block_arg_value(body: str, arg: str) -> str | None:
     return val
 
 
+def _resolve_var_ref(val: str, var_defaults: dict) -> str:
+    """If val is a plain `var.X` reference and X has a known default, return that default.
+
+    Only substitutes when the entire value is `var.X` — compound expressions
+    like `var.x == true` are left unchanged so they don't accidentally match
+    literal-value patterns.
+
+    Data-source references (data.X.Y.attr) are intentionally NOT resolved:
+    they return their original string, which is non-empty and will not match
+    literal `false` checks, so resource_arg patterns behave correctly without
+    a sentinel. Regex-based resource_arg patterns also need the original value.
+    """
+    m = _VAR_PLAIN_REF_RE.match(val.strip())
+    if m:
+        resolved = var_defaults.get(m.group(1))
+        if resolved is not None:
+            return resolved
+    return val
+
+
+def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
+    """Return {dir_path: {var_name: default_value}} for all declared variable defaults.
+
+    Variable scope in Terraform is per-directory, so defaults are indexed by
+    the parent directory of each .tf file rather than a flat global map.
+    """
+    result: dict[str, dict[str, str]] = {}
+    for fp, text in all_files_text.items():
+        dir_key = str(Path(fp).parent)
+        for blk in find_blocks(text, VARIABLE_START):
+            var_name = blk["groups"][0]
+            default = block_arg_value(blk["body"], "default")
+            if default is not None:
+                result.setdefault(dir_key, {})[var_name] = default
+    return result
+
+
 def block_has_nested_path(body: str, path: str) -> bool:
     """Check if a nested HCL path like `settings.backup_configuration.enabled` is set."""
     parts = path.split(".")
@@ -609,11 +655,99 @@ def block_has_nested_path(body: str, path: str) -> bool:
     return False
 
 
+# ---- Dynamic block expansion --------------------------------------------
+
+_DYNAMIC_BLOCK_START_RE = re.compile(r'dynamic\s+"([\w-]+)"\s*\{')
+
+
+def _expand_dynamic_blocks(body: str) -> str:
+    """Replace dynamic "X" { for_each = ... content { ... } } with X { ... }.
+
+    This is a best-effort structural pre-pass so that resource_arg /
+    resource_missing_arg / hcl_attr patterns can match attributes inside
+    dynamically-generated nested blocks (e.g. dynamic "ingress" in a
+    security group). Runtime values (the for_each iterable) are not
+    evaluated — the goal is to surface attribute-presence checks, not to
+    enumerate instances.
+
+    Line numbers are NOT altered: the transformed body is only used for
+    attribute inspection within an already-located resource block; the
+    finding's reported line is always the resource block's start_line.
+    """
+    result: list[str] = []
+    i = 0
+    n = len(body)
+    while i < n:
+        m = _DYNAMIC_BLOCK_START_RE.search(body, i)
+        if not m:
+            result.append(body[i:])
+            break
+        result.append(body[i:m.start()])
+        block_name = m.group(1)
+        # Find the outer dynamic block boundary
+        depth, j, outer_end = 0, m.end() - 1, None
+        while j < n:
+            c = body[j]
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    outer_end = j
+                    break
+            j += 1
+        if outer_end is None:
+            result.append(body[m.start():])
+            break
+        outer_body = body[m.end():outer_end]
+        # Extract the content { ... } block inside the dynamic block
+        content_m = re.search(r'(?m)^\s*content\s*\{', outer_body)
+        if content_m:
+            depth2, k, content_end = 0, content_m.end() - 1, None
+            while k < len(outer_body):
+                c = outer_body[k]
+                if c == '{':
+                    depth2 += 1
+                elif c == '}':
+                    depth2 -= 1
+                    if depth2 == 0:
+                        content_end = k
+                        break
+                k += 1
+            if content_end is not None:
+                content_body = outer_body[content_m.end():content_end]
+                result.append(f'{block_name} {{{content_body}}}')
+            else:
+                result.append(body[m.start():outer_end + 1])
+        else:
+            result.append(body[m.start():outer_end + 1])
+        i = outer_end + 1
+    return ''.join(result)
+
+
 # ---- Detection ----------------------------------------------------------
 
-def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict]:
+def detect_in_file(
+    file_path: Path,
+    text: str,
+    entries: list[dict],
+    var_defaults: dict | None = None,
+) -> list[dict]:
+    """Run per-file detection patterns against a single .tf file.
+
+    var_defaults: directory-scoped {var_name: default_value} map built by
+    _extract_var_defaults_by_dir(). When supplied, plain `var.X` attribute
+    values are substituted with their declared defaults before pattern
+    matching, reducing false negatives from indirectly-configured attributes.
+    """
+    _vd: dict = var_defaults or {}
     findings = []
     resources = find_blocks(text, RESOURCE_START)
+    # Expand dynamic "X" { content { ... } } blocks within each resource body
+    # so that resource_arg / resource_missing_arg / hcl_attr patterns can
+    # match attributes that live inside dynamically-generated nested blocks.
+    for _blk in resources:
+        _blk["body"] = _expand_dynamic_blocks(_blk["body"])
     modules = find_blocks(text, MODULE_START)
     variables = find_blocks(text, VARIABLE_START)
 
@@ -652,6 +786,7 @@ def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict
                     val = block_arg_value(blk["body"], arg)
                     if val is None:
                         continue
+                    val = _resolve_var_ref(val, _vd)
                     hit = False
                     if regex and regex.search(val):
                         hit = True
@@ -670,7 +805,7 @@ def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict
                 if "resource" not in pat:
                     continue
                 rt = pat["resource"]
-                arg_path = pat.get("arg") or pat.get("nested_path") or ""
+                arg_path = pat.get("nested_path") or pat.get("arg") or ""
                 if not arg_path:
                     continue
                 suppress_if = pat.get("suppress_if")
@@ -688,6 +823,8 @@ def detect_in_file(file_path: Path, text: str, entries: list[dict]) -> list[dict
                             s_val = str(suppress_if.get("equals", "")).lower().strip("\"'")
                             if s_arg and s_val:
                                 actual = block_arg_value(blk["body"], s_arg)
+                                if actual:
+                                    actual = _resolve_var_ref(actual, _vd)
                                 if actual and str(actual).lower().strip("\"'") == s_val:
                                     continue
                         findings.append(
@@ -2037,12 +2174,89 @@ def _graph_azure_uami_orphan(index: dict, all_files_text: dict) -> list[dict]:
     return out
 
 
+def _graph_dynamodb_pitr(index: dict, all_files_text: dict) -> list[dict]:
+    """aws_dynamodb_table without point_in_time_recovery { enabled = true }.
+
+    DynamoDB's PITR default is disabled. A table with no
+    point_in_time_recovery block (or enabled = false) cannot be restored
+    to an arbitrary second within the last 35 days, leaving accidental
+    writes or deletes unrecoverable.
+    """
+    out: list[dict] = []
+    for addr, res in index.items():
+        if res["type"] != "aws_dynamodb_table":
+            continue
+        body = res["body"]
+        pitr_m = re.search(r'(?m)^\s*point_in_time_recovery\s*\{', body)
+        if not pitr_m:
+            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            continue
+        depth, k, end = 0, pitr_m.end() - 1, None
+        while k < len(body):
+            c = body[k]
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    end = k
+                    break
+            k += 1
+        if end is None:
+            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            continue
+        pitr_body = body[pitr_m.end():end]
+        enabled = block_arg_value(pitr_body, "enabled")
+        if not enabled or enabled.lower() != "true":
+            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+    return out
+
+
+def _graph_dynamodb_sse(index: dict, all_files_text: dict) -> list[dict]:
+    """aws_dynamodb_table without a customer-managed KMS key for SSE.
+
+    DynamoDB encrypts at rest by default using Amazon-owned keys, which
+    cannot be audited, rotated, or revoked. Tables that lack a
+    server_side_encryption block with kms_key_arn rely on these default
+    keys instead of a customer-managed key (CMK).
+    """
+    out: list[dict] = []
+    for addr, res in index.items():
+        if res["type"] != "aws_dynamodb_table":
+            continue
+        body = res["body"]
+        sse_m = re.search(r'(?m)^\s*server_side_encryption\s*\{', body)
+        if not sse_m:
+            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            continue
+        depth, k, end = 0, sse_m.end() - 1, None
+        while k < len(body):
+            c = body[k]
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    end = k
+                    break
+            k += 1
+        if end is None:
+            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            continue
+        sse_body = body[sse_m.end():end]
+        if not block_has_arg(sse_body, "kms_key_arn"):
+            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+    return out
+
+
 _GRAPH_CHECKS = {
     "logging_target_public": _graph_logging_target_public,
     "gke_nodepool_secure_boot": _graph_gke_nodepool_secure_boot,
     "kms_location_parity": _graph_kms_location_parity,
     "iam_member_breadth": _graph_iam_member_breadth,
     "azure_uami_orphan": _graph_azure_uami_orphan,
+    "dynamodb_pitr": _graph_dynamodb_pitr,
+    "dynamodb_sse": _graph_dynamodb_sse,
 }
 
 
@@ -2055,15 +2269,23 @@ _CROWN_JEWEL_TYPES: set[str] = {
     "google_kms_crypto_key", "google_storage_bucket",
     "azurerm_mssql_server", "azurerm_sql_server",
     "azurerm_key_vault", "azurerm_key_vault_secret", "azurerm_storage_account",
+    # Azure — expanded crown jewels
+    "azurerm_postgresql_server", "azurerm_postgresql_flexible_server",
+    "azurerm_cosmosdb_account", "azurerm_service_bus_namespace",
+    "azurerm_mysql_server", "azurerm_mysql_flexible_server",
 }
 
 _NODE_TYPE_MAP: dict[str, str] = {
     "aws_instance": "compute", "aws_lambda_function": "compute",
     "aws_ecs_task_definition": "compute", "aws_ecs_service": "compute",
     "google_compute_instance": "compute", "google_cloud_run_v2_service": "compute",
-    "google_container_cluster": "compute",
+    "google_cloud_run_service": "compute", "google_container_cluster": "compute",
+    "google_cloudfunctions_function": "compute", "google_cloudfunctions2_function": "compute",
     "azurerm_linux_virtual_machine": "compute",
-    "azurerm_windows_virtual_machine": "compute",
+    "azurerm_windows_virtual_machine": "compute", "azurerm_virtual_machine": "compute",
+    "azurerm_app_service": "compute", "azurerm_linux_web_app": "compute",
+    "azurerm_windows_web_app": "compute", "azurerm_kubernetes_cluster": "compute",
+    "azurerm_function_app": "compute", "azurerm_linux_function_app": "compute",
     "aws_iam_role": "iam", "aws_iam_instance_profile": "iam", "aws_iam_policy": "iam",
     "google_service_account": "iam",
     "azurerm_user_assigned_identity": "iam", "azurerm_role_assignment": "iam",
@@ -2071,12 +2293,16 @@ _NODE_TYPE_MAP: dict[str, str] = {
     "azurerm_storage_account": "storage",
     "aws_db_instance": "storage", "aws_rds_cluster": "storage",
     "google_sql_database_instance": "storage", "azurerm_mssql_server": "storage",
+    "azurerm_postgresql_server": "storage", "azurerm_postgresql_flexible_server": "storage",
+    "azurerm_mysql_server": "storage", "azurerm_cosmosdb_account": "storage",
     "aws_secretsmanager_secret": "secret",
     "google_secret_manager_secret": "secret",
     "azurerm_key_vault_secret": "secret",
-    "aws_kms_key": "key", "google_kms_crypto_key": "key", "azurerm_key_vault_key": "key",
+    "aws_kms_key": "key", "google_kms_crypto_key": "key",
+    "azurerm_key_vault_key": "key", "azurerm_key_vault": "key",
     "aws_security_group": "network", "aws_lb": "network", "aws_alb": "network",
     "google_compute_firewall": "network", "azurerm_network_security_group": "network",
+    "azurerm_public_ip": "network",
 }
 
 # Internet-reachability detection regexes
@@ -2089,6 +2315,8 @@ _INET_CLOUDRUN_ALL_RE   = re.compile(r'ingress\s*=\s*"?INGRESS_TRAFFIC_ALL"?')
 _INET_ALB_FACING_RE     = re.compile(r'(?:scheme|load_balancer_type)\s*=\s*"?internet-facing"?')
 _INET_GCE_ACCESS_CFG_RE = re.compile(r'access_config\s*\{')
 _INET_GKE_PRIVATE_RE    = re.compile(r'private_cluster_config\s*\{')
+# Azure reachability
+_INET_AZ_IP_RESTRICTION_RE = re.compile(r'ip_restriction\s*\{')
 
 # Edge-inference regexes (HCL reference patterns between resources)
 _EDGE_IAM_PROFILE_RE  = re.compile(
@@ -2109,6 +2337,20 @@ _EDGE_GCP_SA_RE       = re.compile(
     r'email\s*=\s*google_service_account\.([\w-]+)(?:\.\w+)?')
 _EDGE_GCS_BUCKET_RE   = re.compile(
     r'\bbucket\s*=\s*google_storage_bucket\.([\w-]+)(?:\.\w+)?')
+# Azure edge-inference (managed identity, Key Vault, storage, SQL)
+_EDGE_AZ_MI_RE        = re.compile(
+    r'identity_ids\s*=\s*\[[^\]]*azurerm_user_assigned_identity\.([\w-]+)')
+_EDGE_AZ_KV_RE        = re.compile(
+    r'key_vault_id\s*=\s*azurerm_key_vault\.([\w-]+)(?:\.\w+)?')
+_EDGE_AZ_STORAGE_RE   = re.compile(
+    r'storage_account_name\s*=\s*azurerm_storage_account\.([\w-]+)(?:\.\w+)?')
+_EDGE_AZ_SQL_RE       = re.compile(
+    r'server_name\s*=\s*azurerm_mssql_server\.([\w-]+)(?:\.\w+)?')
+# GCP additional service-account references (Cloud Run, GKE, Cloud Functions)
+_EDGE_GCP_SA_EMAIL_RE = re.compile(
+    r'service_account_email\s*=\s*google_service_account\.([\w-]+)(?:\.\w+)?')
+_EDGE_GCP_SA_NAME_RE  = re.compile(
+    r'(?<!\w)service_account\s*=\s*google_service_account\.([\w-]+)(?:\.\w+)?')
 
 
 # ---- intent-gap detection ------------------------------------------------
@@ -2143,7 +2385,7 @@ def _is_internet_reachable(rtype: str, body: str) -> bool:
         return bool(_INET_SQL_PUBLIC_IP_RE.search(body))
     if rtype == "aws_security_group":
         return bool(_INET_SG_CIDR_RE.search(body) or _INET_SG_IPV6_RE.search(body))
-    if rtype == "google_cloud_run_v2_service":
+    if rtype in {"google_cloud_run_v2_service", "google_cloud_run_service"}:
         return bool(_INET_CLOUDRUN_ALL_RE.search(body) or "ingress" not in body)
     if rtype in {"aws_lb", "aws_alb"}:
         return bool(_INET_ALB_FACING_RE.search(body))
@@ -2151,6 +2393,16 @@ def _is_internet_reachable(rtype: str, body: str) -> bool:
         return bool(_INET_GCE_ACCESS_CFG_RE.search(body))
     if rtype == "google_container_cluster":
         return not bool(_INET_GKE_PRIVATE_RE.search(body))
+    # Azure — public_ip resource is always internet-facing by definition
+    if rtype == "azurerm_public_ip":
+        return True
+    # Azure web/function apps are public unless ip_restriction blocks are present
+    if rtype in {
+        "azurerm_app_service", "azurerm_linux_web_app",
+        "azurerm_windows_web_app", "azurerm_function_app",
+        "azurerm_linux_function_app",
+    }:
+        return not bool(_INET_AZ_IP_RESTRICTION_RE.search(body))
     return False
 
 
@@ -2235,6 +2487,20 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
             _add_edge(addr, f"google_service_account.{m.group(1)}", "service_account")
         for m in _EDGE_GCS_BUCKET_RE.finditer(body):
             _add_edge(addr, f"google_storage_bucket.{m.group(1)}", "bucket_ref")
+        # Azure edges
+        for m in _EDGE_AZ_MI_RE.finditer(body):
+            _add_edge(addr, f"azurerm_user_assigned_identity.{m.group(1)}", "managed_identity")
+        for m in _EDGE_AZ_KV_RE.finditer(body):
+            _add_edge(addr, f"azurerm_key_vault.{m.group(1)}", "key_vault_ref")
+        for m in _EDGE_AZ_STORAGE_RE.finditer(body):
+            _add_edge(addr, f"azurerm_storage_account.{m.group(1)}", "storage_ref")
+        for m in _EDGE_AZ_SQL_RE.finditer(body):
+            _add_edge(addr, f"azurerm_mssql_server.{m.group(1)}", "sql_server_ref")
+        # GCP additional service account reference patterns
+        for m in _EDGE_GCP_SA_EMAIL_RE.finditer(body):
+            _add_edge(addr, f"google_service_account.{m.group(1)}", "service_account")
+        for m in _EDGE_GCP_SA_NAME_RE.finditer(body):
+            _add_edge(addr, f"google_service_account.{m.group(1)}", "service_account")
 
     # Connect internet-reachable nodes to INTERNET
     for addr, node in list(nodes.items()):
@@ -3184,32 +3450,69 @@ def _infer_cis_framework(rule_id: str) -> str:
     return "Other"
 
 
-def _compliance_gap_report(findings: list[dict], entries: list[dict]) -> dict:
-    """Map CIS controls against fired findings; return {framework: [control_dicts]}.
+def _compliance_gap_report(
+    findings: list[dict],
+    entries: list[dict],
+    framework: str = "cis",
+) -> dict:
+    """Map compliance controls against fired findings; return {framework: [control_dicts]}.
 
     Each control dict: {control, rules, status ('PASS'|'FAIL'), failed_rules}.
-    Controls with no catalogue coverage are omitted (they are NOT-ASSESSABLE).
+    Controls with no catalogue coverage are omitted (NOT-ASSESSABLE).
+
+    framework: 'cis' (default), 'pci_dss', 'soc2', or 'all' (combines all three).
     """
     fired_ids = {f["id"] for f in findings}
     control_map: dict[str, dict] = {}
+
+    want_cis    = framework in ("cis", "all")
+    want_pci    = framework in ("pci_dss", "all")
+    want_soc2   = framework in ("soc2", "all")
+
     for entry in entries:
-        cis_list = entry.get("cis", [])
-        if not isinstance(cis_list, list):
-            cis_list = [cis_list] if cis_list else []
-        if not cis_list:
-            continue
-        fw = _infer_cis_framework(entry.get("id", ""))
-        for ctrl in cis_list:
-            key = f"{fw}::{ctrl}"
-            if key not in control_map:
-                control_map[key] = {
-                    "framework": fw,
-                    "control": str(ctrl),
-                    "rules": [],
-                    "failed_rules": [],
-                    "status": "PASS",
-                }
-            control_map[key]["rules"].append(entry["id"])
+        eid = entry.get("id", "")
+
+        if want_cis:
+            cis_list = entry.get("cis", [])
+            if not isinstance(cis_list, list):
+                cis_list = [cis_list] if cis_list else []
+            fw_name = _infer_cis_framework(eid)
+            for ctrl in cis_list:
+                key = f"{fw_name}::{ctrl}"
+                if key not in control_map:
+                    control_map[key] = {
+                        "framework": fw_name, "control": str(ctrl),
+                        "rules": [], "failed_rules": [], "status": "PASS",
+                    }
+                control_map[key]["rules"].append(eid)
+
+        if want_pci:
+            pci_list = entry.get("pci_dss", [])
+            if not isinstance(pci_list, list):
+                pci_list = [pci_list] if pci_list else []
+            for ctrl in pci_list:
+                fw_name = "PCI-DSS v4.0"
+                key = f"{fw_name}::{ctrl}"
+                if key not in control_map:
+                    control_map[key] = {
+                        "framework": fw_name, "control": str(ctrl),
+                        "rules": [], "failed_rules": [], "status": "PASS",
+                    }
+                control_map[key]["rules"].append(eid)
+
+        if want_soc2:
+            soc2_list = entry.get("soc2_cc", [])
+            if not isinstance(soc2_list, list):
+                soc2_list = [soc2_list] if soc2_list else []
+            for ctrl in soc2_list:
+                fw_name = "SOC2 Trust Services Criteria"
+                key = f"{fw_name}::{ctrl}"
+                if key not in control_map:
+                    control_map[key] = {
+                        "framework": fw_name, "control": str(ctrl),
+                        "rules": [], "failed_rules": [], "status": "PASS",
+                    }
+                control_map[key]["rules"].append(eid)
 
     for item in control_map.values():
         failed = [r for r in item["rules"] if r in fired_ids]
@@ -3221,7 +3524,8 @@ def _compliance_gap_report(findings: list[dict], entries: list[dict]) -> dict:
         by_fw.setdefault(item["framework"], []).append(item)
 
     def _ctrl_sort_key(c: dict) -> list:
-        return [int(x) if x.isdigit() else x for x in c["control"].split(".")]
+        parts = re.split(r'[.\-]', c["control"])
+        return [int(x) if x.isdigit() else x for x in parts]
 
     for fw in by_fw:
         by_fw[fw].sort(key=_ctrl_sort_key)
@@ -3230,7 +3534,7 @@ def _compliance_gap_report(findings: list[dict], entries: list[dict]) -> dict:
 
 
 def _render_compliance_text(by_fw: dict) -> str:
-    lines: list[str] = ["## CIS Compliance Gap Report", ""]
+    lines: list[str] = ["## Compliance Gap Report", ""]
     for fw in sorted(by_fw):
         controls = by_fw[fw]
         total = len(controls)
@@ -4070,6 +4374,14 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     fix_disruption_note = data.get("fix_disruption_note")
     if fix_disruption_note is not None and not isinstance(fix_disruption_note, str):
         errs.append(f"{source}: 'fix_disruption_note' must be a string if present")
+    pci_dss = data.get("pci_dss")
+    if pci_dss is not None:
+        if not isinstance(pci_dss, list) or not all(isinstance(x, str) for x in pci_dss):
+            errs.append(f"{source}: 'pci_dss' must be a list of strings if present")
+    soc2_cc = data.get("soc2_cc")
+    if soc2_cc is not None:
+        if not isinstance(soc2_cc, list) or not all(isinstance(x, str) for x in soc2_cc):
+            errs.append(f"{source}: 'soc2_cc' must be a list of strings if present")
     fid = data.get("id")
     fname = Path(source).stem
     if fid and fid != fname:
@@ -4846,6 +5158,367 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
         sys.exit(2)
 
 
+# ---- Registry staleness (item 7) ----------------------------------------
+
+import urllib.request as _urllib_request
+
+_REGISTRY_SOURCE_RE = re.compile(
+    r'^"?([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)"?$'
+)
+_MOD_VERSION_PIN_RE = re.compile(r'(?m)^\s*version\s*=\s*"([^"]+)"')
+
+
+def _query_registry_latest(namespace: str, name: str, provider: str) -> str | None:
+    """Return the latest published version string from the Terraform Registry.
+
+    Returns None on any network or parse error — callers should treat None
+    as "unknown" and skip the staleness check rather than erroring out.
+    """
+    url = f"https://registry.terraform.io/v1/modules/{namespace}/{name}/{provider}"
+    try:
+        req = _urllib_request.Request(url, headers={"User-Agent": "tf-analyze/1.0"})
+        with _urllib_request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        return data.get("version") or None
+    except Exception:
+        return None
+
+
+def _check_module_registry_staleness(all_files_text: dict) -> list[dict]:
+    """Scan module blocks for registry-style sources and compare pinned vs latest.
+
+    Emits MOD-STALE-001 findings when the pinned version is:
+      - >= 1 major version behind latest, OR
+      - >= 3 minor versions behind latest (within the same major)
+
+    Network errors are silenced — a failed registry query does not emit a finding.
+    """
+    findings: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()   # deduplicate per (ns, name, provider)
+
+    for fp, text in all_files_text.items():
+        for mblk in find_blocks(text, MODULE_START):
+            src = block_arg_value(mblk["body"], "source")
+            if not src:
+                continue
+            m = _REGISTRY_SOURCE_RE.match(src.strip())
+            if not m:
+                continue
+            ns, mod_name, provider = m.group(1), m.group(2), m.group(3)
+            key = (ns, mod_name, provider)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            pin_m = _MOD_VERSION_PIN_RE.search(mblk["body"])
+            pinned = pin_m.group(1) if pin_m else None
+            latest = _query_registry_latest(ns, mod_name, provider)
+            if not pinned or not latest:
+                continue
+
+            pinned_v = _version_tuple(pinned)
+            latest_v = _version_tuple(latest)
+            if not pinned_v or not latest_v or pinned_v >= latest_v:
+                continue
+
+            # Determine staleness severity
+            major_behind = latest_v[0] - pinned_v[0] if len(pinned_v) >= 1 and len(latest_v) >= 1 else 0
+            minor_behind = (latest_v[1] - pinned_v[1]) if (
+                len(pinned_v) >= 2 and len(latest_v) >= 2 and major_behind == 0
+            ) else 0
+
+            if major_behind >= 1:
+                urgency = "MEDIUM"
+            elif minor_behind >= 3:
+                urgency = "LOW"
+            else:
+                continue   # minor drift < 3 — not worth flagging
+
+            findings.append({
+                "id": "MOD-STALE-001",
+                "file": str(fp),
+                "line": mblk["start_line"],
+                "resource": f"module.{mblk['groups'][0]}",
+                "detail": (
+                    f"{ns}/{mod_name}/{provider}: pinned={pinned}, "
+                    f"latest={latest} ({major_behind}M/{minor_behind}m behind)"
+                ),
+                "_urgency_override": urgency,
+            })
+
+    return findings
+
+
+# ---- Incremental scan cache --------------------------------------------
+
+def _corpus_hash(all_files_text: dict, entries: list) -> str:
+    """Stable 16-hex-char hash over all .tf file contents and catalogue rules.
+
+    Used by the --cache path to determine whether a full re-scan is needed.
+    If every file and every catalogue entry is byte-identical to the previous
+    run, the cached findings are returned without re-scanning.
+    """
+    fh = hashlib.sha256()
+    for fp_raw in sorted(all_files_text.keys(), key=str):
+        fh.update(str(fp_raw).encode())
+        content = all_files_text[fp_raw]
+        fh.update(content.encode() if isinstance(content, str) else content)
+    ch = hashlib.sha256()
+    for e in sorted(entries, key=lambda x: x["id"]):
+        ch.update(e["id"].encode())
+        ch.update(str(e.get("patterns", ""))[:200].encode())
+    return hashlib.sha256((fh.hexdigest() + ch.hexdigest()).encode()).hexdigest()[:16]
+
+
+def _load_scan_cache(cache_path: Path) -> dict | None:
+    """Load a scan cache file. Returns None if absent, unreadable, or wrong version."""
+    try:
+        with open(cache_path) as f:
+            data = json.load(f)
+        if data.get("version") != 1:
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def _save_scan_cache(cache_path: Path, corpus_hash: str, findings: list) -> None:
+    """Persist findings to the scan cache file. Failure is silent — non-fatal."""
+    try:
+        with open(cache_path, "w") as f:
+            json.dump({"version": 1, "corpus_hash": corpus_hash, "findings": findings}, f)
+    except Exception:
+        pass
+
+
+# ---- Auto-fix helpers ---------------------------------------------------
+
+def _fix_hcl_body(fix_hcl: str) -> str:
+    """Strip outer resource declaration from fix_hcl, returning just the body."""
+    m = re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{(.*)\}\s*$', fix_hcl, re.DOTALL)
+    return m.group(1) if m else fix_hcl
+
+
+def _fix_line_for_arg(fix_hcl: str, arg: str) -> str | None:
+    """Extract the `arg = value` expression from a fix_hcl snippet.
+
+    Handles single-line attributes and multi-line map literals (`arg = { ... }`).
+    Returns None if arg does not appear as an assignment (use _fix_block_for_nested_arg
+    for block syntax).
+    """
+    body = _fix_hcl_body(fix_hcl)
+    start_m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*=', body)
+    if not start_m:
+        return None
+    text = body[start_m.start():]
+    newline_pos = text.find('\n')
+    first_line = text if newline_pos == -1 else text[:newline_pos]
+    # Count unmatched opening braces on the first line — if > 0, multi-line map
+    brace_depth = first_line.count('{') - first_line.count('}')
+    if brace_depth <= 0:
+        return first_line.strip()
+    # Multi-line map literal — brace-match to find closing `}`
+    depth = 0
+    end_pos = None
+    for i, ch in enumerate(text):
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                end_pos = i + 1
+                break
+    if end_pos is None:
+        return first_line.strip()
+    # Return raw (unstripped) so _reindent_fix_snippet can use first-line base_len
+    return text[:end_pos]
+
+
+def _fix_block_for_nested_arg(fix_hcl: str, arg: str) -> str | None:
+    """Extract the `arg { ... }` nested block from a fix_hcl snippet.
+
+    Returns the raw block text with the leading whitespace of the first line
+    intact (used by _reindent_fix_snippet to determine base indentation).
+    """
+    body = _fix_hcl_body(fix_hcl)
+    start_m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*\{{', body)
+    if not start_m:
+        return None
+    text = body[start_m.start():]
+    depth = 0
+    end_pos = None
+    for i, ch in enumerate(text):
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                end_pos = i + 1
+                break
+    if end_pos is None:
+        return None
+    return text[:end_pos]
+
+
+def _reindent_fix_snippet(raw: str, indent: str) -> list[str]:
+    """Re-indent a fix snippet (single or multi-line) for insertion into a file.
+
+    Strips the base indentation of the first line from all lines, then prepends
+    `indent`. Returns a list of newline-terminated strings ready for list insertion.
+    """
+    lines = raw.split('\n')
+    base_len = len(lines[0]) - len(lines[0].lstrip())
+    base = ' ' * base_len
+    result = []
+    for line in lines:
+        stripped = line[base_len:] if line.startswith(base) else line
+        result.append(f"{indent}{stripped}\n")
+    return result
+
+
+def _find_block_end_in_lines(lines: list[str], start: int) -> int | None:
+    """Return the 0-based index of the line containing the closing '}' of the
+    block that opens at or after `start`. Handles nested braces."""
+    depth = 0
+    for i in range(start, len(lines)):
+        for ch in lines[i]:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    return i
+    return None
+
+
+def _block_indent(lines: list[str], start: int, end: int) -> str:
+    """Detect the indentation string used by attributes inside a resource block."""
+    for i in range(start + 1, end):
+        stripped = lines[i].lstrip()
+        if stripped and not stripped.startswith('}') and not stripped.startswith('#'):
+            return lines[i][:len(lines[i]) - len(stripped)]
+    return "  "  # fallback: 2 spaces
+
+
+def _handle_apply_fixes(
+    args: object,
+    findings: list[dict],
+    entries: list[dict],
+    dry_run: bool,
+) -> None:
+    """Apply (or preview) fix_hcl patches for every fixable finding.
+
+    Processes findings grouped by file, in reverse line order so that
+    insertions at later lines do not shift the positions of earlier ones.
+    Creates .bak backups before writing when not in dry-run mode.
+    """
+    entry_map = {e["id"]: e for e in entries}
+
+    # Group fixable findings by file
+    by_file: dict[str, list[dict]] = {}
+    for f in findings:
+        fp = f.get("file", "")
+        if not fp:
+            continue
+        entry = entry_map.get(f["id"])
+        if not entry or not entry.get("fix_hcl"):
+            continue
+        by_file.setdefault(fp, []).append(f)
+
+    total_applied = 0
+
+    for file_path in sorted(by_file):
+        path = Path(file_path)
+        if not path.exists():
+            continue
+
+        with open(path) as fh:
+            original_lines = fh.readlines()
+        modified = original_lines[:]
+
+        # Process findings in reverse line order — insertions at later lines
+        # don't affect positions of earlier ones.
+        file_findings = sorted(by_file[file_path], key=lambda x: x.get("line", 0), reverse=True)
+
+        for finding in file_findings:
+            entry = entry_map.get(finding["id"])
+            fix_hcl = entry.get("fix_hcl", "")
+            if not fix_hcl:
+                continue
+
+            # Find the matching pattern to learn the kind and arg
+            resource_addr = finding.get("resource", "")
+            resource_type = resource_addr.split(".")[0] if "." in resource_addr else ""
+            pattern = None
+            for pat in entry.get("patterns", []):
+                if pat.get("resource", "") == resource_type:
+                    pattern = pat
+                    break
+
+            if not pattern:
+                continue
+
+            kind = pattern.get("kind", "")
+            arg = pattern.get("arg", "")
+            # 0-based index of the resource block start.
+            # find_blocks' RESOURCE_START has ^\s* which can match a blank line
+            # before the resource keyword, so start_line may be 1 too low. Advance
+            # to the line that actually contains the opening `{`.
+            start_idx = finding.get("line", 1) - 1
+            while start_idx < len(modified) - 1 and '{' not in modified[start_idx]:
+                start_idx += 1
+
+            if kind == "resource_missing_arg" and arg:
+                block_end = _find_block_end_in_lines(modified, start_idx)
+                if block_end is None:
+                    continue
+                indent = _block_indent(modified, start_idx, block_end)
+                raw = _fix_line_for_arg(fix_hcl, arg) or _fix_block_for_nested_arg(fix_hcl, arg)
+                if not raw:
+                    continue
+                modified[block_end:block_end] = _reindent_fix_snippet(raw, indent)
+                total_applied += 1
+
+            elif kind in ("resource_arg", "hcl_attr"):
+                # Find the line containing `arg = <wrong_value>` within the block
+                block_end = _find_block_end_in_lines(modified, start_idx)
+                if block_end is None:
+                    continue
+                fix_line = _fix_line_for_arg(fix_hcl, arg)
+                if not fix_line:
+                    continue
+                attr_re = re.compile(rf'(?m)^\s*{re.escape(arg)}\s*=')
+                for li in range(start_idx, block_end + 1):
+                    if attr_re.match(modified[li]):
+                        indent = modified[li][:len(modified[li]) - len(modified[li].lstrip())]
+                        modified[li] = f"{indent}{fix_line}\n"
+                        total_applied += 1
+                        break
+
+        if modified == original_lines:
+            continue
+
+        diff_lines = list(difflib.unified_diff(
+            original_lines, modified,
+            fromfile=f"{file_path}.orig",
+            tofile=file_path,
+            lineterm="",
+        ))
+
+        if dry_run:
+            for dl in diff_lines:
+                print(dl)
+        else:
+            shutil.copy2(path, str(path) + ".bak")
+            with open(path, "w") as fh:
+                fh.writelines(modified)
+            print(f"# patched {file_path}", file=sys.stderr)
+
+    action = "would apply" if dry_run else "applied"
+    print(f"# apply-fixes: {action} {total_applied} fix(es) across {len(by_file)} file(s)",
+          file=sys.stderr)
+
+
 # ---- Main ---------------------------------------------------------------
 
 def main():
@@ -4907,10 +5580,21 @@ def main():
         action="store_true",
         default=False,
         help=(
-            "Add a CIS compliance gap report tab to HTML output, or (with "
+            "Add a compliance gap report tab to HTML output, or (with "
             "--format compliance) output a plain-text compliance table. "
-            "Maps findings against CIS AWS/GCP/Azure benchmark controls "
-            "defined in catalogue cis: fields."
+            "Use --compliance-framework to choose the standard."
+        ),
+    )
+    ap.add_argument(
+        "--compliance-framework",
+        default="cis",
+        choices=["cis", "pci_dss", "soc2", "all"],
+        metavar="FRAMEWORK",
+        help=(
+            "Compliance framework to map against. Choices: cis (default), "
+            "pci_dss, soc2, all. 'all' combines CIS, PCI-DSS v4.0, and "
+            "SOC2 Trust Services Criteria in one report. Requires --compliance "
+            "or --format compliance."
         ),
     )
     ap.add_argument(
@@ -4931,6 +5615,18 @@ def main():
             "catalogue entry defines a `test_template` field. Files are "
             "written to OUTDIR (created if absent). Native Terraform test "
             "format (requires Terraform >= 1.6)."
+        ),
+    )
+    ap.add_argument(
+        "--check-registry",
+        action="store_true",
+        default=False,
+        help=(
+            "Query the Terraform Registry for the latest version of each "
+            "registry-style module source and emit MOD-STALE-001 findings "
+            "for modules that are significantly behind (>=1 major or >=3 "
+            "minor versions). Requires outbound HTTPS to registry.terraform.io. "
+            "Off by default so scans remain offline-capable."
         ),
     )
     ap.add_argument(
@@ -5069,6 +5765,39 @@ def main():
             "regex path is used. Off by default to honor the stdlib-only "
             "promise; can also be enabled via TF_ANALYZE_USE_HCL2=1."
         ),
+    )
+    ap.add_argument(
+        "--apply-fixes",
+        default=None,
+        choices=["dry-run", "apply"],
+        metavar="MODE",
+        help=(
+            "Auto-apply fix_hcl patches for fixable findings. "
+            "'dry-run' prints a unified diff to stdout without writing files. "
+            "'apply' writes the patched files to disk (creates .bak backups). "
+            "Only resource_missing_arg and resource_arg/hcl_attr patterns are "
+            "patched; patterns without fix_hcl are skipped. "
+            "Always review dry-run output before applying."
+        ),
+    )
+    ap.add_argument(
+        "--cache",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable incremental scan caching. Stores findings keyed on a "
+            "hash of all .tf file contents + catalogue entries in "
+            ".tf-analyze-cache.json inside the target directory. "
+            "Subsequent runs on unchanged code return the cached findings "
+            "instantly. Cache is invalidated automatically when any .tf file "
+            "or catalogue rule changes. Use --cache-file to override the path."
+        ),
+    )
+    ap.add_argument(
+        "--cache-file",
+        default=None,
+        metavar="PATH",
+        help="Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).",
     )
     # Meta-commands — short-circuit before scan logic. None of these
     # require --target.
@@ -5302,11 +6031,39 @@ def main():
         )
 
     # Pass 2 — run per-file detection with the filtered ruleset.
+    # Build per-directory variable-default map once; passed into each
+    # detect_in_file call so plain `var.X` attribute values are resolved
+    # to their declared defaults before pattern matching.
+    var_defaults_by_dir = _extract_var_defaults_by_dir(all_text)
+
+    # Incremental cache: if --cache is set and the corpus hash matches the
+    # stored cache, return the cached findings immediately (skipping the full
+    # scan). The cache covers per-file findings + corpus findings in one shot.
+    _cache_path: Path | None = None
+    _corpus_hash_val: str | None = None
+    _cache_hit = False
     findings: list[dict] = []
-    for fp, text in all_text.items():
-        if diff_files is not None and fp not in diff_files:
-            continue
-        findings.extend(detect_in_file(fp, text, entries))
+    if getattr(args, "cache", False) and diff_files is None:
+        _corpus_hash_val = _corpus_hash(all_text, entries)
+        _cache_path = (
+            Path(args.cache_file).resolve()
+            if getattr(args, "cache_file", None)
+            else target / ".tf-analyze-cache.json"
+        )
+        _cached = _load_scan_cache(_cache_path)
+        if _cached and _cached.get("corpus_hash") == _corpus_hash_val:
+            print("# cache hit — skipping full scan", file=sys.stderr)
+            findings = _cached.get("findings", [])
+            _cache_hit = True
+
+    if not _cache_hit:
+        for fp, text in all_text.items():
+            if diff_files is not None and fp not in diff_files:
+                continue
+            findings.extend(
+                detect_in_file(fp, text, entries,
+                               var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
+            )
 
     # Plan-mode rule re-evaluation. Findings are merged into the same
     # list so suppression, comparison, and reporting all see them; the
@@ -5329,14 +6086,42 @@ def main():
         findings.extend(plan_findings)
 
     # Corpus-level checks run against all files (even in diff mode)
-    corpus_findings = detect_corpus(target, all_text, entries)
-    if diff_files is not None:
-        # Filter corpus findings to only those touching changed files
-        corpus_findings = [
-            f for f in corpus_findings
-            if Path(f["file"]).resolve() in diff_files or f["line"] == 0
-        ]
-    findings.extend(corpus_findings)
+    if not _cache_hit:
+        corpus_findings = detect_corpus(target, all_text, entries)
+        if diff_files is not None:
+            # Filter corpus findings to only those touching changed files
+            corpus_findings = [
+                f for f in corpus_findings
+                if Path(f["file"]).resolve() in diff_files or f["line"] == 0
+            ]
+        findings.extend(corpus_findings)
+
+        # Persist to cache after all per-file + corpus findings are collected
+        # (before plan / registry findings which require external inputs).
+        if _cache_path and _corpus_hash_val:
+            _save_scan_cache(_cache_path, _corpus_hash_val, findings)
+
+    # Registry staleness check (opt-in; requires network access)
+    if getattr(args, "check_registry", False):
+        registry_findings = _check_module_registry_staleness(all_text)
+        print(
+            f"# registry check: {len(registry_findings)} stale module(s) found",
+            file=sys.stderr,
+        )
+        findings.extend(registry_findings)
+
+    # Auto-fix application — runs before suppression so the patched file
+    # re-scan (if the user re-runs) won't report those findings.
+    if getattr(args, "apply_fixes", None):
+        _handle_apply_fixes(
+            args, findings, entries,
+            dry_run=(args.apply_fixes == "dry-run"),
+        )
+        if args.apply_fixes == "apply":
+            # Exit after applying so the user can re-run to confirm clean state.
+            if getattr(args, "_out_file", None):
+                pass  # _out_file closure is local; normal cleanup via finally is N/A
+            return
 
     # Apply suppressions
     suppressed_findings: list[dict] = []
@@ -5409,7 +6194,8 @@ def main():
     # Compliance gap report
     compliance_report: dict | None = None
     if getattr(args, "compliance", False) or args.format == "compliance":
-        compliance_report = _compliance_gap_report(findings, entries)
+        fw_arg = getattr(args, "compliance_framework", "cis") or "cis"
+        compliance_report = _compliance_gap_report(findings, entries, framework=fw_arg)
         if getattr(args, "oscal", None):
             oscal_data = _compliance_to_oscal(
                 compliance_report,

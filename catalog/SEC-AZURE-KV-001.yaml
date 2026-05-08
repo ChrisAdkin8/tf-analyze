@@ -36,5 +36,12 @@ verification: |
         --query '{purgeProtection:properties.enablePurgeProtection,softDelete:properties.enableSoftDelete}'
 
   Both values should return `true`.
+fix_hcl: |
+  resource "azurerm_key_vault" "example" {
+    # ... other arguments ...
+    purge_protection_enabled    = true
+    soft_delete_retention_days  = 90
+  }
+fix_disruption: plan_required
 fixtures:
   - azure_kv_no_purge

@@ -41,5 +41,12 @@ verification: |
   `gcloud redis instances describe <name> --region=<region> \
     --format='value(transitEncryptionMode)'`
   must return `SERVER_AUTHENTICATION`.
+fix_hcl: |
+  resource "google_redis_instance" "example" {
+    # ... other arguments ...
+    transit_encryption_mode = "SERVER_AUTHENTICATION"
+  }
+fix_disruption: plan_required
+
 fixtures:
   - gcp_redis_no_tls

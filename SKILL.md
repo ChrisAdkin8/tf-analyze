@@ -1,7 +1,7 @@
 ---
 name: tf-analyze
 description: Analyze Terraform code (GCP-first; AWS/Azure secondary) for best practices, style, robustness, DRY/code reuse, security posture, simplicity, operational readiness, and CI/CD maturity. Generates a structured report with stable catalogue-backed finding IDs, urgency, blast radius, CIS benchmark mapping, deterministic risk score, and delta tracking against previous runs. Use when you want a comprehensive audit, before a major refactor, or to verify fixes from a prior report.
-argument-hint: "[path:tf/modules/foo] [focus:security|dry|style|robustness|simplicity|ops|cicd|cross-module|stack|compliance|all] [format:markdown|json|sarif|html] [mode:static|diff|plan|verify-fixed|self-test] [diff-base:main]"
+argument-hint: "[path:tf/modules/foo] [focus:security|dry|style|robustness|simplicity|ops|cicd|cross-module|stack|compliance|all] [format:markdown|json|sarif|html|compliance] [mode:static|diff|plan|verify-fixed|self-test] [diff-base:main] [compliance-framework:cis|pci_dss|soc2|all] [check-registry] [apply-fixes:dry-run|apply] [cache]"
 allowed-tools: Bash, Read, Glob, Grep, Write, Agent
 model: claude-opus-4-6
 ---
@@ -135,6 +135,20 @@ Splitting detection from judgement makes delta-tracking and verify-fixed reliabl
 
 For findings the catalogue does not yet cover (novel patterns the agent identifies during reading), tag them as `EXPLORATORY` in the report and flag them for catalogue inclusion in a follow-up. Exploratory findings do NOT carry stable IDs and are excluded from delta tracking — by design.
 
+**Draft-and-challenge for EXPLORATORY findings:**
+Before including any novel (non-catalogue) finding in the report, apply the following three-question challenge. A finding that fails **any** check must NOT be included in the report and must NOT be promoted to a stub:
+
+1. **Concrete evidence** — Can you cite a specific `file:line` that unambiguously demonstrates the pattern? If the evidence is "I didn't see X anywhere in the codebase", that is a `resource_absent` pattern — write a catalogue entry (or note it for follow-up) instead of an exploratory finding.
+2. **Context sensitivity** — Does `CLAUDE.md`, the repo's `README`, or a `.tf-analyze-ignore.yaml` document this as an intentional pattern or compensating control? If yes, downgrade to **INFO** or discard. Do not penalise intentional architectural choices.
+3. **Generalisability** — Would this pattern fire on a well-configured reference implementation of the same resource type (for example, the provider's own Getting Started guide)? If yes, the finding is likely caused by missing context, not a real risk — discard it.
+
+Exploratory findings that pass all three checks are included under a dedicated **"Exploratory Findings (unverified)"** subsection placed at the **end** of the report, after all catalogue-backed sections. Each entry must include:
+- The `file:line` evidence from question 1
+- A one-sentence answer to each of the three challenge questions
+- A proposed catalogue ID (e.g., `EXP-SEC-001`) for follow-up
+
+This section is clearly labelled: *"These findings have not been validated by the detection catalogue. They carry no stable IDs and are excluded from delta tracking."*
+
 **Auto-stub generation:** `detect.py --auto-stub <dir>` scaffolds catalogue YAML stubs for IDs that are *not* in the active catalogue. Two drivers:
 
 1. **Judgement-pass promotion (primary):** After the judgement pass identifies exploratory findings, pass their proposed IDs via `--propose-stub EXP-FOO-001,EXP-BAR-002`. The script writes one YAML per ID with `status: stub` and `TODO` placeholders.
@@ -206,8 +220,15 @@ The detection pass supports CI gating via exit codes and multiple output formats
 - **`--auto-compare`** — auto-discover the most recent `tf-analysis-*.json` under `reports/` as the comparison baseline. Preferred over manual `--compare` for scheduled runs.
 - **`--mode diff [--diff-base REF]`** — per-file scans restricted to `.tf` files changed since `REF` (auto-detected as `main` or `master`). Corpus-level checks still run against the whole tree but filter to changed files. Best for PR CI — drops scan time from seconds to milliseconds.
 - **`--no-suppress`** — disable all suppression for audit runs that must see every finding.
+- **`--plan-json PATH`** — accept a pre-generated `terraform show -json plan.tfplan` file. Rules that support plan-time evaluation (`resource_arg`, `resource_missing_arg`, `resource_present`, `hcl_attr`, `data_source_present`) are re-evaluated against the plan's resolved values. Findings are tagged `mode=plan` so reports can distinguish them from static findings. Use this in CI when a separate job with credentials generates the plan and saves it as an artifact — the analysis job then runs without credentials. Required for detecting variable-resolved violations (e.g., a tfvar setting an IAM role to a forbidden value).
+- **`--check-registry`** — query `registry.terraform.io` for the latest published version of every registry-style module source and emit `MOD-STALE-001` findings for modules significantly behind. Off by default (requires outbound HTTPS). Safe to enable in CI runners with internet access.
+- **`--compliance-framework [cis|pci_dss|soc2|all]`** — choose the compliance standard for `--compliance` output. Default: `cis`. Use `all` to combine CIS, PCI-DSS v4.0, and SOC2 Trust Services Criteria in one report.
+- **`--show-fixes`** — render `fix_hcl` snippets from catalogue entries alongside each finding. HTML: dark-themed disclosure widget per finding. Text: indented HCL block below the finding line. In `--mode pr-review`, fix snippets are posted as ` ```suggestion ``` ` blocks — reviewers can apply with one click.
+- **`--apply-fixes dry-run`** — preview auto-remediation as a unified diff without writing files. Run this first to review what would change. Safe in CI (read-only).
+- **`--apply-fixes apply`** — apply `fix_hcl` patches directly to `.tf` files. Creates `.bak` backups. Handles `resource_missing_arg` (inserts missing attribute before closing `}`) and `resource_arg`/`hcl_attr` (replaces wrong-value line). After applying, re-run `detect.py` to confirm the findings are resolved.
+- **`--cache`** — enable incremental scan caching. Writes `.tf-analyze-cache.json` in the target directory keyed on a hash of all `.tf` file contents and catalogue rules. Subsequent runs on unchanged code return cached findings instantly. Use `--cache-file PATH` to override the location. Invalidated automatically when any file or rule changes.
 
-Ready-to-use configs for pre-commit and GitHub Actions live under `integrations/`.
+Ready-to-use configs for pre-commit and GitHub Actions live under `integrations/`. The GitHub Actions workflow (`integrations/github-action.yml`) now includes a PR comment fallback that posts findings as a collapsible comment on every pull request — works on free-tier repos that don't have Code Scanning enabled.
 
 ### Optional `python-hcl2` fast-path
 
@@ -308,22 +329,62 @@ Also count resources per module to identify oversized modules.
 
 Report the scope summary at the top of the analysis.
 
-### 1a. Subagent delegation for large repos (>100 .tf files)
+### 1a. Subagent delegation for large repos
 
-If the discovery step finds more than 100 `.tf` files, do not read them all into the main agent context. Instead, dispatch focus-area scans to subagents via the `Agent` tool:
+Choose the reading strategy based on file count:
+
+| File count | Strategy |
+|---|---|
+| < 30 `.tf` files | Sequential reads in the main agent |
+| 30–100 `.tf` files | Parallel reads (4–6 at a time) in the main agent — subagent overhead exceeds benefit |
+| > 100 `.tf` files **with `focus:all`** | Parallel subagents per focus area (see below) |
+| > 100 `.tf` files **with a single `focus:`** | One subagent for that focus area |
+
+When `focus:all` is requested on a repo with more than 100 `.tf` files, dispatch all focus areas in a single message as parallel subagents:
 
 ```text
-Agent(subagent_type="Explore",
-      description="Security scan of <path>",
-      prompt="Scan all .tf files under <path> for the patterns listed in
-              tf-analyze SKILL.md Section 2 (Security Posture). Report each
-              hit with file:line, pattern matched, and a one-line excerpt.
-              Do not classify urgency — the parent agent will do that.")
+# Send all six as one Agent tool call with multiple invocations:
+Agent(subagent_type="Explore", description="Security scan",
+      prompt="Scan all .tf files under <path> for patterns in SKILL.md Step 2
+              (Security Posture). Report each hit as JSON:
+              {file, line, catalogue_id_or_EXPLORATORY, excerpt, one_line_justification}.
+              Do not assign urgency — parent agent will do that.")
+
+Agent(subagent_type="Explore", description="DRY/reuse scan",
+      prompt="... Step 3 (DRY and Code Reuse) ...")
+
+Agent(subagent_type="Explore", description="Style scan",
+      prompt="... Step 4 (Style and Conventions) ...")
+
+Agent(subagent_type="Explore", description="Robustness scan",
+      prompt="... Step 5 (Robustness) ...")
+
+Agent(subagent_type="Explore", description="Ops scan",
+      prompt="... Step 7 (Operational Readiness) ...")
+
+Agent(subagent_type="Explore", description="CI/CD scan",
+      prompt="... Step 8 (CI/CD and Testing Maturity) ...")
 ```
 
-Run one subagent per focus area (security, dry, style, robustness, ops, cicd) in parallel. The parent agent then assigns urgency, computes blast radius, and writes the report. This keeps the main context clean and lets the parallelism scale to large monorepos.
+**Parent agent synthesis after all subagents complete:**
+1. Collect all subagent JSON outputs.
+2. De-duplicate on `(file, line, catalogue_id)` — the same pattern may appear in multiple subagent results.
+3. Run Steps 9 (Cross-Module Contracts) and 10 (Stack-Specific) **in the parent agent** — these require global visibility across all files that individual subagents can't provide.
+4. Run Steps 11–17 (judgement, cost, report generation) in the parent agent on the merged finding set.
 
-For repos with 30-100 `.tf` files, parallel reads (4-6 at a time) inside the main agent are still preferable — subagent overhead outweighs the benefit.
+**Output schema each subagent must return (structured JSON list):**
+```json
+[
+  {
+    "file": "path/to/resource.tf",
+    "line": 42,
+    "id": "SEC-GCP-IAM-001",
+    "excerpt": "  member = \"allUsers\"",
+    "justification": "IAM binding grants public access to all authenticated users"
+  }
+]
+```
+Using this schema allows the parent agent to merge results mechanically without re-reading the files.
 
 ### 1b. Build a dependency graph from `terraform graph` (static-mode capable)
 

@@ -33,5 +33,13 @@ verification: |
   `aws lambda get-function-configuration --function-name <name> \
     --query 'TracingConfig.Mode'`
   must return `Active`.
+fix_hcl: |
+  resource "aws_lambda_function" "example" {
+    # ... other arguments ...
+    tracing_config {
+      mode = "Active"
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_lambda_no_tracing

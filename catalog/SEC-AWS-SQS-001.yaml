@@ -30,9 +30,19 @@ recommendation: |
         name                    = "app"
         sqs_managed_sse_enabled = true
       }
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
 verification: |
   `aws sqs get-queue-attributes --queue-url <url> \
     --attribute-names KmsMasterKeyId SqsManagedSseEnabled`
   must return one of the two attributes set.
+fix_hcl: |
+  resource "aws_sqs_queue" "example" {
+    name              = "example"
+    kms_master_key_id = aws_kms_key.sqs.arn
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_sqs_unencrypted

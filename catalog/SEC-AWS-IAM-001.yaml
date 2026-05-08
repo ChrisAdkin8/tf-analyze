@@ -35,6 +35,10 @@ test_template: |
       error_message = "{resource} IAM policy must not use wildcard Resource (SEC-AWS-IAM-001)."
     }
   }
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.1"
 fix_hcl: |
   statement {
     actions   = ["s3:GetObject", "s3:PutObject"]

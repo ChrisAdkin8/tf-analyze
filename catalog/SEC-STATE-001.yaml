@@ -24,5 +24,9 @@ recommendation: |
 verification: |
   `find . -name '*.tfstate*' -not -path './.terraform/*'` returns empty,
   and `git log --all --full-history -- '*.tfstate*'` returns empty.
+pci_dss:
+  - "Req-3.5"
+soc2_cc:
+  - "CC6.1"
 fixtures:
   - tfstate_in_repo

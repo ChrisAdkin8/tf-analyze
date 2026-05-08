@@ -33,5 +33,14 @@ verification: |
   `aws ecs describe-clusters --clusters <name> --include SETTINGS \
     --query 'clusters[0].settings[?name==\`containerInsights\`].value'`
   must return `["enabled"]`.
+fix_hcl: |
+  resource "aws_ecs_cluster" "example" {
+    name = "example"
+    setting {
+      name  = "containerInsights"
+      value = "enabled"
+    }
+  }
+fix_disruption: none
 fixtures:
   - aws_ecs_no_container_insights

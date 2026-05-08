@@ -38,5 +38,15 @@ verification: |
   `aws elasticache describe-replication-groups --replication-group-id <id> \
     --query 'ReplicationGroups[0].{AtRest:AtRestEncryptionEnabled,InTransit:TransitEncryptionEnabled}'`
   both values must be `true`.
+fix_hcl: |
+  resource "aws_elasticache_replication_group" "example" {
+    # ... other arguments ...
+    at_rest_encryption_enabled  = true
+    transit_encryption_enabled  = true
+    auth_token                  = var.auth_token
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Encryption settings cannot be changed on an existing ElastiCache cluster — requires replacement."
+
 fixtures:
   - aws_elasticache_no_encryption

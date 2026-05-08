@@ -10,6 +10,13 @@ on:
     paths:
       - "**/*.tf"
 
+  workflow_dispatch:
+    inputs:
+      post-pr-comment:
+        description: "Post findings as a PR comment (for manual trigger on a PR branch)"
+        required: false
+        default: "true"
+
 permissions:
   contents: read
   security-events: write  # for SARIF upload
@@ -40,19 +47,88 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             MODE=diff
           fi
+          # Write SARIF for Code Scanning (enterprise/paid orgs)
           python3 ~/.tf-analyze/scripts/detect.py \
             --target . \
             --mode "$MODE" \
             --format sarif \
             --fail-on HIGH \
-            > tf-analyze.sarif || echo "::warning::tf-analyze found HIGH+ findings"
+            > tf-analyze.sarif 2>tf-analyze-stderr.txt \
+            || echo "::warning::tf-analyze found HIGH+ findings"
+          # Write markdown summary for PR comment fallback
+          python3 ~/.tf-analyze/scripts/detect.py \
+            --target . \
+            --mode "$MODE" \
+            --format markdown \
+            > tf-analyze-summary.md 2>/dev/null || true
+          # Capture finding count for comment header
+          FINDING_COUNT=$(python3 ~/.tf-analyze/scripts/detect.py \
+            --target . --mode "$MODE" --format json 2>/dev/null \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); \
+              print(len(d.get('findings', d if isinstance(d,list) else [])))" \
+            2>/dev/null || echo "?")
+          echo "finding_count=${FINDING_COUNT}" >> "$GITHUB_OUTPUT"
 
       - name: Upload SARIF to Code Scanning
         if: always()
+        continue-on-error: true   # free-tier repos lack Code Scanning; don't fail the job
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: tf-analyze.sarif
           category: tf-analyze
+
+      # Fallback: post findings as a PR comment when SARIF upload isn't available
+      # (free-tier repos, forks without Code Scanning enabled).
+      # Uses GITHUB_TOKEN which is always available in pull_request events.
+      - name: Post PR comment with findings summary
+        if: >
+          always() &&
+          github.event_name == 'pull_request' &&
+          (github.event.inputs.post-pr-comment != 'false')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const findingCount = '${{ steps.analyze.outputs.finding_count }}';
+            let summary = '';
+            try {
+              summary = fs.readFileSync('tf-analyze-summary.md', 'utf8');
+            } catch(e) {
+              summary = '_No findings summary available._';
+            }
+
+            const header = findingCount === '0'
+              ? '✅ **tf-analyze**: no findings on changed files.'
+              : `⚠️ **tf-analyze** found **${findingCount} finding(s)** on changed files.`;
+
+            const body = `<details>\n<summary>${header}</summary>\n\n${summary}\n</details>\n\n` +
+              `> Run \`detect.py --show-fixes\` locally for one-click HCL fix suggestions. ` +
+              `[View full report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+            // Find and update existing comment, or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('**tf-analyze**')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
 
       - name: Generate HTML report
         if: always()

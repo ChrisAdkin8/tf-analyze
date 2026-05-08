@@ -33,5 +33,9 @@ verification: |
   without a restrictive `Condition` block. Run `terraform plan` and
   verify the rendered policy document in the plan output has no
   wildcard principal.
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.1"
 fixtures:
   - aws_iam_wildcard_principal

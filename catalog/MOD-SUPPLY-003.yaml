@@ -16,5 +16,7 @@ recommendation: |
 verification: |
   Confirm every module block referencing a registry source has a `version`
   argument.
+soc2_cc:
+  - "CC9.2"
 fixtures:
   - mod_supply_no_version

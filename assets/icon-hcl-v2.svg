@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="v2-bg" cx="46%" cy="43%" r="58%">
+      <stop offset="0%" stop-color="#13102A"/>
+      <stop offset="100%" stop-color="#0D1117"/>
+    </radialGradient>
+
+    <linearGradient id="v2-rim" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#C4A0F5"/>
+      <stop offset="50%" stop-color="#7B42BC"/>
+      <stop offset="100%" stop-color="#3D1F6E"/>
+    </linearGradient>
+
+    <linearGradient id="v2-handle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9B5DE5"/>
+      <stop offset="100%" stop-color="#2E1260"/>
+    </linearGradient>
+
+    <radialGradient id="v2-lens" cx="38%" cy="33%" r="65%">
+      <stop offset="0%" stop-color="#0F0C1E"/>
+      <stop offset="100%" stop-color="#080812"/>
+    </radialGradient>
+
+    <filter id="v2-bloom" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <filter id="v2-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="v2-txt" x="-18%" y="-55%" width="136%" height="210%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Clip r=113: 1px larger than lens fill so left-justified text isn't
+         shaved at the top-left corner of the large 'resource' line            -->
+    <clipPath id="v2-clip">
+      <circle cx="200" cy="178" r="113"/>
+    </clipPath>
+  </defs>
+
+  <!-- ── Background ── -->
+  <rect width="400" height="400" rx="24" fill="url(#v2-bg)"/>
+
+  <!-- Ambient halo — lens now centred at x=200 -->
+  <circle cx="200" cy="178" r="152" fill="#7B42BC" opacity="0.13" filter="url(#v2-bloom)"/>
+
+  <!-- ── Handle — start point is lens-rim at 45°: (200+92, 178+92) = (292, 270) ── -->
+  <line x1="292" y1="270" x2="378" y2="356"
+        stroke="url(#v2-handle)" stroke-width="24" stroke-linecap="round"/>
+  <line x1="289" y1="267" x2="371" y2="349"
+        stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.16"/>
+
+  <!-- ── Rim bloom + body ── -->
+  <circle cx="200" cy="178" r="134" fill="#9B5DE5" opacity="0.20" filter="url(#v2-bloom)"/>
+  <circle cx="200" cy="178" r="130" fill="url(#v2-rim)"/>
+  <circle cx="200" cy="178" r="120" fill="none"
+          stroke="rgba(220,196,255,0.20)" stroke-width="2"/>
+
+  <!-- ── Lens interior ── -->
+  <circle cx="200" cy="178" r="112" fill="url(#v2-lens)"/>
+
+  <!-- ════════════════════════════════════════════════════════════
+       HCL resource block — terraform fmt justified (left-aligned,
+       2-space indent, spaces around =, double-quoted strings)
+
+       All lines start at x=113 (text-anchor="start").
+       x=113 chosen so the widest line ("google_storage_bucket", 193 px)
+       is horizontally centred in the lens while every glyph stays
+       inside clip r=113 centred at x=200.
+
+       Visual centres at y = 122, 150, 178, 206, 234  (28 px cadence)
+       Baselines = visual_centre + cap_height/2:
+         line 1  size=27  cap≈19  → y=131
+         line 2  size=14  cap≈10  → y=155
+         line 3  size=18  cap≈13  → y=184
+         line 4  size=14  cap≈10  → y=211
+         line 5  size=18  cap≈13  → y=240
+       ════════════════════════════════════════════════════════════ -->
+  <g clip-path="url(#v2-clip)"
+     font-family="'Courier New', Consolas, monospace" font-weight="700"
+     text-anchor="start">
+
+    <!-- 5 lines · font-size=14 · 22 px cadence centred at y=178
+         Visual centres : 134, 156, 178, 200, 222
+         Baselines (+4.9): 139, 161, 183, 205, 227
+         "google_project_iam_member" (27 chars) wrapped across lines 2-3;
+         member = "allUsers" kept on one line — valid HCL indentation.
+         "allUsers" red — it is the finding.                           -->
+
+    <!-- resource -->
+    <text x="113" y="139" font-size="14" fill="#00C7B7">resource</text>
+
+    <!-- "google_project_  (type string, wrapped) -->
+    <text x="113" y="161" font-size="14" fill="#98C379">&quot;google_project_</text>
+
+    <!-- iam_member" "open" { -->
+    <text x="113" y="183" font-size="14">
+      <tspan fill="#98C379">iam_member&quot;</tspan>
+      <tspan fill="#E5C07B"> &quot;open&quot;</tspan>
+      <tspan fill="#C0C8D8"> {</tspan>
+    </text>
+
+    <!-- ··member = "allUsers"  (attribute + value on one line — valid HCL) -->
+    <text x="113" y="205" font-size="14" filter="url(#v2-txt)">
+      <tspan fill="#61AFEF">  member</tspan>
+      <tspan fill="#C0C8D8"> = </tspan>
+      <tspan fill="#FF5555">&quot;allUsers&quot;</tspan>
+    </text>
+
+    <!-- } -->
+    <text x="113" y="227" font-size="14" fill="#C0C8D8">}</text>
+
+  </g>
+
+  <!-- ── Rim / lens border lines ── -->
+  <circle cx="200" cy="178" r="130" fill="none"
+          stroke="rgba(196,160,245,0.45)" stroke-width="1.5"/>
+  <circle cx="200" cy="178" r="112" fill="none"
+          stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+
+  <!-- ── Glass reflection ── -->
+  <ellipse cx="160" cy="132" rx="34" ry="22" fill="white" opacity="0.055"
+           transform="rotate(-32,160,132)"/>
+  <ellipse cx="158" cy="125" rx="13" ry="8"  fill="white" opacity="0.09"
+           transform="rotate(-32,158,125)"/>
+
+  <!-- ── Handle / lens junction cap ── -->
+  <circle cx="291" cy="269" r="14" fill="url(#v2-handle)"/>
+  <circle cx="291" cy="269" r="14" fill="none"
+          stroke="rgba(196,160,245,0.35)" stroke-width="1.5"/>
+</svg>

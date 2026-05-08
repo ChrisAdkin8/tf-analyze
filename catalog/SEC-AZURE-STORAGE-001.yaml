@@ -35,5 +35,12 @@ verification: |
       az storage account show --name <name> --query 'enableHttpsTrafficOnly'
 
   The command should return `true`.
+fix_hcl: |
+  resource "azurerm_storage_account" "example" {
+    # ... other arguments ...
+    https_traffic_only_enabled = true
+    min_tls_version            = "TLS1_2"
+  }
+fix_disruption: plan_required
 fixtures:
   - azure_storage_http

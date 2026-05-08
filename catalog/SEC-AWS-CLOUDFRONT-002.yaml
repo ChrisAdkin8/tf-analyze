@@ -33,5 +33,15 @@ verification: |
   `aws cloudfront get-distribution --id <id> \
     --query 'Distribution.DistributionConfig.Logging.Enabled'`
   must return `true`.
+fix_hcl: |
+  resource "aws_cloudfront_distribution" "example" {
+    # ... other arguments ...
+    logging_config {
+      include_cookies = false
+      bucket          = aws_s3_bucket.logs.bucket_domain_name
+      prefix          = "cloudfront/"
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_cloudfront_allow_all

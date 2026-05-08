@@ -40,5 +40,16 @@ verification: |
   `aws cloudtrail describe-trails --trail-name-list <name> \
     --query 'trailList[0].LogFileValidationEnabled'`
   must return `true`.
+pci_dss:
+  - "Req-10.5"
+soc2_cc:
+  - "CC7.2"
+fix_hcl: |
+  resource "aws_cloudtrail" "example" {
+    # ... other arguments ...
+    enable_log_file_validation = true
+  }
+fix_disruption: plan_required
+
 fixtures:
   - aws_cloudtrail_no_validation

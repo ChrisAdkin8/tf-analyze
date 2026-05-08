@@ -1,0 +1,58 @@
+id: ROB-AWS-DDB-001
+title: "DynamoDB table missing deletion protection"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_dynamodb_table
+    arg: deletion_protection_enabled
+    description: |
+      `aws_dynamodb_table` without `deletion_protection_enabled`. The
+      default is `false`, so a `terraform destroy` or accidental module
+      removal permanently deletes the table and all its items.
+  - kind: hcl_attr
+    resource: aws_dynamodb_table
+    path: deletion_protection_enabled
+    not_equal: true
+    description: |
+      `deletion_protection_enabled = false` explicitly removes the guard
+      against accidental table deletion.
+recommendation: |
+  Set `deletion_protection_enabled = true` on every production table:
+
+      resource "aws_dynamodb_table" "app" {
+        name                        = "app"
+        billing_mode                = "PAY_PER_REQUEST"
+        hash_key                    = "id"
+        deletion_protection_enabled = true
+
+        attribute {
+          name = "id"
+          type = "S"
+        }
+      }
+
+  Pair with `lifecycle { prevent_destroy = true }` for a two-layer guard.
+soc2_cc:
+  - "A1.2"
+verification: |
+  `aws dynamodb describe-table --table-name <name> \
+    --query 'Table.DeletionProtectionEnabled'`
+  must return `true`.
+fix_hcl: |
+  resource "aws_dynamodb_table" "example" {
+    name                        = "example"
+    billing_mode                = "PAY_PER_REQUEST"
+    hash_key                    = "id"
+    deletion_protection_enabled = true
+
+    attribute {
+      name = "id"
+      type = "S"
+    }
+  }
+fix_disruption: none
+fixtures:
+  - aws_dynamodb_no_deletion_protection

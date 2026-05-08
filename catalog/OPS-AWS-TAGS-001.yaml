@@ -52,6 +52,16 @@ recommendation: |
 verification: |
   `aws resourcegroupstaggingapi get-resources --tag-filters Key=ManagedBy,Values=terraform`
   must return the resource. Or review the AWS Tag Editor in the console.
+fix_hcl: |
+  resource "aws_instance" "example" {
+    # ... other arguments ...
+    tags = {
+      Environment = "prod"
+      Owner       = "platform-team"
+      Project     = "my-project"
+    }
+  }
+fix_disruption: none
 fixtures:
   - aws_resource_no_tags
 test_template: |

@@ -33,5 +33,11 @@ verification: |
   `aws s3api get-bucket-policy --bucket <name>` (policy cannot re-enable
   forced deletion). Confirm `force_destroy` is absent or `false` in
   `terraform show`.
+fix_hcl: |
+  resource "aws_s3_bucket" "example" {
+    # ... other arguments ...
+    force_destroy = false
+  }
+fix_disruption: none
 fixtures:
   - aws_s3_force_destroy

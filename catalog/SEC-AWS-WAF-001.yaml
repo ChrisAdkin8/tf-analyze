@@ -1,0 +1,49 @@
+id: SEC-AWS-WAF-001
+title: "WAFv2 web ACL missing logging configuration"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+patterns:
+  - kind: resource_absent
+    resource: aws_wafv2_logging_configuration
+    when_present: aws_wafv2_web_acl
+    description: |
+      `aws_wafv2_web_acl` exists but no `aws_wafv2_logging_configuration`
+      is defined. Without logging, blocked and allowed requests are invisible:
+      you cannot investigate incidents, tune rules to reduce false positives,
+      or demonstrate compliance with audit requirements. WAF logging streams
+      to an S3 bucket, CloudWatch Logs, or Kinesis Firehose at no additional
+      charge beyond storage costs.
+recommendation: |
+  Add a `aws_wafv2_logging_configuration` resource for every WAF ACL:
+
+      resource "aws_kinesis_firehose_delivery_stream" "waf" {
+        name        = "aws-waf-logs-app"
+        destination = "extended_s3"
+
+        extended_s3_configuration {
+          role_arn   = aws_iam_role.firehose.arn
+          bucket_arn = aws_s3_bucket.waf_logs.arn
+        }
+      }
+
+      resource "aws_wafv2_logging_configuration" "app" {
+        log_destination_configs = [aws_kinesis_firehose_delivery_stream.waf.arn]
+        resource_arn            = aws_wafv2_web_acl.app.arn
+      }
+
+  The log destination name must start with `aws-waf-logs-`. WAF logs
+  include the full request, matched rules, action taken, and timestamps.
+verification: |
+  `aws wafv2 get-logging-configuration \
+    --resource-arn <acl-arn> --scope REGIONAL`
+  must return a logging configuration with at least one destination.
+fix_hcl: |
+  resource "aws_wafv2_logging_configuration" "example" {
+    log_destination_configs = [aws_kinesis_firehose_delivery_stream.waf.arn]
+    resource_arn            = aws_wafv2_web_acl.example.arn
+  }
+fix_disruption: none
+fixtures:
+  - aws_wafv2_no_logging

@@ -39,5 +39,15 @@ verification: |
   Run `tf-analyze` in mode:verify-fixed and confirm OPS-LABELS-001 is
   RESOLVED. Or run `gcloud asset search-all-resources --query="NOT labels:environment"`
   to find unlabeled resources in the project.
+fix_hcl: |
+  resource "google_compute_instance" "example" {
+    # ... other arguments ...
+    labels = {
+      environment = "prod"
+      owner       = "platform-team"
+      project     = "my-project"
+    }
+  }
+fix_disruption: none
 fixtures:
   - missing_labels

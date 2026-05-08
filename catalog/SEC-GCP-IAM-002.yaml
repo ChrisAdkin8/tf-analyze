@@ -29,5 +29,9 @@ verification: |
   After applying the fix, attempt to access the resource without
   credentials and confirm the request is denied. Re-run tf-analyze in
   mode:verify-fixed.
+pci_dss:
+  - "Req-6.4"
+soc2_cc:
+  - "CC6.1"
 fixtures:
   - public_bucket

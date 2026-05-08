@@ -30,5 +30,13 @@ verification: |
   `aws ecr describe-repositories --repository-names <name> \
     --query 'repositories[0].imageScanningConfiguration.scanOnPush'`
   must return `true`.
+fix_hcl: |
+  resource "aws_ecr_repository" "example" {
+    name = "example"
+    image_scanning_configuration {
+      scan_on_push = true
+    }
+  }
+fix_disruption: none
 fixtures:
   - ecr_no_scan_on_push

@@ -5,6 +5,202 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 18 — 2026-05-08
+
+**Bug-fix round: `--apply-fixes` nested blocks + `block_has_arg` false positives (166/166 fixtures):**
+
+### 1. `--apply-fixes` nested block support
+
+`_fix_line_for_arg()` previously only handled flat `arg = value` assignments and returned `None` for nested block fix_hcl entries like `dead_letter_config { ... }` or `tags = { ... }`. Applying fixes silently produced 0 patches for 7 of the 47 fixable rules.
+
+- Added `_fix_hcl_body()` helper to strip outer resource wrapper from fix_hcl snippets.
+- Updated `_fix_line_for_arg()` to handle multi-line map literals (`tags = { ... }`): detects unmatched `{` on the first line, then brace-matches to extract the full expression. Returns raw (unstripped) text so relative indentation is preserved.
+- Added `_fix_block_for_nested_arg()`: brace-matches `arg { ... }` syntax in fix_hcl and returns the complete raw block text.
+- Added `_reindent_fix_snippet(raw, indent) -> list[str]`: strips the fix_hcl base indentation from all lines, prepends the actual file's indentation, returns newline-terminated lines ready for list insertion.
+- Updated `_handle_apply_fixes()` for `resource_missing_arg`: uses `_fix_line_for_arg or _fix_block_for_nested_arg` with `_reindent_fix_snippet`, inserting all lines atomically via `modified[block_end:block_end] = insert_lines`.
+
+### 2. `_handle_apply_fixes` off-by-one in `start_idx`
+
+`RESOURCE_START` regex (`^\s*resource`) with `re.MULTILINE` can match a blank line before the resource keyword due to `\s*` consuming `\n`. This made `start_idx` point to the blank line, causing `_block_indent` to pick up the `resource` declaration line (0 indentation) as the first "valid" content, returning `""` as the indent string. All inserted fixes had no indentation.
+
+- Added a forward scan in `_handle_apply_fixes`: after computing `start_idx`, advance past lines without `{` to reach the actual resource opening.
+
+### 3. `block_has_arg` now detects nested block declarations
+
+`block_has_arg(body, arg)` previously only matched `arg =` (attribute assignment). Arguments that appear as block syntax (`arg {`) were not detected, causing false positives for `resource_missing_arg` rules where the block exists but an inner attribute is absent.
+
+- Extended regex from `arg\s*=` to `arg\s*[={]`.
+- Also changed `resource_missing_arg` detection to prefer `nested_path` over `arg` when both are set in a pattern. This ensures `SEC-AZURE-WEBAPP-001` uses `site_config.ip_restriction` (the deep check) rather than `site_config` (shallow), correctly firing when `site_config {}` is present but `ip_restriction` is absent.
+
+### 4. `STK-AWS-LAMBDA-003` false positive fixed
+
+Consequence of fix 3: `STK-AWS-LAMBDA-003` (`tracing_config` missing) no longer fires when `tracing_config { mode = "Active" }` is present in the resource body.
+
+Self-test: 166/166 (unchanged).
+
+---
+
+## Round 17 — 2026-05-08
+
+**Eight Tier-1 improvements: auto-fix, dynamic blocks, DynamoDB coverage, ECS coverage, WAFv2 coverage, caching, graph checks (+~250 lines detect.py, +6 rules, +6 fixtures):**
+
+### 1. `--apply-fixes` Auto-Remediation
+
+New `--apply-fixes [dry-run|apply]` flag applies `fix_hcl` patches directly to `.tf` files for fixable findings.
+
+- `dry-run`: prints a unified diff to stdout, no files written. Safe to run in CI.
+- `apply`: writes patched files to disk; creates `.bak` backups before mutating.
+- Processes findings in reverse line order per file so multi-fix insertions don't shift positions.
+- Handles `resource_missing_arg` (inserts missing attribute before closing `}`) and `resource_arg`/`hcl_attr` (replaces the wrong-value line).
+- New helper functions: `_fix_line_for_arg()`, `_find_block_end_in_lines()`, `_block_indent()`, `_handle_apply_fixes()`.
+- `difflib` and `shutil` added to imports.
+
+### 2. Dynamic Block Expansion
+
+`detect_in_file()` now expands `dynamic "X" { for_each = ... content { ... } }` blocks into `X { ... }` before running pattern checks.
+
+- New `_expand_dynamic_blocks(body)` text pre-pass replaces each dynamic block with its `content {}` body as a plain block.
+- Applied to every resource block's body after extraction, before attribute inspection.
+- Eliminates false negatives where security attributes live inside dynamically-generated nested blocks (e.g., `dynamic "ingress"` in security groups, `dynamic "container"` in ECS).
+- Line numbers are unaffected: the finding still reports the resource block's `start_line`, not a position inside the expanded body.
+
+### 3. Incremental Scan Cache (`--cache`)
+
+New `--cache` flag stores findings in `.tf-analyze-cache.json` keyed on a hash of all `.tf` file contents + catalogue rules.
+
+- `--cache`: enables caching with default location `<target>/.tf-analyze-cache.json`.
+- `--cache-file PATH`: override the cache file location.
+- Cache is invalidated automatically when any `.tf` file or catalogue rule changes.
+- On cache hit, the full scan (detect_in_file loop + detect_corpus) is skipped; findings are returned instantly.
+- Plan-time (`--plan-json`) and registry staleness (`--check-registry`) findings are not cached (they depend on external inputs).
+- New helpers: `_corpus_hash()`, `_load_scan_cache()`, `_save_scan_cache()`.
+
+### 4. DynamoDB Security Rules (3 new rules)
+
+- `ROB-AWS-DDB-001` — Missing `deletion_protection_enabled`. Default is `false`; uses `resource_missing_arg` + `hcl_attr not_equal:true`.
+- `ROB-AWS-DDB-002` — PITR disabled or absent. Graph check `dynamodb_pitr` verifies `point_in_time_recovery { enabled = true }`.
+- `SEC-AWS-DDB-001` — Server-side encryption using Amazon-owned keys instead of customer-managed KMS. Graph check `dynamodb_sse` verifies `server_side_encryption { kms_key_arn = ... }`.
+
+### 5. ECS Task Definition Security Rules (2 new rules)
+
+- `SEC-AWS-ECS-001` — Secrets in plaintext `environment` variables. Grep pattern matches both HCL `name = "DB_PASSWORD"` and JSON `"name": "DB_PASSWORD"` formats.
+- `SEC-AWS-ECS-002` — Privileged container (`privileged = true` or `"privileged": true`). Grep pattern handles both HCL and JSON formats.
+
+### 6. WAFv2 Logging Rule (1 new rule)
+
+- `SEC-AWS-WAF-001` — `aws_wafv2_web_acl` exists but no `aws_wafv2_logging_configuration` is defined. Uses `resource_absent` with `when_present: aws_wafv2_web_acl`.
+
+### 7. New Graph Check Functions
+
+- `_graph_dynamodb_pitr(index, all_files_text)` — fires `ROB-AWS-DDB-002`.
+- `_graph_dynamodb_sse(index, all_files_text)` — fires `SEC-AWS-DDB-001`.
+- Both registered in `_GRAPH_CHECKS`.
+
+### Infrastructure
+
+- `--apply-fixes` argument added (`dry-run`/`apply`).
+- `--cache` and `--cache-file` arguments added.
+- `docs/cli.md` regenerated.
+- Self-test: 166/166 fixtures passing (was 160/160; +6 new fixture sets).
+
+---
+
+## Round 16 — 2026-05-08
+
+**Nine improvements: variable resolution, fix_hcl coverage, multi-framework compliance, registry staleness, Azure/GCP attack graph, subagent decomposition, LLM calibration, CI PR comments (+~300 lines detect.py, +68 catalogue entries, +1 rule, +1 fixture):**
+
+### 1. Variable Reference Resolution
+
+`detect_in_file()` now substitutes `var.X` attribute values with declared variable defaults before evaluating `resource_arg` patterns. A resource like `enable_key_rotation = var.rotation` where `variable "rotation" { default = false }` now correctly fires the relevant rule instead of silently passing.
+
+- New `_extract_var_defaults_by_dir(all_files_text)` — scans all `.tf` files in scope for `variable "X" { default = Y }` blocks; returns a per-directory map.
+- New `_resolve_var_ref(val, var_defaults)` — substitutes `var.X` with its default if known; returns original value otherwise.
+- Scoped per-directory to match Terraform's actual variable resolution semantics.
+- Applied at both `resource_arg` value check and `suppress_if` check in `detect_in_file()`.
+
+### 2. fix_hcl Coverage (+38 catalogue entries)
+
+Added `fix_hcl` and `fix_disruption` fields to the 38 highest-value rules across security, robustness, and ops categories. These power `--show-fixes` inline remediation suggestions and the HTML "Suggested fix" panels.
+
+- **Security encryption/access (15):** SEC-AWS-EBS-001, SEC-AWS-RDS-002, SEC-AWS-SNS-001, SEC-AWS-SQS-001, SEC-AWS-ELASTICACHE-001, SEC-AWS-COGNITO-001, SEC-AWS-CLOUDTRAIL-001/002, SEC-AZURE-KV-001/002, SEC-AZURE-STORAGE-001/002, SEC-AZURE-VM-001, SEC-GCP-REDIS-001/002.
+- **Robustness data-protection (9):** ROB-AWS-RDS-001/002/003, ROB-AWS-S3-001, ROB-AWS-LIFECYCLE-002, ROB-AZURE-LIFECYCLE-001, ROB-AZURE-SQL-001, ROB-AZURE-STORAGE-001, ROB-GCP-LIFECYCLE-001.
+- **Ops/tagging (3):** OPS-AWS-TAGS-001, OPS-GCP-LABELS-001, OPS-AZURE-TAGS-001.
+- **CI/logging (11):** SEC-AWS-APIGW-001, SEC-AWS-CLOUDFRONT-002, STK-GCP-CLOUDSQL-004, STK-AWS-ECS-001, STK-AWS-EKS-002, SEC-AWS-ECR-001, SEC-AWS-VPC-FLOWLOGS-001, STK-AWS-LAMBDA-002/003.
+- `fix_disruption: forces_replacement` set where enabling encryption on an existing resource requires replacement (EBS, RDS storage encryption).
+
+### 3. Multi-Framework Compliance (PCI-DSS + SOC2)
+
+`_compliance_gap_report()` now supports three frameworks in addition to CIS.
+
+- New `--compliance-framework [cis|pci_dss|soc2|all]` argument (default: `cis` for backward compatibility).
+- Added `pci_dss:` and `soc2_cc:` fields to ~30 catalogue entries spanning IAM, encryption, logging, data retention, and secret management rules.
+- PCI-DSS v4.0 controls mapped: Req-1.2, Req-3.4, Req-3.5, Req-3.6, Req-7.1, Req-8.2, Req-10.2.
+- SOC2 Trust Services Criteria mapped: CC6.1, CC6.7, CC7.2, CC9.2, A1.2.
+- Compliance tab header and OSCAL output updated to display the active framework label.
+- Validated in `validate_catalog_entry()` — both fields are optional lists of strings.
+
+### 4. Plan JSON Consumption — Pre-existing
+
+`--plan-json PATH` and `detect_in_plan()` were already fully implemented (Round 14). Documented here for completeness; no new code added. See CI Integration section of SKILL.md for usage.
+
+### 5. Subagent Decomposition for Large Repos (SKILL.md)
+
+Section 1a updated with an explicit file-count threshold table and a full parallel subagent template for all 6 focus areas.
+
+- **< 30 files**: sequential reads in parent.
+- **30–100 files**: parallel batched reads (4–6 at a time) in parent.
+- **> 100 files + focus:all**: one subagent per focus area (security, robustness, ops, staleness, secrets, drift).
+- Standardised subagent output schema: `{file, line, catalogue_id_or_exploratory, excerpt, one_line_justification}`.
+- Parent synthesis steps: collect subagent JSON, de-duplicate `(file, line, id)` triples, then run Steps 11–17 (judgement, cost, report) in parent.
+- Cross-module (Step 9) and stack-specific (Step 10) checks always run in the parent agent — they require global context unavailable to individual subagents.
+
+### 6. Registry Version Staleness (`--check-registry`)
+
+New opt-in flag that queries `registry.terraform.io` to detect pinned module versions that are significantly behind the latest release.
+
+- `--check-registry`: off by default; opt-in to preserve the stdlib-only, offline-capable contract for normal scans.
+- New `_query_registry_latest(namespace, name, provider)` — `urllib.request` GET to the registry API; returns `None` on any network error (never blocks a scan).
+- New `_check_module_registry_staleness(all_files_text)` — scans for registry-style module sources, extracts pinned version, emits a finding if behind latest by ≥1 major or ≥3 minor versions.
+- New catalogue rule `MOD-STALE-001` (urgency: MEDIUM for major lag, LOW for minor).
+- New fixture `fixtures/mod_stale_version/main.tf` (skip-in-self-test — live network unavailable in CI).
+
+### 7. Azure/GCP Attack Graph Edges
+
+`build_attack_graph()` now infers 6 additional edge types covering Azure managed identity, Key Vault, storage account, and SQL Server references, plus two GCP service account binding patterns.
+
+- New patterns: `_EDGE_AZ_MI_RE`, `_EDGE_AZ_KV_RE`, `_EDGE_AZ_STORAGE_RE`, `_EDGE_AZ_SQL_RE`, `_EDGE_GCP_SA_EMAIL_RE`, `_EDGE_GCP_SA_NAME_RE`.
+- Expanded `_CROWN_JEWEL_TYPES` with 4 Azure database/messaging types.
+- Expanded `_NODE_TYPE_MAP` with ~14 Azure compute, IAM, storage, key, and network resource types.
+- Expanded `_is_internet_reachable()` for Azure: `azurerm_public_ip` always reachable; `azurerm_app_service` / `azurerm_linux_web_app` reachable unless `ip_restriction {}` present.
+
+### 8. LLM Calibration for Exploratory Findings (SKILL.md)
+
+Added a "Draft-and-challenge" three-question quality gate that the LLM must apply before including any novel (non-catalogue) finding in the report.
+
+1. **Concrete evidence** — citable file:line required; absence-of-X patterns must be written as catalogue entries, not exploratory findings.
+2. **Context sensitivity** — CLAUDE.md / README compensating controls → downgrade to INFO or discard.
+3. **Generalisability** — would this pattern fire on a well-configured reference implementation? → likely false positive, discard.
+
+Findings that pass all three are placed in a dedicated **"Exploratory Findings (unverified)"** subsection at the end of the report, clearly labelled as having no stable IDs and not tracked in delta comparisons.
+
+### 9. GitHub Actions PR Comment Fallback
+
+The GitHub Action now posts findings as a collapsible PR comment without requiring Code Scanning (paid/enterprise).
+
+- Added `workflow_dispatch` input `post-pr-comment` (default: `'true'`).
+- `detect.py --format markdown` run produces `tf-analyze-summary.md`; JSON run captures finding count.
+- SARIF upload step has `continue-on-error: true` — free-tier repos without Code Scanning no longer fail the job.
+- New `actions/github-script@v7` step: posts or updates a bot comment with a `<details>` collapsible block on every PR push.
+
+### Infrastructure
+
+- `--compliance-framework` argument added (`cis`/`pci_dss`/`soc2`/`all`).
+- `--check-registry` argument added.
+- `docs/cli.md` regenerated via `scripts/gen-cli-docs.py`.
+- SKILL.md argument-hint frontmatter updated with new flags.
+
+---
+
 ## Round 15 — 2026-05-07
 
 **Four new enterprise features (+~550 lines detect.py, fix_disruption on 8 catalogue entries):**

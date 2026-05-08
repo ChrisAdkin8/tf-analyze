@@ -1,0 +1,296 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0D1117;stop-opacity:1" />
+      <stop offset="60%" style="stop-color:#0F1B2D;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#12102A;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="purpleGlow" cx="30%" cy="50%" r="55%">
+      <stop offset="0%" style="stop-color:#7B42BC;stop-opacity:0.25" />
+      <stop offset="100%" style="stop-color:#7B42BC;stop-opacity:0" />
+    </radialGradient>
+    <radialGradient id="tealGlow" cx="72%" cy="50%" r="40%">
+      <stop offset="0%" style="stop-color:#00C7B7;stop-opacity:0.15" />
+      <stop offset="100%" style="stop-color:#00C7B7;stop-opacity:0" />
+    </radialGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9B5DE5" />
+      <stop offset="100%" style="stop-color:#5B2D8E" />
+    </linearGradient>
+    <linearGradient id="shieldHighlight" x1="0%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.15" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />
+    </linearGradient>
+    <linearGradient id="scanLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00C7B7;stop-opacity:0" />
+      <stop offset="30%" style="stop-color:#00C7B7;stop-opacity:0.9" />
+      <stop offset="70%" style="stop-color:#00C7B7;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#00C7B7;stop-opacity:0" />
+    </linearGradient>
+    <linearGradient id="gridFadeH" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7B42BC;stop-opacity:0" />
+      <stop offset="20%" style="stop-color:#7B42BC;stop-opacity:0.25" />
+      <stop offset="80%" style="stop-color:#7B42BC;stop-opacity:0.25" />
+      <stop offset="100%" style="stop-color:#7B42BC;stop-opacity:0" />
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <filter id="bigGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="20" />
+    </filter>
+  </defs>
+
+  <!-- ── Background ── -->
+  <rect width="1280" height="640" fill="url(#bg)" />
+  <rect width="1280" height="640" fill="url(#purpleGlow)" />
+  <rect width="1280" height="640" fill="url(#tealGlow)" />
+
+  <!-- ── Perspective grid ── -->
+  <g opacity="0.18">
+    <line x1="0" y1="640" x2="1280" y2="640" stroke="#7B42BC" stroke-width="1"/>
+    <line x1="80" y1="590" x2="1200" y2="590" stroke="#7B42BC" stroke-width="0.8"/>
+    <line x1="160" y1="545" x2="1120" y2="545" stroke="#7B42BC" stroke-width="0.7"/>
+    <line x1="230" y1="505" x2="1050" y2="505" stroke="#7B42BC" stroke-width="0.6"/>
+    <line x1="295" y1="470" x2="985" y2="470" stroke="#7B42BC" stroke-width="0.5"/>
+    <line x1="355" y1="438" x2="925" y2="438" stroke="#7B42BC" stroke-width="0.4"/>
+    <line x1="410" y1="410" x2="870" y2="410" stroke="#7B42BC" stroke-width="0.3"/>
+    <line x1="640" y1="410" x2="0" y2="640" stroke="#7B42BC" stroke-width="0.5"/>
+    <line x1="640" y1="410" x2="1280" y2="640" stroke="#7B42BC" stroke-width="0.5"/>
+    <line x1="640" y1="410" x2="160" y2="640" stroke="#7B42BC" stroke-width="0.4"/>
+    <line x1="640" y1="410" x2="320" y2="640" stroke="#7B42BC" stroke-width="0.4"/>
+    <line x1="640" y1="410" x2="480" y2="640" stroke="#7B42BC" stroke-width="0.4"/>
+    <line x1="640" y1="410" x2="640" y2="640" stroke="#7B42BC" stroke-width="0.4"/>
+    <line x1="640" y1="410" x2="800" y2="640" stroke="#7B42BC" stroke-width="0.4"/>
+    <line x1="640" y1="410" x2="960" y2="640" stroke="#7B42BC" stroke-width="0.4"/>
+    <line x1="640" y1="410" x2="1120" y2="640" stroke="#7B42BC" stroke-width="0.4"/>
+  </g>
+
+  <!-- ── Hex nodes right ── -->
+  <g opacity="0.12">
+    <polygon points="980,80 1010,63 1040,80 1040,113 1010,130 980,113" fill="none" stroke="#00C7B7" stroke-width="1.5"/>
+    <polygon points="1055,130 1085,113 1115,130 1115,163 1085,180 1055,163" fill="none" stroke="#7B42BC" stroke-width="1.5"/>
+    <polygon points="1130,70 1160,53 1190,70 1190,103 1160,120 1130,103" fill="none" stroke="#00C7B7" stroke-width="1.5"/>
+    <polygon points="1030,185 1060,168 1090,185 1090,218 1060,235 1030,218" fill="none" stroke="#00C7B7" stroke-width="1"/>
+    <polygon points="1170,160 1200,143 1230,160 1230,193 1200,210 1170,193" fill="none" stroke="#7B42BC" stroke-width="1"/>
+    <polygon points="900,140 930,123 960,140 960,173 930,190 900,173" fill="none" stroke="#7B42BC" stroke-width="1"/>
+    <line x1="1010" y1="130" x2="1085" y2="113" stroke="#00C7B7" stroke-width="0.8" stroke-dasharray="4,4"/>
+    <line x1="1085" y1="113" x2="1160" y2="120" stroke="#7B42BC" stroke-width="0.8" stroke-dasharray="4,4"/>
+    <line x1="1085" y1="180" x2="1060" y2="235" stroke="#00C7B7" stroke-width="0.8" stroke-dasharray="4,4"/>
+    <line x1="1160" y1="120" x2="1200" y2="143" stroke="#7B42BC" stroke-width="0.8" stroke-dasharray="4,4"/>
+    <line x1="930" y1="190" x2="1060" y2="168" stroke="#7B42BC" stroke-width="0.8" stroke-dasharray="4,4"/>
+  </g>
+
+  <!-- ── Hex nodes left ── -->
+  <g opacity="0.10">
+    <polygon points="60,100 90,83 120,100 120,133 90,150 60,133" fill="none" stroke="#7B42BC" stroke-width="1.5"/>
+    <polygon points="20,170 50,153 80,170 80,203 50,220 20,203" fill="none" stroke="#00C7B7" stroke-width="1"/>
+    <polygon points="110,200 140,183 170,200 170,233 140,250 110,233" fill="none" stroke="#7B42BC" stroke-width="1"/>
+    <line x1="90" y1="150" x2="50" y2="153" stroke="#7B42BC" stroke-width="0.7" stroke-dasharray="3,3"/>
+    <line x1="80" y1="170" x2="110" y2="183" stroke="#00C7B7" stroke-width="0.7" stroke-dasharray="3,3"/>
+  </g>
+
+  <!-- ══════════════════════════════════════════════════════════
+       FOREGROUND — full-width layout: x=40 … x=1240
+       Title + tagline left-aligned; icon right of title.
+       ══════════════════════════════════════════════════════════ -->
+
+  <!-- ── HCL magnifying glass — right of title ──
+       Positioned at x=830 so the icon sits alongside the title text.
+       viewBox="65 40 280 280" crops the 400×400 icon to lens+handle.
+       At 260×260 the lens centre lands at ≈(955, 148) in banner coords. -->
+  <svg x="830" y="18" width="260" height="260"
+       viewBox="65 40 280 280" overflow="visible">
+    <defs>
+      <linearGradient id="v2-rim" x1="15%" y1="10%" x2="85%" y2="90%">
+        <stop offset="0%" stop-color="#C4A0F5"/>
+        <stop offset="50%" stop-color="#7B42BC"/>
+        <stop offset="100%" stop-color="#3D1F6E"/>
+      </linearGradient>
+      <linearGradient id="v2-handle" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#9B5DE5"/>
+        <stop offset="100%" stop-color="#2E1260"/>
+      </linearGradient>
+      <radialGradient id="v2-lens" cx="38%" cy="33%" r="65%">
+        <stop offset="0%" stop-color="#0F0C1E"/>
+        <stop offset="100%" stop-color="#080812"/>
+      </radialGradient>
+      <filter id="v2-bloom" x="-120%" y="-120%" width="340%" height="340%">
+        <feGaussianBlur stdDeviation="22"/>
+      </filter>
+      <filter id="v2-glow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="v2-txt" x="-18%" y="-55%" width="136%" height="210%">
+        <feGaussianBlur stdDeviation="3.5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <clipPath id="v2-clip">
+        <circle cx="200" cy="178" r="113"/>
+      </clipPath>
+    </defs>
+
+    <!-- Handle -->
+    <line x1="292" y1="270" x2="378" y2="356"
+          stroke="url(#v2-handle)" stroke-width="24" stroke-linecap="round"/>
+    <line x1="289" y1="267" x2="371" y2="349"
+          stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.16"/>
+
+    <!-- Rim bloom + body -->
+    <circle cx="200" cy="178" r="134" fill="#9B5DE5" opacity="0.20" filter="url(#v2-bloom)"/>
+    <circle cx="200" cy="178" r="130" fill="url(#v2-rim)"/>
+    <circle cx="200" cy="178" r="120" fill="none"
+            stroke="rgba(220,196,255,0.20)" stroke-width="2"/>
+
+    <!-- Lens interior -->
+    <circle cx="200" cy="178" r="112" fill="url(#v2-lens)"/>
+
+    <!-- HCL code (clipped) -->
+    <g clip-path="url(#v2-clip)"
+       font-family="'Courier New', Consolas, monospace" font-weight="700"
+       text-anchor="start">
+      <text x="113" y="139" font-size="14" fill="#00C7B7">resource</text>
+      <text x="113" y="161" font-size="14" fill="#98C379">&quot;google_project_</text>
+      <text x="113" y="183" font-size="14">
+        <tspan fill="#98C379">iam_member&quot;</tspan>
+        <tspan fill="#E5C07B"> &quot;open&quot;</tspan>
+        <tspan fill="#C0C8D8"> {</tspan>
+      </text>
+      <text x="113" y="205" font-size="14" filter="url(#v2-txt)">
+        <tspan fill="#61AFEF">  member</tspan>
+        <tspan fill="#C0C8D8"> = </tspan>
+        <tspan fill="#FF5555">&quot;allUsers&quot;</tspan>
+      </text>
+      <text x="113" y="227" font-size="14" fill="#C0C8D8">}</text>
+    </g>
+
+    <!-- Rim / lens borders -->
+    <circle cx="200" cy="178" r="130" fill="none"
+            stroke="rgba(196,160,245,0.45)" stroke-width="1.5"/>
+    <circle cx="200" cy="178" r="112" fill="none"
+            stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+
+    <!-- Glass reflection -->
+    <ellipse cx="160" cy="132" rx="34" ry="22" fill="white" opacity="0.055"
+             transform="rotate(-32,160,132)"/>
+    <ellipse cx="158" cy="125" rx="13" ry="8"  fill="white" opacity="0.09"
+             transform="rotate(-32,158,125)"/>
+
+    <!-- Handle / lens junction cap -->
+    <circle cx="291" cy="269" r="14" fill="url(#v2-handle)"/>
+    <circle cx="291" cy="269" r="14" fill="none"
+            stroke="rgba(196,160,245,0.35)" stroke-width="1.5"/>
+  </svg>
+
+  <!-- ── Main Title — left-aligned ── -->
+  <text x="43" y="201" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-size="118" font-weight="900" fill="#7B42BC" opacity="0.3" filter="url(#bigGlow)" letter-spacing="-3">tf-analyze</text>
+  <text x="40" y="198" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-size="118" font-weight="900" letter-spacing="-3" filter="url(#softGlow)">
+    <tspan fill="#FFFFFF">tf-</tspan><tspan fill="#9B5DE5">analyze</tspan>
+  </text>
+
+  <!-- ── Tagline ── -->
+  <text x="40" y="246" font-family="'Courier New', 'Consolas', monospace" font-size="19" fill="#B0BAC5" letter-spacing="2" font-weight="400">TERRAFORM  ·  SECURITY  ·  BEST PRACTICES  ·  RISK SCORING</text>
+
+  <!-- ── Divider ── -->
+  <line x1="40" y1="268" x2="1240" y2="268" stroke="url(#gridFadeH)" stroke-width="1.5"/>
+
+  <!-- ══ Pills — 4 × 291 px, 12 px gaps, x=40 … x=1240 ══
+       Pill 1: 40–331  |  Pill 2: 343–634  |  Pill 3: 646–937  |  Pill 4: 949–1240
+       Within each pill: icon cx=35, text x=51, vertically centred cy=18 / y=23 -->
+
+  <!-- Pill 1 · CIS Compliance -->
+  <g transform="translate(40, 286)">
+    <rect width="291" height="36" rx="18" fill="#7B42BC" opacity="0.25"/>
+    <rect width="291" height="36" rx="18" fill="none" stroke="#9B5DE5" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="35" cy="18" r="7" fill="#9B5DE5" opacity="0.9"/>
+    <text x="51" y="23" font-family="'Courier New', Consolas, monospace" font-size="13" fill="#C4A0F5" font-weight="600" letter-spacing="0.4">CIS Compliance</text>
+  </g>
+
+  <!-- Pill 2 · Risk Scoring -->
+  <g transform="translate(343, 286)">
+    <rect width="291" height="36" rx="18" fill="#0A3D3A" opacity="0.5"/>
+    <rect width="291" height="36" rx="18" fill="none" stroke="#00C7B7" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="35" cy="18" r="7" fill="#00C7B7" opacity="0.9"/>
+    <text x="51" y="23" font-family="'Courier New', Consolas, monospace" font-size="13" fill="#7FEDD8" font-weight="600" letter-spacing="0.4">Risk Scoring</text>
+  </g>
+
+  <!-- Pill 3 · Attack Graphs -->
+  <g transform="translate(646, 286)">
+    <rect width="291" height="36" rx="18" fill="#1A1030" opacity="0.6"/>
+    <rect width="291" height="36" rx="18" fill="none" stroke="#7B42BC" stroke-width="1.2" opacity="0.6"/>
+    <circle cx="35" cy="18" r="7" fill="#7B42BC" opacity="0.9"/>
+    <text x="51" y="23" font-family="'Courier New', Consolas, monospace" font-size="13" fill="#C4A0F5" font-weight="600" letter-spacing="0.4">Attack Graphs</text>
+  </g>
+
+  <!-- Pill 4 · Delta Tracking -->
+  <g transform="translate(949, 286)">
+    <rect width="291" height="36" rx="18" fill="#0A3D3A" opacity="0.4"/>
+    <rect width="291" height="36" rx="18" fill="none" stroke="#00C7B7" stroke-width="1.2" opacity="0.5"/>
+    <circle cx="35" cy="18" r="7" fill="#00C7B7" opacity="0.8"/>
+    <text x="51" y="23" font-family="'Courier New', Consolas, monospace" font-size="13" fill="#7FEDD8" font-weight="600" letter-spacing="0.4">Delta Tracking</text>
+  </g>
+
+  <!-- ══ Findings panel — x=40, width=1200, height=182 ══
+       Columns (panel-local): severity x=18 w=74 | id x=108 | desc x=202 | cis right-anchored x=1182
+       Row cadence: header 36 px, rows 27 px each, footer separator+text 46 px -->
+  <g transform="translate(40, 338)">
+    <!-- Panel chrome -->
+    <rect width="1200" height="182" rx="10" fill="#0D1117" opacity="0.88"/>
+    <rect width="1200" height="182" rx="10" fill="none" stroke="#21262D" stroke-width="1.5"/>
+    <!-- Title bar -->
+    <rect width="1200" height="36" rx="10" fill="#161B22" opacity="0.9"/>
+    <rect x="0" y="18" width="1200" height="18" fill="#161B22" opacity="0.9"/>
+    <!-- Traffic lights -->
+    <circle cx="22" cy="18" r="6" fill="#FF5F57"/>
+    <circle cx="44" cy="18" r="6" fill="#FFBD2E"/>
+    <circle cx="66" cy="18" r="6" fill="#28C840"/>
+    <!-- Header text -->
+    <text x="90" y="23" font-family="'Courier New', Consolas, monospace" font-size="13" fill="#E6EDF3" font-weight="600">tf-analyze · findings report</text>
+    <text x="1182" y="23" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#C9D1D9" text-anchor="end">risk_score: 42 / 100</text>
+
+    <!-- Row 1 — CRITICAL -->
+    <rect x="18" y="46" width="74" height="20" rx="4" fill="#FF4444" opacity="0.25"/>
+    <text x="22" y="61" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#FF6B6B" font-weight="700">CRITICAL</text>
+    <text x="108" y="61" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">TF-S-0012</text>
+    <text x="202" y="61" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">google_storage_bucket: public_access_prevention disabled</text>
+    <text x="1182" y="61" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#C9D1D9" text-anchor="end">CIS 5.1</text>
+
+    <!-- Row 2 — HIGH -->
+    <rect x="18" y="73" width="46" height="20" rx="4" fill="#FF8C00" opacity="0.25"/>
+    <text x="22" y="88" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#FFA040" font-weight="700">HIGH</text>
+    <text x="108" y="88" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">TF-S-0028</text>
+    <text x="202" y="88" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">google_sql_instance: require_ssl not enforced</text>
+    <text x="1182" y="88" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#C9D1D9" text-anchor="end">CIS 6.4</text>
+
+    <!-- Row 3 — MEDIUM -->
+    <rect x="18" y="100" width="64" height="20" rx="4" fill="#FFD700" opacity="0.2"/>
+    <text x="22" y="115" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#FFD700" font-weight="700">MEDIUM</text>
+    <text x="108" y="115" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">TF-B-0041</text>
+    <text x="202" y="115" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">google_compute_firewall: overly permissive ingress rule</text>
+    <text x="1182" y="115" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#C9D1D9" text-anchor="end">CIS 3.6</text>
+
+    <!-- Row 4 — PASS -->
+    <rect x="18" y="127" width="40" height="20" rx="4" fill="#00C7B7" opacity="0.2"/>
+    <text x="22" y="142" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#00C7B7" font-weight="700">PASS</text>
+    <text x="108" y="142" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">TF-S-0009</text>
+    <text x="202" y="142" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#E6EDF3">google_kms_crypto_key: rotation period within policy</text>
+    <text x="1182" y="142" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#C9D1D9" text-anchor="end">CIS 1.10</text>
+
+    <!-- Footer -->
+    <line x1="18" y1="156" x2="1182" y2="156" stroke="#21262D" stroke-width="1"/>
+    <text x="22" y="172" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#C9D1D9">3 issues  ·  Δ -2 from last run  ·  GCP · HashiCorp stack</text>
+    <text x="1182" y="172" font-family="'Courier New', Consolas, monospace" font-size="11" fill="#DCC4FF" text-anchor="end">→ auto-fix available</text>
+  </g>
+
+  <!-- ── Bottom branding strip ── -->
+  <rect x="0" y="610" width="1280" height="30" fill="#0D1117" opacity="0.6"/>
+  <text x="640" y="630" font-family="'Courier New', Consolas, monospace" font-size="12" fill="#8B949E" text-anchor="middle" letter-spacing="2">github.com/hashicorp  ·  terraform analysis &amp; security</text>
+
+  <!-- ── Corner accents ── -->
+  <polyline points="20,30 20,20 30,20" fill="none" stroke="#7B42BC" stroke-width="2" opacity="0.5"/>
+  <polyline points="1250,20 1260,20 1260,30" fill="none" stroke="#7B42BC" stroke-width="2" opacity="0.5"/>
+  <polyline points="20,610 20,620 30,620" fill="none" stroke="#7B42BC" stroke-width="2" opacity="0.5"/>
+  <polyline points="1250,620 1260,620 1260,610" fill="none" stroke="#7B42BC" stroke-width="2" opacity="0.5"/>
+</svg>

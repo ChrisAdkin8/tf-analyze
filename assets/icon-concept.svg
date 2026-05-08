@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="ic-bg" cx="45%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#161B28"/>
+      <stop offset="100%" stop-color="#0D1117"/>
+    </radialGradient>
+
+    <!-- Lens rim: bright top-left → deep bottom-right -->
+    <linearGradient id="ic-rim" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#C4A0F5"/>
+      <stop offset="50%" stop-color="#7B42BC"/>
+      <stop offset="100%" stop-color="#3D1F6E"/>
+    </linearGradient>
+
+    <!-- Lens interior: very dark purple -->
+    <radialGradient id="ic-lens-bg" cx="38%" cy="34%" r="65%">
+      <stop offset="0%" stop-color="#1C1438"/>
+      <stop offset="100%" stop-color="#0D1117"/>
+    </radialGradient>
+
+    <!-- Handle -->
+    <linearGradient id="ic-handle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9B5DE5"/>
+      <stop offset="100%" stop-color="#2E1260"/>
+    </linearGradient>
+
+    <!-- Cube: top face (lightest — faces the "sun") -->
+    <linearGradient id="ic-top" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#DCC4FF"/>
+      <stop offset="100%" stop-color="#9B5DE5"/>
+    </linearGradient>
+
+    <!-- Cube: left face (mid-tone) -->
+    <linearGradient id="ic-left" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7B42BC"/>
+      <stop offset="100%" stop-color="#3D1F6E"/>
+    </linearGradient>
+
+    <!-- Cube: right face (darkest — in shadow) -->
+    <linearGradient id="ic-right" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4E2990"/>
+      <stop offset="100%" stop-color="#1E0D45"/>
+    </linearGradient>
+
+    <filter id="ic-glow-soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <filter id="ic-glow-big" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+
+    <filter id="ic-glow-teal" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Clip everything drawn inside the lens to the inner circle -->
+    <clipPath id="ic-clip">
+      <circle cx="188" cy="178" r="108"/>
+    </clipPath>
+  </defs>
+
+  <!-- ── Dark rounded background (preview aid) ── -->
+  <rect width="400" height="400" rx="24" fill="url(#ic-bg)"/>
+
+  <!-- ── Ambient purple halo behind lens ── -->
+  <circle cx="188" cy="178" r="155" fill="#7B42BC" opacity="0.13" filter="url(#ic-glow-big)"/>
+
+  <!-- ══ HANDLE (drawn behind the lens so rim covers the join) ══ -->
+  <line x1="280" y1="272" x2="366" y2="358"
+        stroke="url(#ic-handle)" stroke-width="28" stroke-linecap="round"/>
+  <!-- Handle top-left gloss -->
+  <line x1="277" y1="268" x2="358" y2="349"
+        stroke="white" stroke-width="4" stroke-linecap="round" opacity="0.16"/>
+  <!-- Handle bottom-right shadow -->
+  <line x1="284" y1="276" x2="368" y2="360"
+        stroke="black" stroke-width="5" stroke-linecap="round" opacity="0.20"/>
+
+  <!-- ══ LENS RIM ══ -->
+  <!-- Outer rim glow bloom -->
+  <circle cx="188" cy="178" r="132" fill="#9B5DE5" opacity="0.22" filter="url(#ic-glow-big)"/>
+  <!-- Rim body -->
+  <circle cx="188" cy="178" r="130" fill="url(#ic-rim)"/>
+  <!-- Rim inner bevel highlight -->
+  <circle cx="188" cy="178" r="120" fill="none"
+          stroke="rgba(220,196,255,0.25)" stroke-width="2"/>
+
+  <!-- ══ LENS INTERIOR ══ -->
+  <circle cx="188" cy="178" r="108" fill="url(#ic-lens-bg)"/>
+
+  <!-- ══ TERRAFORM CUBE (clipped to lens) ══
+       Isometric cube · centre (188,178) · edge h=76, v=44
+       6 key points:
+         T  = (188, 90)   — top vertex
+         TR = (264, 134)  — top-right
+         TL = (112, 134)  — top-left
+         C  = (188, 178)  — centre (front vertical edge meets horizontal)
+         BR = (264, 222)  — bottom-right
+         BL = (112, 222)  — bottom-left
+         B  = (188, 266)  — bottom vertex
+  ══ -->
+  <g clip-path="url(#ic-clip)">
+
+    <!-- Soft cube glow behind the geometry -->
+    <polygon points="188,90 264,134 188,178 112,134"
+             fill="#9B5DE5" opacity="0.35" filter="url(#ic-glow-big)"/>
+
+    <!-- Top face -->
+    <polygon points="188,90 264,134 188,178 112,134"
+             fill="url(#ic-top)" opacity="0.97"/>
+
+    <!-- Left face -->
+    <polygon points="112,134 188,178 188,266 112,222"
+             fill="url(#ic-left)" opacity="0.97"/>
+
+    <!-- Right face -->
+    <polygon points="188,178 264,134 264,222 188,266"
+             fill="url(#ic-right)" opacity="0.97"/>
+
+    <!-- ── Edge lines for crispness ── -->
+    <!-- Vertical front edge (centre column) -->
+    <line x1="188" y1="178" x2="188" y2="266"
+          stroke="rgba(255,255,255,0.30)" stroke-width="1.5"/>
+    <!-- Top vertical (centre top) -->
+    <line x1="188" y1="90"  x2="188" y2="178"
+          stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+    <!-- Bottom-left edge -->
+    <line x1="112" y1="222" x2="188" y2="266"
+          stroke="rgba(255,255,255,0.20)" stroke-width="1"/>
+    <!-- Bottom-right edge -->
+    <line x1="264" y1="222" x2="188" y2="266"
+          stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+    <!-- Diagonal top-left edge -->
+    <line x1="188" y1="90"  x2="112" y2="134"
+          stroke="rgba(255,255,255,0.20)" stroke-width="1"/>
+    <!-- Diagonal top-right edge -->
+    <line x1="188" y1="90"  x2="264" y2="134"
+          stroke="rgba(255,255,255,0.20)" stroke-width="1"/>
+
+    <!-- ── Teal analysis scan line across top face ──
+         y=117 slices the upper diamond: left_x≈154, right_x≈222  -->
+    <line x1="154" y1="117" x2="222" y2="117"
+          stroke="#00C7B7" stroke-width="2" opacity="0.70"
+          filter="url(#ic-glow-teal)"/>
+    <!-- Faint second scan sweep lower down (y=154 within lower diamond: left≈145, right≈231) -->
+    <line x1="146" y1="154" x2="230" y2="154"
+          stroke="#00C7B7" stroke-width="1" opacity="0.30"/>
+
+    <!-- Vertex accent dots -->
+    <circle cx="188" cy="90"  r="3.5" fill="#DCC4FF" opacity="0.80"
+            filter="url(#ic-glow-soft)"/>
+    <circle cx="264" cy="134" r="2.5" fill="#B07FE8" opacity="0.60"/>
+    <circle cx="112" cy="134" r="2.5" fill="#B07FE8" opacity="0.60"/>
+    <circle cx="188" cy="266" r="3"   fill="#4E2990" opacity="0.70"/>
+    <circle cx="264" cy="222" r="2"   fill="#3D1F6E" opacity="0.50"/>
+    <circle cx="112" cy="222" r="2"   fill="#3D1F6E" opacity="0.50"/>
+
+  </g>
+
+  <!-- ══ RIM FINISHING TOUCHES ══ -->
+  <!-- Outer border line (crisp) -->
+  <circle cx="188" cy="178" r="130" fill="none"
+          stroke="rgba(196,160,245,0.45)" stroke-width="1.5"/>
+
+  <!-- Glass highlight — oval reflection top-left -->
+  <ellipse cx="150" cy="132" rx="34" ry="22" fill="white" opacity="0.055"
+           transform="rotate(-32,150,132)"/>
+  <ellipse cx="148" cy="125" rx="13" ry="8"  fill="white" opacity="0.095"
+           transform="rotate(-32,148,125)"/>
+
+  <!-- ══ HANDLE-LENS JUNCTION CAP ══ -->
+  <circle cx="280" cy="272" r="15" fill="url(#ic-handle)"/>
+  <circle cx="280" cy="272" r="15" fill="none"
+          stroke="rgba(196,160,245,0.35)" stroke-width="1.5"/>
+</svg>

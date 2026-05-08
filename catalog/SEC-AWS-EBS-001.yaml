@@ -23,9 +23,22 @@ recommendation: |
   encryption via `aws_ebs_encryption_by_default` as a safety net, but also
   set `encrypted = true` explicitly in Terraform so the intent is auditable
   in code.
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
 verification: |
   Run `aws ec2 describe-volumes --volume-ids <id>` and confirm
   `Encrypted` is `true`. Run `terraform plan` and verify no diff shows
   `encrypted = false` or a missing encrypted argument.
+fix_hcl: |
+  resource "aws_ebs_volume" "example" {
+    availability_zone = "us-east-1a"
+    size              = 20
+    encrypted         = true
+    kms_key_id        = aws_kms_key.ebs.arn
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "EBS encryption cannot be enabled on an existing volume — requires snapshot + restore to a new encrypted volume."
 fixtures:
   - aws_ebs_unencrypted

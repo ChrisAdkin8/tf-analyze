@@ -45,5 +45,17 @@ verification: |
   `az vm show -g <rg> -n <name> \
     --query osProfile.linuxConfiguration.disablePasswordAuthentication`
   must return `true`.
+pci_dss:
+  - "Req-8.2"
+fix_hcl: |
+  resource "azurerm_linux_virtual_machine" "example" {
+    # ... other arguments ...
+    disable_password_authentication = true
+    admin_ssh_key {
+      username   = "adminuser"
+      public_key = file("~/.ssh/id_rsa.pub")
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - azure_linux_vm_password_auth

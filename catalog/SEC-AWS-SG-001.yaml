@@ -38,6 +38,8 @@ test_template: |
       error_message = "{resource} must not allow ingress from 0.0.0.0/0 (SEC-AWS-SG-001)."
     }
   }
+pci_dss:
+  - "Req-1.2"
 fix_hcl: |
   # Replace 0.0.0.0/0 with a specific CIDR range:
   ingress {

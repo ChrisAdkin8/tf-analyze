@@ -1,0 +1,28 @@
+id: MOD-STALE-001
+title: "Registry module is significantly behind latest version"
+section: dry
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: grep
+    regex: 'source\s*=\s*"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+"'
+    description: Registry-style module source present (staleness checked via --check-registry)
+recommendation: |
+  Run `detect.py --check-registry` to identify modules pinned significantly behind their
+  latest published version on the Terraform Registry. Upgrade the `version` constraint and
+  run `terraform init -upgrade` to pull the newer release. Review the module's CHANGELOG
+  for breaking changes before upgrading across major versions.
+
+  Staleness thresholds:
+  - MEDIUM: pinned version is >= 1 major version behind latest
+  - LOW: pinned version is >= 3 minor versions behind latest (within the same major)
+
+  Findings are only emitted by `--check-registry` (requires outbound HTTPS to
+  registry.terraform.io). The static pass records the source pattern but does not
+  query the registry — keeping normal scans offline-capable.
+verification: |
+  Run `terraform init -upgrade` and inspect `.terraform.lock.hcl` — the upgraded version
+  should match the latest from `terraform.io/registry/v1/modules/{ns}/{name}/{provider}`.
+  Confirm `terraform plan` shows no unintended resource replacements after the upgrade.
+fixtures: []

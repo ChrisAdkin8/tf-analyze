@@ -38,5 +38,12 @@ verification: |
   `gcloud redis instances describe <name> --region=<region> \
     --format='value(authEnabled)'`
   must return `True`.
+fix_hcl: |
+  resource "google_redis_instance" "example" {
+    # ... other arguments ...
+    auth_enabled = true
+  }
+fix_disruption: plan_required
+
 fixtures:
   - gcp_redis_no_auth

@@ -35,5 +35,13 @@ verification: |
   `aws lambda get-function-configuration --function-name <name> \
     --query 'DeadLetterConfig.TargetArn'`
   must return a non-null ARN.
+fix_hcl: |
+  resource "aws_lambda_function" "example" {
+    # ... other arguments ...
+    dead_letter_config {
+      target_arn = aws_sqs_queue.dlq.arn
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_lambda_no_dlq

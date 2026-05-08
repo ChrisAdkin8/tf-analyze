@@ -47,5 +47,13 @@ verification: |
   `aws rds describe-db-instances --db-instance-identifier <id> \
     --query 'DBInstances[0].DeletionProtection'`
   must return `true`.
+soc2_cc:
+  - "A1.2"
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    # ... other arguments ...
+    deletion_protection = true
+  }
+fix_disruption: none
 fixtures:
   - aws_rds_no_deletion_protection

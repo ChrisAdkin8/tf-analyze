@@ -31,6 +31,14 @@ verification: |
   Run `aws s3api get-bucket-versioning --bucket <name>` and confirm
   `Status` is `Enabled`. Run `terraform plan` and verify no diff shows
   `status = "Suspended"` or `status = "Disabled"`.
+fix_hcl: |
+  resource "aws_s3_bucket_versioning" "example" {
+    bucket = aws_s3_bucket.example.id
+    versioning_configuration {
+      status = "Enabled"
+    }
+  }
+fix_disruption: none
 fixtures:
   - attack_graph_demo
   - aws_s3_no_versioning

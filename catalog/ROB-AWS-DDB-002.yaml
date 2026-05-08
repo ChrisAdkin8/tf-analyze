@@ -1,0 +1,44 @@
+id: ROB-AWS-DDB-002
+title: "DynamoDB table missing point-in-time recovery"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: graph_check
+    function: dynamodb_pitr
+    description: |
+      `aws_dynamodb_table` without `point_in_time_recovery { enabled = true }`.
+      Without PITR, accidental writes, deletes, or application bugs can cause
+      permanent data loss. PITR provides a 35-day rolling backup window with
+      second-level restore granularity at no additional IOPS cost.
+recommendation: |
+  Enable PITR on all production tables:
+
+      resource "aws_dynamodb_table" "app" {
+        name = "app"
+
+        point_in_time_recovery {
+          enabled = true
+        }
+      }
+
+  PITR restores are performed using `RestoreTableToPointInTime` and create
+  a new table — they do not overwrite the original.
+soc2_cc:
+  - "A1.2"
+verification: |
+  `aws dynamodb describe-continuous-backups --table-name <name> \
+    --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus'`
+  must return `"ENABLED"`.
+fix_hcl: |
+  resource "aws_dynamodb_table" "example" {
+    name = "example"
+
+    point_in_time_recovery {
+      enabled = true
+    }
+  }
+fix_disruption: none
+fixtures:
+  - aws_dynamodb_no_pitr

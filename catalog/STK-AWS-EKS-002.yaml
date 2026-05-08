@@ -38,5 +38,15 @@ verification: |
     --query 'cluster.logging.clusterLogging[?enabled==\`true\`].types'`
   must include `api`, `audit`, `authenticator`, `controllerManager`,
   `scheduler`.
+soc2_cc:
+  - "CC7.2"
+fix_hcl: |
+  resource "aws_eks_cluster" "example" {
+    # ... other arguments ...
+    enabled_cluster_log_types = [
+      "api", "audit", "authenticator", "controllerManager", "scheduler"
+    ]
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_eks_no_logging

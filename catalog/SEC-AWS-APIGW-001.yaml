@@ -40,5 +40,13 @@ verification: |
   `aws apigateway get-stage --rest-api-id <id> --stage-name <name> \
     --query 'accessLogSettings.destinationArn'`
   must return a non-null CloudWatch log group ARN.
+fix_hcl: |
+  resource "aws_api_gateway_stage" "example" {
+    # ... other arguments ...
+    access_log_settings {
+      destination_arn = aws_cloudwatch_log_group.api_gw.arn
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_apigw_no_access_logs

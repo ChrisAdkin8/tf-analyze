@@ -15,5 +15,7 @@ recommendation: |
   raw git sources bypass the digest check.
 verification: |
   Replace `git::` sources with registry equivalents where available.
+soc2_cc:
+  - "CC9.2"
 fixtures:
   - mod_supply_git_source

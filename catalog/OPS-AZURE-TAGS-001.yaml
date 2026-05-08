@@ -41,5 +41,15 @@ verification: |
   Confirm in the Azure portal that the resource shows the expected tags, or run:
 
       az resource show --ids <resource-id> --query tags
+fix_hcl: |
+  resource "azurerm_resource_group" "example" {
+    # ... other arguments ...
+    tags = {
+      Environment = "prod"
+      Owner       = "platform-team"
+      Project     = "my-project"
+    }
+  }
+fix_disruption: none
 fixtures:
   - azure_resource_no_tags

@@ -1,5 +1,7 @@
 # tf-analyze
 
+![tf-analyze](assets/banner.svg)
+
 A Claude Code skill for auditing Terraform code. Static + plan-time detection, catalogue-anchored findings, delta tracking, SARIF/HTML/JSON outputs, optional `python-hcl2` heredoc-aware parser. GCP-first; AWS and Azure secondary.
 
 The skill is invoked from Claude Code as `/tf-analyze`. The detection engine (`scripts/detect.py`) is also runnable standalone for CI gating, listing rules, scaffolding new ones, etc. — see [`docs/cli.md`](docs/cli.md).

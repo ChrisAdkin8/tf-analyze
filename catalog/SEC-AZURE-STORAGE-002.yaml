@@ -30,5 +30,11 @@ verification: |
       az storage account show --name <name> --query allowBlobPublicAccess
 
   The command should return `false`.
+fix_hcl: |
+  resource "azurerm_storage_account" "example" {
+    # ... other arguments ...
+    allow_nested_items_to_be_public = false
+  }
+fix_disruption: plan_required
 fixtures:
   - azure_storage_public_blob

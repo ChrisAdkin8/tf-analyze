@@ -1,0 +1,57 @@
+id: SEC-AWS-ECS-002
+title: "ECS task definition runs a privileged container"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: grep
+    regex: '"privileged"\s*:\s*true|^\s*privileged\s*=\s*true'
+    hcl_context: true
+    description: |
+      ECS `container_definitions` JSON contains `"privileged": true`. A
+      privileged container runs with all Linux capabilities and host
+      filesystem access, equivalent to root on the underlying EC2 host.
+      Compromise of the application process inside the container immediately
+      yields full EC2 instance control, breaking container isolation entirely.
+recommendation: |
+  Remove `privileged: true` from all container definitions. If a capability
+  is genuinely required (e.g., `NET_ADMIN` for network tools), grant it
+  explicitly via `linuxParameters.capabilities.add` instead:
+
+      container_definitions = jsonencode([{
+        name  = "app"
+        image = "app:latest"
+
+        linuxParameters = {
+          capabilities = {
+            add  = ["NET_ADMIN"]
+            drop = ["ALL"]
+          }
+        }
+      }])
+
+  Use the principle of least privilege: drop ALL capabilities and re-add
+  only the specific ones the process needs. Never use `privileged: true`
+  in production task definitions.
+verification: |
+  `aws ecs describe-task-definition --task-definition <family> \
+    --query 'taskDefinition.containerDefinitions[*].privileged'`
+  must return `null` or `false` for all containers.
+fix_hcl: |
+  resource "aws_ecs_task_definition" "example" {
+    family = "example"
+    container_definitions = jsonencode([{
+      name  = "example"
+      image = "example:latest"
+      linuxParameters = {
+        capabilities = {
+          add  = []
+          drop = ["ALL"]
+        }
+      }
+    }])
+  }
+fix_disruption: none
+fixtures:
+  - aws_ecs_task_privileged

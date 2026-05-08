@@ -151,7 +151,11 @@ GitHub pull request number for --mode pr-review.
 
 ### `--compliance`
 
-Add a CIS compliance gap report tab to HTML output, or (with --format compliance) output a plain-text compliance table. Maps findings against CIS AWS/GCP/Azure benchmark controls defined in catalogue cis: fields.
+Add a compliance gap report tab to HTML output, or (with --format compliance) output a plain-text compliance table. Use --compliance-framework to choose the standard.
+
+### `--compliance-framework`
+
+Compliance framework to map against. Choices: cis (default), pci_dss, soc2, all. 'all' combines CIS, PCI-DSS v4.0, and SOC2 Trust Services Criteria in one report. Requires --compliance or --format compliance.
 
 ### `--oscal`
 
@@ -160,6 +164,10 @@ Write an OSCAL Assessment Results JSON file to PATH. Requires --compliance. Comp
 ### `--gen-tests`
 
 Generate .tftest.hcl assertion files for each finding whose catalogue entry defines a `test_template` field. Files are written to OUTDIR (created if absent). Native Terraform test format (requires Terraform >= 1.6).
+
+### `--check-registry`
+
+Query the Terraform Registry for the latest version of each registry-style module source and emit MOD-STALE-001 findings for modules that are significantly behind (>=1 major or >=3 minor versions). Requires outbound HTTPS to registry.terraform.io. Off by default so scans remain offline-capable.
 
 ### `--show-fixes`
 
@@ -172,4 +180,16 @@ Write report output to PATH instead of stdout. The file is created or overwritte
 ### `--lookback`
 
 Days of git history to analyse in --mode trend (default: 30).
+
+### `--apply-fixes`
+
+Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying.
+
+### `--cache`
+
+Enable incremental scan caching. Stores findings keyed on a hash of all .tf file contents + catalogue entries in .tf-analyze-cache.json inside the target directory. Subsequent runs on unchanged code return the cached findings instantly. Cache is invalidated automatically when any .tf file or catalogue rule changes. Use --cache-file to override the path.
+
+### `--cache-file`
+
+Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).
 

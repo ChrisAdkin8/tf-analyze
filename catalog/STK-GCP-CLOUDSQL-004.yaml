@@ -32,5 +32,15 @@ verification: |
   `gcloud sql instances describe <name> \
     --format='value(settings.ipConfiguration.requireSsl)'`
   must return `True`.
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    # ... other arguments ...
+    settings {
+      ip_configuration {
+        ssl_mode = "ENCRYPTED_ONLY"
+      }
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - cloudsql_no_require_ssl

@@ -38,6 +38,8 @@ test_template: |
       error_message = "{resource} must have key rotation enabled (SEC-AWS-KMS-001)."
     }
   }
+pci_dss:
+  - "Req-3.6"
 fix_hcl: |
   resource "aws_kms_key" "example" {
     description         = "..."

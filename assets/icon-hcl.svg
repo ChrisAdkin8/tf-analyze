@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="hcl-bg" cx="48%" cy="44%" r="58%">
+      <stop offset="0%" stop-color="#13102A"/>
+      <stop offset="100%" stop-color="#0D1117"/>
+    </radialGradient>
+
+    <!-- Dark lens interior — near black so white text is maximum contrast -->
+    <radialGradient id="hcl-lens" cx="38%" cy="33%" r="65%">
+      <stop offset="0%" stop-color="#0F0C1E"/>
+      <stop offset="100%" stop-color="#080812"/>
+    </radialGradient>
+
+    <filter id="hcl-bloom" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+
+    <filter id="hcl-ring-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Text glow: spreads white light outward for a lit-from-within look -->
+    <filter id="hcl-text-glow" x="-25%" y="-60%" width="150%" height="220%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Background ── -->
+  <rect width="400" height="400" rx="24" fill="url(#hcl-bg)"/>
+
+  <!-- Subtle ambient purple halo centred on lens -->
+  <circle cx="190" cy="178" r="148" fill="#7B42BC" opacity="0.12" filter="url(#hcl-bloom)"/>
+
+  <!-- ── Handle (drawn behind lens so rim overlaps cleanly) ── -->
+  <!-- Banner-matched style: plain white, thick, round cap -->
+  <line x1="284" y1="270" x2="366" y2="352"
+        stroke="white" stroke-width="22" stroke-linecap="round" opacity="0.94"
+        filter="url(#hcl-ring-glow)"/>
+
+  <!-- ── Lens interior fill ── -->
+  <circle cx="190" cy="178" r="122" fill="url(#hcl-lens)"/>
+
+  <!-- ── White magnifying glass ring (matches banner style) ── -->
+  <circle cx="190" cy="178" r="122" fill="none"
+          stroke="white" stroke-width="15" opacity="0.95"
+          filter="url(#hcl-ring-glow)"/>
+
+  <!-- ── HCL  — large, bold, white, centred in lens ──
+       font-size=86, cap-height≈60px
+       baseline y = lens_centre(178) + cap_height/2 = 178+30 = 208  → visually centred -->
+  <text x="190" y="208"
+        font-family="'Courier New', Consolas, monospace"
+        font-size="86" font-weight="900"
+        fill="white" text-anchor="middle"
+        opacity="0.97"
+        filter="url(#hcl-text-glow)">HCL</text>
+
+  <!-- ── Glass reflection (matches banner aesthetic) ── -->
+  <ellipse cx="150" cy="132" rx="32" ry="20" fill="white" opacity="0.06"
+           transform="rotate(-32,150,132)"/>
+  <ellipse cx="148" cy="125" rx="12" ry="7"  fill="white" opacity="0.11"
+           transform="rotate(-32,148,125)"/>
+
+  <!-- ── Handle/lens junction cap ── -->
+  <circle cx="284" cy="270" r="11" fill="white" opacity="0.94"/>
+</svg>

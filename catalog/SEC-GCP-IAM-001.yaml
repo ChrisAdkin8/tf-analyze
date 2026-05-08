@@ -28,6 +28,10 @@ verification: |
 escalation:
   - condition: "member matches '^(allUsers|allAuthenticatedUsers)$'"
     new_urgency: CRITICAL
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.1"
 fixtures:
   - iam_too_broad
 test_template: |

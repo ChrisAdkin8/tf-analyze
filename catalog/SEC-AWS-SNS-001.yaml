@@ -20,9 +20,19 @@ recommendation: |
   payloads with PII, credentials, or other sensitive data — are stored
   in plaintext. Use the AWS-managed key `alias/aws/sns` as a minimum if
   a customer-managed key is not yet in place.
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
 verification: |
   `aws sns get-topic-attributes --topic-arn <arn> \
     --query 'Attributes.KmsMasterKeyId'`
   must return a key ARN or alias.
+fix_hcl: |
+  resource "aws_sns_topic" "example" {
+    name              = "example"
+    kms_master_key_id = aws_kms_key.sns.arn
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_sns_unencrypted

@@ -49,5 +49,7 @@ verification: |
   Should return zero rows. Re-run tf-analyze to confirm clean.
 related:
   - SEC-NETWORK-002
+pci_dss:
+  - "Req-1.2"
 fixtures:
   - firewall_open_ssh

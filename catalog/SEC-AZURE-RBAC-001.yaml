@@ -37,5 +37,9 @@ verification: |
   not `/subscriptions/<sub-id>`.
 related:
   - SEC-IAM-001
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.1"
 fixtures:
   - azure_role_assignment_subscription

@@ -1,0 +1,68 @@
+id: SEC-AWS-ECS-001
+title: "ECS task definition exposes secrets in plaintext environment variables"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: grep
+    regex: '(?i)(?:"name"|name)\s*[=:]\s*"[^"]*(?:password|secret_key|secret|api_key|token|credential|private_key)[^"]*"[^\n}]{0,80}\n[^\n}]{0,80}(?:"value"|value)\s*[=:]\s*"[^\$"\{][^"]*"'
+    hcl_context: true
+    description: |
+      ECS `container_definitions` JSON contains an environment variable whose
+      name looks like a secret (PASSWORD, SECRET, TOKEN, API_KEY, CREDENTIAL)
+      with a hardcoded `value`. Secrets passed as plaintext environment
+      variables are visible in the ECS console, AWS CloudTrail describe-task
+      events, and any container process that reads its own environment.
+      Use `secrets` (backed by Secrets Manager or SSM Parameter Store) instead.
+recommendation: |
+  Replace plaintext `environment` entries with `secrets` references:
+
+      resource "aws_ecs_task_definition" "app" {
+        family = "app"
+
+        container_definitions = jsonencode([{
+          name  = "app"
+          image = "app:latest"
+
+          # BAD — plaintext secret:
+          # environment = [{ name = "DB_PASSWORD", value = "s3cr3t" }]
+
+          # GOOD — Secrets Manager reference:
+          secrets = [
+            {
+              name      = "DB_PASSWORD"
+              valueFrom = aws_secretsmanager_secret.db_password.arn
+            }
+          ]
+        }])
+      }
+
+  ECS injects Secrets Manager / SSM values at container start time.
+  The plaintext value never appears in task metadata or CloudTrail.
+pci_dss:
+  - "Req-3.5"
+soc2_cc:
+  - "CC6.1"
+verification: |
+  `aws ecs describe-task-definition --task-definition <family> \
+    --query 'taskDefinition.containerDefinitions[*].environment'`
+  must return an empty list or contain only non-sensitive values.
+  Secrets should appear under `secrets`, not `environment`.
+fix_hcl: |
+  resource "aws_ecs_task_definition" "example" {
+    family = "example"
+    container_definitions = jsonencode([{
+      name  = "example"
+      image = "example:latest"
+      secrets = [
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.example.arn
+        }
+      ]
+    }])
+  }
+fix_disruption: none
+fixtures:
+  - aws_ecs_task_plaintext_secret

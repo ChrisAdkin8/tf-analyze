@@ -34,6 +34,15 @@ verification: |
   Run `aws rds describe-db-instances --db-instance-identifier <id>` and
   confirm `BackupRetentionPeriod` is greater than 0. Run `terraform plan`
   and verify no diff shows `backup_retention_period = 0` or a missing value.
+soc2_cc:
+  - "A1.2"
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    # ... other arguments ...
+    backup_retention_period = 7
+    backup_window           = "03:00-04:00"
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_rds_no_backup
 test_template: |

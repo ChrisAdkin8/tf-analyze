@@ -1,0 +1,58 @@
+id: SEC-AWS-DDB-001
+title: "DynamoDB table not using customer-managed KMS key for encryption"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: graph_check
+    function: dynamodb_sse
+    description: |
+      `aws_dynamodb_table` without a `server_side_encryption` block
+      specifying a `kms_key_arn`. DynamoDB encrypts at rest by default
+      using Amazon-owned keys, but these keys cannot be audited, rotated,
+      or revoked. Customer-managed KMS keys (CMKs) provide key usage audit
+      trails in CloudTrail, cross-account access control, and automatic
+      annual rotation.
+recommendation: |
+  Add a `server_side_encryption` block with a customer-managed KMS key:
+
+      resource "aws_kms_key" "ddb" {
+        description             = "DynamoDB table CMK"
+        deletion_window_in_days = 30
+        enable_key_rotation     = true
+      }
+
+      resource "aws_dynamodb_table" "app" {
+        name = "app"
+
+        server_side_encryption {
+          enabled     = true
+          kms_key_arn = aws_kms_key.ddb.arn
+        }
+      }
+
+  If a CMK is not yet available, the minimum acceptable baseline is
+  `server_side_encryption { enabled = true }` (AWS-managed key), which
+  at least makes the encryption choice explicit rather than implicit.
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+verification: |
+  `aws dynamodb describe-table --table-name <name> \
+    --query 'Table.SSEDescription'`
+  must return `Status: ENABLED` with a `KMSMasterKeyArn` value pointing
+  to a customer-managed key (not the AWS-owned key ARN).
+fix_hcl: |
+  resource "aws_dynamodb_table" "example" {
+    name = "example"
+
+    server_side_encryption {
+      enabled     = true
+      kms_key_arn = aws_kms_key.ddb.arn
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_dynamodb_no_cmk

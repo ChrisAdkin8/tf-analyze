@@ -45,5 +45,15 @@ verification: |
   `az keyvault show --name <name> --resource-group <rg> \
     --query 'properties.networkAcls.defaultAction'`
   must return `"Deny"`.
+fix_hcl: |
+  resource "azurerm_key_vault" "example" {
+    # ... other arguments ...
+    network_acls {
+      default_action = "Deny"
+      bypass         = ["AzureServices"]
+      ip_rules       = []
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - azure_kv_no_network_acl

@@ -27,5 +27,14 @@ verification: |
   snapshot before destroying the instance. Verify via
   `aws rds describe-db-snapshots` after any deletion that a final snapshot
   was created.
+soc2_cc:
+  - "A1.2"
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    # ... other arguments ...
+    skip_final_snapshot       = false
+    final_snapshot_identifier = "final-snapshot-${replace(timestamp(), ":", "-")}"
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_rds_skip_snapshot

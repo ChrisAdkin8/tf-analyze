@@ -16,5 +16,7 @@ recommendation: |
   on the next `terraform init -upgrade`.
 verification: |
   Verify all git-sourced module URLs use a pinned tag or SHA, not main/master.
+soc2_cc:
+  - "CC9.2"
 fixtures:
   - mod_supply_mutable_ref

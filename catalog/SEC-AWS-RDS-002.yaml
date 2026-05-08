@@ -32,9 +32,21 @@ recommendation: |
   HIPAA, and SOC 2 controls. Note: encryption cannot be enabled on an
   existing unencrypted instance — you must snapshot, restore to a new
   encrypted instance, and redirect traffic.
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
 verification: |
   Run `aws rds describe-db-instances --db-instance-identifier <id>` and
   confirm `StorageEncrypted` is `true`. Run `terraform plan` and verify
   no diff shows `storage_encrypted = false`.
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    # ... other arguments ...
+    storage_encrypted = true
+    kms_key_id        = aws_kms_key.rds.arn
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Storage encryption cannot be enabled on an existing RDS instance — requires snapshot + restore to a new encrypted instance and traffic cutover."
 fixtures:
   - aws_rds_unencrypted

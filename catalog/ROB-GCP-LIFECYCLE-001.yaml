@@ -33,5 +33,15 @@ escalation:
     new_urgency: HIGH
   - condition: "resource_holds_production_data"
     new_urgency: CRITICAL
+soc2_cc:
+  - "A1.2"
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    # ... other arguments ...
+    lifecycle {
+      prevent_destroy = true
+    }
+  }
+fix_disruption: none
 fixtures:
   - missing_prevent_destroy

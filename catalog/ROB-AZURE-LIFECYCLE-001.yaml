@@ -46,5 +46,13 @@ verification: |
 escalation:
   - condition: "is_production_environment"
     new_urgency: CRITICAL
+fix_hcl: |
+  resource "azurerm_storage_account" "example" {
+    # ... other arguments ...
+    lifecycle {
+      prevent_destroy = true
+    }
+  }
+fix_disruption: none
 fixtures:
   - azure_missing_prevent_destroy

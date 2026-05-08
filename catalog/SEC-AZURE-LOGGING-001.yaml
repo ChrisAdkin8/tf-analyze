@@ -36,5 +36,9 @@ verification: |
       az monitor diagnostic-settings list --resource <kv-id>
 
   The response should be a non-empty list with `AuditEvent` enabled.
+pci_dss:
+  - "Req-10.2"
+soc2_cc:
+  - "CC7.2"
 fixtures:
   - azure_kv_no_diagnostics
