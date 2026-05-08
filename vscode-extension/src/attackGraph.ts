@@ -1,0 +1,230 @@
+import * as vscode from 'vscode';
+import * as cp from 'child_process';
+import * as path from 'path';
+
+interface GraphNode {
+  id: string;
+  type: string;
+  label: string;
+  is_crown_jewel: boolean;
+  internet_reachable: boolean;
+  on_critical_path: boolean;
+  findings: string[];
+}
+
+interface GraphEdge {
+  from: string;
+  to: string;
+  label: string;
+}
+
+interface AttackGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export class AttackGraphPanel {
+  static currentPanel: AttackGraphPanel | undefined;
+  private readonly _panel: vscode.WebviewPanel;
+  private readonly _context: vscode.ExtensionContext;
+
+  static createOrShow(context: vscode.ExtensionContext): void {
+    const col = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
+    if (AttackGraphPanel.currentPanel) {
+      AttackGraphPanel.currentPanel._panel.reveal(col);
+      AttackGraphPanel.currentPanel._refresh();
+      return;
+    }
+    const panel = vscode.window.createWebviewPanel(
+      'tfAnalyzeAttackGraph',
+      'tf-analyze: Attack Graph',
+      col,
+      { enableScripts: true, retainContextWhenHidden: true }
+    );
+    AttackGraphPanel.currentPanel = new AttackGraphPanel(panel, context);
+  }
+
+  private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
+    this._panel = panel;
+    this._context = context;
+    this._panel.onDidDispose(() => {
+      AttackGraphPanel.currentPanel = undefined;
+    });
+    this._panel.webview.html = this._getLoadingHtml();
+    this._refresh();
+  }
+
+  private _refresh(): void {
+    const cfg = vscode.workspace.getConfiguration('tf-analyze');
+    const scriptPath = cfg.get<string>('scriptPath', 'scripts/detect.py');
+    const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
+    const absScript = path.isAbsolute(scriptPath)
+      ? scriptPath
+      : path.join(wsFolder, scriptPath);
+
+    cp.exec(
+      `python3 "${absScript}" --target "${wsFolder}" --format json --attack-graph`,
+      { maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout) => {
+        let graph: AttackGraph = { nodes: [], edges: [] };
+        try {
+          const data = JSON.parse(stdout);
+          graph = data.attack_graph ?? graph;
+        } catch (_) {}
+        this._panel.webview.html = this._getHtml(graph);
+      }
+    );
+  }
+
+  private _getLoadingHtml(): string {
+    return `<!DOCTYPE html><html><body style="background:#1e1e1e;color:#ccc;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><p>Building attack graph…</p></body></html>`;
+  }
+
+  private _getHtml(graph: AttackGraph): string {
+    const nodesJson = JSON.stringify(graph.nodes);
+    const edgesJson = JSON.stringify(graph.edges);
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  body { margin: 0; background: #1e1e1e; color: #ccc; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+  #container { display: flex; height: 100vh; }
+  #graph-area { flex: 1; position: relative; }
+  svg { width: 100%; height: 100%; }
+  #sidebar { width: 260px; background: #252526; padding: 12px; overflow-y: auto; border-left: 1px solid #3c3c3c; font-size: 12px; }
+  #sidebar h3 { margin: 0 0 8px; font-size: 13px; color: #e1e1e1; }
+  .finding-chip { background: #3a3d41; border-radius: 3px; padding: 2px 6px; margin: 2px 2px 2px 0; display: inline-block; font-size: 11px; }
+  .badge { font-size: 10px; padding: 1px 5px; border-radius: 2px; margin-left: 4px; }
+  .badge-cj { background: #b8860b; color: #fff; }
+  .badge-inet { background: #c0392b; color: #fff; }
+  #toolbar { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
+  button { background: #3a3d41; border: 1px solid #555; color: #ccc; padding: 4px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+  button:hover { background: #4a4d51; }
+  .node circle { cursor: pointer; transition: stroke-width 0.15s; }
+  .node circle:hover { stroke-width: 3; }
+  .node text { font-size: 9px; fill: #ddd; pointer-events: none; }
+  .link { fill: none; marker-end: url(#arrow); }
+  .link.critical { stroke: #e53e3e; stroke-width: 2.5; }
+  .link.normal { stroke: #555; stroke-width: 1.2; }
+  @keyframes pulse { 0%,100%{stroke-opacity:1} 50%{stroke-opacity:0.3} }
+  .inet-pulse { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="graph-area">
+    <div id="toolbar">
+      <button onclick="exportSvg()">Export SVG</button>
+      <button onclick="resetZoom()">Reset</button>
+    </div>
+    <svg id="svg">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="16" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#555"/>
+        </marker>
+        <marker id="arrow-critical" markerWidth="8" markerHeight="8" refX="16" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#e53e3e"/>
+        </marker>
+      </defs>
+      <g id="root"></g>
+    </svg>
+  </div>
+  <div id="sidebar">
+    <h3>Attack Graph</h3>
+    <div id="node-detail"><p style="color:#888">Click a node to inspect</p></div>
+  </div>
+</div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const nodes = ${nodesJson};
+const edges = ${edgesJson};
+
+const COLOR = {
+  compute: '#4A90D9', storage: '#E8A838', iam: '#D4A017',
+  network: '#7B9EA6', key: '#6BBF84', secret: '#6BBF84',
+  internet: '#E53E3E', unknown: '#888'
+};
+
+const svg = d3.select('#svg');
+const root = d3.select('#root');
+const width = () => document.getElementById('graph-area').clientWidth;
+const height = () => window.innerHeight;
+
+const zoom = d3.zoom().scaleExtent([0.1, 4]).on('zoom', e => root.attr('transform', e.transform));
+svg.call(zoom);
+
+function resetZoom() { svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity); }
+
+const sim = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(edges).id(d => d.id).distance(120))
+  .force('charge', d3.forceManyBody().strength(-300))
+  .force('center', d3.forceCenter(width() / 2, height() / 2))
+  .force('collide', d3.forceCollide(30));
+
+const link = root.append('g').selectAll('line')
+  .data(edges).join('line')
+  .attr('class', d => 'link ' + (d.label === 'critical' ? 'critical' : 'normal'))
+  .attr('marker-end', d => d.label === 'critical' ? 'url(#arrow-critical)' : 'url(#arrow)');
+
+const node = root.append('g').selectAll('g')
+  .data(nodes).join('g')
+  .attr('class', 'node')
+  .call(d3.drag()
+    .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+    .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+    .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+  .on('click', (e, d) => showDetail(d));
+
+node.each(function(d) {
+  const g = d3.select(this);
+  const r = d.is_crown_jewel ? 16 : 10;
+  const color = COLOR[d.type] ?? COLOR.unknown;
+  // Outer glow ring for internet-reachable
+  if (d.internet_reachable) {
+    g.append('circle').attr('r', r + 5)
+      .attr('fill', 'none').attr('stroke', color).attr('stroke-width', 2)
+      .attr('stroke-dasharray', '5,3').attr('class', 'inet-pulse');
+  }
+  // Crown jewel double ring
+  if (d.is_crown_jewel) {
+    g.append('circle').attr('r', r + 3)
+      .attr('fill', 'none').attr('stroke', '#b8860b').attr('stroke-width', 1.5);
+  }
+  g.append('circle').attr('r', r)
+    .attr('fill', color).attr('stroke', d.on_critical_path ? '#e53e3e' : '#333').attr('stroke-width', d.on_critical_path ? 2.5 : 1);
+  g.append('text').text(d.label.split('.').pop()).attr('dy', r + 12).attr('text-anchor', 'middle');
+});
+
+sim.on('tick', () => {
+  link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  node.attr('transform', d => \`translate(\${d.x},\${d.y})\`);
+});
+
+function showDetail(d) {
+  const badges = [
+    d.is_crown_jewel ? '<span class="badge badge-cj">Crown Jewel</span>' : '',
+    d.internet_reachable ? '<span class="badge badge-inet">Internet-reachable</span>' : '',
+  ].join('');
+  const findings = d.findings?.length
+    ? d.findings.map(f => \`<span class="finding-chip">\${f}</span>\`).join('')
+    : '<span style="color:#888">No findings</span>';
+  document.getElementById('node-detail').innerHTML = \`
+    <h3>\${d.label}\${badges}</h3>
+    <p><strong>Type:</strong> \${d.type}</p>
+    <p><strong>Findings:</strong><br>\${findings}</p>
+  \`;
+}
+
+function exportSvg() {
+  const svgEl = document.getElementById('svg');
+  const blob = new Blob([svgEl.outerHTML], {type: 'image/svg+xml'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'attack-graph.svg'; a.click();
+}
+</script>
+</body>
+</html>`;
+  }
+}

@@ -18,8 +18,8 @@ Each has a corresponding section in **PLAN.md** with full implementation detail.
 - [ ] **P0 · S** Add 128×128 PNG icon (`vscode-extension/assets/icon.png`); wire into `package.json`
 - [ ] **P0 · S** Compile + package: `cd vscode-extension && npm install && npm run compile && npm run package`; confirm `tf-analyze-0.1.0.vsix` builds clean
 - [ ] **P0 · S** `vsce publish`; add Marketplace install badge to `README.md`
-- [ ] **P0 · L** Add attack-graph webview (`vscode-extension/src/attackGraph.ts`): call `detect.py --attack-graph --format json`, render d3.js force-directed graph in a `WebviewPanel` with urgency-coloured nodes, crown-jewel indicators, internet-reachable pulsing borders, click-to-inspect sidebar
-- [ ] **P1 · S** Wire `tf-analyze.showAttackGraph` command into `package.json` contributes and `extension.ts` activate
+- [x] **P0 · L** Add attack-graph webview (`vscode-extension/src/attackGraph.ts`): call `detect.py --attack-graph --format json`, render d3.js force-directed graph in a `WebviewPanel` with urgency-coloured nodes, crown-jewel indicators, internet-reachable pulsing borders, click-to-inspect sidebar
+- [x] **P1 · S** Wire `tf-analyze.showAttackGraph` command into `package.json` contributes and `extension.ts` activate
 - [ ] **P1 · S** Diff-style fix preview: replace code-comment insertion with a `WorkspaceEdit`-based proposed change (accept/reject like Copilot suggestions)
 - [ ] **P1 · S** `tf-analyze: Browse rules` command palette entry — fuzzy `QuickPick` over 194 rules by ID + title + urgency
 - [ ] **P2 · S** `tf-analyze.ignoreRules` setting — array of rule IDs suppressed project-wide without editing source files
@@ -67,32 +67,32 @@ Each has a corresponding section in **PLAN.md** with full implementation detail.
 ### #6 — Custom rules support
 *PLAN.md §6*
 
-- [ ] **P1 · M** Add `--config PATH` CLI flag to `detect.py` (default: auto-discover `.tf-analyze.yaml` in target dir)
-- [ ] **P1 · M** Add `_load_project_config(target: Path) -> dict` that reads `.tf-analyze.yaml` and returns `{rules_dir, ignore_rules, thresholds}`
-- [ ] **P1 · M** Update `load_catalog()` signature to accept optional `extra_rules_dir: Path | None`; merge custom YAML files into catalogue; reserve `CUSTOM-*` ID prefix
-- [ ] **P1 · M** Apply `ignore_rules` list from project config as project-wide suppressions (after catalogue load, before scan)
-- [ ] **P1 · S** Add `detect.py --init` command: scaffold `.tf-analyze.yaml` + `.tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml` with commented template
-- [ ] **P1 · S** Add `tests/test_custom_rules.py`: assert custom YAML rule fires, `ignore_rules` suppresses built-in rule, `CUSTOM-*` IDs appear in output
+- [x] **P1 · M** Add `--config PATH` CLI flag to `detect.py` (default: auto-discover `.tf-analyze.yaml` in target dir)
+- [x] **P1 · M** Add `_load_project_config(target: Path) -> dict` that reads `.tf-analyze.yaml` and returns `{rules_dir, ignore_rules, thresholds}`
+- [x] **P1 · M** Update `load_catalog()` signature to accept optional `extra_rules_dir: Path | None`; merge custom YAML files into catalogue; reserve `CUSTOM-*` ID prefix
+- [x] **P1 · M** Apply `ignore_rules` list from project config as project-wide suppressions (after catalogue load, before scan)
+- [x] **P1 · S** Add `detect.py --init` command: scaffold `.tf-analyze.yaml` + `.tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml` with commented template
+- [x] **P1 · S** Add `tests/test_custom_rules.py`: assert custom YAML rule fires, `ignore_rules` suppresses built-in rule, `CUSTOM-*` IDs rejected
 - [ ] **P1 · S** Write `docs/custom-rules.md` with worked example (company-specific tagging rule)
 
 ### #7 — LSP server mode (`--lsp`)
 *PLAN.md §7*
 
-- [ ] **P1 · XL** Add `_run_lsp_server()` to `detect.py`: `asyncio`-based JSON-RPC server on stdin/stdout; implement `initialize`, `textDocument/didOpen`, `textDocument/didSave`, `textDocument/didClose`, `textDocument/codeAction`, `shutdown`, `exit`
-- [ ] **P1 · M** Map urgency to LSP `DiagnosticSeverity`: CRITICAL/HIGH → Error (1), MEDIUM → Warning (2), LOW → Information (3)
-- [ ] **P1 · M** `textDocument/codeAction` handler: return `WorkspaceEdit` actions inserting `fix_hcl` for findings on the requested range
+- [x] **P1 · XL** Add `_run_lsp_server()` to `detect.py`: JSON-RPC server on stdin/stdout; `initialize`, `textDocument/didOpen`, `textDocument/didSave`, `textDocument/didClose`, `textDocument/codeAction`, `shutdown`, `exit`
+- [x] **P1 · M** Map urgency to LSP `DiagnosticSeverity`: CRITICAL/HIGH → Error (1), MEDIUM → Warning (2), LOW → Information (3)
+- [x] **P1 · M** `textDocument/codeAction` handler: return `WorkspaceEdit` actions inserting `fix_hcl` for findings on the requested range
 - [ ] **P1 · S** Update VS Code extension to optionally use `--lsp` instead of spawning `detect.py` per-save (persistent process, lower overhead)
-- [ ] **P1 · S** Write `docs/lsp.md` with `nvim-lspconfig` stanza and `coc.nvim` example
+- [x] **P1 · S** Write `docs/lsp.md` with `nvim-lspconfig` stanza and `coc.nvim` example
 - [ ] **P2 · S** Add JetBrains LSP client config example
 
 ### #8 — Interactive web demo
 *PLAN.md §8*
 
-- [ ] **P1 · L** Write `demo/app.py` (FastAPI): `POST /scan` accepts `{"hcl": "..."}` or `{"repo": "https://github.com/..."}`, calls `detect.py --format json --attack-graph`, returns findings JSON
-- [ ] **P1 · L** Write `demo/index.html`: HCL editor (CodeMirror), findings table (sortable by urgency), d3.js attack-graph SVG, share button
-- [ ] **P1 · S** Write `demo/Dockerfile` + `demo/fly.toml` for one-command deployment to Fly.io
-- [ ] **P1 · S** Add rate limiting (10 req/min per IP), repo-scan validation (github.com/gitlab.com only), 30s timeout
-- [ ] **P1 · S** Add "Try the demo" link and badge to `README.md`
+- [x] **P1 · L** Write `demo/app.py` (FastAPI): `POST /scan/hcl` and `POST /scan/repo`, calls `detect.py --format json --attack-graph`, returns findings JSON
+- [x] **P1 · L** Write `demo/index.html`: HCL editor (CodeMirror 6), findings table with expandable fix_hcl, d3.js attack-graph SVG
+- [x] **P1 · S** Write `demo/Dockerfile` + `demo/fly.toml` for one-command deployment to Fly.io
+- [x] **P1 · S** Rate limiting (10 req/min per IP), repo-scan validation (github.com/gitlab.com only), 30s timeout, 50 KB cap
+- [ ] **P1 · S** Add "Try the demo" link and badge to `README.md` once deployed
 - [ ] **P2 · M** Permalink for scan results: store in SQLite with 24-hour TTL so results are shareable via URL
 
 ---

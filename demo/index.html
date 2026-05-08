@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tf-analyze — Live Demo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #16213e; padding: 10px 20px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+  header h1 { font-size: 18px; color: #e94560; letter-spacing: 0.5px; }
+  header span { color: #888; font-size: 13px; }
+  #main { display: flex; flex: 1; min-height: 0; }
+  .panel { display: flex; flex-direction: column; border-right: 1px solid #0f3460; min-width: 0; }
+  #editor-panel { flex: 0 0 380px; }
+  #findings-panel { flex: 0 0 380px; }
+  #graph-panel { flex: 1; }
+  .panel-header { background: #16213e; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #a0a0c0; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .panel-body { flex: 1; overflow: auto; }
+  #editor-container { height: 100%; }
+  .CodeMirror { height: 100% !important; font-size: 12px; background: #1e1e2e; color: #cdd6f4; }
+  .CodeMirror-scroll { height: 100%; }
+  #controls { padding: 8px 12px; background: #16213e; border-top: 1px solid #0f3460; flex-shrink: 0; display: flex; gap: 8px; align-items: center; }
+  #repo-input { flex: 1; background: #1e1e2e; border: 1px solid #0f3460; color: #cdd6f4; padding: 5px 8px; border-radius: 4px; font-size: 12px; }
+  button { background: #e94560; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  button:hover { background: #c73652; }
+  button.secondary { background: #0f3460; }
+  button.secondary:hover { background: #1a4a7a; }
+  #findings-list { padding: 8px; }
+  .finding-row { background: #16213e; border-radius: 6px; margin-bottom: 6px; overflow: hidden; cursor: pointer; border: 1px solid transparent; }
+  .finding-row:hover { border-color: #0f3460; }
+  .finding-header { display: flex; align-items: center; gap: 8px; padding: 7px 10px; }
+  .badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 700; flex-shrink: 0; }
+  .CRITICAL { background: #7f1d1d; color: #fca5a5; }
+  .HIGH { background: #78350f; color: #fcd34d; }
+  .MEDIUM { background: #1e3a5f; color: #93c5fd; }
+  .LOW { background: #1e3a1e; color: #86efac; }
+  .finding-title { font-size: 12px; color: #e0e0e0; flex: 1; }
+  .finding-location { font-size: 11px; color: #888; flex-shrink: 0; }
+  .finding-fix { display: none; padding: 8px 10px; background: #0d1b2a; border-top: 1px solid #0f3460; font-family: monospace; font-size: 11px; white-space: pre; color: #a8cc8c; overflow-x: auto; }
+  .finding-row.expanded .finding-fix { display: block; }
+  #empty-state { padding: 40px; text-align: center; color: #555; font-size: 13px; }
+  #status { font-size: 12px; color: #888; }
+  #status.loading { color: #e94560; }
+  #status.success { color: #86efac; }
+  #status.error { color: #f87171; }
+  #graph-svg { width: 100%; height: 100%; }
+  .node circle { cursor: pointer; }
+  .node text { font-size: 9px; fill: #aaa; pointer-events: none; }
+  .link { fill: none; stroke: #2a2a4a; stroke-width: 1.2; marker-end: url(#arrow); }
+  .link.critical { stroke: #e94560; stroke-width: 2.5; marker-end: url(#arrow-red); }
+  @keyframes pulse { 0%,100%{stroke-opacity:0.8} 50%{stroke-opacity:0.2} }
+  .inet-ring { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<header>
+  <h1>tf-analyze</h1>
+  <span>Terraform security scanner — live demo</span>
+</header>
+<div id="main">
+  <div class="panel" id="editor-panel">
+    <div class="panel-header">
+      <span>HCL Editor</span>
+      <button class="secondary" onclick="loadExample()">Load example</button>
+    </div>
+    <div class="panel-body">
+      <div id="editor-container"><textarea id="editor"></textarea></div>
+    </div>
+    <div id="controls">
+      <input id="repo-input" type="text" placeholder="…or enter a GitHub/GitLab repo URL">
+      <button onclick="scanHcl()">Scan HCL</button>
+      <button class="secondary" onclick="scanRepo()">Scan Repo</button>
+    </div>
+  </div>
+  <div class="panel" id="findings-panel">
+    <div class="panel-header">
+      <span>Findings</span>
+      <span id="status">paste HCL or enter a repo URL</span>
+    </div>
+    <div class="panel-body">
+      <div id="findings-list"><div id="empty-state">Run a scan to see findings</div></div>
+    </div>
+  </div>
+  <div class="panel" id="graph-panel">
+    <div class="panel-header"><span>Attack Graph</span></div>
+    <div class="panel-body" style="position:relative">
+      <svg id="graph-svg">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="14" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#2a2a4a"/>
+          </marker>
+          <marker id="arrow-red" markerWidth="8" markerHeight="6" refX="14" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#e94560"/>
+          </marker>
+        </defs>
+        <g id="graph-root"></g>
+      </svg>
+    </div>
+  </div>
+</div>
+<script>
+const EXAMPLE_HCL = `resource "aws_s3_bucket" "data" {
+  bucket = "my-data-bucket"
+  force_destroy = true
+}
+
+resource "aws_instance" "web" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t3.micro"
+  associate_public_ip_address = true
+}
+
+resource "aws_ebs_volume" "disk" {
+  availability_zone = "us-east-1a"
+  size              = 40
+}
+
+resource "aws_security_group" "allow_all" {
+  name = "allow_all"
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}`;
+
+const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+  mode: 'null', lineNumbers: true, theme: 'default', lineWrapping: true,
+});
+editor.setValue(EXAMPLE_HCL);
+
+function loadExample() { editor.setValue(EXAMPLE_HCL); }
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('status');
+  el.textContent = msg; el.className = cls || '';
+}
+
+async function scanHcl() {
+  setStatus('Scanning…', 'loading');
+  try {
+    const resp = await fetch('/scan/hcl', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ hcl: editor.getValue() }),
+    });
+    if (!resp.ok) { const e = await resp.json(); setStatus('Error: ' + e.detail, 'error'); return; }
+    const data = await resp.json();
+    renderFindings(data.findings ?? []);
+    renderGraph(data.attack_graph ?? {nodes:[], edges:[]});
+    setStatus((data.findings?.length ?? 0) + ' finding(s)', 'success');
+  } catch(e) { setStatus('Request failed: ' + e.message, 'error'); }
+}
+
+async function scanRepo() {
+  const url = document.getElementById('repo-input').value.trim();
+  if (!url) { setStatus('Enter a repo URL first', 'error'); return; }
+  setStatus('Cloning & scanning…', 'loading');
+  try {
+    const resp = await fetch('/scan/repo', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ repo: url }),
+    });
+    if (!resp.ok) { const e = await resp.json(); setStatus('Error: ' + e.detail, 'error'); return; }
+    const data = await resp.json();
+    renderFindings(data.findings ?? []);
+    renderGraph(data.attack_graph ?? {nodes:[], edges:[]});
+    setStatus((data.findings?.length ?? 0) + ' finding(s)', 'success');
+  } catch(e) { setStatus('Request failed: ' + e.message, 'error'); }
+}
+
+function renderFindings(findings) {
+  const list = document.getElementById('findings-list');
+  if (!findings.length) {
+    list.innerHTML = '<div id="empty-state" style="color:#86efac">✓ No findings — configuration looks good!</div>';
+    return;
+  }
+  list.innerHTML = findings.map(f => `
+    <div class="finding-row" onclick="this.classList.toggle('expanded')">
+      <div class="finding-header">
+        <span class="badge ${f.urgency}">${f.urgency}</span>
+        <span class="finding-title">${f.id} — ${f.title || ''}</span>
+        <span class="finding-location">${(f.file||'').split('/').pop()}:${f.line||''}</span>
+      </div>
+      ${f.fix_hcl ? `<div class="finding-fix">${f.fix_hcl.replace(/</g,'&lt;')}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+const COLOR = {compute:'#4A90D9',storage:'#E8A838',iam:'#D4A017',network:'#7B9EA6',key:'#6BBF84',secret:'#6BBF84',internet:'#e94560',unknown:'#888'};
+
+function renderGraph(graph) {
+  const svgEl = document.getElementById('graph-svg');
+  const W = svgEl.clientWidth || 600, H = svgEl.clientHeight || 500;
+  const root = d3.select('#graph-root');
+  root.selectAll('*').remove();
+
+  if (!graph.nodes?.length) return;
+
+  const nodes = graph.nodes.map(n => ({...n}));
+  const edges = graph.edges.map(e => ({...e}));
+
+  const svg = d3.select('#graph-svg');
+  const zoom = d3.zoom().scaleExtent([0.1,4]).on('zoom', e => root.attr('transform', e.transform));
+  svg.call(zoom);
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-250))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collide', d3.forceCollide(28));
+
+  const link = root.append('g').selectAll('line').data(edges).join('line')
+    .attr('class', d => 'link' + (d.label === 'critical' ? ' critical' : ''));
+
+  const node = root.append('g').selectAll('g').data(nodes).join('g').attr('class','node')
+    .call(d3.drag()
+      .on('start',(e,d)=>{ if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',(e,d)=>{ d.fx=e.x; d.fy=e.y; })
+      .on('end',(e,d)=>{ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+  node.each(function(d) {
+    const g = d3.select(this);
+    const r = d.is_crown_jewel ? 14 : 9;
+    const c = COLOR[d.type]||COLOR.unknown;
+    if (d.internet_reachable) g.append('circle').attr('r',r+5).attr('fill','none').attr('stroke',c).attr('stroke-width',1.5).attr('stroke-dasharray','4,3').attr('class','inet-ring');
+    if (d.is_crown_jewel) g.append('circle').attr('r',r+3).attr('fill','none').attr('stroke','#b8860b').attr('stroke-width',1.5);
+    g.append('circle').attr('r',r).attr('fill',c).attr('stroke',d.on_critical_path?'#e94560':'#1a1a2e').attr('stroke-width',d.on_critical_path?2:1);
+    g.append('text').text(d.label.split('.').pop()).attr('dy',r+11).attr('text-anchor','middle');
+  });
+
+  sim.on('tick',()=>{
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    node.attr('transform',d=>`translate(${d.x},${d.y})`);
+  });
+}
+</script>
+</body>
+</html>

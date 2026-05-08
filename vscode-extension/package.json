@@ -37,7 +37,8 @@
       },
       {
         "command": "tf-analyze.showAttackGraph",
-        "title": "tf-analyze: Show Attack Graph"
+        "title": "tf-analyze: Show Attack Graph",
+        "icon": "$(type-hierarchy)"
       },
       {
         "command": "tf-analyze.openFinding",
@@ -96,6 +97,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "tf-analyze.showAttackGraph",
+          "when": "view == tfAnalyzeFindings",
+          "group": "navigation"
+        },
         {
           "command": "tf-analyze.runScan",
           "when": "view == tfAnalyzeFindings",

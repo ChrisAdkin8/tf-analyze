@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as path from "path";
 import * as fs from "fs";
+import { AttackGraphPanel } from "./attackGraph";
 
 interface Finding {
   id: string;
@@ -409,6 +410,10 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
     ),
+
+    vscode.commands.registerCommand("tf-analyze.showAttackGraph", () => {
+      AttackGraphPanel.createOrShow(context);
+    }),
 
     vscode.workspace.onDidSaveTextDocument((doc) => {
       const cfg = vscode.workspace.getConfiguration("tf-analyze");

@@ -426,6 +426,7 @@ RESOURCE_START = re.compile(
 )
 MODULE_START = re.compile(r'^\s*module\s+"([\w-]+)"\s*\{', re.MULTILINE)
 VARIABLE_START = re.compile(r'^\s*variable\s+"([\w-]+)"\s*\{', re.MULTILINE)
+LOCALS_START = re.compile(r'^\s*locals\s*\{', re.MULTILINE)
 MOVED_START = re.compile(r'^\s*moved\s*\{', re.MULTILINE)
 IMPORT_START = re.compile(r'^\s*import\s*\{', re.MULTILINE)
 REMOVED_START = re.compile(r'^\s*removed\s*\{', re.MULTILINE)
@@ -445,6 +446,7 @@ VALIDATION_BLOCK_RE = re.compile(r'(?m)^\s*validation\s*\{')
 VAR_REF_RE = re.compile(r'\bvar\.([\w-]+)\b')
 # Matches when the entire (stripped) attribute value is a plain var.X reference.
 _VAR_PLAIN_REF_RE = re.compile(r'^var\.([\w-]+)$')
+_LOCAL_PLAIN_REF_RE = re.compile(r'^local\.([\w-]+)$')
 MODULE_REF_RE = re.compile(r'\bmodule\.([\w-]+)\.([\w-]+)')
 INLINE_IGNORE_RE = re.compile(r'#\s*tf-analyze:ignore\s+([\w-]+)')
 BOOL_COUNT_RE = re.compile(
@@ -590,30 +592,33 @@ def block_arg_value(body: str, arg: str) -> str | None:
 
 
 def _resolve_var_ref(val: str, var_defaults: dict) -> str:
-    """If val is a plain `var.X` reference and X has a known default, return that default.
+    """Resolve plain `var.X` or `local.X` references to their known values.
 
-    Only substitutes when the entire value is `var.X` — compound expressions
-    like `var.x == true` are left unchanged so they don't accidentally match
-    literal-value patterns.
-
-    Data-source references (data.X.Y.attr) are intentionally NOT resolved:
-    they return their original string, which is non-empty and will not match
-    literal `false` checks, so resource_arg patterns behave correctly without
-    a sentinel. Regex-based resource_arg patterns also need the original value.
+    Only substitutes when the entire value is a single reference — compound
+    expressions like `var.x == true` are left unchanged.  Data-source
+    references (data.X.Y) are intentionally NOT resolved.
     """
-    m = _VAR_PLAIN_REF_RE.match(val.strip())
+    stripped = val.strip()
+    m = _VAR_PLAIN_REF_RE.match(stripped)
     if m:
         resolved = var_defaults.get(m.group(1))
+        if resolved is not None:
+            return resolved
+    m = _LOCAL_PLAIN_REF_RE.match(stripped)
+    if m:
+        resolved = var_defaults.get("__local__" + m.group(1))
         if resolved is not None:
             return resolved
     return val
 
 
 def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
-    """Return {dir_path: {var_name: default_value}} for all declared variable defaults.
+    """Return {dir_path: {var_name: default_value}} for all declared variable
+    defaults AND locals values.
 
-    Variable scope in Terraform is per-directory, so defaults are indexed by
-    the parent directory of each .tf file rather than a flat global map.
+    Variable scope in Terraform is per-directory.  Locals are stored under
+    the key ``__local__<name>`` in the same per-directory dict so that a
+    single lookup table can serve both namespaces.
     """
     result: dict[str, dict[str, str]] = {}
     for fp, text in all_files_text.items():
@@ -623,7 +628,32 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
             default = block_arg_value(blk["body"], "default")
             if default is not None:
                 result.setdefault(dir_key, {})[var_name] = default
+        # Locals blocks: `locals { name = value ... }`  (no groups — use find_blocks
+        # variant that returns body only via LOCALS_START which has no capture groups).
+        for blk in find_blocks(text, LOCALS_START):
+            body = blk["body"]
+            # Each line of the body is a `name = value` assignment.
+            for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', body):
+                lname, lval = lm.group(1), lm.group(2).strip().strip('"').strip("'")
+                result.setdefault(dir_key, {})["__local__" + lname] = lval
     return result
+
+
+def _resource_is_count_zero(body: str, var_defaults: dict) -> bool:
+    """Return True if the resource block has `count = 0` (definitely not created).
+
+    Resolves `var.X` and `local.X` references against known defaults.  When
+    count is a non-resolvable expression the function returns False (safe default
+    — don't skip a resource we can't prove is absent).
+    """
+    val = block_arg_value(body, "count")
+    if val is None:
+        return False
+    val = _resolve_var_ref(val, var_defaults)
+    try:
+        return int(val) == 0
+    except (ValueError, TypeError):
+        return False
 
 
 def block_has_nested_path(body: str, path: str) -> bool:
@@ -764,13 +794,33 @@ def detect_in_file(
                     glob.lstrip("*/")
                 ):
                     continue
-                search_text = strip_hcl_context(text) if pat.get("hcl_context") else text
-                for m in regex.finditer(search_text):
-                    line = search_text.count("\n", 0, m.start()) + 1
-                    findings.append({"id": eid, "file": str(file_path), "line": line, "resource": ""})
+                scope = pat.get("scope", "")
+                if scope == "resource_body":
+                    # Restrict the search to resource block bodies so the pattern
+                    # cannot fire on comments, variable descriptions, or output values.
+                    rt_filter = pat.get("resource", "")
+                    for blk in resources:
+                        btype, bname = blk["groups"]
+                        if rt_filter and btype != rt_filter:
+                            continue
+                        if _resource_is_count_zero(blk["body"], _vd):
+                            continue
+                        if regex.search(blk["body"]):
+                            findings.append({
+                                "id": eid,
+                                "file": str(file_path),
+                                "line": blk["start_line"],
+                                "resource": f"{btype}.{bname}",
+                            })
+                else:
+                    search_text = strip_hcl_context(text) if pat.get("hcl_context") else text
+                    for m in regex.finditer(search_text):
+                        line = search_text.count("\n", 0, m.start()) + 1
+                        findings.append({"id": eid, "file": str(file_path), "line": line, "resource": ""})
             elif kind == "resource_arg":
                 has_regex = "regex" in pat
                 has_not_regex = "not_regex" in pat
+                fire_if_absent = pat.get("fire_if_absent", False)
                 if "resource" not in pat or "arg" not in pat:
                     continue
                 if not has_regex and not has_not_regex:
@@ -783,15 +833,22 @@ def detect_in_file(
                     btype, bname = blk["groups"]
                     if btype != rt:
                         continue
+                    # Skip resources that are definitely not created (count = 0).
+                    if _resource_is_count_zero(blk["body"], _vd):
+                        continue
                     val = block_arg_value(blk["body"], arg)
                     if val is None:
-                        continue
-                    val = _resolve_var_ref(val, _vd)
-                    hit = False
-                    if regex and regex.search(val):
-                        hit = True
-                    if not_regex and not not_regex.search(val):
-                        hit = True
+                        if fire_if_absent:
+                            hit = True
+                        else:
+                            continue
+                    else:
+                        val = _resolve_var_ref(val, _vd)
+                        hit = False
+                        if regex and regex.search(val):
+                            hit = True
+                        if not_regex and not not_regex.search(val):
+                            hit = True
                     if hit:
                         findings.append(
                             {
@@ -812,6 +869,8 @@ def detect_in_file(
                 for blk in resources:
                     btype, bname = blk["groups"]
                     if btype != rt:
+                        continue
+                    if _resource_is_count_zero(blk["body"], _vd):
                         continue
                     if "." in arg_path:
                         present = block_has_nested_path(blk["body"], arg_path)
@@ -4391,10 +4450,26 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     return errs
 
 
+def _load_project_config(target: Path) -> dict:
+    """Read .tf-analyze.yaml from target directory.
+
+    Returns {} on missing file or any parse error (with a warning to stderr).
+    """
+    cfg_path = target / ".tf-analyze.yaml"
+    if not cfg_path.exists():
+        return {}
+    try:
+        return load_yaml(cfg_path.read_text()) or {}
+    except Exception as e:
+        print(f"WARN: cannot parse {cfg_path}: {e}", file=sys.stderr)
+        return {}
+
+
 def load_catalog(
     catalog_dir: Path,
     include_stubs: bool = False,
     strict: bool = False,
+    extra_rules_dir: Path | None = None,
 ) -> list[dict]:
     """Load catalogue YAMLs with schema validation.
 
@@ -4406,6 +4481,9 @@ def load_catalog(
     entry is skipped. With strict=True, a single error aborts the load
     via sys.exit(2). Default is non-strict so a stale catalogue entry
     doesn't break every CI run.
+
+    If extra_rules_dir is set and is a directory, custom rules are loaded
+    from *.yaml files there. Custom rule IDs must start with 'CUSTOM-'.
     """
     entries: list[dict] = []
     error_count = 0
@@ -4436,6 +4514,35 @@ def load_catalog(
             file=sys.stderr,
         )
         sys.exit(2)
+
+    # Load custom rules from extra_rules_dir if provided
+    if extra_rules_dir is not None and Path(extra_rules_dir).is_dir():
+        for yml in sorted(Path(extra_rules_dir).glob("*.yaml")):
+            try:
+                data = load_yaml(yml.read_text())
+            except Exception as e:
+                print(f"ERROR: cannot parse custom rule {yml}: {e}", file=sys.stderr)
+                continue
+            rule_id = data.get("id", "")
+            if not str(rule_id).startswith("CUSTOM-"):
+                print(
+                    f"WARN: custom rule {yml} has id '{rule_id}' which does not "
+                    f"start with 'CUSTOM-'; skipping",
+                    file=sys.stderr,
+                )
+                continue
+            errs = validate_catalog_entry(data, str(yml))
+            if errs:
+                for msg in errs:
+                    print(f"ERROR: {msg}", file=sys.stderr)
+                continue
+            status = data.get("status", "active")
+            if status == "deprecated":
+                continue
+            if status == "stub" and not include_stubs:
+                continue
+            entries.append(data)
+
     return entries
 
 
@@ -5521,6 +5628,143 @@ def _handle_apply_fixes(
 
 # ---- Main ---------------------------------------------------------------
 
+def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
+    """JSON-RPC 2.0 LSP server on stdin/stdout."""
+    import json as _json
+
+    entries = load_catalog(catalog_dir)
+    id_map = {e["id"]: e for e in entries}
+    _diagnostics: dict[str, list] = {}
+
+    def _uri_to_path(uri: str) -> Path:
+        return Path(uri.removeprefix("file://"))
+
+    def _scan_uri(uri: str) -> list[dict]:
+        path = _uri_to_path(uri)
+        if not path.exists() or path.suffix != ".tf":
+            return []
+        text = path.read_text()
+        target = path.parent
+        all_files = {str(p): p.read_text() for p in target.glob("*.tf") if p.exists()}
+        var_defaults = _extract_var_defaults_by_dir(all_files)
+        return detect_in_file(path, text, entries, var_defaults.get(str(target), {}))
+
+    def _findings_to_diagnostics(findings: list[dict]) -> list[dict]:
+        sev_map = {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+        diags = []
+        for f in findings:
+            line = max(0, f["line"] - 1)
+            urgency = id_map.get(f["id"], {}).get("default_urgency", "LOW")
+            diags.append({
+                "range": {"start": {"line": line, "character": 0},
+                           "end":   {"line": line, "character": 9999}},
+                "severity": sev_map.get(urgency, 3),
+                "code": f["id"],
+                "source": "tf-analyze",
+                "message": f"{f['id']}: {id_map.get(f['id'], {}).get('title', '')}",
+            })
+        return diags
+
+    def _read_message() -> dict | None:
+        header = b""
+        while not header.endswith(b"\r\n\r\n"):
+            ch = sys.stdin.buffer.read(1)
+            if not ch:
+                return None
+            header += ch
+        m = re.search(rb"Content-Length: (\d+)", header)
+        if not m:
+            return None
+        length = int(m.group(1))
+        body = sys.stdin.buffer.read(length)
+        return _json.loads(body)
+
+    def _send(obj: dict) -> None:
+        body = _json.dumps(obj).encode()
+        sys.stdout.buffer.write(
+            f"Content-Length: {len(body)}\r\n\r\n".encode() + body
+        )
+        sys.stdout.buffer.flush()
+
+    def _notify(method: str, params: dict) -> None:
+        _send({"jsonrpc": "2.0", "method": method, "params": params})
+
+    while True:
+        msg = _read_message()
+        if msg is None:
+            break
+        method = msg.get("method", "")
+        mid = msg.get("id")
+
+        if method == "initialize":
+            _send({
+                "jsonrpc": "2.0", "id": mid,
+                "result": {
+                    "capabilities": {
+                        "textDocumentSync": {"openClose": True, "save": True},
+                        "codeActionProvider": True,
+                    },
+                    "serverInfo": {"name": "tf-analyze", "version": "0.1.0"},
+                }
+            })
+
+        elif method == "initialized":
+            pass
+
+        elif method in ("textDocument/didOpen", "textDocument/didSave"):
+            uri = msg["params"]["textDocument"]["uri"]
+            findings = _scan_uri(uri)
+            _diagnostics[uri] = findings
+            _notify("textDocument/publishDiagnostics", {
+                "uri": uri,
+                "diagnostics": _findings_to_diagnostics(findings),
+            })
+
+        elif method == "textDocument/didClose":
+            uri = msg["params"]["textDocument"]["uri"]
+            _diagnostics.pop(uri, None)
+            _notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": []})
+
+        elif method == "textDocument/codeAction":
+            uri = msg["params"]["textDocument"]["uri"]
+            req_line = msg["params"]["range"]["start"]["line"] + 1
+            findings = _diagnostics.get(uri, [])
+            actions = []
+            for f in findings:
+                if abs(f["line"] - req_line) > 2:
+                    continue
+                entry = id_map.get(f["id"], {})
+                fix_hcl = entry.get("fix_hcl")
+                if not fix_hcl:
+                    continue
+                actions.append({
+                    "title": f"tf-analyze fix: {f['id']}",
+                    "kind": "quickfix",
+                    "edit": {
+                        "changes": {
+                            uri: [{
+                                "range": {
+                                    "start": {"line": f["line"] - 1, "character": 0},
+                                    "end":   {"line": f["line"] - 1, "character": 0},
+                                },
+                                "newText": f"\n# tf-analyze fix for {f['id']}:\n{fix_hcl}\n",
+                            }]
+                        }
+                    }
+                })
+            _send({"jsonrpc": "2.0", "id": mid, "result": actions})
+
+        elif method == "shutdown":
+            _send({"jsonrpc": "2.0", "id": mid, "result": None})
+
+        elif method == "exit":
+            sys.exit(0)
+
+        elif mid is not None:
+            _send({"jsonrpc": "2.0", "id": mid,
+                   "error": {"code": -32601, "message": f"Method not found: {method}"}})
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -5838,6 +6082,33 @@ def main():
             "module, stack, verification)."
         ),
     )
+    ap.add_argument(
+        "--config",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to .tf-analyze.yaml project config file. "
+            "Default: auto-discover in target directory."
+        ),
+    )
+    ap.add_argument(
+        "--init",
+        action="store_true",
+        default=False,
+        help=(
+            "Create .tf-analyze.yaml and .tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml "
+            "in the target directory, then exit."
+        ),
+    )
+    ap.add_argument(
+        "--lsp",
+        action="store_true",
+        default=False,
+        help=(
+            "Run as a JSON-RPC 2.0 LSP server on stdin/stdout. "
+            "Provides real-time diagnostics and code actions for .tf files."
+        ),
+    )
     args = ap.parse_args()
     if args.use_hcl2:
         _enable_hcl2_or_warn()
@@ -5862,6 +6133,66 @@ def main():
     if args.targets is None:
         args.targets = []
 
+    # --init: create project config scaffold and exit
+    if args.init:
+        init_target = Path(args.targets[0]).resolve() if args.targets else Path.cwd()
+        _cfg_path = init_target / ".tf-analyze.yaml"
+        _rules_dir = init_target / ".tf-analyze-rules"
+        _rules_dir.mkdir(parents=True, exist_ok=True)
+        _cfg_path.write_text(
+            "# tf-analyze project configuration\n"
+            "# rules_dir: .tf-analyze-rules/\n"
+            "# ignore_rules: []\n"
+            "# thresholds:\n"
+            "#   password_min_length: 14\n"
+        )
+        (_rules_dir / "CUSTOM-EXAMPLE-001.yaml").write_text(
+            "id: CUSTOM-EXAMPLE-001\n"
+            'title: "Example: resource missing required Owner tag"\n'
+            "section: ops\n"
+            "default_urgency: MEDIUM\n"
+            "blast_radius: single-resource\n"
+            "status: active\n"
+            "patterns:\n"
+            "  - kind: resource_missing_arg\n"
+            "    resource: aws_instance\n"
+            "    arg: tags.Owner\n"
+            "    description: EC2 instance missing Owner tag required by org policy\n"
+            "recommendation: |\n"
+            "  Add an Owner tag identifying the team responsible for this resource.\n"
+            "      resource \"aws_instance\" \"app\" {\n"
+            "        tags = { Owner = \"platform-team\" }\n"
+            "      }\n"
+            "verification: |\n"
+            "  Check that all instances have Owner tag.\n"
+            "fix_hcl: |\n"
+            "  resource \"aws_instance\" \"app\" {\n"
+            "    tags = {\n"
+            "      Owner       = \"platform-team\"\n"
+            "      Environment = var.environment\n"
+            "    }\n"
+            "  }\n"
+            "fix_disruption: none\n"
+            "fixtures: []\n"
+        )
+        print(f"# created {_cfg_path}", file=sys.stderr)
+        print(f"# created {_rules_dir / 'CUSTOM-EXAMPLE-001.yaml'}", file=sys.stderr)
+        sys.exit(0)
+
+    # Load project config from .tf-analyze.yaml
+    if args.config:
+        _project_config_target = Path(args.config).parent
+    elif args.targets:
+        _project_config_target = Path(args.targets[0]).resolve()
+    else:
+        _project_config_target = Path.cwd()
+    project_config = _load_project_config(_project_config_target)
+
+    # Resolve extra_rules_dir from project config
+    _extra_rules_dir: Path | None = None
+    if project_config.get("rules_dir"):
+        _extra_rules_dir = _project_config_target / project_config["rules_dir"]
+
     # Meta-commands run on the catalogue alone — no target needed.
     if args.list_rules:
         _cmd_list_rules(catalog_dir, args.focus, args.include_stubs)
@@ -5871,7 +6202,7 @@ def main():
     if args.new_rule:
         sys.exit(_cmd_new_rule(args.new_rule))
 
-    if not args.targets and args.mode not in ("fleet",):
+    if not args.targets and args.mode not in ("fleet",) and not args.lsp:
         print(
             "ERROR: --target is required for scan modes. "
             "Use --list-rules / --explain / --new-rule for catalogue ops.",
@@ -5883,10 +6214,16 @@ def main():
         catalog_dir,
         include_stubs=args.include_stubs,
         strict=args.strict_catalog,
+        extra_rules_dir=_extra_rules_dir,
     )
     if not entries:
         print(f"ERROR: no catalogue entries loaded from {catalog_dir}", file=sys.stderr)
         sys.exit(2)
+
+    # LSP server mode — takes over stdin/stdout after catalog is loaded
+    if args.lsp:
+        _run_lsp_server(catalog_dir, project_config)
+        return
 
     if args.only_fixture:
         name = args.only_fixture
@@ -6122,6 +6459,16 @@ def main():
             if getattr(args, "_out_file", None):
                 pass  # _out_file closure is local; normal cleanup via finally is N/A
             return
+
+    # Apply project-wide ignore_rules from .tf-analyze.yaml
+    _ignore_rules = project_config.get("ignore_rules") or []
+    if _ignore_rules:
+        _ignore_set = set(_ignore_rules)
+        _before = len(findings)
+        findings = [f for f in findings if f["id"] not in _ignore_set]
+        _ignored = _before - len(findings)
+        if _ignored:
+            print(f"# {_ignored} finding(s) suppressed by project ignore_rules", file=sys.stderr)
 
     # Apply suppressions
     suppressed_findings: list[dict] = []

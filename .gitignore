@@ -6,3 +6,4 @@ docs/sentinel/
 *.sarif
 *.html
 !reports/*.html
+!demo/*.html
