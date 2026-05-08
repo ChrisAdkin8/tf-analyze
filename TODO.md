@@ -59,7 +59,7 @@ Each has a corresponding section in **PLAN.md** with full implementation detail.
 - [x] **P0 · M** Create `tests/test_clean_fixtures.py`: parametrize over all `*_clean` fixture dirs
 - [x] **P0 · L** Create `tests/test_detection_core.py`: unit tests for `block_arg_value()`, `_resolve_var_ref()`, `_extract_var_defaults_by_dir()`, `find_blocks()`, `_expand_dynamic_blocks()`
 - [x] **P0 · M** Create `tests/test_attack_graph.py`: unit tests for `build_attack_graph()` with known node/edge fixtures
-- [ ] **P1 · M** Create `tests/test_output_formats.py`: assert JSON/SARIF/HTML output validity and exit codes
+- [x] **P1 · M** Create `tests/test_output_formats.py`: assert JSON/SARIF/HTML output validity and exit codes  *(Round 25, 17 tests including summary block contract + grade boundaries)*
 - [ ] **P1 · S** Add `pytest-xdist` dev dependency; run with `pytest -n auto` in CI
 - [ ] **P1 · S** Update `.github/workflows/ci.yml`: replace `python3 scripts/self_test.py` with `pytest --tb=short -q --junitxml=test-results.xml`
 - [ ] **P1 · S** Keep `scripts/self_test.py` as thin shim calling pytest for backwards compatibility
@@ -103,11 +103,12 @@ Items beyond the 8 priority recommendations. Implement after the priority items 
 
 ### Detection quality
 
-- [ ] **P1 · M** `_extract_local_defaults()` — chase `local.X` references (same pattern as `var.X`)
-- [ ] **P1 · L** Ternary constant folding: `var.x ? "a" : "b"` where `var.x` has `default = true` → resolves to `"a"`
-- [ ] **P1 · M** Provider-level `default_tags` awareness — resources that inherit tags via provider don't fail `OPS-AWS-TAGS-001`
+- [x] **P1 · M** `_extract_local_defaults()` — chase `local.X` references (same pattern as `var.X`)  *(Round 21)*
+- [x] **P1 · L** Ternary constant folding: `var.x ? "a" : "b"` where `var.x` has `default = true` → resolves to `"a"`  *(Round 24)*
+- [x] **P1 · M** Provider-level `default_tags` awareness — resources that inherit tags via provider don't fail `OPS-AWS-TAGS-001`  *(Round 24)*
+- [x] **P1 · M** Module-input flow-through: `module "x" { source = "./c"; foo = bar }` resolves child's `var.foo` to `bar`  *(Round 24)*
+- [x] **P1 · XL** `iam_policy_analysis` pattern kind — parse `data "aws_iam_policy_document"` blocks for wildcard actions/resources/public principals  *(Round 24, 6 rules + dedicated fixtures)*
 - [ ] **P1 · S** `SEC-AWS-PROVIDER-001` — `skip_credentials_validation = true` in provider block
-- [ ] **P1 · XL** `iam_policy_analysis` pattern kind — parse `data "aws_iam_policy_document"` blocks for wildcard actions/resources/public principals
 - [ ] **P1 · S** `SEC-AWS-CONFIG-001/002` — Config recorder + delivery channel absence rules
 - [ ] **P1 · S** `SEC-AWS-SHIELD-001` — Shield protection absence for EIP/LB
 - [ ] **P1 · S** `SEC-AZURE-DEFENDER-001/002` — Microsoft Defender disabled
@@ -121,24 +122,26 @@ Items beyond the 8 priority recommendations. Implement after the priority items 
 - [ ] **P1 · M** Multi-file fixture: `fixtures/sensitive_module_boundary/` (exercises `SEC-SENSITIVE-002`)
 - [ ] **P1 · M** Multi-file fixture: `fixtures/inconsistent_backend_types/` (exercises `ROB-BACKEND-001`)
 - [ ] **P1 · M** Catalogue invariant tests in `test_schema.py`: fixture dirs exist on disk, no duplicate IDs, `fix_disruption` is valid enum
-- [ ] **P2 · S** Performance regression test: 192-fixture corpus scans in < 5s
+- [x] **P2 · S** Performance regression test: 219-fixture corpus scans in < 5s  *(Round 24, `tests/test_perf.py` — current 0.35s)*
 - [ ] **P2 · L** `tests/test_fuzz.py` — hypothesis-based scanner robustness tests
 
 ### Architecture
 
-- [ ] **P1 · M** `--baseline <prior.json>` flag — suppress findings already in prior scan, only new findings affect exit code
-- [ ] **P1 · L** MITRE ATT&CK mapping: add `mitre_attack:` field to ~50 rules; `--format mitre` output
+- [x] **P1 · M** `--baseline <prior.json>` flag — suppress findings already in prior scan, only new findings affect exit code  *(Round 24)*
+- [x] **P1 · L** MITRE ATT&CK mapping: add `mitre:` field to ~50 rules; `--format mitre` output  *(Round 24, 48 rules mapped)*
+- [x] **P2 · M** HCP Terraform Run Task server (`integrations/run-task/server.py`)  *(Round 24, FastAPI stub + Dockerfile + docs)*
 - [ ] **P2 · M** `--format attestation` — HMAC-signed scan envelope for compliance evidence
 - [ ] **P2 · S** OpenTofu compatibility: `applies_when: { runtime: [terraform] }` field on TF-only rules
 - [ ] **P2 · M** Atlantis custom workflow integration (`integrations/atlantis/`)
-- [ ] **P2 · M** HCP Terraform Run Task server (`integrations/run-task/server.py`)
 - [ ] **P3 · S** Homebrew formula
 
 ### Documentation
 
-- [ ] **P1 · S** `docs/custom-rules.md` (after §6)
-- [ ] **P1 · S** `docs/lsp.md` (after §7)
-- [ ] **P2 · S** `docs/mitre-attack.md`
+- [x] **P1 · S** `docs/custom-rules.md` (after §6)  *(Round 24)*
+- [x] **P1 · S** `docs/lsp.md` (after §7)  *(Round 21)*
+- [x] **P1 · S** `docs/run-task.md` — HCP Terraform Run Task walkthrough  *(Round 24)*
+- [x] **P1 · S** `docs/severity-calibration.md` — methodology log  *(Round 24)*
+- [ ] **P2 · S** `docs/mitre-attack.md` — technique reference + coverage matrix
 - [ ] **P2 · S** `docs/atlantis.md`
 - [ ] **P2 · S** `CONTRIBUTING.md` — "Add a rule in 10 minutes" walkthrough
 

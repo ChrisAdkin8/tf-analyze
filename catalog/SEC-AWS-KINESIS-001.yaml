@@ -8,6 +8,8 @@ pci_dss:
   - "Req-3.4"
 soc2_cc:
   - "CC6.7"
+mitre:
+  - "T1530"
 patterns:
   - kind: resource_arg
     resource: aws_kinesis_stream

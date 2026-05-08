@@ -5,6 +5,8 @@ default_urgency: HIGH
 blast_radius: environment
 cis:
   - "5.2.1"
+mitre:
+  - "T1562.008"
 status: active
 patterns:
   - kind: resource_absent

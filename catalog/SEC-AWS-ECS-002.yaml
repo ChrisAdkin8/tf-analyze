@@ -4,6 +4,8 @@ section: security
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1611"
 patterns:
   - kind: grep
     regex: '"privileged"\s*:\s*true|^\s*privileged\s*=\s*true'

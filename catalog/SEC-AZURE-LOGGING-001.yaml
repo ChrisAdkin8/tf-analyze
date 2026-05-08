@@ -40,6 +40,8 @@ pci_dss:
   - "Req-10.2"
 soc2_cc:
   - "CC7.2"
+mitre:
+  - "T1562.008"
 fix_hcl: |
   resource "azurerm_monitor_diagnostic_setting" "kv" {
     name                       = "kv-diagnostics"

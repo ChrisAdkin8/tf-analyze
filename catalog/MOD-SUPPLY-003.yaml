@@ -18,6 +18,8 @@ verification: |
   argument.
 soc2_cc:
   - "CC9.2"
+mitre:
+  - "T1195.002"
 fix_hcl: |
   module "example" {
     source  = "hashicorp/consul/aws"

@@ -4,6 +4,8 @@ section: security
 default_urgency: HIGH
 blast_radius: module
 status: active
+mitre:
+  - "T1552.001"
 patterns:
   - kind: output_sensitive_leak
     description: |

@@ -44,6 +44,8 @@ pci_dss:
   - "Req-3.5"
 soc2_cc:
   - "CC6.1"
+mitre:
+  - "T1552.001"
 verification: |
   `aws ecs describe-task-definition --task-definition <family> \
     --query 'taskDefinition.containerDefinitions[*].environment'`

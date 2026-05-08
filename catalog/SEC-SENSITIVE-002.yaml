@@ -4,6 +4,8 @@ section: security
 default_urgency: HIGH
 blast_radius: module
 status: active
+mitre:
+  - "T1552.001"
 patterns:
   - kind: cross_module
     description: |

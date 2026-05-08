@@ -5,6 +5,8 @@ default_urgency: HIGH
 blast_radius: module
 cis:
   - "8.4"
+mitre:
+  - "T1530"
 status: active
 patterns:
   - kind: resource_arg

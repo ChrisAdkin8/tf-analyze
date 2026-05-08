@@ -6,6 +6,8 @@ blast_radius: single-resource
 status: active
 cis:
   - "3.6"
+mitre:
+  - "T1562.008"
 patterns:
   - kind: resource_absent
     resource: aws_s3_bucket_logging

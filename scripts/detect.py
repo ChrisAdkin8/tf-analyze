@@ -93,19 +93,18 @@ _USE_HCL2 = False  # toggled by main() after argparse
 
 
 def _enable_hcl2_or_warn() -> None:
-    """Flip the fast-path on. Warn and remain in regex mode if hcl2 isn't
-    installed — the caller asked for it explicitly and deserves to know
-    they're not getting it."""
+    """[legacy] Old explicit-opt-in path. Kept as a thin wrapper around
+    `_enable_hcl2_default()` so any caller using --use-hcl2 still works.
+    """
+    _enable_hcl2_default()
+
+
+def _enable_hcl2_default() -> None:
+    """Enable the python-hcl2 fast-path. Silent no-op when the dependency
+    isn't present — the caller already decided whether to print a notice."""
     global _USE_HCL2
-    if not _HAS_HCL2:
-        print(
-            "WARN: --use-hcl2 requested but python-hcl2 is not installed; "
-            "falling back to regex parser. Run `pip install python-hcl2` "
-            "to enable the heredoc-aware fast-path.",
-            file=sys.stderr,
-        )
-        return
-    _USE_HCL2 = True
+    if _HAS_HCL2:
+        _USE_HCL2 = True
 
 
 def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
@@ -447,6 +446,9 @@ VAR_REF_RE = re.compile(r'\bvar\.([\w-]+)\b')
 # Matches when the entire (stripped) attribute value is a plain var.X reference.
 _VAR_PLAIN_REF_RE = re.compile(r'^var\.([\w-]+)$')
 _LOCAL_PLAIN_REF_RE = re.compile(r'^local\.([\w-]+)$')
+# Ternary `<cond> ? <a> : <b>` — only used for constant folding when <cond>
+# resolves to a known boolean. Captures cond, then-branch, else-branch.
+_TERNARY_RE = re.compile(r'^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$')
 MODULE_REF_RE = re.compile(r'\bmodule\.([\w-]+)\.([\w-]+)')
 INLINE_IGNORE_RE = re.compile(r'#\s*tf-analyze:ignore\s+([\w-]+)')
 BOOL_COUNT_RE = re.compile(
@@ -592,7 +594,8 @@ def block_arg_value(body: str, arg: str) -> str | None:
 
 
 def _resolve_var_ref(val: str, var_defaults: dict) -> str:
-    """Resolve plain `var.X` or `local.X` references to their known values.
+    """Resolve plain `var.X` / `local.X` references to their known values,
+    plus simple ternary constant folding `<bool-ref> ? <a> : <b>`.
 
     Only substitutes when the entire value is a single reference — compound
     expressions like `var.x == true` are left unchanged.  Data-source
@@ -609,16 +612,31 @@ def _resolve_var_ref(val: str, var_defaults: dict) -> str:
         resolved = var_defaults.get("__local__" + m.group(1))
         if resolved is not None:
             return resolved
+    # Ternary constant folding: `var.x ? "a" : "b"` resolves when var.x has
+    # a known boolean default. Other forms left unchanged.
+    m = _TERNARY_RE.match(stripped)
+    if m:
+        cond, then_b, else_b = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        cond_resolved = _resolve_var_ref(cond, var_defaults)
+        cond_norm = cond_resolved.strip().strip('"').strip("'").lower()
+        if cond_norm == "true":
+            return _resolve_var_ref(then_b.strip('"').strip("'"), var_defaults)
+        if cond_norm == "false":
+            return _resolve_var_ref(else_b.strip('"').strip("'"), var_defaults)
     return val
 
 
 def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
     """Return {dir_path: {var_name: default_value}} for all declared variable
-    defaults AND locals values.
+    defaults AND locals values, then layer module-call inputs on top.
 
     Variable scope in Terraform is per-directory.  Locals are stored under
     the key ``__local__<name>`` in the same per-directory dict so that a
     single lookup table can serve both namespaces.
+
+    Module-input flow-through: for every `module "x" { source = "./child"; foo
+    = bar }`, push `foo = bar` into the child directory's dict so child-module
+    rules see the *caller's* override rather than the child's default.
     """
     result: dict[str, dict[str, str]] = {}
     for fp, text in all_files_text.items():
@@ -636,6 +654,60 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
             for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', body):
                 lname, lval = lm.group(1), lm.group(2).strip().strip('"').strip("'")
                 result.setdefault(dir_key, {})["__local__" + lname] = lval
+
+    # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
+    # provider declares default_tags is recorded under the synthetic key
+    # __aws_default_tags__. Tag-related findings in that dir are then
+    # suppressed (the provider injects the tags downstream).
+    PROVIDER_AWS = re.compile(r'^\s*provider\s+"aws"\s*\{', re.MULTILINE)
+    for fp, text in all_files_text.items():
+        for pm in PROVIDER_AWS.finditer(text):
+            depth = 0
+            i = pm.end() - 1
+            end = None
+            while i < len(text):
+                c = text[i]
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+                i += 1
+            if end is None:
+                continue
+            pbody = text[pm.end():end]
+            if "default_tags" in pbody:
+                dirk = str(Path(fp).parent)
+                result.setdefault(dirk, {})["__aws_default_tags__"] = "true"
+
+    # Module-input flow-through: parent's `module "x" { source = "./c"; k = v }`
+    # overrides child dir's `var.k` default. Only literal values flow; var.Y
+    # references are resolved against the parent's already-built dict.
+    for fp, text in all_files_text.items():
+        parent_dir = str(Path(fp).parent)
+        parent_vd = result.get(parent_dir, {})
+        for mblk in find_blocks(text, MODULE_START):
+            source = block_arg_value(mblk["body"], "source")
+            if not source or not source.startswith((".", "/")):
+                continue
+            try:
+                child_dir = str((Path(parent_dir) / source).resolve())
+            except (OSError, ValueError):
+                continue
+            for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', mblk["body"]):
+                k, v = lm.group(1), lm.group(2).strip()
+                if k in ("source", "version", "providers", "count", "for_each",
+                         "depends_on", "lifecycle"):
+                    continue
+                resolved = _resolve_var_ref(v, parent_vd)
+                resolved = resolved.strip().strip('"').strip("'")
+                # Only flow values that look like literals after resolution;
+                # leave child default in place when caller passes an unresolved
+                # expression.
+                if resolved and not resolved.startswith(("var.", "local.", "data.")):
+                    result.setdefault(child_dir, {})[k] = resolved
     return result
 
 
@@ -816,7 +888,21 @@ def detect_in_file(
                     search_text = strip_hcl_context(text) if pat.get("hcl_context") else text
                     for m in regex.finditer(search_text):
                         line = search_text.count("\n", 0, m.start()) + 1
-                        findings.append({"id": eid, "file": str(file_path), "line": line, "resource": ""})
+                        # Best-effort resource attribution: find the enclosing
+                        # resource/data block so the attack graph can attach
+                        # this finding even though the rule wasn't a
+                        # resource-shaped pattern.
+                        addr = ""
+                        for blk in resources:
+                            if blk["start_pos"] <= m.start() < blk["end_pos"]:
+                                addr = f"{blk['groups'][0]}.{blk['groups'][1]}"
+                                break
+                        if not addr:
+                            for dblk in find_blocks(text, DATA_START):
+                                if dblk["start_pos"] <= m.start() < dblk["end_pos"]:
+                                    addr = f"data.{dblk['groups'][0]}.{dblk['groups'][1]}"
+                                    break
+                        findings.append({"id": eid, "file": str(file_path), "line": line, "resource": addr})
             elif kind == "resource_arg":
                 has_regex = "regex" in pat
                 has_not_regex = "not_regex" in pat
@@ -829,12 +915,15 @@ def detect_in_file(
                 arg = pat["arg"]
                 regex = re.compile(pat["regex"]) if has_regex else None
                 not_regex = re.compile(pat["not_regex"]) if has_not_regex else None
+                suppress_body_contains = pat.get("suppress_if_body_contains")
                 for blk in resources:
                     btype, bname = blk["groups"]
                     if btype != rt:
                         continue
                     # Skip resources that are definitely not created (count = 0).
                     if _resource_is_count_zero(blk["body"], _vd):
+                        continue
+                    if suppress_body_contains and suppress_body_contains in blk["body"]:
                         continue
                     val = block_arg_value(blk["body"], arg)
                     if val is None:
@@ -865,12 +954,24 @@ def detect_in_file(
                 arg_path = pat.get("nested_path") or pat.get("arg") or ""
                 if not arg_path:
                     continue
+                # AWS default_tags propagation: if the dir's AWS provider
+                # declares default_tags, suppress findings whose target
+                # arg is `tags` or any `tags.*` path on aws_* resources.
+                if (
+                    rt.startswith("aws_")
+                    and (arg_path == "tags" or arg_path.startswith("tags."))
+                    and _vd.get("__aws_default_tags__") == "true"
+                ):
+                    continue
                 suppress_if = pat.get("suppress_if")
+                suppress_body_contains = pat.get("suppress_if_body_contains")
                 for blk in resources:
                     btype, bname = blk["groups"]
                     if btype != rt:
                         continue
                     if _resource_is_count_zero(blk["body"], _vd):
+                        continue
+                    if suppress_body_contains and suppress_body_contains in blk["body"]:
                         continue
                     if "." in arg_path:
                         present = block_has_nested_path(blk["body"], arg_path)
@@ -922,6 +1023,101 @@ def detect_in_file(
                                 "resource": f"data.{blk['groups'][0]}.{blk['groups'][1]}",
                             }
                         )
+            elif kind == "iam_policy_analysis":
+                # Walk every `data "aws_iam_policy_document"` block, then each
+                # nested `statement { ... }`. The pattern's `check` field
+                # selects what to look for inside an Allow statement:
+                #   wildcard_action       — actions list contains "*"
+                #   wildcard_resource     — resources list contains "*"
+                #   public_principal      — principals { identifiers = ["*"] }
+                #   wildcard_action_iam   — any iam:* action (privesc class)
+                #   wildcard_action_and_resource — both action and resource "*"
+                #   not_action_or_not_resource   — uses NotAction/NotResource
+                check = pat.get("check")
+                if not check:
+                    continue
+                for dblk in find_blocks(text, DATA_START):
+                    dtype, dname = dblk["groups"]
+                    if dtype != "aws_iam_policy_document":
+                        continue
+                    body = dblk["body"]
+                    for sm in re.finditer(r'(?m)^\s*statement\s*\{', body):
+                        depth = 0
+                        i = sm.end() - 1
+                        s_end = None
+                        while i < len(body):
+                            c = body[i]
+                            if c == "{":
+                                depth += 1
+                            elif c == "}":
+                                depth -= 1
+                                if depth == 0:
+                                    s_end = i
+                                    break
+                            i += 1
+                        if s_end is None:
+                            continue
+                        sbody = body[sm.end():s_end]
+                        # Skip statements explicitly Effect = "Deny".
+                        eff = block_arg_value(sbody, "effect")
+                        if eff and eff.strip().strip('"').lower() == "deny":
+                            continue
+                        actions = block_arg_value(sbody, "actions") or ""
+                        resources_l = block_arg_value(sbody, "resources") or ""
+                        not_actions = block_arg_value(sbody, "not_actions") or ""
+                        not_resources = block_arg_value(sbody, "not_resources") or ""
+                        has_wild_action = '"*"' in actions
+                        has_wild_resource = '"*"' in resources_l
+                        has_iam_wild = bool(re.search(r'"iam:[^"]*\*"', actions))
+                        has_public_principal = False
+                        for pm in re.finditer(r'(?m)^\s*principals\s*\{', sbody):
+                            pdepth = 0
+                            j = pm.end() - 1
+                            p_end = None
+                            while j < len(sbody):
+                                cc = sbody[j]
+                                if cc == "{":
+                                    pdepth += 1
+                                elif cc == "}":
+                                    pdepth -= 1
+                                    if pdepth == 0:
+                                        p_end = j
+                                        break
+                                j += 1
+                            if p_end is None:
+                                continue
+                            pbody = sbody[pm.end():p_end]
+                            ids = block_arg_value(pbody, "identifiers") or ""
+                            if '"*"' in ids:
+                                has_public_principal = True
+                                break
+                        triggered = False
+                        if check == "wildcard_action" and has_wild_action:
+                            triggered = True
+                        elif check == "wildcard_resource" and has_wild_resource:
+                            triggered = True
+                        elif check == "public_principal" and has_public_principal:
+                            triggered = True
+                        elif check == "wildcard_action_iam" and has_iam_wild:
+                            triggered = True
+                        elif (
+                            check == "wildcard_action_and_resource"
+                            and has_wild_action
+                            and has_wild_resource
+                        ):
+                            triggered = True
+                        elif check == "not_action_or_not_resource" and (
+                            not_actions or not_resources
+                        ):
+                            triggered = True
+                        if triggered:
+                            stmt_line = dblk["start_line"] + body[: sm.start()].count("\n")
+                            findings.append({
+                                "id": eid,
+                                "file": str(file_path),
+                                "line": stmt_line,
+                                "resource": f"data.aws_iam_policy_document.{dname}",
+                            })
             elif kind == "firewall_open_port":
                 # google_compute_firewall with source_ranges containing
                 # 0.0.0.0/0 AND an allow{} block whose `ports` list
@@ -1023,9 +1219,12 @@ def detect_in_file(
                 rt = pat["resource"]
                 path = pat["path"]
                 not_equal = pat.get("not_equal")
+                suppress_body_contains = pat.get("suppress_if_body_contains")
                 for blk in resources:
                     btype, bname = blk["groups"]
                     if btype != rt:
+                        continue
+                    if suppress_body_contains and suppress_body_contains in blk["body"]:
                         continue
                     parts = path.split(".")
                     parent_body = blk["body"]
@@ -1056,15 +1255,22 @@ def detect_in_file(
                     val = block_arg_value(parent_body, parts[-1])
                     if val is None:
                         continue
-                    if not_equal is not None and str(val).lower() != str(not_equal).lower():
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"{btype}.{bname}",
-                            }
-                        )
+                    val = _resolve_var_ref(val, _vd)
+                    if not_equal is not None:
+                        # Both sides may carry surrounding quotes from HCL or
+                        # from YAML literal escaping. Compare on the unquoted
+                        # form so `not_equal: '"Deny"'` matches `arg = "Deny"`.
+                        v_norm = str(val).strip().strip('"').strip("'").lower()
+                        ne_norm = str(not_equal).strip().strip('"').strip("'").lower()
+                        if v_norm != ne_norm:
+                            findings.append(
+                                {
+                                    "id": eid,
+                                    "file": str(file_path),
+                                    "line": blk["start_line"],
+                                    "resource": f"{btype}.{bname}",
+                                }
+                            )
             elif kind == "module_block_missing_arg":
                 if "arg" not in pat:
                     continue
@@ -3101,6 +3307,42 @@ def _effective_urgency(finding: dict, entry: dict) -> str:
     return finding.get("urgency") or entry.get("default_urgency", "MEDIUM")
 
 
+def _enrich_findings_for_output(
+    findings: list[dict], entries: list[dict]
+) -> list[dict]:
+    """Add `title`, `urgency`, `section`, `recommendation`, `fix_hcl`,
+    `fix_disruption`, `mitre`, and `narrative` to each finding using the
+    catalogue entry. Mutates in place and returns the same list for
+    convenience.
+
+    Skipped fields when missing from the entry — consumers (the VS Code
+    extension, the LSP server, the demo web UI) all do `f.get(key)` and
+    handle absence.
+    """
+    entry_map = {e["id"]: e for e in entries}
+    for f in findings:
+        e = entry_map.get(f["id"], {})
+        if "title" not in f and e.get("title"):
+            f["title"] = e["title"]
+        if "urgency" not in f and e.get("default_urgency"):
+            f["urgency"] = e["default_urgency"]
+        if "section" not in f and e.get("section"):
+            f["section"] = e["section"]
+        if "recommendation" not in f and e.get("recommendation"):
+            f["recommendation"] = e["recommendation"]
+        if "fix_hcl" not in f and e.get("fix_hcl"):
+            f["fix_hcl"] = e["fix_hcl"]
+        if "fix_disruption" not in f and e.get("fix_disruption"):
+            f["fix_disruption"] = e["fix_disruption"]
+        if "mitre" not in f and e.get("mitre"):
+            f["mitre"] = list(e["mitre"])
+        if "narrative" not in f:
+            narr = _narrative_for_finding(f["id"], f.get("resource", ""), f.get("file", ""))
+            if narr:
+                f["narrative"] = narr
+    return findings
+
+
 def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
     """Convert findings to SARIF v2.1.0 format."""
     rules = []
@@ -3144,7 +3386,9 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
                     entry.get("section", "general"),
                     f"urgency:{urgency.lower()}",
                     f"blast-radius:{entry.get('blast_radius', 'single-resource')}",
-                ] + [f"cis:{c}" for c in (entry.get("cis") or [])],
+                ]
+                + [f"cis:{c}" for c in (entry.get("cis") or [])]
+                + [f"mitre:{t}" for t in (entry.get("mitre") or [])],
                 "precision": "high",
                 "problem.severity": urgency.lower(),
                 "security-severity": severity_map.get(urgency, "5.0"),
@@ -3340,6 +3584,44 @@ _ATTACK_NARRATIVES: dict[str, str] = {
         "exploited without traversing VPC boundaries. "
         "Set ipv4_enabled = false and use Private Service Connect or private IP allocation for "
         "all database connectivity."
+    ),
+    "SEC-AWS-IAM-POLICY-001": (
+        "{resource} grants `actions = [\"*\"]` — any AWS API call is permitted against the "
+        "scoped resource set. Once an attacker holds credentials bound to this policy, the "
+        "blast radius is whatever the resource list happens to be. The 2019 Capital One breach "
+        "began with a wildcard-action role attached to a single EC2 instance; SSRF retrieved "
+        "the role's STS token, and the wildcard then cleared every subsequent S3 list/get call. "
+        "Enumerate the explicit minimum action set and validate with "
+        "`aws iam simulate-principal-policy` before tightening."
+    ),
+    "SEC-AWS-IAM-POLICY-002": (
+        "{resource} grants an `iam:*` wildcard, allowing the bound principal to create "
+        "policies, attach them to itself, or rotate access keys for any user. This is a "
+        "self-mutating identity — privilege escalation requires no separate exploit, just one "
+        "credential leak. Internal red-team exercises consistently identify this single grant "
+        "as the highest-yield foothold once initial access is achieved. "
+        "Replace with the explicit IAM operations the workload genuinely needs (most apps need "
+        "*none*)."
+    ),
+    "SEC-AWS-IAM-POLICY-004": (
+        "{resource} attaches a policy whose `principals.identifiers = [\"*\"]` — every AWS "
+        "account on the planet, plus AWS service principals, can invoke the granted actions. "
+        "On an S3 bucket policy this means public reads/writes; on a KMS key policy it means "
+        "any account can decrypt; on a Secrets Manager resource policy it means anyone can "
+        "fetch the secret. The 2017 Accenture and 2019 Verizon Wireless leaks were both "
+        "caused by exactly this shape on production buckets. "
+        "Replace with a structured AWS account or service principal whitelist; if true public "
+        "exposure is intentional, gate it behind explicit `Condition` keys and a "
+        "`aws_s3_bucket_public_access_block` exception."
+    ),
+    "SEC-AWS-IAM-POLICY-005": (
+        "A single statement on {resource} grants `actions = [\"*\"]` AND "
+        "`resources = [\"*\"]` — equivalent to attaching `AdministratorAccess` but bypassing "
+        "the org-level guardrails (SCPs, IAM Access Analyzer) that flag the named policy. "
+        "Any compromise of the bound principal yields immediate full-account takeover; "
+        "attacker pivot requires no further escalation. If true admin access is intentional "
+        "this should be the AWS-managed policy attached by name so audit tooling sees it; "
+        "otherwise, scope to the explicit minimum surface."
     ),
 }
 
@@ -3592,6 +3874,51 @@ def _compliance_gap_report(
     return by_fw
 
 
+def _render_mitre(findings: list[dict], entries: list[dict]) -> str:
+    """Group findings by MITRE ATT&CK technique using catalogue `mitre:`.
+
+    Findings whose rule has no mitre mapping are grouped under "(unmapped)"
+    so coverage gaps are visible. T-IDs are sorted lexicographically; rules
+    inside each group are sorted by urgency then ID.
+    """
+    entry_map = {e["id"]: e for e in entries}
+    by_tech: dict[str, list[dict]] = {}
+    for f in findings:
+        e = entry_map.get(f["id"], {})
+        techs = e.get("mitre") or []
+        if not techs:
+            by_tech.setdefault("(unmapped)", []).append(f)
+            continue
+        for t in techs:
+            by_tech.setdefault(str(t), []).append(f)
+
+    URGENCY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    out: list[str] = ["## MITRE ATT&CK Coverage", ""]
+    if not by_tech:
+        out.append("(no findings)")
+        return "\n".join(out)
+    for tech in sorted(by_tech):
+        group = by_tech[tech]
+        out.append(f"### {tech}  ({len(group)} finding{'s' if len(group) != 1 else ''})")
+        # Render with stable sort: urgency, then rule id, then file.
+        for f in sorted(
+            group,
+            key=lambda x: (
+                URGENCY_RANK.get(entry_map.get(x["id"], {}).get("default_urgency", "INFO"), 9),
+                x["id"],
+                x.get("file", ""),
+                x.get("line", 0),
+            ),
+        ):
+            urg = entry_map.get(f["id"], {}).get("default_urgency", "?")
+            out.append(
+                f"  [{urg}] {f['id']}  {f.get('file','')}:{f.get('line','?')}  "
+                f"{f.get('resource','')}"
+            )
+        out.append("")
+    return "\n".join(out)
+
+
 def _render_compliance_text(by_fw: dict) -> str:
     lines: list[str] = ["## Compliance Gap Report", ""]
     for fw in sorted(by_fw):
@@ -3760,12 +4087,18 @@ def to_html(
     show_fixes: bool = False,
     centrality: list[dict] | None = None,
     compliance_data: dict | None = None,
+    summary: dict | None = None,
 ) -> str:
     """Produce a single-file HTML report, scalable to hundreds of findings.
 
     Groups by catalogue ID, collapsible per group.  No external CSS/JS —
     self-contained for offline review.  When `graph` is provided (from
     build_attack_graph) an interactive Attack Graph tab is included.
+
+    When ``summary`` is provided, a coloured banner is rendered above the
+    findings panel showing score, grade, and per-urgency counts. The
+    banner colour mirrors grade severity (A=green, B=lime, C=amber,
+    D/F=red).
     """
     entry_map = {e["id"]: e for e in entries}
     by_id: dict[str, list[dict]] = {}
@@ -3843,6 +4176,47 @@ def to_html(
         suppressed_section = f"<h2>Suppressed ({len(suppressed)})</h2><ul>{sups}</ul>"
 
     findings_panel = f"{''.join(rows)}\n{suppressed_section}"
+
+    # Risk-score banner (rendered above the tabs). Colour-banded by grade
+    # so the headline number is visible at a glance without scrolling.
+    summary_banner = ""
+    if summary is not None:
+        _grade_to_colour = {
+            "A":  ("#1e7e34", "#d4edda"),
+            "B":  ("#5d8e2d", "#e8f3d6"),
+            "B-": ("#7a8a2d", "#f0f4d8"),
+            "C":  ("#b07d00", "#fff3cd"),
+            "D":  ("#a53f0d", "#fde4d4"),
+            "F":  ("#a02020", "#f8d7da"),
+        }
+        fg, bg = _grade_to_colour.get(summary["grade"], ("#444", "#eee"))
+        c = summary["counts"]
+        sup = summary.get("suppressed_count", 0)
+        sup_html = (
+            f"<span style='color:#777;margin-left:.6em'>· {sup} suppressed</span>"
+            if sup else ""
+        )
+        summary_banner = (
+            f"<div style='background:{bg};border-left:6px solid {fg};"
+            f"padding:.7em 1em;margin-bottom:1em;border-radius:0 4px 4px 0;"
+            f"font-size:14px'>"
+            f"<span style='font-size:24px;font-weight:700;color:{fg};margin-right:.4em'>"
+            f"{summary['score']}</span>"
+            f"<span style='font-size:18px;font-weight:600;color:{fg};margin-right:.8em'>"
+            f"({summary['grade']})</span>"
+            f"<span style='color:#1a1a1a'>"
+            f"{c['CRITICAL']} <strong>CRITICAL</strong> · "
+            f"{c['HIGH']} HIGH · {c['MEDIUM']} MEDIUM · "
+            f"{c['LOW']} LOW · {c['INFO']} INFO"
+            f"{sup_html}"
+            f"</span>"
+            f"<div style='font-size:11px;color:#666;margin-top:.3em'>"
+            f"scoring_version {summary['scoring_version']} · "
+            f"<code style='background:rgba(0,0,0,.05);padding:1px 4px;border-radius:2px'>"
+            f"{summary['formula']}</code>"
+            f"</div>"
+            f"</div>"
+        )
 
     tab_bar = ""
     tab_js = ""
@@ -3948,6 +4322,7 @@ pre.fix-hcl{{background:#1a1a2e;color:#a8d8a8;padding:.8em 1em;border-radius:4px
 </style></head><body>
 <h1>tf-analyze report</h1>
 <div class='meta'>{len(findings)} findings across {len(by_id)} rules.</div>
+{summary_banner}
 {tab_bar}
 <div id='tp-findings' class='tab-panel'>
 {findings_panel}
@@ -4325,6 +4700,38 @@ def apply_suppressions(findings: list[dict], file_suppressions: dict,
 
 # ---- Report comparison ---------------------------------------------------
 
+def apply_baseline(current: list[dict], baseline_path: Path) -> tuple[list[dict], list[dict]]:
+    """Filter `current` against a baseline JSON report.
+
+    Returns ``(retained, suppressed)`` — retained is the new-or-still-broken
+    set (these affect the exit code under --fail-on); suppressed is what was
+    already in the baseline. Match key is ``(id, file, line, resource)`` so
+    the same finding moving lines counts as new.
+
+    Wrapped exceptions: missing/invalid baseline returns ``(current, [])``
+    plus a stderr warning so a broken baseline never silently passes.
+    """
+    try:
+        data = json.loads(baseline_path.read_text())
+        prior = data if isinstance(data, list) else data.get("findings", [])
+    except Exception as e:
+        print(f"WARN: cannot load baseline {baseline_path}: {e}", file=sys.stderr)
+        return current, []
+    prior_keys = {
+        (f.get("id"), f.get("file", ""), f.get("line", 0), f.get("resource", ""))
+        for f in prior
+    }
+    retained: list[dict] = []
+    suppressed: list[dict] = []
+    for f in current:
+        key = (f.get("id"), f.get("file", ""), f.get("line", 0), f.get("resource", ""))
+        if key in prior_keys:
+            suppressed.append(f)
+        else:
+            retained.append(f)
+    return retained, suppressed
+
+
 def compare_reports(current: list[dict], prior_path: Path) -> dict:
     """Compare current findings against a prior JSON report.
 
@@ -4362,6 +4769,90 @@ _VALID_SECTIONS = {
 }
 _URGENCY_TIERS: list[str] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 _VALID_URGENCIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+
+# ---- Aggregate risk-score formula ---------------------------------------
+#
+# These constants are the SINGLE SOURCE OF TRUTH for the score and letter
+# grade documented in SKILL.md (search for "Risk Score"). The CLI emits
+# the same score that the LLM-driven markdown report computes, so two
+# runs against the same code always agree.
+#
+# `score = max(0, 100 - sum(weight * count for each urgency))`
+# Suppressed findings count at half weight (acknowledged but the
+# underlying risk still exists).
+#
+# Tagged with `_SCORING_VERSION` so downstream gates can pin to a
+# specific weighting; bump it whenever weights change.
+_SCORING_VERSION = 1
+_RISK_WEIGHTS: dict[str, int] = {
+    "CRITICAL": 15,
+    "HIGH":     7,
+    "MEDIUM":   3,
+    "LOW":      1,
+    "INFO":     0,
+}
+# (lower bound of score, letter grade) — first match wins; sorted descending.
+_GRADE_TIERS: list[tuple[int, str]] = [
+    (90, "A"),
+    (75, "B"),
+    (65, "B-"),
+    (50, "C"),
+    (30, "D"),
+    (0,  "F"),
+]
+
+
+def _grade_for_score(score: int) -> str:
+    for floor, grade in _GRADE_TIERS:
+        if score >= floor:
+            return grade
+    return "F"
+
+
+def _compute_summary(
+    findings: list[dict],
+    suppressed: list[dict] | None = None,
+    suppressed_by_baseline: list[dict] | None = None,
+) -> dict:
+    """Compute the always-emitted summary block.
+
+    Score formula: ``max(0, 100 - sum(weight * count))`` where suppressed
+    findings (both ignore-suppressed and baseline-suppressed) contribute
+    half weight. INFO findings carry weight 0 so they never affect the
+    score; their count is reported for context.
+
+    The dict returned is JSON-safe and stable: keys, types, and ordering
+    are part of the public contract pinned by ``scoring_version``.
+    """
+    counts: dict[str, int] = {u: 0 for u in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")}
+    for f in findings:
+        u = f.get("urgency", "MEDIUM")
+        counts[u] = counts.get(u, 0) + 1
+
+    # Half-weight contribution from suppressed/baselined findings.
+    suppressed_count = 0
+    half_penalty = 0.0
+    for bucket in (suppressed or [], suppressed_by_baseline or []):
+        for f in bucket:
+            suppressed_count += 1
+            u = f.get("urgency", "MEDIUM")
+            half_penalty += _RISK_WEIGHTS.get(u, 0) / 2
+
+    full_penalty = sum(_RISK_WEIGHTS.get(u, 0) * c for u, c in counts.items())
+    raw_score = 100 - full_penalty - half_penalty
+    score = max(0, int(round(raw_score)))
+    return {
+        "scoring_version": _SCORING_VERSION,
+        "score": score,
+        "grade": _grade_for_score(score),
+        "counts": counts,
+        "suppressed_count": suppressed_count,
+        "formula": (
+            "max(0, 100 - sum(weight * count)); "
+            "weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; "
+            "suppressed at half weight"
+        ),
+    }
 _VALID_BLAST_RADIUS = {
     "single-resource", "module", "environment", "infrastructure-wide",
 }
@@ -5790,8 +6281,12 @@ def main():
     )
     ap.add_argument(
         "--format",
-        choices=["text", "json", "sarif", "html", "compliance"],
+        choices=["text", "json", "sarif", "html", "compliance", "mitre"],
         default="text",
+        help=(
+            "Output format. `mitre` groups findings by MITRE ATT&CK "
+            "technique (using catalogue `mitre:` fields)."
+        ),
     )
     ap.add_argument(
         "--attack-graph",
@@ -5971,6 +6466,19 @@ def main():
         default=None,
         help="Path to a prior JSON report to compare against (outputs delta)",
     )
+    ap.add_argument(
+        "--baseline",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a baseline JSON report. Findings present in the baseline "
+            "are suppressed (counted under `suppressed_by_baseline` in JSON "
+            "output) so only NEW findings affect the exit code. "
+            "Match key: (id, file, line, resource). Use to ratchet a legacy "
+            "repo: snapshot today's findings, then enforce no regressions "
+            "going forward."
+        ),
+    )
     # Suppressions are on by default; --no-suppress is the opt-out toggle.
     # An earlier `--suppress` flag was a confusing no-op (it defaulted to
     # True so passing it changed nothing) and has been removed.
@@ -6003,11 +6511,19 @@ def main():
         action="store_true",
         default=os.environ.get("TF_ANALYZE_USE_HCL2") == "1",
         help=(
-            "Enable optional python-hcl2 fast-path for heredoc-aware "
-            "attribute extraction. Requires `pip install python-hcl2` — "
-            "if the dependency is missing this flag is a no-op and the "
-            "regex path is used. Off by default to honor the stdlib-only "
-            "promise; can also be enabled via TF_ANALYZE_USE_HCL2=1."
+            "[deprecated, default-on since v0.2] Enable python-hcl2 "
+            "fast-path. Kept for backwards compat; behaviour is now "
+            "controlled by --no-hcl2."
+        ),
+    )
+    ap.add_argument(
+        "--no-hcl2",
+        action="store_true",
+        default=os.environ.get("TF_ANALYZE_NO_HCL2") == "1",
+        help=(
+            "Disable the python-hcl2 fast-path and use the regex parser "
+            "exclusively. Useful for benchmarking or when running in a "
+            "constrained environment without the optional dependency."
         ),
     )
     ap.add_argument(
@@ -6110,8 +6626,21 @@ def main():
         ),
     )
     args = ap.parse_args()
-    if args.use_hcl2:
-        _enable_hcl2_or_warn()
+    # python-hcl2 fast-path is on by default; `--no-hcl2` (or
+    # TF_ANALYZE_NO_HCL2=1) restores the stdlib-only regex path.  When
+    # python-hcl2 isn't installed we silently fall back, but emit a
+    # one-line stderr notice the first time so the user knows they're
+    # missing the heredoc-aware parser.
+    if not args.no_hcl2:
+        if _HAS_HCL2:
+            _enable_hcl2_default()
+        else:
+            print(
+                "NOTE: python-hcl2 not installed; using regex parser. "
+                "`pip install python-hcl2` removes a class of false positives "
+                "around heredoc/multi-line attributes. (Pass --no-hcl2 to silence.)",
+                file=sys.stderr,
+            )
 
     # Route report output: stdout (default) or a file (--output PATH).
     # We shadow `print` for report output only — stderr progress lines
@@ -6563,6 +7092,35 @@ def main():
         written = generate_tftest(findings, entries, Path(args.gen_tests))
         print(f"# gen-tests: wrote {len(written)} file(s) to {args.gen_tests}", file=sys.stderr)
 
+    # Enrich findings with catalogue metadata so JSON/SARIF/HTML/LSP
+    # consumers (especially the VS Code extension's hover) can render
+    # narratives, fix snippets, and MITRE tags without re-loading the
+    # catalogue themselves.
+    _enrich_findings_for_output(findings, entries)
+
+    # Baseline mode: filter findings against a prior snapshot before
+    # everything downstream (output, exit-code, attack-graph). Suppressed
+    # findings still appear under suppressed_by_baseline in JSON output.
+    suppressed_by_baseline: list[dict] = []
+    if getattr(args, "baseline", None):
+        retained, suppressed_by_baseline = apply_baseline(
+            findings, Path(args.baseline)
+        )
+        if suppressed_by_baseline:
+            print(
+                f"# baseline: {len(suppressed_by_baseline)} finding(s) "
+                f"matched and suppressed; "
+                f"{len(retained)} new",
+                file=sys.stderr,
+            )
+        findings = retained
+
+    # Compute the always-emitted summary block (score, grade, counts).
+    # SKILL.md describes the same formula; the constants in detect.py are
+    # the single source of truth and the LLM-driven markdown report should
+    # cite this same number.
+    summary = _compute_summary(findings, suppressed_findings, suppressed_by_baseline)
+
     # Auto-compare: resolve most recent JSON report as the prior when set.
     compare_target = args.compare
     if args.auto_compare and not compare_target:
@@ -6577,19 +7135,36 @@ def main():
         print(f"# delta: {len(delta['new'])} new, {len(delta['resolved'])} resolved, "
               f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
         if args.format == "json":
-            output = {"findings": findings, "suppressed": suppressed_findings, "delta": delta}
+            output = {
+                "summary": summary,
+                "findings": findings,
+                "suppressed": suppressed_findings,
+                "delta": delta,
+            }
+            if attack_graph:
+                output["graph"] = attack_graph
             _emit(json.dumps(output, indent=2))
         elif args.format == "sarif":
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
         elif args.format == "compliance":
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
                 _emit("# No CIS-mapped catalogue entries found.")
+        elif args.format == "mitre":
+            _emit(_render_mitre(findings, entries))
         else:
+            _c = summary["counts"]
+            _emit(
+                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
+                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
+                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
+                + (f" · {summary['suppressed_count']} suppressed"
+                   if summary["suppressed_count"] else "")
+            )
             if delta["new"]:
                 _emit("# NEW findings:")
                 for f in delta["new"]:
@@ -6609,21 +7184,38 @@ def main():
     else:
         # Standard output
         if args.format == "json":
-            output_data = {"findings": findings}
+            output_data: dict = {"summary": summary, "findings": findings}
             if suppressed_findings:
                 output_data["suppressed"] = suppressed_findings
+            if suppressed_by_baseline:
+                output_data["suppressed_by_baseline"] = suppressed_by_baseline
+            if attack_graph:
+                output_data["graph"] = attack_graph
             _emit(json.dumps(output_data, indent=2))
         elif args.format == "sarif":
             sarif = to_sarif(findings, entries)
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report))
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
         elif args.format == "compliance":
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
                 _emit("# No CIS-mapped catalogue entries found.")
+        elif args.format == "mitre":
+            _emit(_render_mitre(findings, entries))
         else:
+            # Text format: lead with a one-line summary score, then the
+            # finding list. The summary always prints (even on a clean
+            # repo) so CI logs always carry the headline number.
+            _c = summary["counts"]
+            _emit(
+                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
+                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
+                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
+                + (f" · {summary['suppressed_count']} suppressed"
+                   if summary["suppressed_count"] else "")
+            )
             entry_map_out = {e["id"]: e for e in entries}
             for f in findings:
                 _emit(f"{f['id']} {f['file']}:{f['line']} {f['resource']}")

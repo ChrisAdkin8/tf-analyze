@@ -7,13 +7,17 @@ status: active
 cis:
   - "6.1.2"
 patterns:
+  # Modern provider (>=5.x) replaced require_ssl with ssl_mode. Suppress when
+  # ssl_mode is set to ENCRYPTED_ONLY or TRUSTED_CLIENT_CERTIFICATE_REQUIRED.
   - kind: resource_missing_arg
     resource: google_sql_database_instance
     nested_path: settings.ip_configuration.require_ssl
+    suppress_if_body_contains: 'ssl_mode = "ENCRYPTED_ONLY"'
   - kind: hcl_attr
     resource: google_sql_database_instance
     path: settings.ip_configuration.require_ssl
     not_equal: true
+    suppress_if_body_contains: 'ssl_mode = "ENCRYPTED_ONLY"'
 recommendation: |
   Set `require_ssl = true` in the `ip_configuration` block:
 

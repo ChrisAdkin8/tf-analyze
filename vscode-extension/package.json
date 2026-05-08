@@ -2,8 +2,9 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.0",
-  "publisher": "hashicorp",
+  "version": "0.1.5",
+  "publisher": "tfanalyze",
+  "license": "Apache-2.0",
   "icon": "assets/icon.png",
   "engines": {
     "vscode": "^1.85.0"
@@ -12,6 +13,11 @@
     "Linters",
     "Other"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChrisAdkin8/tf-analyze.git",
+    "directory": "vscode-extension"
+  },
   "keywords": [
     "terraform",
     "security",
@@ -21,7 +27,8 @@
     "static analysis"
   ],
   "activationEvents": [
-    "onLanguage:terraform"
+    "onLanguage:terraform",
+    "onView:tfAnalyzeFindings"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -78,12 +85,20 @@
         }
       }
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tfAnalyze",
+          "title": "tf-analyze",
+          "icon": "assets/icon-activitybar.svg"
+        }
+      ]
+    },
     "views": {
-      "explorer": [
+      "tfAnalyze": [
         {
           "id": "tfAnalyzeFindings",
-          "name": "tf-analyze Findings",
-          "icon": "$(shield)",
+          "name": "Findings",
           "contextualTitle": "tf-analyze"
         }
       ]
@@ -114,7 +129,43 @@
         }
       ]
     },
-    "statusBar": []
+    "statusBar": [],
+    "walkthroughs": [
+      {
+        "id": "tfAnalyze.gettingStarted",
+        "title": "Get started with tf-analyze",
+        "description": "Run your first Terraform security scan in under a minute.",
+        "steps": [
+          {
+            "id": "tfAnalyze.connectEngine",
+            "title": "Connect the detection engine",
+            "description": "Set `tf-analyze.scriptPath` or open the [tf-analyze project](https://github.com/ChrisAdkin8/tf-analyze) as part of your workspace.\n[Open Settings](command:workbench.action.openSettings?%22tf-analyze%22)",
+            "media": { "markdown": "media/walkthrough/01-engine.md" },
+            "completionEvents": [
+              "onSettingChanged:tf-analyze.scriptPath"
+            ]
+          },
+          {
+            "id": "tfAnalyze.firstScan",
+            "title": "Run your first scan",
+            "description": "Open any `.tf` file and save it — or run **tf-analyze: Run Scan** from the Command Palette.\n[Run Scan](command:tf-analyze.runScan)",
+            "media": { "markdown": "media/walkthrough/02-scan.md" },
+            "completionEvents": [
+              "onCommand:tf-analyze.runScan"
+            ]
+          },
+          {
+            "id": "tfAnalyze.exploreFindings",
+            "title": "Explore findings & fix issues",
+            "description": "Click the 🛡 shield on the Activity Bar to open the Findings tree, hover squiggles for details, and use Quick Fix (`⌘.` / `Ctrl+.`) for auto-remediation.\n[Show Attack Graph](command:tf-analyze.showAttackGraph)",
+            "media": { "markdown": "media/walkthrough/03-explore.md" },
+            "completionEvents": [
+              "onView:tfAnalyzeFindings"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

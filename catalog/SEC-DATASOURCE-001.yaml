@@ -4,6 +4,8 @@ section: security
 default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1552.001"
 patterns:
   - kind: grep
     file_glob: "**/*.tf"

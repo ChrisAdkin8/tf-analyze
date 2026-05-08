@@ -4,6 +4,8 @@ section: security
 default_urgency: HIGH
 blast_radius: module
 status: active
+mitre:
+  - "T1552.001"
 patterns:
   - kind: templatefile_sensitive_leak
     description: templatefile() call whose argument map references a sensitive variable, rendering the secret into a non-sensitive string

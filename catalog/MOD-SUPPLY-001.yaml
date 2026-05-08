@@ -18,6 +18,8 @@ verification: |
   Verify all git-sourced module URLs use a pinned tag or SHA, not main/master.
 soc2_cc:
   - "CC9.2"
+mitre:
+  - "T1195.002"
 fix_hcl: |
   module "example" {
     source = "git::https://github.com/example/module.git?ref=v1.2.3"

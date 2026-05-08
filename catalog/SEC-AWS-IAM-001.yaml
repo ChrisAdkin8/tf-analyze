@@ -39,6 +39,8 @@ pci_dss:
   - "Req-7.1"
 soc2_cc:
   - "CC6.1"
+mitre:
+  - "T1078.004"
 fix_hcl: |
   statement {
     actions   = ["s3:GetObject", "s3:PutObject"]

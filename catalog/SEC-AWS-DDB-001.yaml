@@ -39,6 +39,8 @@ pci_dss:
   - "Req-3.4"
 soc2_cc:
   - "CC6.7"
+mitre:
+  - "T1530"
 verification: |
   `aws dynamodb describe-table --table-name <name> \
     --query 'Table.SSEDescription'`

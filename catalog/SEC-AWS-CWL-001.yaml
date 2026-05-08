@@ -8,6 +8,8 @@ pci_dss:
   - "Req-3.4"
 soc2_cc:
   - "CC6.7"
+mitre:
+  - "T1562.008"
 patterns:
   - kind: resource_missing_arg
     resource: aws_cloudwatch_log_group

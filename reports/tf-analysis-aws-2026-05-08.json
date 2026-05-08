@@ -1,0 +1,2229 @@
+{
+  "summary": {
+    "scoring_version": 1,
+    "score": 0,
+    "grade": "F",
+    "counts": {
+      "CRITICAL": 6,
+      "HIGH": 11,
+      "MEDIUM": 60,
+      "LOW": 42,
+      "INFO": 0
+    },
+    "suppressed_count": 0,
+    "formula": "max(0, 100 - sum(weight * count)); weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; suppressed at half weight"
+  },
+  "findings": [
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 49,
+      "resource": "aws_s3_bucket.no_block",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 49,
+      "resource": "aws_s3_bucket.no_block",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 49,
+      "resource": "aws_s3_bucket.no_block",
+      "urgency": "LOW",
+      "title": "S3 bucket versioning disabled or suspended",
+      "section": "robustness",
+      "recommendation": "Set `versioning_configuration { status = \"Enabled\" }` on the\n`aws_s3_bucket_versioning` resource associated with every S3 bucket\nthat holds important data. Versioning protects against accidental\noverwrites and deletions by retaining prior object versions. Add a\nlifecycle rule expiring non-current versions after 90 days to control\nstorage costs:\n\n  noncurrent_version_expiration {\n    noncurrent_days = 90\n  }\n",
+      "fix_hcl": "resource \"aws_s3_bucket_versioning\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  versioning_configuration {\n    status = \"Enabled\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-IAM-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 38,
+      "resource": "data.aws_iam_policy_document.all_access",
+      "urgency": "MEDIUM",
+      "title": "IAM policy with wildcard resource",
+      "section": "security",
+      "recommendation": "Narrow the `Resource` field to the specific ARN(s) the policy needs.\nWildcard resources grant the actions to every resource in the account,\nviolating least-privilege. Use `arn:aws:s3:::my-bucket/*` instead of\n`*` for S3 access, `arn:aws:dynamodb:*:*:table/my-table` for DynamoDB,\netc.\n",
+      "fix_hcl": "statement {\n  actions   = [\"s3:GetObject\", \"s3:PutObject\"]\n  resources = [\"arn:aws:s3:::my-bucket/*\"]\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1078.004"
+      ],
+      "narrative": "A wildcard Resource in the IAM policy attached to data.aws_iam_policy_document.all_access grants the declared actions against every AWS resource in the account \u2014 any credential theft, role assumption, or confused-deputy exploit immediately yields account-wide blast radius. In the 2019 Capital One breach a broad S3-read role attached to an EC2 instance was the reason 100M records could be exfiltrated after SSRF retrieved the role's STS token. Scope the Resource ARN to the specific bucket, table, or secret the workload needs."
+    },
+    {
+      "id": "SEC-AWS-IAM-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 61,
+      "resource": "aws_iam_role.anyone",
+      "urgency": "HIGH",
+      "title": "IAM assume role policy with wildcard Principal",
+      "section": "security",
+      "recommendation": "Restrict the `Principal` in assume role policies to specific AWS account\nIDs, IAM roles, or services. A wildcard principal (`\"Principal\": \"*\"`)\nallows any entity in the world to call `sts:AssumeRole`, effectively\nmaking the role public unless a restrictive Condition is also present.\nReplace `\"Principal\": \"*\"` with the exact ARN(s) of the trusted entity,\ne.g. `\"Principal\": {\"Service\": \"lambda.amazonaws.com\"}` or\n`\"Principal\": {\"AWS\": \"arn:aws:iam::123456789012:role/my-role\"}`.\n",
+      "fix_hcl": "resource \"aws_iam_role\" \"example\" {\n  name = \"example\"\n  assume_role_policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect    = \"Allow\"\n      Principal = { Service = \"lambda.amazonaws.com\" }\n      Action    = \"sts:AssumeRole\"\n    }]\n  })\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1078.004"
+      ],
+      "narrative": "aws_iam_role.anyone grants the AdministratorAccess policy or equivalent wildcard, giving any principal bound to it full control over every AWS service and resource in the account. Compromise of a single workload using this role \u2014 via SSRF, code injection, or supply chain attack \u2014 yields immediate account takeover with no further privilege escalation required. Replace with a least-privilege policy scoped to the exact API calls and resource ARNs the workload uses."
+    },
+    {
+      "id": "SEC-AWS-IAM-POLICY-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 34,
+      "resource": "data.aws_iam_policy_document.all_access",
+      "urgency": "MEDIUM",
+      "title": "IAM policy document grants wildcard `actions = [\\\"*\\\"]`",
+      "section": "security",
+      "recommendation": "Replace `actions = [\"*\"]` with the explicit minimum set the workload\nrequires. Use `aws iam simulate-principal-policy` to validate that\nthe trimmed list still passes for legitimate flows.\n",
+      "fix_hcl": "data \"aws_iam_policy_document\" \"example\" {\n  statement {\n    effect    = \"Allow\"\n    actions   = [\"s3:GetObject\", \"s3:PutObject\"]\n    resources = [\"arn:aws:s3:::my-bucket/*\"]\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1078.004"
+      ],
+      "narrative": "data.aws_iam_policy_document.all_access grants `actions = [\"*\"]` \u2014 any AWS API call is permitted against the scoped resource set. Once an attacker holds credentials bound to this policy, the blast radius is whatever the resource list happens to be. The 2019 Capital One breach began with a wildcard-action role attached to a single EC2 instance; SSRF retrieved the role's STS token, and the wildcard then cleared every subsequent S3 list/get call. Enumerate the explicit minimum action set and validate with `aws iam simulate-principal-policy` before tightening."
+    },
+    {
+      "id": "SEC-AWS-IAM-POLICY-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 34,
+      "resource": "data.aws_iam_policy_document.all_access",
+      "urgency": "MEDIUM",
+      "title": "IAM policy document grants wildcard `resources = [\\\"*\\\"]`",
+      "section": "security",
+      "recommendation": "Scope `resources` to specific ARNs or ARN patterns. For S3 use\n`arn:aws:s3:::my-bucket/*`; for KMS use the key ARN; for EC2 use\n`arn:aws:ec2:<region>:<account>:instance/i-*` filtered by tag\nconditions.\n",
+      "fix_hcl": "data \"aws_iam_policy_document\" \"example\" {\n  statement {\n    effect    = \"Allow\"\n    actions   = [\"s3:GetObject\"]\n    resources = [\"arn:aws:s3:::my-bucket/*\"]\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1078.004"
+      ]
+    },
+    {
+      "id": "SEC-AWS-IAM-POLICY-005",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 34,
+      "resource": "data.aws_iam_policy_document.all_access",
+      "urgency": "HIGH",
+      "title": "IAM policy grants both `actions = [\\\"*\\\"]` and `resources = [\\\"*\\\"]`",
+      "section": "security",
+      "recommendation": "If true administrator access is intentional, attach\n`arn:aws:iam::aws:policy/AdministratorAccess` directly via\n`aws_iam_role_policy_attachment` so audit and least-privilege tools\nflag it correctly. Otherwise, replace with the explicit minimum\naction and resource set the workload needs.\n",
+      "fix_hcl": "data \"aws_iam_policy_document\" \"example\" {\n  statement {\n    effect    = \"Allow\"\n    actions   = [\"s3:GetObject\", \"s3:PutObject\"]\n    resources = [\"arn:aws:s3:::my-bucket/*\"]\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1078.004",
+        "T1098.001"
+      ],
+      "narrative": "A single statement on data.aws_iam_policy_document.all_access grants `actions = [\"*\"]` AND `resources = [\"*\"]` \u2014 equivalent to attaching `AdministratorAccess` but bypassing the org-level guardrails (SCPs, IAM Access Analyzer) that flag the named policy. Any compromise of the bound principal yields immediate full-account takeover; attacker pivot requires no further escalation. If true admin access is intentional this should be the AWS-managed policy attached by name so audit tooling sees it; otherwise, scope to the explicit minimum surface."
+    },
+    {
+      "id": "SEC-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 49,
+      "resource": "aws_s3_bucket.no_block",
+      "urgency": "MEDIUM",
+      "title": "S3 bucket missing server-side encryption configuration",
+      "section": "security",
+      "recommendation": "Create an `aws_s3_bucket_server_side_encryption_configuration` resource\nfor every S3 bucket, or use the legacy inline block for provider < 4.0.\nAt minimum, use `AES256` (SSE-S3). For sensitive data, use `aws:kms`\nwith a customer-managed KMS key.\n",
+      "fix_hcl": "resource \"aws_s3_bucket_server_side_encryption_configuration\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = \"aws:kms\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530"
+      ],
+      "narrative": "Unencrypted data in aws_s3_bucket.no_block is readable in plaintext by any AWS principal with s3:GetObject, including anyone who obtains temporary credentials via SSRF, stolen access keys, or a confused-deputy attack on an over-permissioned role. The 2017 Verizon and 2017 Accenture incidents both involved S3 buckets with sensitive data exposed without encryption, compounding the impact of misconfigured access controls. Apply SSE-KMS with a customer-managed key so data at rest requires key access in addition to bucket permissions."
+    },
+    {
+      "id": "SEC-AWS-ACCESSKEY-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+      "line": 37,
+      "resource": "aws_iam_access_key.human",
+      "urgency": "MEDIUM",
+      "title": "Long-lived IAM access key created for a user",
+      "section": "security",
+      "recommendation": "Avoid long-lived IAM access keys entirely. Use IAM roles with temporary\ncredentials instead:\n- EC2 workloads: EC2 instance profiles\n- Lambda: Lambda execution roles\n- CI/CD: OIDC federation (GitHub Actions, GitLab CI, CircleCI, etc.)\n- Cross-account: `sts:AssumeRole`\n\nIf a long-lived key is truly unavoidable (a legacy system that cannot\nuse OIDC), enforce these mitigations:\n1. Rotate every 90 days via automation.\n2. Store the secret in AWS Secrets Manager or HashiCorp Vault \u2014 never\n   in `terraform.tfvars` or CI/CD environment variables in plaintext.\n3. Attach a policy that restricts the key to the minimum required actions\n   and resources.\n4. Enable CloudTrail and alert on unusual usage patterns.\n",
+      "fix_hcl": "# Replace long-lived access key with an IAM instance profile (EC2 example)\nresource \"aws_iam_role\" \"app\" {\n  name = \"app\"\n  assume_role_policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Action    = \"sts:AssumeRole\"\n      Effect    = \"Allow\"\n      Principal = { Service = \"ec2.amazonaws.com\" }\n    }]\n  })\n}\n\nresource \"aws_iam_instance_profile\" \"app\" {\n  name = \"app\"\n  role = aws_iam_role.app.name\n}\n# Remove the aws_iam_access_key resource entirely\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-COGNITO-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+      "line": 68,
+      "resource": "aws_cognito_user_pool.no_mfa",
+      "urgency": "MEDIUM",
+      "title": "Cognito user pool MFA not enabled",
+      "section": "security",
+      "recommendation": "Set `mfa_configuration = \"ON\"` and configure software token MFA:\n\n    resource \"aws_cognito_user_pool\" \"users\" {\n      mfa_configuration = \"ON\"\n\n      software_token_mfa_configuration {\n        enabled = true\n      }\n    }\n\n`\"OPTIONAL\"` allows self-enrolment but is not a durable security\ncontrol \u2014 users may skip MFA. For regulated workloads, `\"ON\"` with\nTOTP (or hardware keys via `sms_mfa_configuration`) is required.\nExisting users will be prompted at next login.\n",
+      "fix_hcl": "resource \"aws_cognito_user_pool\" \"example\" {\n  # ... other arguments ...\n  mfa_configuration = \"ON\"\n  software_token_mfa_configuration {\n    enabled = true\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1556.006"
+      ]
+    },
+    {
+      "id": "SEC-AWS-IAM-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+      "line": 58,
+      "resource": "aws_iam_account_password_policy.weak",
+      "urgency": "LOW",
+      "title": "IAM account password policy is not configured or too weak",
+      "section": "security",
+      "recommendation": "Define a strong password policy:\n\n    resource \"aws_iam_account_password_policy\" \"strict\" {\n      minimum_password_length        = 14\n      require_lowercase_characters   = true\n      require_numbers                = true\n      require_uppercase_characters   = true\n      require_symbols                = true\n      allow_users_to_change_password = true\n      password_reuse_prevention      = 24\n      max_password_age               = 90\n      hard_expiry                    = false\n    }\n",
+      "fix_hcl": "resource \"aws_iam_account_password_policy\" \"strict\" {\n  minimum_password_length        = 14\n  require_lowercase_characters   = true\n  require_numbers                = true\n  require_uppercase_characters   = true\n  require_symbols                = true\n  allow_users_to_change_password = true\n  password_reuse_prevention      = 24\n  max_password_age               = 90\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1098.001",
+        "T1078.004"
+      ]
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 49,
+      "resource": "aws_instance.public",
+      "urgency": "MEDIUM",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 60,
+      "resource": "aws_s3_bucket.force_destroyable",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 99,
+      "resource": "aws_db_instance.public_db",
+      "urgency": "HIGH",
+      "on_critical_path": true,
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 99,
+      "resource": "aws_db_instance.public_db",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 60,
+      "resource": "aws_s3_bucket.force_destroyable",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 60,
+      "resource": "aws_s3_bucket.force_destroyable",
+      "urgency": "MEDIUM",
+      "title": "S3 bucket has force_destroy enabled",
+      "section": "robustness",
+      "recommendation": "Remove `force_destroy = true` from production buckets:\n\n    resource \"aws_s3_bucket\" \"app\" {\n      bucket = \"app-data\"\n      # force_destroy = true  # remove this line\n    }\n\nFor development/test environments where force_destroy is intentional,\nadd an inline comment explaining why and suppress the finding:\n    # tf-analyze:ignore ROB-AWS-LIFECYCLE-002\n    force_destroy = true  # test env only \u2014 data is ephemeral\n\nPair production buckets with `lifecycle { prevent_destroy = true }` for\na double guard.\n",
+      "fix_hcl": "resource \"aws_s3_bucket\" \"example\" {\n  # ... other arguments ...\n  force_destroy = false\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-RDS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 99,
+      "resource": "aws_db_instance.public_db",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "RDS instance or Aurora cluster backup retention disabled",
+      "section": "robustness",
+      "recommendation": "Set `backup_retention_period` to at least `7` (days) on every\n`aws_db_instance`. For production databases, use `30` or more and also\nset `delete_automated_backups = false` so that automated backups survive\nan accidental instance deletion. Without backups, a corrupted or deleted\ndatabase cannot be recovered to a point-in-time prior to the incident.\nAlso consider enabling `copy_tags_to_snapshot = true` for cost allocation.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  backup_retention_period = 7\n  backup_window           = \"03:00-04:00\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-RDS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 99,
+      "resource": "aws_db_instance.public_db",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "RDS instance or Aurora cluster skips final snapshot on deletion",
+      "section": "robustness",
+      "recommendation": "Set `skip_final_snapshot = false` and provide a `final_snapshot_identifier`\non every production `aws_db_instance`. Without this, running\n`terraform destroy` (or any operation that removes the resource from\nstate) permanently destroys all data in the database with no recovery\npath. The final snapshot costs a small amount of S3 storage and is a\nlast-resort safety net against accidental deletion.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  skip_final_snapshot       = false\n  final_snapshot_identifier = \"final-snapshot-${replace(timestamp(), \":\", \"-\")}\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 60,
+      "resource": "aws_s3_bucket.force_destroyable",
+      "urgency": "LOW",
+      "title": "S3 bucket versioning disabled or suspended",
+      "section": "robustness",
+      "recommendation": "Set `versioning_configuration { status = \"Enabled\" }` on the\n`aws_s3_bucket_versioning` resource associated with every S3 bucket\nthat holds important data. Versioning protects against accidental\noverwrites and deletions by retaining prior object versions. Add a\nlifecycle rule expiring non-current versions after 90 days to control\nstorage costs:\n\n  noncurrent_version_expiration {\n    noncurrent_days = 90\n  }\n",
+      "fix_hcl": "resource \"aws_s3_bucket_versioning\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  versioning_configuration {\n    status = \"Enabled\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-CLOUDFRONT-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 68,
+      "resource": "aws_cloudfront_distribution.http_allowed",
+      "urgency": "MEDIUM",
+      "title": "CloudFront distribution serves HTTP without redirect",
+      "section": "security",
+      "recommendation": "Set `viewer_protocol_policy = \"redirect-to-https\"` (or `\"https-only\"`)\nin every cache-behavior block:\n\n    resource \"aws_cloudfront_distribution\" \"cdn\" {\n      default_cache_behavior {\n        viewer_protocol_policy = \"redirect-to-https\"\n        # ...\n      }\n      ordered_cache_behavior {\n        viewer_protocol_policy = \"redirect-to-https\"\n        # ...\n      }\n    }\n\n`redirect-to-https` is preferred over `https-only` for public-facing\ndistributions where existing HTTP URLs may be indexed \u2014 it enforces\nencryption without returning 403s to legacy links.\n",
+      "fix_hcl": "resource \"aws_cloudfront_distribution\" \"example\" {\n  default_cache_behavior {\n    viewer_protocol_policy = \"redirect-to-https\"\n    allowed_methods        = [\"GET\", \"HEAD\"]\n    cached_methods         = [\"GET\", \"HEAD\"]\n    target_origin_id       = \"example\"\n    forwarded_values {\n      query_string = false\n      cookies { forward = \"none\" }\n    }\n  }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1071.001"
+      ]
+    },
+    {
+      "id": "SEC-AWS-CLOUDFRONT-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 68,
+      "resource": "aws_cloudfront_distribution.http_allowed",
+      "urgency": "LOW",
+      "title": "CloudFront distribution missing access logging",
+      "section": "security",
+      "recommendation": "Add a `logging_config` block pointing to an S3 bucket:\n\n    resource \"aws_cloudfront_distribution\" \"cdn\" {\n      logging_config {\n        bucket          = aws_s3_bucket.cf_logs.bucket_domain_name\n        include_cookies = false\n        prefix          = \"cf/\"\n      }\n      # ...\n    }\n\nGrant the CloudFront logging principal `s3:PutObject` on the target\nbucket via a bucket policy. Enable versioning and lifecycle rules on\nthe log bucket \u2014 CloudFront generates high log volume.\n",
+      "fix_hcl": "resource \"aws_cloudfront_distribution\" \"example\" {\n  # ... other arguments ...\n  logging_config {\n    include_cookies = false\n    bucket          = aws_s3_bucket.logs.bucket_domain_name\n    prefix          = \"cloudfront/\"\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1071.001"
+      ]
+    },
+    {
+      "id": "SEC-AWS-RDS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 99,
+      "resource": "aws_db_instance.public_db",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "RDS instance or Aurora cluster publicly accessible",
+      "section": "security",
+      "recommendation": "Set `publicly_accessible = false` on every `aws_db_instance`. A publicly\naccessible RDS instance receives a DNS hostname resolvable from the\ninternet, exposing the database port to potential brute-force and\nexploitation. Place the instance in private subnets and access it via a\nbastion host, AWS Systems Manager Session Manager, or a VPC-peered\nconnection instead.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  storage_encrypted = true\n  kms_key_id        = aws_kms_key.rds.arn\n}\n",
+      "fix_disruption": "plan_required",
+      "narrative": "Setting publicly_accessible = true on aws_db_instance.public_db assigns the database a DNS name resolvable from the internet, exposing the database port to any network adversary. Combined with weak or default credentials, this is a trivially exploited attack path \u2014 internet-scanning tools like Shodan index publicly accessible RDS endpoints within minutes of provisioning. Place the instance in private subnets and use a VPC-peered bastion or AWS Systems Manager for administrative access."
+    },
+    {
+      "id": "SEC-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 60,
+      "resource": "aws_s3_bucket.force_destroyable",
+      "urgency": "MEDIUM",
+      "title": "S3 bucket missing server-side encryption configuration",
+      "section": "security",
+      "recommendation": "Create an `aws_s3_bucket_server_side_encryption_configuration` resource\nfor every S3 bucket, or use the legacy inline block for provider < 4.0.\nAt minimum, use `AES256` (SSE-S3). For sensitive data, use `aws:kms`\nwith a customer-managed KMS key.\n",
+      "fix_hcl": "resource \"aws_s3_bucket_server_side_encryption_configuration\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = \"aws:kms\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530"
+      ],
+      "narrative": "Unencrypted data in aws_s3_bucket.force_destroyable is readable in plaintext by any AWS principal with s3:GetObject, including anyone who obtains temporary credentials via SSRF, stolen access keys, or a confused-deputy attack on an over-permissioned role. The 2017 Verizon and 2017 Accenture incidents both involved S3 buckets with sensitive data exposed without encryption, compounding the impact of misconfigured access controls. Apply SSE-KMS with a customer-managed key so data at rest requires key access in addition to bucket permissions."
+    },
+    {
+      "id": "SEC-AWS-SG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 37,
+      "resource": "aws_security_group.ssh_open",
+      "urgency": "HIGH",
+      "title": "Security group allows ingress from 0.0.0.0/0",
+      "section": "security",
+      "recommendation": "Restrict `cidr_blocks` to the specific IP ranges that need access.\nFor SSH/RDP, use a bastion host or AWS Systems Manager Session Manager\ninstead of opening ports to the internet. For web traffic, place an\nALB/NLB in front with a restrictive security group.\n",
+      "fix_hcl": "# Replace 0.0.0.0/0 with a specific CIDR range:\ningress {\n  from_port   = 443\n  to_port     = 443\n  protocol    = \"tcp\"\n  cidr_blocks = [\"10.0.0.0/8\"]\n}\n",
+      "fix_disruption": "plan_required",
+      "narrative": "The security group aws_security_group.ssh_open accepts ingress from 0.0.0.0/0, making every instance in the group reachable from the public internet on the allowed port. This directly expands the attack surface for brute-force, CVE exploitation, and lateral movement \u2014 the 2020 SolarWinds attacker used internet-accessible management ports on internal hosts as persistence anchors. Restrict ingress to specific CIDR ranges, or use a bastion or SSM Session Manager to eliminate the public attack surface entirely."
+    },
+    {
+      "id": "SEC-AWS-SG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 44,
+      "resource": "aws_security_group.ssh_open",
+      "urgency": "HIGH",
+      "title": "Security group allows ingress from 0.0.0.0/0",
+      "section": "security",
+      "recommendation": "Restrict `cidr_blocks` to the specific IP ranges that need access.\nFor SSH/RDP, use a bastion host or AWS Systems Manager Session Manager\ninstead of opening ports to the internet. For web traffic, place an\nALB/NLB in front with a restrictive security group.\n",
+      "fix_hcl": "# Replace 0.0.0.0/0 with a specific CIDR range:\ningress {\n  from_port   = 443\n  to_port     = 443\n  protocol    = \"tcp\"\n  cidr_blocks = [\"10.0.0.0/8\"]\n}\n",
+      "fix_disruption": "plan_required",
+      "narrative": "The security group aws_security_group.ssh_open accepts ingress from 0.0.0.0/0, making every instance in the group reachable from the public internet on the allowed port. This directly expands the attack surface for brute-force, CVE exploitation, and lateral movement \u2014 the 2020 SolarWinds attacker used internet-accessible management ports on internal hosts as persistence anchors. Restrict ingress to specific CIDR ranges, or use a bastion or SSM Session Manager to eliminate the public attack surface entirely."
+    },
+    {
+      "id": "SEC-AWS-SSRF-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+      "line": 49,
+      "resource": "aws_instance.public",
+      "urgency": "HIGH",
+      "title": "EC2 instance metadata service v1 enabled (IMDSv2 not enforced)",
+      "section": "security",
+      "recommendation": "Add a `metadata_options` block to every `aws_instance` that enforces\nIMDSv2:\n\n  metadata_options {\n    http_tokens   = \"required\"\n    http_endpoint = \"enabled\"\n  }\n\nIMDSv1 is a pre-authenticated HTTP endpoint accessible from within the\ninstance. An SSRF vulnerability in any application on the instance can\nretrieve the instance's IAM credentials from `http://169.254.169.254/`.\nThis was the root cause of the Capital One breach in 2019. IMDSv2\nrequires a session-oriented PUT request before any GET, which is\nincompatible with simple SSRF payloads.\n",
+      "fix_hcl": "metadata_options {\n  http_endpoint               = \"enabled\"\n  http_tokens                 = \"required\"\n  http_put_response_hop_limit = 1\n}\n",
+      "fix_disruption": "forces_replacement",
+      "narrative": "An attacker exploiting a Server-Side Request Forgery (SSRF) vulnerability in any application running on aws_instance.public can query the EC2 metadata endpoint (http://169.254.169.254/) and retrieve temporary IAM credentials without authentication \u2014 IMDSv1 requires no session token. This was the exact attack vector in the 2019 Capital One breach, where a WAF misconfiguration allowed an SSRF that exfiltrated 100M customer records via the instance's over-privileged role. Enforcing IMDSv2 (http_tokens = \"required\") breaks the chain because the attacker's request must first complete a PUT handshake that a server-side forged request cannot perform."
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/10_ssrf.tf",
+      "line": 38,
+      "resource": "aws_instance.imds_v1",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/10_ssrf.tf",
+      "line": 47,
+      "resource": "aws_instance.imds_v1_explicit",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-SSRF-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/10_ssrf.tf",
+      "line": 38,
+      "resource": "aws_instance.imds_v1",
+      "urgency": "MEDIUM",
+      "title": "EC2 instance metadata service v1 enabled (IMDSv2 not enforced)",
+      "section": "security",
+      "recommendation": "Add a `metadata_options` block to every `aws_instance` that enforces\nIMDSv2:\n\n  metadata_options {\n    http_tokens   = \"required\"\n    http_endpoint = \"enabled\"\n  }\n\nIMDSv1 is a pre-authenticated HTTP endpoint accessible from within the\ninstance. An SSRF vulnerability in any application on the instance can\nretrieve the instance's IAM credentials from `http://169.254.169.254/`.\nThis was the root cause of the Capital One breach in 2019. IMDSv2\nrequires a session-oriented PUT request before any GET, which is\nincompatible with simple SSRF payloads.\n",
+      "fix_hcl": "metadata_options {\n  http_endpoint               = \"enabled\"\n  http_tokens                 = \"required\"\n  http_put_response_hop_limit = 1\n}\n",
+      "fix_disruption": "forces_replacement",
+      "narrative": "An attacker exploiting a Server-Side Request Forgery (SSRF) vulnerability in any application running on aws_instance.imds_v1 can query the EC2 metadata endpoint (http://169.254.169.254/) and retrieve temporary IAM credentials without authentication \u2014 IMDSv1 requires no session token. This was the exact attack vector in the 2019 Capital One breach, where a WAF misconfiguration allowed an SSRF that exfiltrated 100M customer records via the instance's over-privileged role. Enforcing IMDSv2 (http_tokens = \"required\") breaks the chain because the attacker's request must first complete a PUT handshake that a server-side forged request cannot perform."
+    },
+    {
+      "id": "ROB-VERSION-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/versions.tf",
+      "line": 9,
+      "resource": "",
+      "urgency": "MEDIUM",
+      "title": "required_version floor too old for skill assumptions",
+      "section": "robustness",
+      "recommendation": "Set `required_version = \"~> 1.10\"` (or whatever the current Terraform\nmajor is). Many checks in this skill assume features only available in\nTerraform 1.6+: native test framework (`*.tftest.hcl`), `import` blocks,\n`optional()` in object types, `moved` blocks, conditional outputs.\n",
+      "fix_hcl": "terraform {\n  required_version = \">= 1.5.0, < 2.0.0\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "MOD-PIN-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 85,
+      "resource": "module.unpinned_vpc",
+      "urgency": "MEDIUM",
+      "title": "Module source not pinned",
+      "section": "module",
+      "recommendation": "Pin every external module:\n - Registry: add `version = \"~> X.Y\"`.\n - Git: add `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL.\n - Local (`./modules/foo`): no pin needed but verify the path is stable.\n",
+      "fix_hcl": "module \"example\" {\n  source  = \"hashicorp/consul/aws\"\n  version = \"= 0.11.0\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "MOD-STALE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 86,
+      "resource": "",
+      "urgency": "LOW",
+      "title": "Registry module is significantly behind latest version",
+      "section": "dry",
+      "recommendation": "Run `detect.py --check-registry` to identify modules pinned significantly behind their\nlatest published version on the Terraform Registry. Upgrade the `version` constraint and\nrun `terraform init -upgrade` to pull the newer release. Review the module's CHANGELOG\nfor breaking changes before upgrading across major versions.\n\nStaleness thresholds:\n- MEDIUM: pinned version is >= 1 major version behind latest\n- LOW: pinned version is >= 3 minor versions behind latest (within the same major)\n\nFindings are only emitted by `--check-registry` (requires outbound HTTPS to\nregistry.terraform.io). The static pass records the source pattern but does not\nquery the registry \u2014 keeping normal scans offline-capable.\n",
+      "fix_hcl": "# Update the version constraint to the latest (check with --check-registry)\nmodule \"vpc\" {\n  source  = \"terraform-aws-modules/vpc/aws\"\n  version = \"~> 5.1\"   # was ~> 3.0\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "MOD-SUPPLY-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 86,
+      "resource": "",
+      "urgency": "HIGH",
+      "title": "Registry module missing version constraint",
+      "section": "module",
+      "recommendation": "Add `version = \"~> X.Y\"` to every registry module block. Without a\nversion constraint, `terraform init` resolves the latest available\nversion making builds non-reproducible.\n",
+      "fix_hcl": "module \"example\" {\n  source  = \"hashicorp/consul/aws\"\n  version = \">= 0.11.0, < 0.12.0\"\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1195.002"
+      ]
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 53,
+      "resource": "aws_instance.frozen_ami",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 71,
+      "resource": "aws_eks_cluster.insecure",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "aws_lambda_function.eol_runtime",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-SSRF-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 53,
+      "resource": "aws_instance.frozen_ami",
+      "urgency": "MEDIUM",
+      "title": "EC2 instance metadata service v1 enabled (IMDSv2 not enforced)",
+      "section": "security",
+      "recommendation": "Add a `metadata_options` block to every `aws_instance` that enforces\nIMDSv2:\n\n  metadata_options {\n    http_tokens   = \"required\"\n    http_endpoint = \"enabled\"\n  }\n\nIMDSv1 is a pre-authenticated HTTP endpoint accessible from within the\ninstance. An SSRF vulnerability in any application on the instance can\nretrieve the instance's IAM credentials from `http://169.254.169.254/`.\nThis was the root cause of the Capital One breach in 2019. IMDSv2\nrequires a session-oriented PUT request before any GET, which is\nincompatible with simple SSRF payloads.\n",
+      "fix_hcl": "metadata_options {\n  http_endpoint               = \"enabled\"\n  http_tokens                 = \"required\"\n  http_put_response_hop_limit = 1\n}\n",
+      "fix_disruption": "forces_replacement",
+      "narrative": "An attacker exploiting a Server-Side Request Forgery (SSRF) vulnerability in any application running on aws_instance.frozen_ami can query the EC2 metadata endpoint (http://169.254.169.254/) and retrieve temporary IAM credentials without authentication \u2014 IMDSv1 requires no session token. This was the exact attack vector in the 2019 Capital One breach, where a WAF misconfiguration allowed an SSRF that exfiltrated 100M customer records via the instance's over-privileged role. Enforcing IMDSv2 (http_tokens = \"required\") breaks the chain because the attacker's request must first complete a PUT handshake that a server-side forged request cannot perform."
+    },
+    {
+      "id": "STK-AWS-EKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 71,
+      "resource": "aws_eks_cluster.insecure",
+      "urgency": "MEDIUM",
+      "title": "EKS cluster API endpoint private access not enabled",
+      "section": "stack",
+      "recommendation": "Enable private endpoint access and restrict (or disable) public access:\n\n    resource \"aws_eks_cluster\" \"app\" {\n      vpc_config {\n        endpoint_private_access = true\n        endpoint_public_access  = false  # disable public entirely, or...\n        # endpoint_public_access  = true  # ...keep public but restrict CIDRs:\n        # public_access_cidrs     = [\"203.0.113.0/24\"]\n      }\n    }\n\nWith both access types enabled, use `public_access_cidrs` to limit which\nCIDRs can reach the public endpoint (e.g., your CI runner egress IPs only).\nEquivalent to GKE `private_cluster_config.enable_private_endpoint`.\n",
+      "fix_hcl": "resource \"aws_eks_cluster\" \"example\" {\n  name     = \"example\"\n  role_arn = aws_iam_role.eks.arn\n  vpc_config {\n    subnet_ids              = var.subnet_ids\n    endpoint_private_access = true\n    endpoint_public_access  = false\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AWS-EKS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 71,
+      "resource": "aws_eks_cluster.insecure",
+      "urgency": "MEDIUM",
+      "title": "EKS cluster control plane logging not enabled",
+      "section": "stack",
+      "recommendation": "Enable all five control-plane log types:\n\n    resource \"aws_eks_cluster\" \"app\" {\n      enabled_cluster_log_types = [\n        \"api\",\n        \"audit\",\n        \"authenticator\",\n        \"controllerManager\",\n        \"scheduler\",\n      ]\n    }\n\nThe `audit` log type is the most critical \u2014 it captures every API call\nmade to the Kubernetes API server, including by pods with service account\ntokens. The other types are necessary for diagnosing control-plane issues\nand tracing scheduler or controller-manager behaviour.\n",
+      "fix_hcl": "resource \"aws_eks_cluster\" \"example\" {\n  # ... other arguments ...\n  enabled_cluster_log_types = [\n    \"api\", \"audit\", \"authenticator\", \"controllerManager\", \"scheduler\"\n  ]\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AWS-EKS-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 71,
+      "resource": "aws_eks_cluster.insecure",
+      "urgency": "MEDIUM",
+      "title": "EKS cluster Kubernetes Secrets not encrypted with KMS",
+      "section": "stack",
+      "recommendation": "Add an `encryption_config` block pointing to a customer-managed KMS key:\n\n    resource \"aws_eks_cluster\" \"app\" {\n      encryption_config {\n        resources = [\"secrets\"]\n        provider {\n          key_arn = aws_kms_key.eks.arn\n        }\n      }\n    }\n\n    resource \"aws_kms_key\" \"eks\" {\n      description             = \"EKS secrets encryption\"\n      enable_key_rotation     = true\n      deletion_window_in_days = 30\n    }\n\nEquivalent to GKE `database_encryption { state = \"ENCRYPTED\" }`.\n",
+      "fix_hcl": "resource \"aws_eks_cluster\" \"example\" {\n  name     = \"example\"\n  role_arn = aws_iam_role.eks.arn\n  encryption_config {\n    provider { key_arn = aws_kms_key.eks.arn }\n    resources = [\"secrets\"]\n  }\n  vpc_config { subnet_ids = var.subnet_ids }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AWS-LAMBDA-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "aws_lambda_function.eol_runtime",
+      "urgency": "MEDIUM",
+      "title": "Lambda function uses end-of-life runtime",
+      "section": "stack",
+      "recommendation": "Upgrade the `runtime` to a currently supported version. EOL runtimes\nno longer receive security patches or OS updates from AWS, meaning known\nCVEs accumulate silently. AWS may also block deployment of new functions\nusing deprecated runtimes after a deprecation deadline.\nSee https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html\nfor the current support matrix and deprecation schedule. Common\nreplacements: `nodejs14.x` \u2192 `nodejs22.x`, `python3.7` \u2192 `python3.13`,\n`dotnetcore3.1` \u2192 `dotnet8`.\n",
+      "fix_hcl": "resource \"aws_lambda_function\" \"example\" {\n  function_name = \"example\"\n  role          = aws_iam_role.lambda.arn\n  handler       = \"index.handler\"\n  runtime       = \"python3.12\"\n  filename      = \"function.zip\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AWS-LAMBDA-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "aws_lambda_function.eol_runtime",
+      "urgency": "LOW",
+      "title": "Lambda function missing dead-letter queue configuration",
+      "section": "stack",
+      "recommendation": "Add a `dead_letter_config` block pointing to an SQS DLQ or SNS topic:\n\n    resource \"aws_sqs_queue\" \"dlq\" {\n      name                       = \"${local.name}-dlq\"\n      message_retention_seconds  = 1209600  # 14 days\n    }\n\n    resource \"aws_lambda_function\" \"processor\" {\n      # ...\n      dead_letter_config {\n        target_arn = aws_sqs_queue.dlq.arn\n      }\n    }\n\nGrant the Lambda execution role `sqs:SendMessage` on the DLQ.\nFor synchronous invocations (API Gateway, ALB) handle errors at the\ncaller side \u2014 DLQ is only relevant for async invocation paths.\n",
+      "fix_hcl": "resource \"aws_lambda_function\" \"example\" {\n  # ... other arguments ...\n  dead_letter_config {\n    target_arn = aws_sqs_queue.dlq.arn\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AWS-LAMBDA-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "aws_lambda_function.eol_runtime",
+      "urgency": "LOW",
+      "title": "Lambda function active X-Ray tracing not configured",
+      "section": "stack",
+      "recommendation": "Add a `tracing_config` block with `mode = \"Active\"`:\n\n    resource \"aws_lambda_function\" \"processor\" {\n      # ...\n      tracing_config {\n        mode = \"Active\"\n      }\n    }\n\nGrant the execution role `xray:PutTraceSegments` and\n`xray:PutTelemetryRecords`. `Active` mode samples all invocations;\nadjust the X-Ray sampling rules if cost is a concern. For\ncost-sensitive batch functions, `PassThrough` with sampling on the\nupstream trigger is acceptable \u2014 document the choice.\n",
+      "fix_hcl": "resource \"aws_lambda_function\" \"example\" {\n  # ... other arguments ...\n  tracing_config {\n    mode = \"Active\"\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AWS-LAUNCH-TEMPLATE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+      "line": 61,
+      "resource": "aws_launch_template.insecure",
+      "urgency": "MEDIUM",
+      "title": "EC2 launch template does not enforce IMDSv2",
+      "section": "stack",
+      "recommendation": "Enforce IMDSv2 on every launch template:\n\n    resource \"aws_launch_template\" \"app\" {\n      # ...\n      metadata_options {\n        http_endpoint               = \"enabled\"\n        http_tokens                 = \"required\"\n        http_put_response_hop_limit = 1\n      }\n    }\n\nFor EKS managed node groups, the launch template feeds into\n`aws_eks_node_group.launch_template`. Nodes without IMDSv2 are\nexploitable from any pod with SSRF capability \u2014 the pod can reach\n169.254.169.254 and steal the node's IAM role credentials.\n",
+      "fix_hcl": "resource \"aws_launch_template\" \"example\" {\n  name = \"example\"\n  metadata_options {\n    http_endpoint               = \"enabled\"\n    http_tokens                 = \"required\"\n    http_put_response_hop_limit = 1\n    instance_metadata_tags      = \"enabled\"\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1552.005"
+      ]
+    },
+    {
+      "id": "COST-AWS-RISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 82,
+      "resource": "aws_cloudwatch_log_group.no_retention",
+      "urgency": "LOW",
+      "title": "AWS resource missing cost control",
+      "section": "ops",
+      "recommendation": "Add explicit cost controls:\n\n    # CloudWatch log group \u2014 expire logs after 90 days (adjust per retention policy)\n    resource \"aws_cloudwatch_log_group\" \"app\" {\n      name              = \"/app/logs\"\n      retention_in_days = 90\n    }\n\n    # ASG \u2014 always set an explicit max_size\n    resource \"aws_autoscaling_group\" \"app\" {\n      min_size = 1\n      max_size = 10   # explicit upper bound\n      # ...\n    }\n\nPair with AWS Budgets alerts so cost anomalies page on-call before\nthe bill arrives.\n",
+      "fix_hcl": "resource \"aws_cloudwatch_log_group\" \"app\" {\n  name              = \"/app/logs\"\n  retention_in_days = 90\n}\n\nresource \"aws_autoscaling_group\" \"app\" {\n  min_size         = 1\n  max_size         = 10\n  desired_capacity = 2\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-CWL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 82,
+      "resource": "aws_cloudwatch_log_group.no_retention",
+      "urgency": "LOW",
+      "title": "CloudWatch log group has no retention policy",
+      "section": "ops",
+      "recommendation": "Set an explicit retention period appropriate to your compliance requirements:\n\n    resource \"aws_cloudwatch_log_group\" \"app\" {\n      name              = \"/app/prod\"\n      retention_in_days = 90   # 30/60/90/120/150/180/365/400/545/731/1096/1827/2192/2557/2922/3288/3653\n    }\n\nCommon values: 30 days for transient app logs, 365 days for audit logs,\n2557 days (7 years) for financial compliance.\n",
+      "fix_hcl": "resource \"aws_cloudwatch_log_group\" \"example\" {\n  name              = \"example\"\n  retention_in_days = 90\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 62,
+      "resource": "aws_s3_bucket.unlogged",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 69,
+      "resource": "aws_eks_cluster.partial_logging",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 62,
+      "resource": "aws_s3_bucket.unlogged",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 62,
+      "resource": "aws_s3_bucket.unlogged",
+      "urgency": "LOW",
+      "title": "S3 bucket versioning disabled or suspended",
+      "section": "robustness",
+      "recommendation": "Set `versioning_configuration { status = \"Enabled\" }` on the\n`aws_s3_bucket_versioning` resource associated with every S3 bucket\nthat holds important data. Versioning protects against accidental\noverwrites and deletions by retaining prior object versions. Add a\nlifecycle rule expiring non-current versions after 90 days to control\nstorage costs:\n\n  noncurrent_version_expiration {\n    noncurrent_days = 90\n  }\n",
+      "fix_hcl": "resource \"aws_s3_bucket_versioning\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  versioning_configuration {\n    status = \"Enabled\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-APIGW-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 103,
+      "resource": "aws_api_gateway_stage.no_access_logs",
+      "urgency": "LOW",
+      "title": "API Gateway stage missing access log destination",
+      "section": "security",
+      "recommendation": "Add an `access_log_settings` block pointing to a CloudWatch log group:\n\n    resource \"aws_cloudwatch_log_group\" \"apigw\" {\n      name              = \"/aws/apigateway/${var.api_name}\"\n      retention_in_days = 90\n    }\n\n    resource \"aws_api_gateway_stage\" \"api\" {\n      stage_name    = \"prod\"\n      rest_api_id   = aws_api_gateway_rest_api.main.id\n      deployment_id = aws_api_gateway_deployment.main.id\n\n      access_log_settings {\n        destination_arn = aws_cloudwatch_log_group.apigw.arn\n      }\n\n      xray_tracing_enabled = true\n    }\n\nAlso set `method_settings { logging_level = \"INFO\" }` to capture\nexecution logs (request/response bodies at INFO level).\n",
+      "fix_hcl": "resource \"aws_api_gateway_stage\" \"example\" {\n  # ... other arguments ...\n  access_log_settings {\n    destination_arn = aws_cloudwatch_log_group.api_gw.arn\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1190"
+      ]
+    },
+    {
+      "id": "SEC-AWS-CLOUDTRAIL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 44,
+      "resource": "aws_cloudtrail.single_region",
+      "urgency": "HIGH",
+      "title": "CloudTrail not enabled for all regions",
+      "section": "security",
+      "recommendation": "Set `is_multi_region_trail = true` and `include_global_service_events = true`\non every `aws_cloudtrail`. Single-region trails miss API calls made in\nregions that are not currently in active use. Attackers deliberately use\nquiet or seldom-monitored regions to create IAM users, launch instances,\nor establish persistence. A multi-region trail ensures all management\nevents \u2014 including those for global services like IAM and STS \u2014 flow to\na single, monitored log destination (CIS AWS 2.1, 2.4).\n",
+      "fix_hcl": "resource \"aws_cloudtrail\" \"example\" {\n  # ... other arguments ...\n  is_multi_region_trail = true\n  include_global_service_events = true\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1562.008"
+      ],
+      "narrative": "A single-region CloudTrail on aws_cloudtrail.single_region creates detection blind spots in every other AWS region \u2014 an attacker deliberately operates in less-monitored regions to create IAM backdoors, launch instances, or establish data exfiltration pipelines. The 2020 SolarWinds-related AWS campaign specifically leveraged regions the victim had not enabled CloudTrail in, delaying detection by weeks. Enable is_multi_region_trail = true and include_global_service_events = true to capture all IAM and STS calls regardless of region."
+    },
+    {
+      "id": "SEC-AWS-CLOUDTRAIL-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 44,
+      "resource": "aws_cloudtrail.single_region",
+      "urgency": "MEDIUM",
+      "title": "CloudTrail log file integrity validation disabled",
+      "section": "security",
+      "recommendation": "Enable log file validation on every CloudTrail trail:\n\n    resource \"aws_cloudtrail\" \"org\" {\n      name                       = \"org-trail\"\n      s3_bucket_name             = aws_s3_bucket.trail.id\n      enable_log_file_validation = true\n      is_multi_region_trail      = true\n      kms_key_id                 = aws_kms_key.trail.arn\n    }\n\nValidation works by CloudTrail computing a SHA-256 digest file every\nhour and signing it with a private key. To verify integrity retroactively:\n`aws cloudtrail validate-logs --trail-arn <arn> --start-time <ISO8601>`.\n",
+      "fix_hcl": "resource \"aws_cloudtrail\" \"example\" {\n  # ... other arguments ...\n  enable_log_file_validation = true\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1562.008"
+      ]
+    },
+    {
+      "id": "SEC-AWS-CWL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 82,
+      "resource": "aws_cloudwatch_log_group.no_retention",
+      "urgency": "LOW",
+      "title": "CloudWatch log group not encrypted with KMS CMK",
+      "section": "security",
+      "recommendation": "Encrypt every log group with a CMK:\n\n    resource \"aws_cloudwatch_log_group\" \"app\" {\n      name              = \"/app/prod\"\n      retention_in_days = 90\n      kms_key_id        = aws_kms_key.logs.arn\n    }\n\nThe KMS key policy must grant `logs.<region>.amazonaws.com` permission to\ncall `kms:Encrypt`, `kms:Decrypt`, and `kms:GenerateDataKey`.\n",
+      "fix_hcl": "resource \"aws_cloudwatch_log_group\" \"example\" {\n  name              = \"example\"\n  retention_in_days = 90\n  kms_key_id        = aws_kms_key.logs.arn\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.008"
+      ]
+    },
+    {
+      "id": "SEC-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 62,
+      "resource": "aws_s3_bucket.unlogged",
+      "urgency": "MEDIUM",
+      "title": "S3 bucket missing server-side encryption configuration",
+      "section": "security",
+      "recommendation": "Create an `aws_s3_bucket_server_side_encryption_configuration` resource\nfor every S3 bucket, or use the legacy inline block for provider < 4.0.\nAt minimum, use `AES256` (SSE-S3). For sensitive data, use `aws:kms`\nwith a customer-managed KMS key.\n",
+      "fix_hcl": "resource \"aws_s3_bucket_server_side_encryption_configuration\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = \"aws:kms\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530"
+      ],
+      "narrative": "Unencrypted data in aws_s3_bucket.unlogged is readable in plaintext by any AWS principal with s3:GetObject, including anyone who obtains temporary credentials via SSRF, stolen access keys, or a confused-deputy attack on an over-permissioned role. The 2017 Verizon and 2017 Accenture incidents both involved S3 buckets with sensitive data exposed without encryption, compounding the impact of misconfigured access controls. Apply SSE-KMS with a customer-managed key so data at rest requires key access in addition to bucket permissions."
+    },
+    {
+      "id": "STK-AWS-ECS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 112,
+      "resource": "aws_ecs_cluster.no_insights",
+      "urgency": "LOW",
+      "title": "ECS cluster Container Insights not configured",
+      "section": "stack",
+      "recommendation": "Add a `setting` block enabling Container Insights:\n\n    resource \"aws_ecs_cluster\" \"app\" {\n      name = \"app\"\n\n      setting {\n        name  = \"containerInsights\"\n        value = \"enabled\"\n      }\n    }\n\nContainer Insights is billed per metric per task, per month.\nAt low task counts the cost is negligible; evaluate for large\nclusters before enabling in cost-sensitive environments.\n",
+      "fix_hcl": "resource \"aws_ecs_cluster\" \"example\" {\n  name = \"example\"\n  setting {\n    name  = \"containerInsights\"\n    value = \"enabled\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AWS-EKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 69,
+      "resource": "aws_eks_cluster.partial_logging",
+      "urgency": "MEDIUM",
+      "title": "EKS cluster API endpoint private access not enabled",
+      "section": "stack",
+      "recommendation": "Enable private endpoint access and restrict (or disable) public access:\n\n    resource \"aws_eks_cluster\" \"app\" {\n      vpc_config {\n        endpoint_private_access = true\n        endpoint_public_access  = false  # disable public entirely, or...\n        # endpoint_public_access  = true  # ...keep public but restrict CIDRs:\n        # public_access_cidrs     = [\"203.0.113.0/24\"]\n      }\n    }\n\nWith both access types enabled, use `public_access_cidrs` to limit which\nCIDRs can reach the public endpoint (e.g., your CI runner egress IPs only).\nEquivalent to GKE `private_cluster_config.enable_private_endpoint`.\n",
+      "fix_hcl": "resource \"aws_eks_cluster\" \"example\" {\n  name     = \"example\"\n  role_arn = aws_iam_role.eks.arn\n  vpc_config {\n    subnet_ids              = var.subnet_ids\n    endpoint_private_access = true\n    endpoint_public_access  = false\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AWS-EKS-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 69,
+      "resource": "aws_eks_cluster.partial_logging",
+      "urgency": "MEDIUM",
+      "title": "EKS cluster Kubernetes Secrets not encrypted with KMS",
+      "section": "stack",
+      "recommendation": "Add an `encryption_config` block pointing to a customer-managed KMS key:\n\n    resource \"aws_eks_cluster\" \"app\" {\n      encryption_config {\n        resources = [\"secrets\"]\n        provider {\n          key_arn = aws_kms_key.eks.arn\n        }\n      }\n    }\n\n    resource \"aws_kms_key\" \"eks\" {\n      description             = \"EKS secrets encryption\"\n      enable_key_rotation     = true\n      deletion_window_in_days = 30\n    }\n\nEquivalent to GKE `database_encryption { state = \"ENCRYPTED\" }`.\n",
+      "fix_hcl": "resource \"aws_eks_cluster\" \"example\" {\n  name     = \"example\"\n  role_arn = aws_iam_role.eks.arn\n  encryption_config {\n    provider { key_arn = aws_kms_key.eks.arn }\n    resources = [\"secrets\"]\n  }\n  vpc_config { subnet_ids = var.subnet_ids }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AWS-EKS-005",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 69,
+      "resource": "aws_eks_cluster.partial_logging",
+      "urgency": "MEDIUM",
+      "title": "EKS cluster missing audit log type in enabled_cluster_log_types",
+      "section": "stack",
+      "recommendation": "Enable all five control-plane log types. The `audit` and `authenticator`\ntypes are the most security-critical:\n\n```hcl\nresource \"aws_eks_cluster\" \"app\" {\n  enabled_cluster_log_types = [\n    \"api\",\n    \"audit\",\n    \"authenticator\",\n    \"controllerManager\",\n    \"scheduler\",\n  ]\n}\n```\n\nNote: STK-AWS-EKS-002 fires when `enabled_cluster_log_types` is absent\nentirely. This rule (STK-AWS-EKS-005) fires when the attribute exists but\ncritical types are missing \u2014 both rules must pass.\n",
+      "fix_hcl": "resource \"aws_eks_cluster\" \"example\" {\n  name     = \"example\"\n  role_arn = aws_iam_role.eks.arn\n  enabled_cluster_log_types = [\n    \"api\", \"audit\", \"authenticator\", \"controllerManager\", \"scheduler\"\n  ]\n  vpc_config { subnet_ids = var.subnet_ids }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AWS-EKS-005",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+      "line": 69,
+      "resource": "aws_eks_cluster.partial_logging",
+      "urgency": "MEDIUM",
+      "title": "EKS cluster missing audit log type in enabled_cluster_log_types",
+      "section": "stack",
+      "recommendation": "Enable all five control-plane log types. The `audit` and `authenticator`\ntypes are the most security-critical:\n\n```hcl\nresource \"aws_eks_cluster\" \"app\" {\n  enabled_cluster_log_types = [\n    \"api\",\n    \"audit\",\n    \"authenticator\",\n    \"controllerManager\",\n    \"scheduler\",\n  ]\n}\n```\n\nNote: STK-AWS-EKS-002 fires when `enabled_cluster_log_types` is absent\nentirely. This rule (STK-AWS-EKS-005) fires when the attribute exists but\ncritical types are missing \u2014 both rules must pass.\n",
+      "fix_hcl": "resource \"aws_eks_cluster\" \"example\" {\n  name     = \"example\"\n  role_arn = aws_iam_role.eks.arn\n  enabled_cluster_log_types = [\n    \"api\", \"audit\", \"authenticator\", \"controllerManager\", \"scheduler\"\n  ]\n  vpc_config { subnet_ids = var.subnet_ids }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 38,
+      "resource": "aws_s3_bucket.no_sse",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 43,
+      "resource": "aws_db_instance.unencrypted",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 71,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 43,
+      "resource": "aws_db_instance.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 71,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 38,
+      "resource": "aws_s3_bucket.no_sse",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-RDS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 43,
+      "resource": "aws_db_instance.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster backup retention disabled",
+      "section": "robustness",
+      "recommendation": "Set `backup_retention_period` to at least `7` (days) on every\n`aws_db_instance`. For production databases, use `30` or more and also\nset `delete_automated_backups = false` so that automated backups survive\nan accidental instance deletion. Without backups, a corrupted or deleted\ndatabase cannot be recovered to a point-in-time prior to the incident.\nAlso consider enabling `copy_tags_to_snapshot = true` for cost allocation.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  backup_retention_period = 7\n  backup_window           = \"03:00-04:00\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-RDS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 71,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster backup retention disabled",
+      "section": "robustness",
+      "recommendation": "Set `backup_retention_period` to at least `7` (days) on every\n`aws_db_instance`. For production databases, use `30` or more and also\nset `delete_automated_backups = false` so that automated backups survive\nan accidental instance deletion. Without backups, a corrupted or deleted\ndatabase cannot be recovered to a point-in-time prior to the incident.\nAlso consider enabling `copy_tags_to_snapshot = true` for cost allocation.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  backup_retention_period = 7\n  backup_window           = \"03:00-04:00\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-RDS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 43,
+      "resource": "aws_db_instance.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster skips final snapshot on deletion",
+      "section": "robustness",
+      "recommendation": "Set `skip_final_snapshot = false` and provide a `final_snapshot_identifier`\non every production `aws_db_instance`. Without this, running\n`terraform destroy` (or any operation that removes the resource from\nstate) permanently destroys all data in the database with no recovery\npath. The final snapshot costs a small amount of S3 storage and is a\nlast-resort safety net against accidental deletion.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  skip_final_snapshot       = false\n  final_snapshot_identifier = \"final-snapshot-${replace(timestamp(), \":\", \"-\")}\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-RDS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 71,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster skips final snapshot on deletion",
+      "section": "robustness",
+      "recommendation": "Set `skip_final_snapshot = false` and provide a `final_snapshot_identifier`\non every production `aws_db_instance`. Without this, running\n`terraform destroy` (or any operation that removes the resource from\nstate) permanently destroys all data in the database with no recovery\npath. The final snapshot costs a small amount of S3 storage and is a\nlast-resort safety net against accidental deletion.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  skip_final_snapshot       = false\n  final_snapshot_identifier = \"final-snapshot-${replace(timestamp(), \":\", \"-\")}\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-RDS-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 71,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster missing deletion protection",
+      "section": "robustness",
+      "recommendation": "Set `deletion_protection = true` on every production RDS instance:\n\n    resource \"aws_db_instance\" \"app\" {\n      deletion_protection = true\n      # ...\n    }\n\nPair with `lifecycle { prevent_destroy = true }` in Terraform for a\ntwo-layer guard: AWS-level deletion protection requires a manual disable\nstep before destruction, while the lifecycle hook prevents `terraform\ndestroy` from even attempting it.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  deletion_protection = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-RDS-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 43,
+      "resource": "aws_db_instance.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster missing deletion protection",
+      "section": "robustness",
+      "recommendation": "Set `deletion_protection = true` on every production RDS instance:\n\n    resource \"aws_db_instance\" \"app\" {\n      deletion_protection = true\n      # ...\n    }\n\nPair with `lifecycle { prevent_destroy = true }` in Terraform for a\ntwo-layer guard: AWS-level deletion protection requires a manual disable\nstep before destruction, while the lifecycle hook prevents `terraform\ndestroy` from even attempting it.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  deletion_protection = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 38,
+      "resource": "aws_s3_bucket.no_sse",
+      "urgency": "LOW",
+      "title": "S3 bucket versioning disabled or suspended",
+      "section": "robustness",
+      "recommendation": "Set `versioning_configuration { status = \"Enabled\" }` on the\n`aws_s3_bucket_versioning` resource associated with every S3 bucket\nthat holds important data. Versioning protects against accidental\noverwrites and deletions by retaining prior object versions. Add a\nlifecycle rule expiring non-current versions after 90 days to control\nstorage costs:\n\n  noncurrent_version_expiration {\n    noncurrent_days = 90\n  }\n",
+      "fix_hcl": "resource \"aws_s3_bucket_versioning\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  versioning_configuration {\n    status = \"Enabled\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-EBS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 57,
+      "resource": "aws_ebs_volume.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "EBS volume not encrypted",
+      "section": "security",
+      "recommendation": "Set `encrypted = true` and supply a `kms_key_id` for every `aws_ebs_volume`.\nUnencrypted EBS volumes expose data if a snapshot is accidentally shared\nor if physical media is decommissioned. Enable the account-level default\nencryption via `aws_ebs_encryption_by_default` as a safety net, but also\nset `encrypted = true` explicitly in Terraform so the intent is auditable\nin code.\n",
+      "fix_hcl": "resource \"aws_ebs_volume\" \"example\" {\n  availability_zone = \"us-east-1a\"\n  size              = 20\n  encrypted         = true\n  kms_key_id        = aws_kms_key.ebs.arn\n}\n",
+      "fix_disruption": "forces_replacement",
+      "mitre": [
+        "T1530"
+      ]
+    },
+    {
+      "id": "SEC-AWS-KMS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 64,
+      "resource": "aws_kms_key.no_rotation",
+      "urgency": "MEDIUM",
+      "title": "KMS key rotation disabled",
+      "section": "security",
+      "recommendation": "Add `enable_key_rotation = true` to every `aws_kms_key`. AWS automatically\nrotates the key material once a year when rotation is enabled; the old\nbacking key material is retained to decrypt data encrypted before the\nrotation. Disabling rotation means that a compromised key remains in use\nindefinitely, violating least-privilege and common compliance controls\n(CIS AWS 2.8, PCI-DSS Requirement 3.6.4).\n",
+      "fix_hcl": "resource \"aws_kms_key\" \"example\" {\n  description         = \"...\"\n  enable_key_rotation = true\n}\n",
+      "fix_disruption": "plan_required",
+      "narrative": "KMS key rotation is disabled on aws_kms_key.no_rotation, meaning that if the key material is ever compromised \u2014 via AWS account takeover, insider threat, or KMS API misuse \u2014 the compromise is permanent with no rotation event to remediate it. CIS AWS 2.8 requires annual key rotation as a compensating control for key exposure; disabling rotation violates PCI-DSS 3.6.4 for cryptographic keys protecting cardholder data. Enable enable_key_rotation = true; AWS rotates automatically and retains old material for decryption of previously encrypted data."
+    },
+    {
+      "id": "SEC-AWS-RDS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 71,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster storage not encrypted",
+      "section": "security",
+      "recommendation": "Set `storage_encrypted = true` and provide a `kms_key_id` pointing to a\ncustomer-managed KMS key on every `aws_db_instance`. Encrypting storage\nat rest protects data from physical media theft and satisfies PCI-DSS,\nHIPAA, and SOC 2 controls. Note: encryption cannot be enabled on an\nexisting unencrypted instance \u2014 you must snapshot, restore to a new\nencrypted instance, and redirect traffic.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  storage_encrypted = true\n  kms_key_id        = aws_kms_key.rds.arn\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "SEC-AWS-RDS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 43,
+      "resource": "aws_db_instance.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster storage not encrypted",
+      "section": "security",
+      "recommendation": "Set `storage_encrypted = true` and provide a `kms_key_id` pointing to a\ncustomer-managed KMS key on every `aws_db_instance`. Encrypting storage\nat rest protects data from physical media theft and satisfies PCI-DSS,\nHIPAA, and SOC 2 controls. Note: encryption cannot be enabled on an\nexisting unencrypted instance \u2014 you must snapshot, restore to a new\nencrypted instance, and redirect traffic.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  storage_encrypted = true\n  kms_key_id        = aws_kms_key.rds.arn\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "SEC-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 38,
+      "resource": "aws_s3_bucket.no_sse",
+      "urgency": "MEDIUM",
+      "title": "S3 bucket missing server-side encryption configuration",
+      "section": "security",
+      "recommendation": "Create an `aws_s3_bucket_server_side_encryption_configuration` resource\nfor every S3 bucket, or use the legacy inline block for provider < 4.0.\nAt minimum, use `AES256` (SSE-S3). For sensitive data, use `aws:kms`\nwith a customer-managed KMS key.\n",
+      "fix_hcl": "resource \"aws_s3_bucket_server_side_encryption_configuration\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = \"aws:kms\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530"
+      ],
+      "narrative": "Unencrypted data in aws_s3_bucket.no_sse is readable in plaintext by any AWS principal with s3:GetObject, including anyone who obtains temporary credentials via SSRF, stolen access keys, or a confused-deputy attack on an over-permissioned role. The 2017 Verizon and 2017 Accenture incidents both involved S3 buckets with sensitive data exposed without encryption, compounding the impact of misconfigured access controls. Apply SSE-KMS with a customer-managed key so data at rest requires key access in addition to bucket permissions."
+    },
+    {
+      "id": "SEC-AWS-SECRETSMANAGER-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 85,
+      "resource": "aws_secretsmanager_secret.app_creds",
+      "urgency": "LOW",
+      "title": "Secrets Manager secret uses AWS-managed key (no CMK)",
+      "section": "security",
+      "recommendation": "Specify a customer-managed KMS key:\n\n    resource \"aws_secretsmanager_secret\" \"app_db\" {\n      name       = \"app/db/password\"\n      kms_key_id = aws_kms_key.secrets.arn\n    }\n",
+      "fix_hcl": "resource \"aws_secretsmanager_secret\" \"example\" {\n  name       = \"example\"\n  kms_key_id = aws_kms_key.secrets.arn\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 50,
+      "resource": "aws_db_instance.unencrypted",
+      "urgency": "HIGH",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 78,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "HIGH",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AWS-RDS-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+      "line": 71,
+      "resource": "aws_db_instance.eol_engine",
+      "urgency": "MEDIUM",
+      "title": "RDS instance uses end-of-life database engine version",
+      "section": "stack",
+      "recommendation": "Upgrade to a supported engine version. AWS maintains a support calendar\nat https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/MySQL.Concepts.VersionMgmt.html\n\nCommon upgrades:\n- MySQL 5.6 \u2192 MySQL 8.0 (major version upgrade, test thoroughly)\n- PostgreSQL 9.6 \u2192 PostgreSQL 16 (multiple hops: 9.6\u219211\u219214\u219216)\n- PostgreSQL 10/11/12 \u2192 PostgreSQL 16\n\nUse `aws rds describe-db-engine-versions` to enumerate supported\nversions for your region and instance class.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  engine         = \"postgres\"\n  engine_version = \"16.2\"\n  instance_class = \"db.t3.medium\"\n  username       = \"admin\"\n  password       = var.db_password\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 36,
+      "resource": "aws_s3_bucket.no_versioning",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 44,
+      "resource": "aws_db_instance.no_backups",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 44,
+      "resource": "aws_db_instance.no_backups",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 36,
+      "resource": "aws_s3_bucket.no_versioning",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-RDS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 44,
+      "resource": "aws_db_instance.no_backups",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster backup retention disabled",
+      "section": "robustness",
+      "recommendation": "Set `backup_retention_period` to at least `7` (days) on every\n`aws_db_instance`. For production databases, use `30` or more and also\nset `delete_automated_backups = false` so that automated backups survive\nan accidental instance deletion. Without backups, a corrupted or deleted\ndatabase cannot be recovered to a point-in-time prior to the incident.\nAlso consider enabling `copy_tags_to_snapshot = true` for cost allocation.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  backup_retention_period = 7\n  backup_window           = \"03:00-04:00\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-RDS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 44,
+      "resource": "aws_db_instance.no_backups",
+      "urgency": "MEDIUM",
+      "title": "RDS instance or Aurora cluster skips final snapshot on deletion",
+      "section": "robustness",
+      "recommendation": "Set `skip_final_snapshot = false` and provide a `final_snapshot_identifier`\non every production `aws_db_instance`. Without this, running\n`terraform destroy` (or any operation that removes the resource from\nstate) permanently destroys all data in the database with no recovery\npath. The final snapshot costs a small amount of S3 storage and is a\nlast-resort safety net against accidental deletion.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  # ... other arguments ...\n  skip_final_snapshot       = false\n  final_snapshot_identifier = \"final-snapshot-${replace(timestamp(), \":\", \"-\")}\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 36,
+      "resource": "aws_s3_bucket.no_versioning",
+      "urgency": "LOW",
+      "title": "S3 bucket versioning disabled or suspended",
+      "section": "robustness",
+      "recommendation": "Set `versioning_configuration { status = \"Enabled\" }` on the\n`aws_s3_bucket_versioning` resource associated with every S3 bucket\nthat holds important data. Versioning protects against accidental\noverwrites and deletions by retaining prior object versions. Add a\nlifecycle rule expiring non-current versions after 90 days to control\nstorage costs:\n\n  noncurrent_version_expiration {\n    noncurrent_days = 90\n  }\n",
+      "fix_hcl": "resource \"aws_s3_bucket_versioning\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  versioning_configuration {\n    status = \"Enabled\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-ECR-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 59,
+      "resource": "aws_ecr_repository.unscanned",
+      "urgency": "MEDIUM",
+      "title": "ECR repository missing scan-on-push",
+      "section": "security",
+      "recommendation": "Enable scan-on-push to catch known CVEs in base images at push time:\n\n    resource \"aws_ecr_repository\" \"app\" {\n      name = \"app\"\n\n      image_scanning_configuration {\n        scan_on_push = true\n      }\n    }\n\nWithout scanning, supply-chain CVEs in base images are not surfaced\nuntil a separate scanner runs (if one is configured at all). Scan-on-push\nis free and adds no latency to pull operations.\n",
+      "fix_hcl": "resource \"aws_ecr_repository\" \"example\" {\n  name = \"example\"\n  image_scanning_configuration {\n    scan_on_push = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-S3-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 36,
+      "resource": "aws_s3_bucket.no_versioning",
+      "urgency": "MEDIUM",
+      "title": "S3 bucket missing server-side encryption configuration",
+      "section": "security",
+      "recommendation": "Create an `aws_s3_bucket_server_side_encryption_configuration` resource\nfor every S3 bucket, or use the legacy inline block for provider < 4.0.\nAt minimum, use `AES256` (SSE-S3). For sensitive data, use `aws:kms`\nwith a customer-managed KMS key.\n",
+      "fix_hcl": "resource \"aws_s3_bucket_server_side_encryption_configuration\" \"example\" {\n  bucket = aws_s3_bucket.example.id\n  rule {\n    apply_server_side_encryption_by_default {\n      sse_algorithm = \"aws:kms\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530"
+      ],
+      "narrative": "Unencrypted data in aws_s3_bucket.no_versioning is readable in plaintext by any AWS principal with s3:GetObject, including anyone who obtains temporary credentials via SSRF, stolen access keys, or a confused-deputy attack on an over-permissioned role. The 2017 Verizon and 2017 Accenture incidents both involved S3 buckets with sensitive data exposed without encryption, compounding the impact of misconfigured access controls. Apply SSE-KMS with a customer-managed key so data at rest requires key access in addition to bucket permissions."
+    },
+    {
+      "id": "SEC-AWS-SNS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 72,
+      "resource": "aws_sns_topic.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "SNS topic missing KMS encryption",
+      "section": "security",
+      "recommendation": "Add a `kms_master_key_id` to encrypt messages at rest:\n\n    resource \"aws_sns_topic\" \"alerts\" {\n      name              = \"alerts\"\n      kms_master_key_id = aws_kms_key.sns.arn\n    }\n\nWithout encryption, messages stored in the topic buffer \u2014 including\npayloads with PII, credentials, or other sensitive data \u2014 are stored\nin plaintext. Use the AWS-managed key `alias/aws/sns` as a minimum if\na customer-managed key is not yet in place.\n",
+      "fix_hcl": "resource \"aws_sns_topic\" \"example\" {\n  name              = \"example\"\n  kms_master_key_id = aws_kms_key.sns.arn\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-AWS-SQS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 66,
+      "resource": "aws_sqs_queue.unencrypted",
+      "urgency": "MEDIUM",
+      "title": "SQS queue missing server-side encryption",
+      "section": "security",
+      "recommendation": "Enable encryption using either a customer-managed KMS key or SQS-managed SSE:\n\n    # Option A \u2014 customer-managed KMS (preferred for compliance)\n    resource \"aws_sqs_queue\" \"app\" {\n      name              = \"app\"\n      kms_master_key_id = aws_kms_key.sqs.arn\n    }\n\n    # Option B \u2014 SQS-managed SSE (simpler, still encrypts at rest)\n    resource \"aws_sqs_queue\" \"app\" {\n      name                    = \"app\"\n      sqs_managed_sse_enabled = true\n    }\n",
+      "fix_hcl": "resource \"aws_sqs_queue\" \"example\" {\n  name              = \"example\"\n  kms_master_key_id = aws_kms_key.sqs.arn\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+      "line": 51,
+      "resource": "aws_db_instance.no_backups",
+      "urgency": "HIGH",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+      "line": 62,
+      "resource": "aws_dynamodb_table.stateful",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-DDB-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+      "line": 62,
+      "resource": "aws_dynamodb_table.stateful",
+      "urgency": "MEDIUM",
+      "title": "DynamoDB table missing deletion protection",
+      "section": "robustness",
+      "recommendation": "Set `deletion_protection_enabled = true` on every production table:\n\n    resource \"aws_dynamodb_table\" \"app\" {\n      name                        = \"app\"\n      billing_mode                = \"PAY_PER_REQUEST\"\n      hash_key                    = \"id\"\n      deletion_protection_enabled = true\n\n      attribute {\n        name = \"id\"\n        type = \"S\"\n      }\n    }\n\nPair with `lifecycle { prevent_destroy = true }` for a two-layer guard.\n",
+      "fix_hcl": "resource \"aws_dynamodb_table\" \"example\" {\n  name                        = \"example\"\n  billing_mode                = \"PAY_PER_REQUEST\"\n  hash_key                    = \"id\"\n  deletion_protection_enabled = true\n\n  attribute {\n    name = \"id\"\n    type = \"S\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+      "line": 62,
+      "resource": "aws_dynamodb_table.stateful",
+      "urgency": "MEDIUM",
+      "title": "Stateful AWS resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"aws_dynamodb_table\" \"orders\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nThe block forces operators to remove the line intentionally before a\ndestroy plan can succeed \u2014 a deliberate friction that prevents\naccidental data loss on `terraform destroy` or workspace deletion.\n",
+      "fix_hcl": "lifecycle {\n  prevent_destroy = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+      "line": 37,
+      "resource": "",
+      "urgency": "CRITICAL",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+      "line": 37,
+      "resource": "",
+      "urgency": "CRITICAL",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AWS-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/03_injection.tf",
+      "line": 37,
+      "resource": "aws_instance.ec2_user_data_injection",
+      "urgency": "LOW",
+      "title": "AWS resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `Environment`, `ManagedBy = \"terraform\"`,\nand `Project`. Use a `locals` block for shared tags:\n\n    locals {\n      common_tags = {\n        Environment = var.environment\n        ManagedBy   = \"terraform\"\n        Project     = var.project_name\n      }\n    }\n\n    resource \"aws_instance\" \"app\" {\n      # ...\n      tags = merge(local.common_tags, { Name = \"app\" })\n    }\n\nTags are required for cost allocation, compliance reporting, and\nautomated cleanup. AWS Cost Explorer cannot break down spend by\nworkload without consistent tags.\n",
+      "fix_hcl": "resource \"aws_instance\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-SSRF-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/03_injection.tf",
+      "line": 37,
+      "resource": "aws_instance.ec2_user_data_injection",
+      "urgency": "MEDIUM",
+      "title": "EC2 instance metadata service v1 enabled (IMDSv2 not enforced)",
+      "section": "security",
+      "recommendation": "Add a `metadata_options` block to every `aws_instance` that enforces\nIMDSv2:\n\n  metadata_options {\n    http_tokens   = \"required\"\n    http_endpoint = \"enabled\"\n  }\n\nIMDSv1 is a pre-authenticated HTTP endpoint accessible from within the\ninstance. An SSRF vulnerability in any application on the instance can\nretrieve the instance's IAM credentials from `http://169.254.169.254/`.\nThis was the root cause of the Capital One breach in 2019. IMDSv2\nrequires a session-oriented PUT request before any GET, which is\nincompatible with simple SSRF payloads.\n",
+      "fix_hcl": "metadata_options {\n  http_endpoint               = \"enabled\"\n  http_tokens                 = \"required\"\n  http_put_response_hop_limit = 1\n}\n",
+      "fix_disruption": "forces_replacement",
+      "narrative": "An attacker exploiting a Server-Side Request Forgery (SSRF) vulnerability in any application running on aws_instance.ec2_user_data_injection can query the EC2 metadata endpoint (http://169.254.169.254/) and retrieve temporary IAM credentials without authentication \u2014 IMDSv1 requires no session token. This was the exact attack vector in the 2019 Capital One breach, where a WAF misconfiguration allowed an SSRF that exfiltrated 100M customer records via the instance's over-privileged role. Enforcing IMDSv2 (http_tokens = \"required\") breaks the chain because the attacker's request must first complete a PUT handshake that a server-side forged request cannot perform."
+    },
+    {
+      "id": "SEC-PROVISIONER-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/03_injection.tf",
+      "line": 51,
+      "resource": "null_resource.shell_inject",
+      "urgency": "MEDIUM",
+      "title": "Provisioner block used for shell execution",
+      "section": "security",
+      "recommendation": "Provisioners are a last resort. Replace with provider-native resources\nwhere possible:\n- `local-exec` for scripts \u2192 `terraform_data` with `provisioner` only\n  when no provider resource exists, or use `null_resource` with explicit\n  `triggers` to control re-execution.\n- `remote-exec` \u2192 cloud-init (`user_data`), Packer images, or\n  configuration management (Ansible, Chef, Puppet).\nIf a provisioner is genuinely needed, document the justification with\nan inline `# tf-analyze:ignore SEC-PROVISIONER-001` comment.\n",
+      "fix_hcl": "# Replace remote-exec with user_data / cloud-init\nresource \"aws_instance\" \"app\" {\n  ami           = data.aws_ami.ubuntu.id\n  instance_type = \"t3.micro\"\n\n  user_data = templatefile(\"${path.module}/cloud-init.sh.tpl\", {\n    environment = var.environment\n  })\n}\n\n# Replace local-exec trigger with terraform_data\nresource \"terraform_data\" \"init\" {\n  triggers_replace = [aws_instance.app.id]\n  provisioner \"local-exec\" {\n    command = \"echo 'only use as last resort \u2014 document why'\"\n  }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1059"
+      ]
+    },
+    {
+      "id": "CI-TEST-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+      "line": 1,
+      "resource": "<module:aws>",
+      "urgency": "LOW",
+      "title": "Module has no Terraform test files",
+      "section": "cicd",
+      "recommendation": "Add at least one `.tftest.hcl` file covering the module's primary\nresource creation path. Terraform native tests (1.6+) validate both\nplan and apply without external tooling.\n\nExample:\n```hcl\nrun \"creates_bucket\" {\n  command = plan\n  assert {\n    condition     = google_storage_bucket.main.location == \"US\"\n    error_message = \"bucket location must be US\"\n  }\n}\n```\n",
+      "fix_hcl": "# Create a <module>.tftest.hcl file in the module directory\nrun \"creates_resource\" {\n  command = plan\n\n  assert {\n    condition     = aws_s3_bucket.main.bucket != \"\"\n    error_message = \"bucket must be created with a non-empty name\"\n  }\n}\n\nrun \"apply_and_verify\" {\n  command = apply\n\n  assert {\n    condition     = aws_s3_bucket.main.region == \"us-east-1\"\n    error_message = \"bucket must be in us-east-1\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-BACKEND-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/versions.tf",
+      "line": 12,
+      "resource": "backend.s3",
+      "urgency": "MEDIUM",
+      "title": "Terraform S3 backend missing DynamoDB state locking",
+      "section": "robustness",
+      "recommendation": "Add `dynamodb_table` to the S3 backend configuration:\n\n    terraform {\n      backend \"s3\" {\n        bucket         = \"my-terraform-state\"\n        key            = \"terraform.tfstate\"\n        region         = \"us-east-1\"\n        dynamodb_table = \"terraform-state-lock\"\n        encrypt        = true\n      }\n    }\n\nWithout state locking, concurrent `terraform apply` runs on the same\nworkspace will race and can corrupt the state file. The DynamoDB table\nneeds a `LockID` string hash key; `terraform init` does not create it\nautomatically.\n",
+      "fix_hcl": "terraform {\n  backend \"s3\" {\n    bucket         = \"my-tf-state\"\n    key            = \"env/prod/terraform.tfstate\"\n    region         = \"us-east-1\"\n    encrypt        = true\n    dynamodb_table = \"terraform-state-lock\"\n    kms_key_id     = \"alias/terraform-state\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-BACKUP-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_backup_plan>",
+      "urgency": "LOW",
+      "title": "No AWS Backup plan defined",
+      "section": "robustness",
+      "recommendation": "Define a backup plan with appropriate retention:\n\n    resource \"aws_backup_plan\" \"main\" {\n      name = \"main\"\n\n      rule {\n        rule_name         = \"daily_30d\"\n        target_vault_name = aws_backup_vault.main.name\n        schedule          = \"cron(0 5 ? * * *)\"\n\n        lifecycle {\n          delete_after = 30\n        }\n\n        copy_action {\n          destination_vault_arn = aws_backup_vault.dr_region.arn\n          lifecycle { delete_after = 90 }\n        }\n      }\n    }\n\n    resource \"aws_backup_selection\" \"all_tagged\" {\n      plan_id      = aws_backup_plan.main.id\n      name         = \"all_tagged_resources\"\n      iam_role_arn = aws_iam_role.backup.arn\n\n      selection_tag {\n        type  = \"STRINGEQUALS\"\n        key   = \"backup\"\n        value = \"true\"\n      }\n    }\n",
+      "fix_hcl": "resource \"aws_backup_plan\" \"example\" {\n  name = \"example\"\n  rule {\n    rule_name         = \"daily\"\n    target_vault_name = aws_backup_vault.example.name\n    schedule          = \"cron(0 5 ? * * *)\"\n    lifecycle { delete_after = 30 }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+      "line": 62,
+      "resource": "aws_dynamodb_table.stateful",
+      "id": "ROB-AWS-DDB-002",
+      "urgency": "LOW",
+      "title": "DynamoDB table missing point-in-time recovery",
+      "section": "robustness",
+      "recommendation": "Enable PITR on all production tables:\n\n    resource \"aws_dynamodb_table\" \"app\" {\n      name = \"app\"\n\n      point_in_time_recovery {\n        enabled = true\n      }\n    }\n\nPITR restores are performed using `RestoreTableToPointInTime` and create\na new table \u2014 they do not overwrite the original.\n",
+      "fix_hcl": "resource \"aws_dynamodb_table\" \"example\" {\n  name = \"example\"\n\n  point_in_time_recovery {\n    enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AWS-SECRETSMANAGER-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_secretsmanager_secret_rotation>",
+      "urgency": "LOW",
+      "title": "Secrets Manager secret has no automatic rotation configured",
+      "section": "robustness",
+      "recommendation": "Define a rotation configuration for every secret that supports it:\n\n    resource \"aws_secretsmanager_secret_rotation\" \"db\" {\n      secret_id           = aws_secretsmanager_secret.db.id\n      rotation_lambda_arn = aws_lambda_function.rotate_secret.arn\n\n      rotation_rules {\n        automatically_after_days = 30\n      }\n    }\n\nUse AWS-provided rotation Lambdas for RDS, Redshift, and DocumentDB secrets.\nFor custom secrets, implement the standard rotation Lambda contract.\n",
+      "fix_hcl": "resource \"aws_secretsmanager_secret_rotation\" \"example\" {\n  secret_id           = aws_secretsmanager_secret.example.id\n  rotation_lambda_arn = aws_lambda_function.rotate_secret.arn\n  rotation_rules {\n    automatically_after_days = 30\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-VERSION-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/versions.tf",
+      "line": 29,
+      "resource": "<provider:random>",
+      "urgency": "MEDIUM",
+      "title": "required_providers entry missing version constraint",
+      "section": "robustness",
+      "recommendation": "Add a `version` constraint to every provider entry in `required_providers`:\n\n    terraform {\n      required_providers {\n        google = {\n          source  = \"hashicorp/google\"\n          version = \"~> 5.0\"\n        }\n        aws = {\n          source  = \"hashicorp/aws\"\n          version = \"~> 5.0\"\n        }\n      }\n    }\n\nThe `~> X.Y` pessimistic-constraint operator pins the major version while\nallowing minor/patch updates. For production environments, consider exact\npinning (`= X.Y.Z`) and committing `.terraform.lock.hcl`.\n",
+      "fix_hcl": "terraform {\n  required_version = \">= 1.5.0, < 2.0\"\n  required_providers {\n    aws = {\n      source  = \"hashicorp/aws\"\n      version = \"~> 5.0\"\n    }\n    azurerm = {\n      source  = \"hashicorp/azurerm\"\n      version = \"~> 3.0\"\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+      "line": 62,
+      "resource": "aws_dynamodb_table.stateful",
+      "id": "SEC-AWS-DDB-001",
+      "urgency": "LOW",
+      "title": "DynamoDB table not using customer-managed KMS key for encryption",
+      "section": "security",
+      "recommendation": "Add a `server_side_encryption` block with a customer-managed KMS key:\n\n    resource \"aws_kms_key\" \"ddb\" {\n      description             = \"DynamoDB table CMK\"\n      deletion_window_in_days = 30\n      enable_key_rotation     = true\n    }\n\n    resource \"aws_dynamodb_table\" \"app\" {\n      name = \"app\"\n\n      server_side_encryption {\n        enabled     = true\n        kms_key_arn = aws_kms_key.ddb.arn\n      }\n    }\n\nIf a CMK is not yet available, the minimum acceptable baseline is\n`server_side_encryption { enabled = true }` (AWS-managed key), which\nat least makes the encryption choice explicit rather than implicit.\n",
+      "fix_hcl": "resource \"aws_dynamodb_table\" \"example\" {\n  name = \"example\"\n\n  server_side_encryption {\n    enabled     = true\n    kms_key_arn = aws_kms_key.ddb.arn\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530"
+      ]
+    },
+    {
+      "id": "SEC-AWS-ECR-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_ecr_lifecycle_policy>",
+      "urgency": "LOW",
+      "title": "ECR repository missing image lifecycle policy",
+      "section": "security",
+      "recommendation": "Add an `aws_ecr_lifecycle_policy` resource to expire old images:\n\n    resource \"aws_ecr_lifecycle_policy\" \"main\" {\n      repository = aws_ecr_repository.main.name\n\n      policy = jsonencode({\n        rules = [{\n          rulePriority = 1\n          description  = \"Expire untagged images older than 30 days\"\n          selection = {\n            tagStatus   = \"untagged\"\n            countType   = \"sinceImagePushed\"\n            countUnit   = \"days\"\n            countNumber = 30\n          }\n          action = { type = \"expire\" }\n        }]\n      })\n    }\n\nWithout a lifecycle policy, ECR accumulates every pushed image indefinitely.\nThis increases storage cost and keeps stale (potentially vulnerable) images\nin scope for scanners and attackers who reach the registry.\n",
+      "fix_hcl": "resource \"aws_ecr_lifecycle_policy\" \"example\" {\n  repository = aws_ecr_repository.example.name\n  policy = jsonencode({\n    rules = [{\n      rulePriority = 1\n      description  = \"Expire untagged images after 30 days\"\n      selection = {\n        tagStatus   = \"untagged\"\n        countType   = \"sinceImagePushed\"\n        countUnit   = \"days\"\n        countNumber = 30\n      }\n      action = { type = \"expire\" }\n    }]\n  })\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AWS-GUARDDUTY-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_guardduty_detector>",
+      "urgency": "MEDIUM",
+      "title": "GuardDuty detector not provisioned",
+      "section": "security",
+      "recommendation": "Enable GuardDuty in every account and region:\n\n    resource \"aws_guardduty_detector\" \"main\" {\n      enable = true\n\n      datasources {\n        s3_logs { enable = true }\n        kubernetes { audit_logs { enable = true } }\n        malware_protection {\n          scan_ec2_instance_with_findings { ebs_volumes { enable = true } }\n        }\n      }\n    }\n\nUse `aws_guardduty_organization_admin_account` to enable GuardDuty\norg-wide from the management account.\n",
+      "fix_hcl": "resource \"aws_guardduty_detector\" \"main\" {\n  enable = true\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.001"
+      ]
+    },
+    {
+      "id": "SEC-AWS-S3-LOGGING-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_s3_bucket_logging>",
+      "urgency": "LOW",
+      "title": "S3 bucket missing server access logging",
+      "section": "security",
+      "recommendation": "Add a dedicated logging bucket and enable access logging on every bucket\nthat requires audit trails:\n\n```hcl\nresource \"aws_s3_bucket\" \"logs\" {\n  bucket = \"${var.prefix}-access-logs\"\n}\n\nresource \"aws_s3_bucket_logging\" \"app\" {\n  bucket        = aws_s3_bucket.app.id\n  target_bucket = aws_s3_bucket.logs.id\n  target_prefix = \"app-access-logs/\"\n}\n```\n\nThe logging bucket itself does not need a logging configuration (that\nwould create a loop). Protect the logging bucket with:\n- `aws_s3_bucket_public_access_block` (block all public access)\n- `lifecycle_rule` with expiration (keep logs \u226590 days for CIS)\n- `aws_s3_bucket_server_side_encryption_configuration`\n",
+      "fix_hcl": "resource \"aws_s3_bucket_logging\" \"example\" {\n  bucket        = aws_s3_bucket.example.id\n  target_bucket = aws_s3_bucket.logs.id\n  target_prefix = \"access-logs/\"\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.008"
+      ]
+    },
+    {
+      "id": "SEC-AWS-S3-PUBLIC-BLOCK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_s3_bucket_public_access_block>",
+      "urgency": "MEDIUM",
+      "title": "S3 bucket missing public access block",
+      "section": "security",
+      "recommendation": "Add an `aws_s3_bucket_public_access_block` resource for every bucket:\n\n    resource \"aws_s3_bucket_public_access_block\" \"app\" {\n      bucket = aws_s3_bucket.app.id\n\n      block_public_acls       = true\n      block_public_policy     = true\n      ignore_public_acls      = true\n      restrict_public_buckets = true\n    }\n\nWithout this resource, S3 ACLs and bucket policies can inadvertently\nexpose the bucket to the public. The four flags together enforce that\nno public grant can be applied, even if a policy mistake is made later.\n",
+      "fix_hcl": "resource \"aws_s3_bucket_public_access_block\" \"example\" {\n  bucket                  = aws_s3_bucket.example.id\n  block_public_acls       = true\n  block_public_policy     = true\n  ignore_public_acls      = true\n  restrict_public_buckets = true\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1530"
+      ]
+    },
+    {
+      "id": "SEC-AWS-SECURITYHUB-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_securityhub_account>",
+      "urgency": "LOW",
+      "title": "Security Hub not enabled",
+      "section": "security",
+      "recommendation": "Enable Security Hub and subscribe to relevant standards:\n\n    resource \"aws_securityhub_account\" \"main\" {}\n\n    resource \"aws_securityhub_standards_subscription\" \"cis\" {\n      standards_arn = \"arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.2.0\"\n      depends_on    = [aws_securityhub_account.main]\n    }\n\n    resource \"aws_securityhub_standards_subscription\" \"fsbp\" {\n      standards_arn = \"arn:aws:securityhub:${data.aws_region.current.name}::standards/aws-foundational-security-best-practices/v/1.0.0\"\n      depends_on    = [aws_securityhub_account.main]\n    }\n",
+      "fix_hcl": "resource \"aws_securityhub_account\" \"main\" {}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.001"
+      ]
+    },
+    {
+      "id": "SEC-AWS-VPC-FLOWLOGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_flow_log>",
+      "urgency": "MEDIUM",
+      "title": "AWS VPC missing flow log resource",
+      "section": "security",
+      "recommendation": "Add an `aws_flow_log` resource targeting every VPC:\n\n    resource \"aws_flow_log\" \"vpc\" {\n      vpc_id          = aws_vpc.main.id\n      traffic_type    = \"ALL\"\n      iam_role_arn    = aws_iam_role.flow_log.arn\n      log_destination = aws_cloudwatch_log_group.flow_log.arn\n    }\n\nVPC flow logs are the primary network-layer evidence source for\npost-incident investigation and anomaly detection. Without them,\nlateral movement within the VPC is invisible.\n",
+      "fix_hcl": "resource \"aws_flow_log\" \"example\" {\n  vpc_id          = aws_vpc.example.id\n  traffic_type    = \"ALL\"\n  iam_role_arn    = aws_iam_role.flow_log.arn\n  log_destination = aws_cloudwatch_log_group.flow_log.arn\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.008"
+      ]
+    },
+    {
+      "id": "STK-AWS-EKS-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_iam_openid_connect_provider>",
+      "urgency": "LOW",
+      "title": "EKS cluster missing OIDC provider for IRSA",
+      "section": "stack",
+      "recommendation": "Create an OIDC provider backed by the cluster's issuer URL, then bind\npod service accounts to scoped IAM roles:\n\n    data \"tls_certificate\" \"eks\" {\n      url = aws_eks_cluster.app.identity[0].oidc[0].issuer\n    }\n\n    resource \"aws_iam_openid_connect_provider\" \"eks\" {\n      client_id_list  = [\"sts.amazonaws.com\"]\n      thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]\n      url             = aws_eks_cluster.app.identity[0].oidc[0].issuer\n    }\n\n    resource \"aws_iam_role\" \"pod_role\" {\n      assume_role_policy = jsonencode({\n        Statement = [{\n          Effect    = \"Allow\"\n          Principal = { Federated = aws_iam_openid_connect_provider.eks.arn }\n          Action    = \"sts:AssumeRoleWithWebIdentity\"\n          Condition = { StringEquals = {\n            \"${replace(aws_iam_openid_connect_provider.eks.url, \"https://\", \"\")}:sub\" =\n              \"system:serviceaccount:default:my-service-account\"\n          }}\n        }]\n      })\n    }\n",
+      "fix_hcl": "data \"tls_certificate\" \"eks\" {\n  url = aws_eks_cluster.example.identity[0].oidc[0].issuer\n}\nresource \"aws_iam_openid_connect_provider\" \"eks\" {\n  client_id_list  = [\"sts.amazonaws.com\"]\n  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]\n  url             = aws_eks_cluster.example.identity[0].oidc[0].issuer\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AWS-ROUTE53-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws",
+      "line": 0,
+      "resource": "<absent: aws_route53_key_signing_key>",
+      "urgency": "LOW",
+      "title": "Route 53 hosted zone missing DNSSEC signing",
+      "section": "stack",
+      "recommendation": "Enable DNSSEC on the hosted zone:\n\n    resource \"aws_kms_key\" \"dnssec\" {\n      customer_master_key_spec = \"ECC_NIST_P256\"\n      deletion_window_in_days  = 7\n      key_usage                = \"SIGN_VERIFY\"\n      policy = data.aws_iam_policy_document.dnssec.json\n    }\n\n    resource \"aws_route53_key_signing_key\" \"main\" {\n      hosted_zone_id             = aws_route53_zone.main.zone_id\n      key_management_service_arn = aws_kms_key.dnssec.arn\n      name                       = \"main\"\n    }\n\n    resource \"aws_route53_hosted_zone_dnssec\" \"main\" {\n      hosted_zone_id = aws_route53_key_signing_key.main.hosted_zone_id\n      depends_on     = [aws_route53_key_signing_key.main]\n    }\n\nAfter enabling, submit the DS record to your domain registrar so the\nparent zone can verify the chain of trust.\n",
+      "fix_hcl": "resource \"aws_route53_zone\" \"example\" {\n  name = \"example.com\"\n}\nresource \"aws_route53_key_signing_key\" \"example\" {\n  hosted_zone_id             = aws_route53_zone.example.id\n  key_management_service_arn = aws_kms_key.dnssec.arn\n  name                       = \"example\"\n}\nresource \"aws_route53_hosted_zone_dnssec\" \"example\" {\n  depends_on     = [aws_route53_key_signing_key.example]\n  hosted_zone_id = aws_route53_key_signing_key.example.hosted_zone_id\n}\n",
+      "fix_disruption": "none"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "aws_iam_policy.godmode",
+        "type": "iam",
+        "label": "aws_iam_policy.godmode",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+        "line": 41,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_s3_bucket.no_block",
+        "type": "storage",
+        "label": "aws_s3_bucket.no_block",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+        "line": 49,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-S3-001",
+          "SEC-AWS-S3-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_iam_role.anyone",
+        "type": "iam",
+        "label": "aws_iam_role.anyone",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/01_broken_access_control.tf",
+        "line": 54,
+        "findings": [
+          "SEC-AWS-IAM-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_iam_user.human",
+        "type": "compute",
+        "label": "aws_iam_user.human",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+        "line": 34,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_iam_access_key.human",
+        "type": "compute",
+        "label": "aws_iam_access_key.human",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+        "line": 37,
+        "findings": [
+          "SEC-AWS-ACCESSKEY-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_iam_user_policy.human_admin",
+        "type": "compute",
+        "label": "aws_iam_user_policy.human_admin",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+        "line": 43,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_iam_account_password_policy.weak",
+        "type": "compute",
+        "label": "aws_iam_account_password_policy.weak",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+        "line": 58,
+        "findings": [
+          "SEC-AWS-IAM-003"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_cognito_user_pool.no_mfa",
+        "type": "compute",
+        "label": "aws_cognito_user_pool.no_mfa",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/07_identification_auth.tf",
+        "line": 68,
+        "findings": [
+          "SEC-AWS-COGNITO-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_security_group.ssh_open",
+        "type": "network",
+        "label": "aws_security_group.ssh_open",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+        "line": 28,
+        "findings": [
+          "SEC-AWS-SG-001",
+          "SEC-AWS-SG-001"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_instance.public",
+        "type": "compute",
+        "label": "aws_instance.public",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+        "line": 49,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "SEC-AWS-SSRF-001"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_s3_bucket.force_destroyable",
+        "type": "storage",
+        "label": "aws_s3_bucket.force_destroyable",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+        "line": 60,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-LIFECYCLE-002",
+          "ROB-AWS-S3-001",
+          "SEC-AWS-S3-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_cloudfront_distribution.http_allowed",
+        "type": "compute",
+        "label": "aws_cloudfront_distribution.http_allowed",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+        "line": 68,
+        "findings": [
+          "SEC-AWS-CLOUDFRONT-001",
+          "SEC-AWS-CLOUDFRONT-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_db_instance.public_db",
+        "type": "storage",
+        "label": "aws_db_instance.public_db",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/05_security_misconfiguration.tf",
+        "line": 99,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-RDS-001",
+          "ROB-AWS-RDS-002",
+          "SEC-AWS-RDS-001"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": true,
+        "on_critical_path": true
+      },
+      {
+        "id": "aws_instance.imds_v1",
+        "type": "compute",
+        "label": "aws_instance.imds_v1",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/10_ssrf.tf",
+        "line": 38,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "SEC-AWS-SSRF-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_instance.imds_v1_explicit",
+        "type": "compute",
+        "label": "aws_instance.imds_v1_explicit",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/10_ssrf.tf",
+        "line": 47,
+        "findings": [
+          "OPS-AWS-TAGS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_lambda_function.eol_runtime",
+        "type": "compute",
+        "label": "aws_lambda_function.eol_runtime",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+        "line": 38,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "STK-AWS-LAMBDA-001",
+          "STK-AWS-LAMBDA-002",
+          "STK-AWS-LAMBDA-003"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_instance.frozen_ami",
+        "type": "compute",
+        "label": "aws_instance.frozen_ami",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+        "line": 53,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "SEC-AWS-SSRF-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_launch_template.insecure",
+        "type": "compute",
+        "label": "aws_launch_template.insecure",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+        "line": 61,
+        "findings": [
+          "STK-AWS-LAUNCH-TEMPLATE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_eks_cluster.insecure",
+        "type": "compute",
+        "label": "aws_eks_cluster.insecure",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/06_vulnerable_components.tf",
+        "line": 71,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "STK-AWS-EKS-001",
+          "STK-AWS-EKS-002",
+          "STK-AWS-EKS-003"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_cloudtrail.single_region",
+        "type": "compute",
+        "label": "aws_cloudtrail.single_region",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 44,
+        "findings": [
+          "SEC-AWS-CLOUDTRAIL-001",
+          "SEC-AWS-CLOUDTRAIL-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_vpc.unmonitored",
+        "type": "compute",
+        "label": "aws_vpc.unmonitored",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 53,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_s3_bucket.unlogged",
+        "type": "storage",
+        "label": "aws_s3_bucket.unlogged",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 62,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-S3-001",
+          "SEC-AWS-S3-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_eks_cluster.partial_logging",
+        "type": "compute",
+        "label": "aws_eks_cluster.partial_logging",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 69,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "STK-AWS-EKS-001",
+          "STK-AWS-EKS-003",
+          "STK-AWS-EKS-005",
+          "STK-AWS-EKS-005"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_cloudwatch_log_group.no_retention",
+        "type": "compute",
+        "label": "aws_cloudwatch_log_group.no_retention",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 82,
+        "findings": [
+          "COST-AWS-RISK-001",
+          "OPS-AWS-CWL-001",
+          "SEC-AWS-CWL-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_route53_zone.no_dnssec",
+        "type": "compute",
+        "label": "aws_route53_zone.no_dnssec",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 90,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_api_gateway_rest_api.demo",
+        "type": "compute",
+        "label": "aws_api_gateway_rest_api.demo",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 96,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_api_gateway_deployment.demo",
+        "type": "compute",
+        "label": "aws_api_gateway_deployment.demo",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 99,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_api_gateway_stage.no_access_logs",
+        "type": "compute",
+        "label": "aws_api_gateway_stage.no_access_logs",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 103,
+        "findings": [
+          "SEC-AWS-APIGW-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_ecs_cluster.no_insights",
+        "type": "compute",
+        "label": "aws_ecs_cluster.no_insights",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/09_logging_monitoring.tf",
+        "line": 112,
+        "findings": [
+          "STK-AWS-ECS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_s3_bucket.no_sse",
+        "type": "storage",
+        "label": "aws_s3_bucket.no_sse",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+        "line": 38,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-S3-001",
+          "SEC-AWS-S3-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_db_instance.unencrypted",
+        "type": "storage",
+        "label": "aws_db_instance.unencrypted",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+        "line": 43,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-RDS-001",
+          "ROB-AWS-RDS-002",
+          "ROB-AWS-RDS-003",
+          "SEC-AWS-RDS-002",
+          "SEC-SECRETS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_ebs_volume.unencrypted",
+        "type": "compute",
+        "label": "aws_ebs_volume.unencrypted",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+        "line": 57,
+        "findings": [
+          "SEC-AWS-EBS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_kms_key.no_rotation",
+        "type": "key",
+        "label": "aws_kms_key.no_rotation",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+        "line": 64,
+        "findings": [
+          "SEC-AWS-KMS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_db_instance.eol_engine",
+        "type": "storage",
+        "label": "aws_db_instance.eol_engine",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+        "line": 71,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-RDS-001",
+          "ROB-AWS-RDS-002",
+          "ROB-AWS-RDS-003",
+          "SEC-AWS-RDS-002",
+          "SEC-SECRETS-001",
+          "STK-AWS-RDS-004"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_secretsmanager_secret.app_creds",
+        "type": "secret",
+        "label": "aws_secretsmanager_secret.app_creds",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/02_cryptographic_failures.tf",
+        "line": 85,
+        "findings": [
+          "SEC-AWS-SECRETSMANAGER-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_s3_bucket.no_versioning",
+        "type": "storage",
+        "label": "aws_s3_bucket.no_versioning",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+        "line": 36,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-S3-001",
+          "SEC-AWS-S3-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_db_instance.no_backups",
+        "type": "storage",
+        "label": "aws_db_instance.no_backups",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+        "line": 44,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-RDS-001",
+          "ROB-AWS-RDS-002",
+          "SEC-SECRETS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_ecr_repository.unscanned",
+        "type": "compute",
+        "label": "aws_ecr_repository.unscanned",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+        "line": 59,
+        "findings": [
+          "SEC-AWS-ECR-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_sqs_queue.unencrypted",
+        "type": "compute",
+        "label": "aws_sqs_queue.unencrypted",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+        "line": 66,
+        "findings": [
+          "SEC-AWS-SQS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_sns_topic.unencrypted",
+        "type": "compute",
+        "label": "aws_sns_topic.unencrypted",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/08_data_integrity.tf",
+        "line": 72,
+        "findings": [
+          "SEC-AWS-SNS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_iam_role.all_lambdas",
+        "type": "iam",
+        "label": "aws_iam_role.all_lambdas",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+        "line": 41,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_iam_role_policy_attachment.all_lambdas_admin",
+        "type": "compute",
+        "label": "aws_iam_role_policy_attachment.all_lambdas_admin",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+        "line": 55,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_dynamodb_table.stateful",
+        "type": "compute",
+        "label": "aws_dynamodb_table.stateful",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/04_insecure_design.tf",
+        "line": 62,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "ROB-AWS-DDB-001",
+          "ROB-AWS-LIFECYCLE-001",
+          "ROB-AWS-DDB-002",
+          "SEC-AWS-DDB-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "aws_instance.ec2_user_data_injection",
+        "type": "compute",
+        "label": "aws_instance.ec2_user_data_injection",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/03_injection.tf",
+        "line": 37,
+        "findings": [
+          "OPS-AWS-TAGS-001",
+          "SEC-AWS-SSRF-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "null_resource.shell_inject",
+        "type": "compute",
+        "label": "null_resource.shell_inject",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/aws/03_injection.tf",
+        "line": 50,
+        "findings": [
+          "SEC-PROVISIONER-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "INTERNET",
+        "type": "internet",
+        "label": "Internet",
+        "file": "",
+        "line": 0,
+        "findings": [],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": true
+      }
+    ],
+    "edges": [
+      {
+        "from": "aws_instance.public",
+        "to": "aws_security_group.ssh_open",
+        "label": "security_group"
+      },
+      {
+        "from": "aws_iam_role_policy_attachment.all_lambdas_admin",
+        "to": "aws_iam_role.all_lambdas",
+        "label": "role"
+      },
+      {
+        "from": "INTERNET",
+        "to": "aws_security_group.ssh_open",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "aws_instance.public",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "aws_db_instance.public_db",
+        "label": "internet"
+      }
+    ],
+    "critical_path": [
+      "INTERNET",
+      "aws_db_instance.public_db"
+    ],
+    "internet_node_id": "INTERNET"
+  }
+}

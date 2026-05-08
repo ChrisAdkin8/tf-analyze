@@ -1,0 +1,48 @@
+id: SEC-AWS-IAM-POLICY-004
+title: "IAM policy document grants principal `identifiers = [\"*\"]` (public)"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.16"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.004"
+patterns:
+  - kind: iam_policy_analysis
+    check: public_principal
+    description: |
+      A statement uses `principals { identifiers = ["*"] }` (or any
+      principal whose identifiers list contains `"*"`). The policy
+      grants the action set to *any* principal — effectively making
+      whatever resource it attaches to public (S3 buckets, SNS topics,
+      KMS keys, Secrets Manager secrets all support resource policies).
+recommendation: |
+  Replace the wildcard principal with the specific account or role
+  ARNs that should have access. If true public exposure is the
+  intent (e.g. a website-hosting bucket), use the resource-specific
+  public-access mechanism (`aws_s3_bucket_policy` with explicit
+  `Principal: "*"` *plus* documented intent) and gate it with a
+  `aws_s3_bucket_public_access_block` exception.
+verification: |
+  The rendered policy's `Principal` field must be a structured
+  object listing AWS account IDs or service principals, not `"*"`.
+fix_hcl: |
+  data "aws_iam_policy_document" "example" {
+    statement {
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = ["arn:aws:iam::123456789012:root"]
+      }
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_iam_policy_public_principal

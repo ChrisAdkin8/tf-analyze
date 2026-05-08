@@ -4,6 +4,8 @@ section: security
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1071.001"
 patterns:
   - kind: resource_body_contains
     resource: aws_cloudfront_distribution

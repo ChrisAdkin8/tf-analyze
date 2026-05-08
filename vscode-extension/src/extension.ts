@@ -16,6 +16,8 @@ interface Finding {
   recommendation?: string;
   fix_hcl?: string;
   fix_disruption?: string;
+  narrative?: string;
+  mitre?: string[];
 }
 
 interface ScanResult {
@@ -446,6 +448,15 @@ function buildFindingHtml(finding: Finding): string {
     ? `<h3>Recommendation</h3><pre>${escape(finding.recommendation)}</pre>`
     : "";
 
+  const narrativeHtml = finding.narrative
+    ? `<h3>Adversarial scenario</h3>
+       <p class="narrative">${escape(finding.narrative)}</p>`
+    : "";
+
+  const mitreHtml = finding.mitre && finding.mitre.length
+    ? `<div class="mitre">MITRE ATT&amp;CK: ${finding.mitre.map(t => `<code>${escape(t)}</code>`).join(" ")}</div>`
+    : "";
+
   const fixHclHtml = finding.fix_hcl
     ? `<h3>fix_hcl</h3>
        <div class="disruption">Disruption: <strong>${finding.fix_disruption ?? "unknown"}</strong></div>
@@ -471,6 +482,12 @@ function buildFindingHtml(finding: Finding): string {
         overflow-x:auto; white-space:pre-wrap; }
   .hcl { border-left:3px solid ${color}; }
   .disruption { font-size:0.85em; color:var(--vscode-descriptionForeground); margin:-4px 0 8px; }
+  .narrative { background: var(--vscode-editorWarning-background, #fff3cd);
+                border-left:3px solid ${color}; padding:10px 14px; border-radius:0 4px 4px 0;
+                font-style:italic; line-height:1.5; }
+  .mitre { font-size:0.85em; margin:8px 0; color:var(--vscode-descriptionForeground); }
+  .mitre code { background: var(--vscode-textCodeBlock-background); padding:2px 6px;
+                 border-radius:3px; font-size:0.95em; }
   h3 { font-size:1em; margin-bottom:4px; }
 </style>
 </head>
@@ -478,6 +495,8 @@ function buildFindingHtml(finding: Finding): string {
 <h1>${escape(finding.id)}: ${escape(finding.title)}</h1>
 <span class="badge">${escape(finding.urgency)}</span>
 <div class="meta">${escape(finding.file)}:${finding.line} &nbsp;|&nbsp; section: ${escape(finding.section)}</div>
+${mitreHtml}
+${narrativeHtml}
 ${excerptHtml}
 ${recommendationHtml}
 ${fixHclHtml}

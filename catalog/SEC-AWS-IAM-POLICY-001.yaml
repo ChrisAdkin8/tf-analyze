@@ -1,0 +1,39 @@
+id: SEC-AWS-IAM-POLICY-001
+title: "IAM policy document grants wildcard `actions = [\"*\"]`"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.16"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.004"
+patterns:
+  - kind: iam_policy_analysis
+    check: wildcard_action
+    description: |
+      A statement inside `data "aws_iam_policy_document"` grants `actions = ["*"]`.
+      Effective grant is "any AWS API call against any resource selected
+      by this policy" — the canonical privilege-escalation foothold.
+recommendation: |
+  Replace `actions = ["*"]` with the explicit minimum set the workload
+  requires. Use `aws iam simulate-principal-policy` to validate that
+  the trimmed list still passes for legitimate flows.
+verification: |
+  Re-render the policy with `terraform plan` and inspect the rendered
+  `Action` field — it must be a finite list, not `"*"`.
+fix_hcl: |
+  data "aws_iam_policy_document" "example" {
+    statement {
+      effect    = "Allow"
+      actions   = ["s3:GetObject", "s3:PutObject"]
+      resources = ["arn:aws:s3:::my-bucket/*"]
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_iam_policy_wildcard_action

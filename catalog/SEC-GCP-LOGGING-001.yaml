@@ -23,6 +23,8 @@ pci_dss:
   - "Req-10.2"
 soc2_cc:
   - "CC7.2"
+mitre:
+  - "T1562.008"
 fix_hcl: |
   resource "google_project_iam_audit_config" "all_services" {
     project = var.project_id

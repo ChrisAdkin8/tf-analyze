@@ -17,6 +17,8 @@ verification: |
   Replace `git::` sources with registry equivalents where available.
 soc2_cc:
   - "CC9.2"
+mitre:
+  - "T1195.002"
 fix_hcl: |
   # Before: module sourced from raw git
   # source = "git::https://github.com/example/terraform-aws-vpc.git"

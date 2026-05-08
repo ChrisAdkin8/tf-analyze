@@ -1,0 +1,215 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720" font-family="-apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feOffset dy="6" in="b" result="o"/>
+      <feComponentTransfer in="o"><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background canvas -->
+  <rect width="1280" height="720" fill="url(#bg)"/>
+
+  <!-- Decorative grid -->
+  <g stroke="rgba(255,255,255,0.03)" stroke-width="1">
+    <line x1="0" y1="180" x2="1280" y2="180"/>
+    <line x1="0" y1="360" x2="1280" y2="360"/>
+    <line x1="0" y1="540" x2="1280" y2="540"/>
+    <line x1="320" y1="0" x2="320" y2="720"/>
+    <line x1="640" y1="0" x2="640" y2="720"/>
+    <line x1="960" y1="0" x2="960" y2="720"/>
+  </g>
+
+  <!-- Window frame -->
+  <g filter="url(#shadow)">
+    <rect x="80" y="60" width="1120" height="600" rx="14" fill="#1E293B"/>
+
+    <!-- Title bar -->
+    <rect x="80" y="60" width="1120" height="40" rx="14" fill="#0F172A"/>
+    <rect x="80" y="86" width="1120" height="14" fill="#0F172A"/>
+    <circle cx="106" cy="80" r="6" fill="#EF4444"/>
+    <circle cx="126" cy="80" r="6" fill="#F59E0B"/>
+    <circle cx="146" cy="80" r="6" fill="#10B981"/>
+    <text x="640" y="85" text-anchor="middle" font-size="13" fill="#94A3B8">main.tf — tf-analyze workspace</text>
+
+    <!-- Activity bar -->
+    <rect x="80" y="100" width="56" height="560" fill="#0F172A"/>
+    <!-- Active shield icon -->
+    <rect x="80" y="120" width="3" height="44" fill="#A78BFA"/>
+    <g transform="translate(96 130)" stroke="#A78BFA" stroke-width="1.7" fill="none" stroke-linejoin="round">
+      <path d="M12 2.5 L19.5 5.5 V11 C19.5 16 16 19 12 21 C8 19 4.5 16 4.5 11 V5.5 Z"/>
+      <circle cx="11" cy="10.5" r="2.7"/>
+      <line x1="13" y1="12.5" x2="14.6" y2="14.1" stroke-linecap="round"/>
+    </g>
+    <!-- Other inert icons -->
+    <g stroke="#475569" stroke-width="1.6" fill="none" opacity="0.6">
+      <rect x="100" y="186" width="18" height="14" rx="2"/>
+      <rect x="100" y="232" width="18" height="18" rx="3"/>
+      <circle cx="109" cy="284" r="9"/>
+      <path d="M101 332 L117 332 M101 338 L117 338 M101 344 L113 344"/>
+    </g>
+
+    <!-- Findings sidebar -->
+    <rect x="136" y="100" width="280" height="560" fill="#111827"/>
+    <text x="156" y="130" font-size="11" fill="#94A3B8" font-weight="700" letter-spacing="1">TF-ANALYZE</text>
+    <text x="156" y="158" font-size="13" fill="#E2E8F0" font-weight="600">Findings</text>
+    <rect x="380" y="146" width="22" height="18" rx="9" fill="#7C3AED"/>
+    <text x="391" y="159" text-anchor="middle" font-size="10" fill="white" font-weight="700">7</text>
+
+    <!-- File group: main.tf -->
+    <g font-size="12">
+      <text x="156" y="194" fill="#CBD5E1">▾  main.tf</text>
+      <text x="385" y="194" text-anchor="end" font-size="10" fill="#64748B">5</text>
+
+      <!-- Finding 1: CRITICAL -->
+      <rect x="146" y="208" width="260" height="28" rx="4" fill="#1E293B"/>
+      <circle cx="166" cy="222" r="5" fill="#EF4444"/>
+      <text x="180" y="226" fill="#F1F5F9">SEC-AWS-S3-001</text>
+      <text x="385" y="226" text-anchor="end" font-size="10" fill="#94A3B8">L 24</text>
+
+      <!-- Finding 2: HIGH -->
+      <circle cx="166" cy="252" r="5" fill="#F97316"/>
+      <text x="180" y="256" fill="#CBD5E1">SEC-AWS-IAM-POLICY-001</text>
+      <text x="385" y="256" text-anchor="end" font-size="10" fill="#64748B">L 41</text>
+
+      <!-- Finding 3: HIGH -->
+      <circle cx="166" cy="278" r="5" fill="#F97316"/>
+      <text x="180" y="282" fill="#CBD5E1">ROB-AWS-RDS-001</text>
+      <text x="385" y="282" text-anchor="end" font-size="10" fill="#64748B">L 58</text>
+
+      <!-- Finding 4: MEDIUM -->
+      <circle cx="166" cy="304" r="5" fill="#EAB308"/>
+      <text x="180" y="308" fill="#CBD5E1">OPS-AWS-TAGS-001</text>
+      <text x="385" y="308" text-anchor="end" font-size="10" fill="#64748B">L 12</text>
+
+      <!-- Finding 5: MEDIUM -->
+      <circle cx="166" cy="330" r="5" fill="#EAB308"/>
+      <text x="180" y="334" fill="#CBD5E1">STK-AWS-LAMBDA-002</text>
+      <text x="385" y="334" text-anchor="end" font-size="10" fill="#64748B">L 73</text>
+    </g>
+
+    <!-- File group: kms.tf -->
+    <g font-size="12">
+      <text x="156" y="370" fill="#CBD5E1">▾  kms.tf</text>
+      <text x="385" y="370" text-anchor="end" font-size="10" fill="#64748B">2</text>
+
+      <circle cx="166" cy="394" r="5" fill="#F97316"/>
+      <text x="180" y="398" fill="#CBD5E1">SEC-AWS-KMS-001</text>
+      <text x="385" y="398" text-anchor="end" font-size="10" fill="#64748B">L 8</text>
+
+      <circle cx="166" cy="420" r="5" fill="#EAB308"/>
+      <text x="180" y="424" fill="#CBD5E1">SEC-AWS-KMS-002</text>
+      <text x="385" y="424" text-anchor="end" font-size="10" fill="#64748B">L 19</text>
+    </g>
+
+    <!-- Editor pane -->
+    <rect x="416" y="100" width="784" height="560" fill="#1E293B"/>
+
+    <!-- Tab bar -->
+    <rect x="416" y="100" width="784" height="34" fill="#0F172A"/>
+    <rect x="430" y="106" width="160" height="28" rx="4" fill="#1E293B"/>
+    <text x="448" y="125" font-size="12" fill="#E2E8F0">main.tf</text>
+    <circle cx="572" cy="120" r="3" fill="#A78BFA"/>
+
+    <!-- Code lines -->
+    <g font-family="'JetBrains Mono', 'Fira Code', Menlo, monospace" font-size="13">
+      <!-- Line 22 -->
+      <text x="440" y="172" fill="#475569">22</text>
+      <text x="476" y="172" fill="#94A3B8">resource</text>
+      <text x="544" y="172" fill="#FCD34D">"aws_s3_bucket"</text>
+      <text x="668" y="172" fill="#A78BFA">"backups"</text>
+      <text x="744" y="172" fill="#E2E8F0"> {</text>
+
+      <!-- Line 23 -->
+      <text x="440" y="196" fill="#475569">23</text>
+      <text x="492" y="196" fill="#94A3B8">bucket</text>
+      <text x="556" y="196" fill="#E2E8F0"> = </text>
+      <text x="580" y="196" fill="#FCD34D">"prod-backups-2026"</text>
+
+      <!-- Line 24 (offending — squiggle on `acl = "public-read"`) -->
+      <text x="440" y="220" fill="#475569">24</text>
+      <text x="492" y="220" fill="#94A3B8">acl</text>
+      <text x="528" y="220" fill="#E2E8F0"> = </text>
+      <text x="552" y="220" fill="#FCD34D">"public-read"</text>
+      <path d="M492 224 q4 4 8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0"
+            stroke="#EF4444" stroke-width="1.6" fill="none"/>
+
+      <!-- Line 25 -->
+      <text x="440" y="244" fill="#475569">25</text>
+      <text x="476" y="244" fill="#E2E8F0">}</text>
+
+      <!-- Line 27 -->
+      <text x="440" y="292" fill="#475569">27</text>
+      <text x="476" y="292" fill="#94A3B8">resource</text>
+      <text x="544" y="292" fill="#FCD34D">"aws_iam_policy"</text>
+      <text x="676" y="292" fill="#A78BFA">"admin"</text>
+      <text x="736" y="292" fill="#E2E8F0"> {</text>
+
+      <!-- Line 28 -->
+      <text x="440" y="316" fill="#475569">28</text>
+      <text x="492" y="316" fill="#94A3B8">policy</text>
+      <text x="556" y="316" fill="#E2E8F0"> = jsonencode({</text>
+
+      <!-- Line 29 -->
+      <text x="440" y="340" fill="#475569">29</text>
+      <text x="508" y="340" fill="#94A3B8">Statement</text>
+      <text x="588" y="340" fill="#E2E8F0"> = [{</text>
+
+      <!-- Line 30 -->
+      <text x="440" y="364" fill="#475569">30</text>
+      <text x="524" y="364" fill="#94A3B8">Effect</text>
+      <text x="592" y="364" fill="#E2E8F0"> = </text>
+      <text x="616" y="364" fill="#FCD34D">"Allow"</text>
+
+      <!-- Line 31 (offending — squiggle on action wildcard) -->
+      <text x="440" y="388" fill="#475569">31</text>
+      <text x="524" y="388" fill="#94A3B8">Action</text>
+      <text x="592" y="388" fill="#E2E8F0"> = </text>
+      <text x="616" y="388" fill="#FCD34D">"*"</text>
+      <path d="M524 392 q3 3 6 0 t6 0 t6 0 t6 0 t6 0 t6 0 t6 0 t6 0 t6 0 t6 0 t6 0 t6 0"
+            stroke="#F97316" stroke-width="1.6" fill="none"/>
+
+      <!-- Line 32 -->
+      <text x="440" y="412" fill="#475569">32</text>
+      <text x="524" y="412" fill="#94A3B8">Resource</text>
+      <text x="600" y="412" fill="#E2E8F0"> = </text>
+      <text x="624" y="412" fill="#FCD34D">"*"</text>
+    </g>
+
+    <!-- Hover popover for the SEC-AWS-S3-001 squiggle -->
+    <g transform="translate(540 232)" filter="url(#shadow)">
+      <rect width="380" height="116" rx="8" fill="#0F172A" stroke="#7C3AED" stroke-width="1"/>
+      <circle cx="20" cy="22" r="6" fill="#EF4444"/>
+      <text x="36" y="26" font-size="12" fill="#F1F5F9" font-weight="700">SEC-AWS-S3-001</text>
+      <text x="160" y="26" font-size="11" fill="#94A3B8">CRITICAL · CIS 2.1.5</text>
+      <text x="20" y="52" font-size="12" fill="#CBD5E1">S3 bucket allows public read access via ACL.</text>
+      <text x="20" y="72" font-size="11" fill="#94A3B8">Public buckets are a top-3 cause of cloud data leaks.</text>
+      <rect x="20" y="84" width="120" height="22" rx="4" fill="#7C3AED"/>
+      <text x="80" y="99" text-anchor="middle" font-size="11" fill="white" font-weight="600">Quick Fix · ⌘.</text>
+      <text x="156" y="99" font-size="11" fill="#94A3B8">Set `acl = "private"`</text>
+    </g>
+
+    <!-- Status bar -->
+    <rect x="80" y="636" width="1120" height="24" fill="#0F172A"/>
+    <g transform="translate(96 642)" stroke="#A78BFA" stroke-width="1.4" fill="none">
+      <path d="M6 1 L11 3 V7 C11 10 9 11.5 6 12.5 C3 11.5 1 10 1 7 V3 Z"/>
+    </g>
+    <text x="116" y="652" font-size="11" fill="#E2E8F0">tf-analyze: 7 (C:1 H:3 M:3)</text>
+    <text x="280" y="652" font-size="11" fill="#94A3B8">·  HCL  ·  UTF-8  ·  Spaces: 2</text>
+    <text x="1180" y="652" text-anchor="end" font-size="11" fill="#94A3B8">Ln 24, Col 9</text>
+  </g>
+
+  <!-- Title overlay -->
+  <g>
+    <text x="640" y="704" text-anchor="middle" font-size="13" fill="#64748B" letter-spacing="3">TF-ANALYZE   ·   TERRAFORM SECURITY &amp; STACK ANALYSIS   ·   192 RULES   ·   AWS · GCP · AZURE</text>
+  </g>
+</svg>

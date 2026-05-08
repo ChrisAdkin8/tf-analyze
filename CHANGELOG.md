@@ -5,6 +5,90 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 25 — 2026-05-08
+
+**Risk score / letter grade now emitted by `detect.py` (381/381 tests passing).**
+
+Closes a long-standing gap between SKILL.md and the CLI: SKILL.md described a "deterministic risk score" as a top-level capability, but the engine never emitted it — every CI integration on top of `--format json` had to re-implement the formula, with no guarantee that the LLM-driven markdown report and the CLI agreed on the number.
+
+### Changes
+
+- **New `_compute_summary()`** in `scripts/detect.py` — single source of truth for the score, grade, urgency counts, and `scoring_version`. SKILL.md now references the engine's constants rather than duplicating the formula.
+- **`summary` block in JSON output** — always present, never optional. Keys: `scoring_version`, `score`, `grade`, `counts`, `suppressed_count`, `formula`. Stable across releases; weight changes bump `_SCORING_VERSION` so downstream gates pin to a specific weighting.
+- **One-line score header in text output** — first line of every text-format scan, e.g. `# tf-analyze: 82 (B) · 0 CRITICAL · 0 HIGH · 4 MEDIUM · 6 LOW · 0 INFO`.
+- **Colour-banded score banner in HTML** — rendered above the findings panel; A=green, B=lime, C=amber, D/F=red. Includes the formula text and `scoring_version` for traceability.
+- **`tests/test_output_formats.py` (NEW, 17 tests)** — pyramid-bottom contract tests covering `_compute_summary` formula correctness, grade boundaries, half-weight suppressed contribution, JSON/text/HTML emission, and SARIF / HTML well-formedness. SKILL.md's worked examples are encoded as test cases.
+- **SARIF skipped intentionally** — SARIF v2.1.0 has no canonical aggregate-score slot; tooling doesn't expect one.
+- **No `--exit-on-grade` flag** — `--fail-on HIGH` already exists and gates on finding kind. A grade gate invites suppression-to-bump-score gaming and was deliberately not added.
+
+### Test count: 364 → 381 (+17)
+
+| Source                     | Tests | Notes                                                                |
+|----------------------------|-------|----------------------------------------------------------------------|
+| `test_output_formats.py`   | 17    | NEW — `_compute_summary`, grade boundaries, JSON/text/HTML contract |
+
+---
+
+## Round 24 — 2026-05-08
+
+**Tier 1/2/3 implementation: detection depth, MITRE mapping, baseline ratcheting, HCP run task (364/364 tests passing).**
+
+### Tier 1 — detection depth
+
+1. **Auto-scaffolded clean fixtures: 26 → 131.** New `scripts/gen_clean_fixtures.py` generates `fixtures/<rule-id>_clean/main.tf` from each rule's `fix_hcl`. Caught **4 real false positives** the moment they ran:
+   - `SEC-AWS-LB-LISTENER-001` — fired on the redirect-only HTTP listener pattern
+   - `SEC-AZURE-KV-002`, `STK-AWS-LAUNCH-TEMPLATE-001` — `hcl_attr` quote-handling bug (`not_equal: '"Deny"'` vs unwrapped `"Deny"` value)
+   - `STK-GCP-CLOUDSQL-004` — stale rule still expected legacy `require_ssl` when fix uses modern `ssl_mode = "ENCRYPTED_ONLY"`
+
+   Engine fixes:
+   - `hcl_attr` now strips quotes and resolves `var.X` before `not_equal` comparison
+   - New `suppress_if_body_contains: '<substring>'` field on `resource_arg`, `resource_missing_arg`, `hcl_attr`
+
+2. **Variable resolution: ternary + module-input flow-through.** `_resolve_var_ref` now folds `var.x ? "a" : "b"` when the condition has a known boolean default. `_extract_var_defaults_by_dir` propagates `module "child" { source = "./c"; foo = bar }` overrides into the child module's directory-scoped var dict, so parent-supplied values resolve through child rules.
+
+3. **`iam_policy_analysis` pattern kind + 6 new rules.** Walks every `data "aws_iam_policy_document"` block and inspects each `statement {}`. Skips `Effect = "Deny"`. Six checks shipped:
+   - `SEC-AWS-IAM-POLICY-001` — wildcard `actions = ["*"]` (HIGH)
+   - `SEC-AWS-IAM-POLICY-002` — `iam:*` privesc (CRITICAL)
+   - `SEC-AWS-IAM-POLICY-003` — wildcard `resources = ["*"]` (HIGH)
+   - `SEC-AWS-IAM-POLICY-004` — public principal (CRITICAL)
+   - `SEC-AWS-IAM-POLICY-005` — full admin (action+resource both `*`) (CRITICAL)
+   - `SEC-AWS-IAM-POLICY-006` — `not_actions` / `not_resources` on Allow (MEDIUM, demoted from HIGH after calibration)
+
+4. **`python-hcl2` default-on.** Was opt-in via `--use-hcl2`; now auto-enabled when the dependency is installed, with a one-line stderr notice when it isn't. Opt-out with `--no-hcl2` or `TF_ANALYZE_NO_HCL2=1`. Dockerfile bundles `python-hcl2==4.3.5`.
+
+5. **Resource-address propagation audit.** Audited all 54 `findings.append(…)` sites; the only remaining empty-`resource` case (the `grep` pattern kind) now does best-effort attribution by walking enclosing `resource`/`data` blocks. Attack-graph attachment now works for grep-shaped rules too.
+
+### Tier 2 — quality and credibility
+
+6. **MITRE ATT&CK mapping.** 48 catalogue rules now carry a `mitre:` field (T1078.004, T1098.001, T1530, T1552.001, T1552.005, T1562.001, T1562.008, T1611, T1071.001, T1190, T1133, T1195.002, T1556.006, T1059). New `--format mitre` groups findings by technique. SARIF output gets `mitre:Tnnnn` tags. Mapping script: `scripts/apply_mitre.py` (idempotent re-runs).
+
+7. **Performance ceiling test (`tests/test_perf.py`).** Single-process scan of the 219-fixture corpus must finish in <5s. Current actuals: **329 files / 200 rules / 1624 findings in 0.35s** — 14× under the budget. Skip with `TF_ANALYZE_SKIP_PERF=1` on noisy CI runners.
+
+8. **`--baseline prior.json` flag.** New `apply_baseline()` filters current findings against a snapshot using `(id, file, line, resource)` as the join key. Suppressed-by-baseline findings appear under `suppressed_by_baseline` in the JSON output; only retained findings affect the `--fail-on` exit code. Designed for ratcheting on legacy repos.
+
+9. **Severity calibration log (`docs/severity-calibration.md`).** Documented methodology, two adjustments this round, and standing decisions. Net moves: `SEC-AWS-CLOUDTRAIL-001` HIGH→CRITICAL, `SEC-AWS-IAM-POLICY-006` HIGH→MEDIUM.
+
+10. **HCP Terraform Run Task server stub (`integrations/run-task/`).** FastAPI server that receives webhook callbacks from HCP Terraform between plan and apply, downloads plan-JSON, runs `detect.py --plan-json`, posts `passed` / `failed` back. HMAC-SHA512 signature verification. Dockerfile bundled. Walkthrough in `docs/run-task.md`.
+
+### Tier 3 — polish
+
+- **`docs/custom-rules.md`** — worked example (company-wide `cost_center` tag), schema reference, suppression mechanisms, testing pattern.
+- **Provider `default_tags` propagation** — when the AWS provider in a directory declares `default_tags { ... }`, `OPS-AWS-TAGS-*` and any `aws_*` rule whose target arg is `tags` is suppressed. No more "missing tags" findings on resources whose tags are injected by the provider.
+- **VS Code adversarial narrative** — extension hover panel now shows `narrative`, `mitre`, and styled `fix_disruption` badges. New per-finding `narrative` field is added by `_enrich_findings_for_output()`. New narratives shipped for the 4 IAM-POLICY rules.
+
+### Test count: 246 → 364
+
+| Source                     | Tests | Notes                                                                       |
+|----------------------------|-------|-----------------------------------------------------------------------------|
+| `test_fixtures.py`         | 193   | All 193 positive fixtures (was 187)                                         |
+| `test_clean_fixtures.py`   | 131   | All 131 clean fixtures (was 26 — coverage 13% → ~67% of active rules)       |
+| `test_detection_core.py`   | 28    | +5 ternary + module-input tests                                             |
+| `test_attack_graph.py`     | 8     | unchanged                                                                   |
+| `test_custom_rules.py`     | 3     | unchanged                                                                   |
+| `test_perf.py`             | 1     | NEW — corpus-scan budget guard                                              |
+
+---
+
 ## Round 21 — 2026-05-08
 
 **100% fix_hcl coverage, pre-commit hook, VS Code extension, SKILL.md re-scan (192/192 fixtures):**

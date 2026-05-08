@@ -1,0 +1,1574 @@
+{
+  "summary": {
+    "scoring_version": 1,
+    "score": 0,
+    "grade": "F",
+    "counts": {
+      "CRITICAL": 3,
+      "HIGH": 19,
+      "MEDIUM": 39,
+      "LOW": 22,
+      "INFO": 0
+    },
+    "suppressed_count": 0,
+    "formula": "max(0, 100 - sum(weight * count)); weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; suppressed at half weight"
+  },
+  "findings": [
+    {
+      "id": "SEC-GCP-IAM-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+      "line": 31,
+      "resource": "google_project_iam_member.admin_too_broad",
+      "urgency": "MEDIUM",
+      "title": "Project-level binding of overly broad role",
+      "section": "security",
+      "recommendation": "Replace the broad role with a narrowly-scoped resource-level binding.\nSee Appendix A for the IAM compatibility matrix \u2014 not every service\nexposes a `_iam_member` resource. Where resource-level binding is not\npossible (Cloud Workflows, Cloud Build, Document AI, Vertex AI, Cloud\nSQL), apply IAM Conditions on the project-level binding instead.\n",
+      "fix_hcl": "resource \"google_project_iam_member\" \"example\" {\n  project = var.project_id\n  role    = \"roles/storage.objectViewer\"\n  member  = \"serviceAccount:${google_service_account.example.email}\"\n}\n",
+      "fix_disruption": "none",
+      "narrative": "The broad project-level role granted by google_project_iam_member.admin_too_broad gives any principal bound to it control over every resource in the GCP project \u2014 compute, storage, secrets, and IAM itself. An attacker who compromises a single workload service account inheriting this binding can pivot to exfiltrate Cloud SQL databases, read Secret Manager secrets, and create persistent backdoor service accounts, as demonstrated in multiple GCP supply-chain incidents. Replace with the narrowest resource-level role covering only the API surfaces the workload calls."
+    },
+    {
+      "id": "SEC-GCP-IAM-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+      "line": 37,
+      "resource": "google_storage_bucket_iam_member.public_objects",
+      "urgency": "HIGH",
+      "title": "Public IAM binding (allUsers / allAuthenticatedUsers)",
+      "section": "security",
+      "recommendation": "Public IAM grants must be removed unless the resource is intentionally\na public website or public dataset. If public access is intentional,\ndocument it in CLAUDE.md and add a `# tf-analyze:ignore SEC-IAM-002`\ncomment on the binding line.\n",
+      "fix_hcl": "resource \"google_storage_bucket_iam_member\" \"example\" {\n  bucket = google_storage_bucket.example.name\n  role   = \"roles/storage.objectViewer\"\n  member = \"serviceAccount:${google_service_account.example.email}\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "COST-GCP-RISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 37,
+      "resource": "google_container_cluster.demo",
+      "urgency": "MEDIUM",
+      "title": "Expensive resource without cost control",
+      "section": "ops",
+      "recommendation": "Add explicit cost controls to prevent bill surprises:\n- Spanner: set `processing_units` explicitly\n- GKE: set `cluster_autoscaling.resource_limits` with max bounds\n- Cloud SQL: set `settings.disk_autoresize_limit`\n- Compute: consider `scheduling { preemptible = true }` for non-production\n",
+      "fix_hcl": "resource \"google_spanner_instance\" \"app\" {\n  config           = \"regional-us-central1\"\n  display_name     = \"app\"\n  processing_units = 100\n}\n\nresource \"google_sql_database_instance\" \"app\" {\n  settings {\n    tier                   = \"db-f1-micro\"\n    disk_autoresize        = true\n    disk_autoresize_limit  = 50\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 37,
+      "resource": "google_container_cluster.demo",
+      "urgency": "MEDIUM",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-GKE-NETWORK-POLICY-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 37,
+      "resource": "google_container_cluster.demo",
+      "urgency": "HIGH",
+      "title": "GKE cluster missing network_policy enforcement",
+      "section": "security",
+      "recommendation": "Without `network_policy` on the cluster, every pod can reach every\nother pod on every port \u2014 there is no namespace isolation, no\ndefault-deny, and no way to enforce \"frontend may talk to backend\nbut backend may not talk to internet\" via Kubernetes\nNetworkPolicies.\n\nEnable it in Terraform:\n\n    resource \"google_container_cluster\" \"main\" {\n      # ...\n      network_policy {\n        enabled  = true\n        provider = \"CALICO\"\n      }\n\n      addons_config {\n        network_policy_config {\n          disabled = false\n        }\n      }\n    }\n\nThen write `NetworkPolicy` Kubernetes manifests to allow only the\nflows the workload needs. A sensible default is a namespace-scoped\ndeny-all egress with explicit allow rules for required services.\n",
+      "fix_hcl": "resource \"google_container_cluster\" \"example\" {\n  name     = \"example\"\n  location = \"us-central1\"\n  network_policy {\n    enabled  = true\n    provider = \"CALICO\"\n  }\n  addons_config {\n    network_policy_config { disabled = false }\n  }\n}\n",
+      "fix_disruption": "forces_replacement",
+      "narrative": "Without a network policy on google_container_cluster.demo, every pod in the cluster can reach every other pod on every port \u2014 there is no namespace isolation or default-deny. An attacker who compromises one container can scan and pivot to databases, metadata servers, and control-plane endpoints without any network-layer barrier, as demonstrated in the 2020 Tesla Kubernetes cryptomining incident where lateral movement from one compromised pod was unrestricted. Enable the built-in network policy provider and deploy default-deny egress policies in every workload namespace."
+    },
+    {
+      "id": "SEC-GCP-SA-KEY-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 69,
+      "resource": "google_service_account_key.app_key",
+      "urgency": "MEDIUM",
+      "title": "GCP service account key created in Terraform",
+      "section": "security",
+      "recommendation": "Remove the `google_service_account_key` resource and migrate to one of:\n\n1. **GKE workloads** \u2014 Workload Identity:\n   ```hcl\n   resource \"google_service_account_iam_member\" \"wi\" {\n     service_account_id = google_service_account.app.name\n     role               = \"roles/iam.workloadIdentityUser\"\n     member             = \"serviceAccount:${var.project}.svc.id.goog[${var.namespace}/${var.ksa}]\"\n   }\n   ```\n   Set `google_container_cluster.workload_identity_config.workload_pool`.\n\n2. **CI/CD pipelines** \u2014 Workload Identity Federation:\n   ```hcl\n   resource \"google_iam_workload_identity_pool\" \"ci\" { \u2026 }\n   resource \"google_iam_workload_identity_pool_provider\" \"github\" { \u2026 }\n   ```\n   No key file; pipeline asserts its OIDC token to get a short-lived token.\n\n3. **Short-lived tokens** (rare on-premise need):\n   Use `google_service_account_access_token` data source for ephemeral\n   tokens scoped to a single call rather than a persistent key.\n\nIf you must keep a key temporarily, encrypt the output with Cloud KMS\nbefore writing to any storage and rotate at least every 90 days.\n",
+      "fix_hcl": "# Replace service account key with Workload Identity (GKE example)\nresource \"google_service_account_iam_member\" \"wi\" {\n  service_account_id = google_service_account.app.name\n  role               = \"roles/iam.workloadIdentityUser\"\n  member             = \"serviceAccount:${var.project}.svc.id.goog[${var.namespace}/${var.ksa}]\"\n}\n\nresource \"google_container_cluster\" \"app\" {\n  workload_identity_config {\n    workload_pool = \"${var.project}.svc.id.goog\"\n  }\n}\n# Remove the google_service_account_key resource entirely\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-GKE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 37,
+      "resource": "google_container_cluster.demo",
+      "urgency": "HIGH",
+      "title": "GKE cluster missing private nodes",
+      "section": "stack",
+      "recommendation": "Add a `private_cluster_config { enable_private_nodes = true ... }` block.\nPublic node IPs widen the attack surface and prevent VPC Service Controls\nfrom constraining outbound traffic.\n\n    private_cluster_config {\n      enable_private_nodes    = true\n      enable_private_endpoint = false\n      master_ipv4_cidr_block  = \"172.16.0.0/28\"\n    }\n",
+      "fix_hcl": "resource \"google_container_cluster\" \"example\" {\n  name     = \"example\"\n  location = \"us-central1\"\n  private_cluster_config {\n    enable_private_nodes    = true\n    enable_private_endpoint = false\n    master_ipv4_cidr_block  = \"172.16.0.0/28\"\n  }\n  ip_allocation_policy {}\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "STK-GCP-GKE-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 37,
+      "resource": "google_container_cluster.demo",
+      "urgency": "HIGH",
+      "title": "GKE cluster missing Workload Identity",
+      "section": "stack",
+      "recommendation": "Add to the cluster:\n\n    workload_identity_config {\n      workload_pool = \"${var.project_id}.svc.id.goog\"\n    }\n\nWithout Workload Identity, pods that need GCP access must mount\nstatic service account keys as Kubernetes secrets \u2014 a long-lived\ncredential that survives every pod restart and is hard to rotate.\nWI binds a Kubernetes service account to a Google service account\nvia the cluster's identity pool, eliminating the static key.\n\nPer-deployment, then bind a KSA to a GSA:\n\n    resource \"google_service_account_iam_member\" \"wi\" {\n      service_account_id = google_service_account.app.name\n      role               = \"roles/iam.workloadIdentityUser\"\n      member             = \"serviceAccount:${var.project_id}.svc.id.goog[mynamespace/myksa]\"\n    }\n",
+      "fix_hcl": "resource \"google_container_cluster\" \"example\" {\n  name     = \"example\"\n  location = \"us-central1\"\n  workload_identity_config {\n    workload_pool = \"${var.project_id}.svc.id.goog\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-GKE-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 37,
+      "resource": "google_container_cluster.demo",
+      "urgency": "HIGH",
+      "title": "GKE cluster missing application-layer secrets encryption",
+      "section": "stack",
+      "recommendation": "Add a `database_encryption { state = \"ENCRYPTED\" key_name = <kms-key> }`\nblock. Without this, etcd-stored Kubernetes Secrets are encrypted only\nat the Google-managed disk level \u2014 not at the application layer.\n\n    database_encryption {\n      state    = \"ENCRYPTED\"\n      key_name = google_kms_crypto_key.k8s_secrets.id\n    }\n",
+      "fix_hcl": "resource \"google_container_cluster\" \"example\" {\n  name     = \"example\"\n  location = \"us-central1\"\n  database_encryption {\n    state    = \"ENCRYPTED\"\n    key_name = google_kms_crypto_key.gke.id\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-GCP-GKE-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 37,
+      "resource": "google_container_cluster.demo",
+      "urgency": "HIGH",
+      "title": "GKE cluster missing master authorized networks",
+      "section": "stack",
+      "recommendation": "Add a `master_authorized_networks_config` block to restrict who can\nreach the Kubernetes API server:\n\n    master_authorized_networks_config {\n      cidr_blocks {\n        cidr_block   = \"10.0.0.0/8\"\n        display_name = \"internal-vpc\"\n      }\n      cidr_blocks {\n        cidr_block   = \"<corporate-egress-cidr>\"\n        display_name = \"corp-vpn\"\n      }\n    }\n\nWithout this block the API server is reachable from any IP that can\nreach GCP, making it a target for credential stuffing and zero-day\nexploits against the Kubernetes API.\n",
+      "fix_hcl": "resource \"google_container_cluster\" \"example\" {\n  name     = \"example\"\n  location = \"us-central1\"\n  master_authorized_networks_config {\n    cidr_blocks {\n      cidr_block   = \"203.0.113.0/24\"\n      display_name = \"corporate-vpn\"\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "COST-GCP-RISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 94,
+      "resource": "google_sql_database_instance.main",
+      "urgency": "HIGH",
+      "on_critical_path": true,
+      "title": "Expensive resource without cost control",
+      "section": "ops",
+      "recommendation": "Add explicit cost controls to prevent bill surprises:\n- Spanner: set `processing_units` explicitly\n- GKE: set `cluster_autoscaling.resource_limits` with max bounds\n- Cloud SQL: set `settings.disk_autoresize_limit`\n- Compute: consider `scheduling { preemptible = true }` for non-production\n",
+      "fix_hcl": "resource \"google_spanner_instance\" \"app\" {\n  config           = \"regional-us-central1\"\n  display_name     = \"app\"\n  processing_units = 100\n}\n\nresource \"google_sql_database_instance\" \"app\" {\n  settings {\n    tier                   = \"db-f1-micro\"\n    disk_autoresize        = true\n    disk_autoresize_limit  = 50\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "COST-GCP-RISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 114,
+      "resource": "google_sql_database_instance.no_dp",
+      "urgency": "LOW",
+      "title": "Expensive resource without cost control",
+      "section": "ops",
+      "recommendation": "Add explicit cost controls to prevent bill surprises:\n- Spanner: set `processing_units` explicitly\n- GKE: set `cluster_autoscaling.resource_limits` with max bounds\n- Cloud SQL: set `settings.disk_autoresize_limit`\n- Compute: consider `scheduling { preemptible = true }` for non-production\n",
+      "fix_hcl": "resource \"google_spanner_instance\" \"app\" {\n  config           = \"regional-us-central1\"\n  display_name     = \"app\"\n  processing_units = 100\n}\n\nresource \"google_sql_database_instance\" \"app\" {\n  settings {\n    tier                   = \"db-f1-micro\"\n    disk_autoresize        = true\n    disk_autoresize_limit  = 50\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "COST-GCP-RISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 45,
+      "resource": "google_compute_instance.exposed",
+      "urgency": "MEDIUM",
+      "title": "Expensive resource without cost control",
+      "section": "ops",
+      "recommendation": "Add explicit cost controls to prevent bill surprises:\n- Spanner: set `processing_units` explicitly\n- GKE: set `cluster_autoscaling.resource_limits` with max bounds\n- Cloud SQL: set `settings.disk_autoresize_limit`\n- Compute: consider `scheduling { preemptible = true }` for non-production\n",
+      "fix_hcl": "resource \"google_spanner_instance\" \"app\" {\n  config           = \"regional-us-central1\"\n  display_name     = \"app\"\n  processing_units = 100\n}\n\nresource \"google_sql_database_instance\" \"app\" {\n  settings {\n    tier                   = \"db-f1-micro\"\n    disk_autoresize        = true\n    disk_autoresize_limit  = 50\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 45,
+      "resource": "google_compute_instance.exposed",
+      "urgency": "MEDIUM",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 94,
+      "resource": "google_sql_database_instance.main",
+      "urgency": "HIGH",
+      "on_critical_path": true,
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 114,
+      "resource": "google_sql_database_instance.no_dp",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 135,
+      "resource": "google_storage_bucket.prod_data",
+      "urgency": "MEDIUM",
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 94,
+      "resource": "google_sql_database_instance.main",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 114,
+      "resource": "google_sql_database_instance.no_dp",
+      "urgency": "MEDIUM",
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-BUCKET-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 135,
+      "resource": "google_storage_bucket.prod_data",
+      "urgency": "MEDIUM",
+      "title": "GCS bucket missing public_access_prevention=enforced",
+      "section": "security",
+      "recommendation": "Add `public_access_prevention = \"enforced\"` to every bucket. This is\na defense-in-depth control that blocks accidental public IAM grants\neven if SEC-IAM-002 is bypassed.\n",
+      "fix_hcl": "resource \"google_storage_bucket\" \"example\" {\n  name                        = \"example\"\n  location                    = \"US\"\n  public_access_prevention    = \"enforced\"\n  uniform_bucket_level_access = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-BUCKET-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 135,
+      "resource": "google_storage_bucket.prod_data",
+      "urgency": "LOW",
+      "title": "GCS bucket missing uniform_bucket_level_access",
+      "section": "security",
+      "recommendation": "Set `uniform_bucket_level_access = true`. ACLs are legacy and should\nnot coexist with IAM bindings.\n",
+      "fix_hcl": "resource \"google_storage_bucket\" \"example\" {\n  name                        = \"example\"\n  location                    = \"US\"\n  uniform_bucket_level_access = true\n  public_access_prevention    = \"enforced\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-COMPUTE-DISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 45,
+      "resource": "google_compute_instance.exposed",
+      "urgency": "MEDIUM",
+      "title": "GCP compute disk not encrypted with CSEK/CMEK",
+      "section": "security",
+      "recommendation": "Specify a KMS key for disk encryption:\n\n    resource \"google_compute_disk\" \"data\" {\n      name = \"data\"\n      type = \"pd-ssd\"\n      zone = \"us-central1-a\"\n\n      disk_encryption_key {\n        kms_key_self_link = google_kms_crypto_key.disk.id\n      }\n    }\n",
+      "fix_hcl": "resource \"google_compute_disk\" \"example\" {\n  name = \"example\"\n  type = \"pd-ssd\"\n  zone = \"us-central1-a\"\n  disk_encryption_key {\n    kms_key_self_link = google_kms_crypto_key.disk.id\n  }\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "SEC-GCP-COMPUTE-PUBLIC-IP-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 45,
+      "resource": "google_compute_instance.exposed",
+      "urgency": "HIGH",
+      "title": "Compute instance has a public IP via access_config",
+      "section": "security",
+      "recommendation": "Remove the `access_config {}` block:\n\n    network_interface {\n      network    = google_compute_network.app.id\n      subnetwork = google_compute_subnetwork.app.id\n      # No access_config => no public IP\n    }\n\nIf outbound internet access is needed for package fetches or API\ncalls, use a Cloud NAT gateway on the VPC. If inbound access is\nneeded (rare), put the VM behind an Identity-Aware Proxy or HTTPS\nload balancer rather than exposing the instance directly.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  name         = \"example\"\n  machine_type = \"e2-medium\"\n  zone         = \"us-central1-a\"\n  boot_disk {\n    initialize_params { image = \"debian-cloud/debian-11\" }\n  }\n  network_interface {\n    network    = google_compute_network.vpc.id\n    subnetwork = google_compute_subnetwork.private.id\n    # No access_config block \u2014 no public IP assigned\n  }\n}\n",
+      "fix_disruption": "none",
+      "narrative": "google_compute_instance.exposed has a public IP via an access_config block, making it directly reachable from the internet and exposing any listening service to internet-scale scanners and exploit attempts. GCP instances with public IPs are routinely targeted within minutes of provisioning by automated credential-stuffing and exploitation bots, as documented in multiple GCP threat intelligence reports. Remove the access_config block and use Cloud NAT for outbound traffic; use Identity-Aware Proxy for authenticated inbound access."
+    },
+    {
+      "id": "SEC-GCP-COMPUTE-SA-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 45,
+      "resource": "google_compute_instance.exposed",
+      "urgency": "HIGH",
+      "title": "Compute instance uses default Compute Engine service account",
+      "section": "security",
+      "recommendation": "When `service_account` is omitted, the VM runs as the project's\ndefault Compute Engine SA (`<project-number>-compute@developer.\ngserviceaccount.com`), which holds `roles/editor` project-wide. Any\nworkload code running on the VM inherits that level of access \u2014 far\ntoo broad for almost any application.\n\nCreate a dedicated SA scoped to the workload and bind it explicitly:\n\n    resource \"google_service_account\" \"vm_runtime\" {\n      account_id   = \"vm-runtime\"\n      display_name = \"Runtime SA for ${var.app_name}\"\n    }\n\n    resource \"google_compute_instance\" \"app\" {\n      # ...\n      service_account {\n        email  = google_service_account.vm_runtime.email\n        scopes = [\"cloud-platform\"]\n      }\n    }\n\nThen attach narrow IAM grants to that SA on only the resources the\nworkload needs (objectViewer on a specific bucket, etc.).\n",
+      "fix_hcl": "resource \"google_service_account\" \"vm\" {\n  account_id = \"vm-runtime\"\n}\nresource \"google_compute_instance\" \"example\" {\n  name         = \"example\"\n  machine_type = \"e2-medium\"\n  zone         = \"us-central1-a\"\n  boot_disk {\n    initialize_params { image = \"debian-cloud/debian-11\" }\n  }\n  network_interface { network = \"default\" }\n  service_account {\n    email  = google_service_account.vm.email\n    scopes = [\"cloud-platform\"]\n  }\n}\n",
+      "fix_disruption": "none",
+      "narrative": "google_compute_instance.exposed uses the default Compute Engine service account, which holds roles/editor project-wide \u2014 any workload code or attacker who gains code execution on this VM can read every bucket, modify every Cloud SQL database, and impersonate other service accounts. The default SA pattern was the root cause in several GCP privilege-escalation chains documented by Palo Alto Unit 42, where container escape led to project-wide compromise via the VM's inherited credentials. Bind a dedicated, narrowly scoped service account to every Compute instance."
+    },
+    {
+      "id": "SEC-GCP-COMPUTE-SHIELDED-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 45,
+      "resource": "google_compute_instance.exposed",
+      "urgency": "MEDIUM",
+      "title": "GCP Compute instance missing shielded instance configuration",
+      "section": "security",
+      "recommendation": "Add a `shielded_instance_config` block to every `google_compute_instance`:\n\n    resource \"google_compute_instance\" \"app\" {\n      # ...\n      shielded_instance_config {\n        enable_secure_boot          = true\n        enable_vtpm                 = true\n        enable_integrity_monitoring = true\n      }\n    }\n\nThe machine must use a Shielded-compatible image (all standard GCP images\npublished after 2018 are shielded-compatible). Use\n`gcloud compute images list --filter=\"shielded=true\"` to confirm.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  name         = \"example\"\n  machine_type = \"e2-medium\"\n  zone         = \"us-central1-a\"\n  boot_disk {\n    initialize_params { image = \"debian-cloud/debian-11\" }\n  }\n  network_interface { network = \"default\" }\n  shielded_instance_config {\n    enable_secure_boot          = true\n    enable_vtpm                 = true\n    enable_integrity_monitoring = true\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-GCP-NETWORK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 67,
+      "resource": "google_compute_firewall.ssh_open",
+      "urgency": "HIGH",
+      "title": "SSH (tcp:22) exposed to 0.0.0.0/0",
+      "section": "security",
+      "recommendation": "Replace public SSH ingress with **Identity-Aware Proxy** TCP\nforwarding. The trio is:\n\n    resource \"google_compute_firewall\" \"iap_ssh\" {\n      name      = \"iap-ssh\"\n      network   = google_compute_network.vpc.id\n      direction = \"INGRESS\"\n\n      # IAP CIDR \u2014 fixed Google-owned range\n      source_ranges = [\"35.235.240.0/20\"]\n\n      allow {\n        protocol = \"tcp\"\n        ports    = [\"22\"]\n      }\n\n      target_tags = [\"iap-ssh\"]\n    }\n\nThen `gcloud compute ssh <vm> --tunnel-through-iap` from any\nnetwork. If IAP isn't an option, restrict `source_ranges` to\ncorporate egress CIDRs and rotate them out of band.\n",
+      "fix_hcl": "resource \"google_compute_firewall\" \"iap_ssh\" {\n  name          = \"iap-ssh\"\n  network       = google_compute_network.vpc.id\n  direction     = \"INGRESS\"\n  source_ranges = [\"35.235.240.0/20\"]\n  allow {\n    protocol = \"tcp\"\n    ports    = [\"22\"]\n  }\n  target_tags = [\"iap-ssh\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-NETWORK-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 82,
+      "resource": "google_compute_firewall.rdp_open",
+      "urgency": "HIGH",
+      "title": "RDP (tcp:3389) exposed to 0.0.0.0/0",
+      "section": "security",
+      "recommendation": "Restrict `source_ranges` to corporate CIDRs or use IAP TCP forwarding\nfor RDP access. Never expose tcp:3389 to the public internet.\n\n    resource \"google_compute_firewall\" \"iap_rdp\" {\n      name    = \"iap-rdp\"\n      network = google_compute_network.vpc.id\n\n      source_ranges = [\"35.235.240.0/20\"]\n\n      allow {\n        protocol = \"tcp\"\n        ports    = [\"3389\"]\n      }\n\n      target_tags = [\"iap-rdp\"]\n    }\n",
+      "fix_hcl": "resource \"google_compute_firewall\" \"iap_rdp\" {\n  name          = \"iap-rdp\"\n  network       = google_compute_network.vpc.id\n  direction     = \"INGRESS\"\n  source_ranges = [\"35.235.240.0/20\"]\n  allow {\n    protocol = \"tcp\"\n    ports    = [\"3389\"]\n  }\n  target_tags = [\"iap-rdp\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-NETWORK-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 145,
+      "resource": "google_compute_firewall.open_postgres",
+      "urgency": "HIGH",
+      "title": "GCP firewall rule exposes database or cache port to 0.0.0.0/0",
+      "section": "security",
+      "recommendation": "Remove the `allow` block for database/cache ports or restrict\n`source_ranges` to specific internal CIDR ranges:\n\n```hcl\nresource \"google_compute_firewall\" \"db_internal\" {\n  name    = \"allow-db-internal\"\n  network = google_compute_network.main.name\n\n  allow {\n    protocol = \"tcp\"\n    ports    = [\"5432\"]\n  }\n\n  # Only allow from the application subnet, never from 0.0.0.0/0\n  source_ranges = [google_compute_subnetwork.app.ip_cidr_range]\n}\n```\n\nFor GKE workloads, use a Kubernetes `NetworkPolicy` (covered by\nSEC-GCP-GKE-NETWORK-POLICY-001) instead of a VPC firewall rule.\n\nFor Cloud SQL, the correct pattern is the Cloud SQL Auth Proxy or\nPrivate Service Access \u2014 not a public IP with firewall rules.\n",
+      "fix_hcl": "resource \"google_compute_firewall\" \"db_internal\" {\n  name          = \"allow-db-internal\"\n  network       = google_compute_network.vpc.id\n  direction     = \"INGRESS\"\n  source_ranges = [google_compute_subnetwork.app.ip_cidr_range]\n  allow {\n    protocol = \"tcp\"\n    ports    = [\"5432\"]\n  }\n  target_tags = [\"db\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-SQL-PUBLIC-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 94,
+      "resource": "google_sql_database_instance.main",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "Cloud SQL instance permits public IPv4",
+      "section": "security",
+      "recommendation": "Set `ipv4_enabled = false` and use Private Service Connect or a\nPrivate IP allocation:\n\n    ip_configuration {\n      ipv4_enabled    = false\n      private_network = google_compute_network.vpc.id\n    }\n\nIf a temporary public IP is needed for a one-off migration, gate it\nbehind a `count` driven by a tfvar (`var.allow_public_ip`) and\ndefault to false. Document the migration window in CLAUDE.md.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  name             = \"example\"\n  database_version = \"POSTGRES_14\"\n  settings {\n    tier = \"db-f1-micro\"\n    ip_configuration {\n      ipv4_enabled    = false\n      private_network = google_compute_network.vpc.id\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "narrative": "google_sql_database_instance.main has ipv4_enabled = true, assigning the Cloud SQL instance a public IP reachable from the internet \u2014 even with authorized_networks set, a single misconfigured network rule or future change exposes the database to direct attack. Internet-exposed Cloud SQL instances are routinely targeted by automated credential-stuffing attacks, and any SQL injection in the connected application can be exploited without traversing VPC boundaries. Set ipv4_enabled = false and use Private Service Connect or private IP allocation for all database connectivity."
+    },
+    {
+      "id": "STK-GCP-ARTIFACT-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 158,
+      "resource": "google_artifact_registry_repository.no_cmek",
+      "urgency": "LOW",
+      "title": "Artifact Registry repository missing customer-managed encryption key",
+      "section": "stack",
+      "recommendation": "Add a `kms_key_name` pointing to a Cloud KMS CryptoKey:\n\n    resource \"google_artifact_registry_repository\" \"containers\" {\n      location      = \"us-central1\"\n      repository_id = \"containers\"\n      format        = \"DOCKER\"\n      kms_key_name  = google_kms_crypto_key.artifact.id\n    }\n\nThe KMS key ring must be in the same region as the repository.\nGrant the Artifact Registry service account\n`roles/cloudkms.cryptoKeyEncrypterDecrypter` on the key before\ncreating the repository \u2014 otherwise `terraform apply` will fail\nwith a permission error.\n",
+      "fix_hcl": "resource \"google_artifact_registry_repository\" \"example\" {\n  location      = \"us-central1\"\n  repository_id = \"example\"\n  format        = \"DOCKER\"\n  kms_key_name  = google_kms_crypto_key.artifact.id\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "STK-GCP-BUCKET-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 135,
+      "resource": "google_storage_bucket.prod_data",
+      "urgency": "LOW",
+      "title": "GCS bucket missing versioning",
+      "section": "stack",
+      "recommendation": "Add object versioning so accidental overwrites and deletes are\nrecoverable:\n\n    resource \"google_storage_bucket\" \"data\" {\n      # ...\n      versioning {\n        enabled = true\n      }\n      lifecycle_rule {\n        condition  { num_newer_versions = 10 }\n        action     { type = \"Delete\" }\n      }\n    }\n\nPair versioning with a `lifecycle_rule` (above) to expire\nnon-current versions, otherwise storage costs grow unbounded for\nhigh-write buckets. State buckets (`*-tfstate`) and any bucket\nstoring audit logs MUST have versioning on \u2014 losing prior state\nduring a botched apply is unrecoverable otherwise.\n",
+      "fix_hcl": "resource \"google_storage_bucket\" \"example\" {\n  name     = \"example\"\n  location = \"US\"\n  versioning {\n    enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-CLOUDSQL-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 114,
+      "resource": "google_sql_database_instance.no_dp",
+      "urgency": "MEDIUM",
+      "title": "Cloud SQL instance missing deletion protection",
+      "section": "stack",
+      "recommendation": "Set `deletion_protection = true` on every Cloud SQL instance. This is\nthe only safety net against `terraform destroy` removing a database\nwith all of its data.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  name             = \"example\"\n  database_version = \"POSTGRES_15\"\n  deletion_protection = true\n  settings {\n    tier = \"db-f1-micro\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-CLOUDSQL-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 94,
+      "resource": "google_sql_database_instance.main",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "Cloud SQL instance does not require SSL connections",
+      "section": "stack",
+      "recommendation": "Set `require_ssl = true` in the `ip_configuration` block:\n\n    settings {\n      ip_configuration {\n        require_ssl     = true\n        ipv4_enabled    = false\n        private_network = google_compute_network.vpc.id\n      }\n    }\n\nWithout this flag, clients can connect over unencrypted TCP. Any\nnetwork path between client and Cloud SQL (VPC, Cloud Interconnect,\nCloud VPN) becomes a potential eavesdropping or MITM point.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  settings {\n    ip_configuration {\n      ssl_mode = \"ENCRYPTED_ONLY\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-GCP-CLOUDSQL-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 114,
+      "resource": "google_sql_database_instance.no_dp",
+      "urgency": "MEDIUM",
+      "title": "Cloud SQL instance does not require SSL connections",
+      "section": "stack",
+      "recommendation": "Set `require_ssl = true` in the `ip_configuration` block:\n\n    settings {\n      ip_configuration {\n        require_ssl     = true\n        ipv4_enabled    = false\n        private_network = google_compute_network.vpc.id\n      }\n    }\n\nWithout this flag, clients can connect over unencrypted TCP. Any\nnetwork path between client and Cloud SQL (VPC, Cloud Interconnect,\nCloud VPN) becomes a potential eavesdropping or MITM point.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  settings {\n    ip_configuration {\n      ssl_mode = \"ENCRYPTED_ONLY\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "COST-GCP-RISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+      "line": 42,
+      "resource": "google_sql_database_instance.public_db",
+      "urgency": "MEDIUM",
+      "title": "Expensive resource without cost control",
+      "section": "ops",
+      "recommendation": "Add explicit cost controls to prevent bill surprises:\n- Spanner: set `processing_units` explicitly\n- GKE: set `cluster_autoscaling.resource_limits` with max bounds\n- Cloud SQL: set `settings.disk_autoresize_limit`\n- Compute: consider `scheduling { preemptible = true }` for non-production\n",
+      "fix_hcl": "resource \"google_spanner_instance\" \"app\" {\n  config           = \"regional-us-central1\"\n  display_name     = \"app\"\n  processing_units = 100\n}\n\nresource \"google_sql_database_instance\" \"app\" {\n  settings {\n    tier                   = \"db-f1-micro\"\n    disk_autoresize        = true\n    disk_autoresize_limit  = 50\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+      "line": 42,
+      "resource": "google_sql_database_instance.public_db",
+      "urgency": "MEDIUM",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+      "line": 42,
+      "resource": "google_sql_database_instance.public_db",
+      "urgency": "HIGH",
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-CLOUDRUN-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+      "line": 68,
+      "resource": "google_cloud_run_v2_service.publicly_reachable",
+      "urgency": "HIGH",
+      "title": "Cloud Run service allows all ingress traffic",
+      "section": "security",
+      "recommendation": "Restrict ingress to internal traffic or load-balancer-only:\n\n    resource \"google_cloud_run_v2_service\" \"app\" {\n      # ...\n      ingress = \"INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER\"\n    }\n\nOptions:\n- `INGRESS_TRAFFIC_INTERNAL_ONLY` \u2014 VPC-only, no public access\n- `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` \u2014 load balancer + VPC (recommended for public APIs with WAF/CDN)\n- `INGRESS_TRAFFIC_ALL` \u2014 public internet (only for genuinely public, unauthenticated endpoints)\n\nPair with `google_cloud_run_v2_service_iam_member` if authentication\nis required.\n",
+      "fix_hcl": "resource \"google_cloud_run_v2_service\" \"example\" {\n  name     = \"example\"\n  location = \"us-central1\"\n  ingress  = \"INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER\"\n  template {\n    containers {\n      image = \"gcr.io/example/app:latest\"\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-SQL-PUBLIC-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+      "line": 42,
+      "resource": "google_sql_database_instance.public_db",
+      "urgency": "HIGH",
+      "title": "Cloud SQL instance permits public IPv4",
+      "section": "security",
+      "recommendation": "Set `ipv4_enabled = false` and use Private Service Connect or a\nPrivate IP allocation:\n\n    ip_configuration {\n      ipv4_enabled    = false\n      private_network = google_compute_network.vpc.id\n    }\n\nIf a temporary public IP is needed for a one-off migration, gate it\nbehind a `count` driven by a tfvar (`var.allow_public_ip`) and\ndefault to false. Document the migration window in CLAUDE.md.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  name             = \"example\"\n  database_version = \"POSTGRES_14\"\n  settings {\n    tier = \"db-f1-micro\"\n    ip_configuration {\n      ipv4_enabled    = false\n      private_network = google_compute_network.vpc.id\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "narrative": "google_sql_database_instance.public_db has ipv4_enabled = true, assigning the Cloud SQL instance a public IP reachable from the internet \u2014 even with authorized_networks set, a single misconfigured network rule or future change exposes the database to direct attack. Internet-exposed Cloud SQL instances are routinely targeted by automated credential-stuffing attacks, and any SQL injection in the connected application can be exploited without traversing VPC boundaries. Set ipv4_enabled = false and use Private Service Connect or private IP allocation for all database connectivity."
+    },
+    {
+      "id": "STK-GCP-CLOUDSQL-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+      "line": 42,
+      "resource": "google_sql_database_instance.public_db",
+      "urgency": "HIGH",
+      "title": "Cloud SQL instance does not require SSL connections",
+      "section": "stack",
+      "recommendation": "Set `require_ssl = true` in the `ip_configuration` block:\n\n    settings {\n      ip_configuration {\n        require_ssl     = true\n        ipv4_enabled    = false\n        private_network = google_compute_network.vpc.id\n      }\n    }\n\nWithout this flag, clients can connect over unencrypted TCP. Any\nnetwork path between client and Cloud SQL (VPC, Cloud Interconnect,\nCloud VPN) becomes a potential eavesdropping or MITM point.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  settings {\n    ip_configuration {\n      ssl_mode = \"ENCRYPTED_ONLY\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "ROB-VERSION-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/versions.tf",
+      "line": 10,
+      "resource": "",
+      "urgency": "MEDIUM",
+      "title": "required_version floor too old for skill assumptions",
+      "section": "robustness",
+      "recommendation": "Set `required_version = \"~> 1.10\"` (or whatever the current Terraform\nmajor is). Many checks in this skill assume features only available in\nTerraform 1.6+: native test framework (`*.tftest.hcl`), `import` blocks,\n`optional()` in object types, `moved` blocks, conditional outputs.\n",
+      "fix_hcl": "terraform {\n  required_version = \">= 1.5.0, < 2.0.0\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "COST-GCP-RISK-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 49,
+      "resource": "google_sql_database_instance.legacy",
+      "urgency": "LOW",
+      "title": "Expensive resource without cost control",
+      "section": "ops",
+      "recommendation": "Add explicit cost controls to prevent bill surprises:\n- Spanner: set `processing_units` explicitly\n- GKE: set `cluster_autoscaling.resource_limits` with max bounds\n- Cloud SQL: set `settings.disk_autoresize_limit`\n- Compute: consider `scheduling { preemptible = true }` for non-production\n",
+      "fix_hcl": "resource \"google_spanner_instance\" \"app\" {\n  config           = \"regional-us-central1\"\n  display_name     = \"app\"\n  processing_units = 100\n}\n\nresource \"google_sql_database_instance\" \"app\" {\n  settings {\n    tier                   = \"db-f1-micro\"\n    disk_autoresize        = true\n    disk_autoresize_limit  = 50\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "MOD-PIN-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 36,
+      "resource": "module.unpinned_network",
+      "urgency": "MEDIUM",
+      "title": "Module source not pinned",
+      "section": "module",
+      "recommendation": "Pin every external module:\n - Registry: add `version = \"~> X.Y\"`.\n - Git: add `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL.\n - Local (`./modules/foo`): no pin needed but verify the path is stable.\n",
+      "fix_hcl": "module \"example\" {\n  source  = \"hashicorp/consul/aws\"\n  version = \"= 0.11.0\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "MOD-STALE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "",
+      "urgency": "LOW",
+      "title": "Registry module is significantly behind latest version",
+      "section": "dry",
+      "recommendation": "Run `detect.py --check-registry` to identify modules pinned significantly behind their\nlatest published version on the Terraform Registry. Upgrade the `version` constraint and\nrun `terraform init -upgrade` to pull the newer release. Review the module's CHANGELOG\nfor breaking changes before upgrading across major versions.\n\nStaleness thresholds:\n- MEDIUM: pinned version is >= 1 major version behind latest\n- LOW: pinned version is >= 3 minor versions behind latest (within the same major)\n\nFindings are only emitted by `--check-registry` (requires outbound HTTPS to\nregistry.terraform.io). The static pass records the source pattern but does not\nquery the registry \u2014 keeping normal scans offline-capable.\n",
+      "fix_hcl": "# Update the version constraint to the latest (check with --check-registry)\nmodule \"vpc\" {\n  source  = \"terraform-aws-modules/vpc/aws\"\n  version = \"~> 5.1\"   # was ~> 3.0\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "MOD-SUPPLY-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 38,
+      "resource": "",
+      "urgency": "HIGH",
+      "title": "Registry module missing version constraint",
+      "section": "module",
+      "recommendation": "Add `version = \"~> X.Y\"` to every registry module block. Without a\nversion constraint, `terraform init` resolves the latest available\nversion making builds non-reproducible.\n",
+      "fix_hcl": "module \"example\" {\n  source  = \"hashicorp/consul/aws\"\n  version = \">= 0.11.0, < 0.12.0\"\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1195.002"
+      ]
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 49,
+      "resource": "google_sql_database_instance.legacy",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 49,
+      "resource": "google_sql_database_instance.legacy",
+      "urgency": "MEDIUM",
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-CLOUDSQL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 49,
+      "resource": "google_sql_database_instance.legacy",
+      "urgency": "MEDIUM",
+      "title": "Cloud SQL instance missing backup_configuration",
+      "section": "stack",
+      "recommendation": "Add a `settings { backup_configuration { enabled = true } }` block.\nWithout backups, a destructive query or instance loss is unrecoverable.\nAlso set `point_in_time_recovery_enabled = true` for Postgres / MySQL.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  name             = \"example\"\n  database_version = \"POSTGRES_15\"\n  settings {\n    tier = \"db-f1-micro\"\n    backup_configuration {\n      enabled                        = true\n      start_time                     = \"02:00\"\n      point_in_time_recovery_enabled = true\n      backup_retention_settings {\n        retained_backups = 7\n      }\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-CLOUDSQL-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 49,
+      "resource": "google_sql_database_instance.legacy",
+      "urgency": "MEDIUM",
+      "title": "Cloud SQL instance does not require SSL connections",
+      "section": "stack",
+      "recommendation": "Set `require_ssl = true` in the `ip_configuration` block:\n\n    settings {\n      ip_configuration {\n        require_ssl     = true\n        ipv4_enabled    = false\n        private_network = google_compute_network.vpc.id\n      }\n    }\n\nWithout this flag, clients can connect over unencrypted TCP. Any\nnetwork path between client and Cloud SQL (VPC, Cloud Interconnect,\nCloud VPN) becomes a potential eavesdropping or MITM point.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  settings {\n    ip_configuration {\n      ssl_mode = \"ENCRYPTED_ONLY\"\n    }\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-GCP-CLOUDSQL-005",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+      "line": 49,
+      "resource": "google_sql_database_instance.legacy",
+      "urgency": "MEDIUM",
+      "title": "Cloud SQL instance uses end-of-life database version",
+      "section": "stack",
+      "recommendation": "Upgrade to a supported version. Current Google Cloud SQL supported versions:\n- PostgreSQL: 14, 15, 16\n- MySQL: 8.0, 8.4\n- SQL Server: 2017, 2019, 2022\n\nTest the upgrade on a clone first:\n    resource \"google_sql_database_instance\" \"clone\" {\n      database_version = \"POSTGRES_15\"\n      clone { source_instance_name = google_sql_database_instance.main.name }\n    }\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  name             = \"example\"\n  database_version = \"POSTGRES_16\"\n  settings {\n    tier = \"db-f1-micro\"\n  }\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+      "line": 37,
+      "resource": "google_storage_bucket.logged_source",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+      "line": 57,
+      "resource": "google_storage_bucket.audit_target",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+      "line": 57,
+      "resource": "google_storage_bucket.audit_target",
+      "urgency": "MEDIUM",
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-BUCKET-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+      "line": 57,
+      "resource": "google_storage_bucket.audit_target",
+      "urgency": "MEDIUM",
+      "title": "GCS bucket missing public_access_prevention=enforced",
+      "section": "security",
+      "recommendation": "Add `public_access_prevention = \"enforced\"` to every bucket. This is\na defense-in-depth control that blocks accidental public IAM grants\neven if SEC-IAM-002 is bypassed.\n",
+      "fix_hcl": "resource \"google_storage_bucket\" \"example\" {\n  name                        = \"example\"\n  location                    = \"US\"\n  public_access_prevention    = \"enforced\"\n  uniform_bucket_level_access = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-NETWORK-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+      "line": 73,
+      "resource": "google_compute_subnetwork.no_flow_logs",
+      "urgency": "MEDIUM",
+      "title": "VPC subnet missing flow logs",
+      "section": "security",
+      "recommendation": "Enable VPC Flow Logs on every subnet:\n\n    log_config {\n      aggregation_interval = \"INTERVAL_5_SEC\"\n      flow_sampling        = 0.5\n      metadata             = \"INCLUDE_ALL_METADATA\"\n    }\n\nFlow logs are required for post-incident investigation, anomaly\ndetection, and meeting CIS GCP 3.8. Absent logs mean lateral\nmovement within the VPC leaves no network-layer evidence.\n",
+      "fix_hcl": "resource \"google_compute_subnetwork\" \"example\" {\n  name          = \"example\"\n  ip_cidr_range = \"10.0.0.0/24\"\n  region        = \"us-central1\"\n  network       = google_compute_network.vpc.id\n  log_config {\n    aggregation_interval = \"INTERVAL_5_SEC\"\n    flow_sampling        = 0.5\n    metadata             = \"INCLUDE_ALL_METADATA\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-DNS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+      "line": 83,
+      "resource": "google_dns_managed_zone.no_dnssec",
+      "urgency": "MEDIUM",
+      "title": "Cloud DNS managed zone missing DNSSEC",
+      "section": "stack",
+      "recommendation": "Add `dnssec_config { state = \"on\" }`:\n\n    resource \"google_dns_managed_zone\" \"prod\" {\n      name     = \"prod-zone\"\n      dns_name = \"example.com.\"\n\n      dnssec_config {\n        state = \"on\"\n      }\n    }\n\nDNSSEC protects against cache-poisoning attacks that redirect resolvers\nto attacker-controlled endpoints. Required by CIS GCP 3.9.\n",
+      "fix_hcl": "resource \"google_dns_managed_zone\" \"example\" {\n  name     = \"example\"\n  dns_name = \"example.com.\"\n  dnssec_config {\n    state = \"on\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 53,
+      "resource": "google_storage_bucket.encrypted_cross_region",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 76,
+      "resource": "google_pubsub_topic.no_cmek",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-REDIS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 84,
+      "resource": "google_redis_instance.insecure",
+      "urgency": "MEDIUM",
+      "title": "Cloud Memorystore Redis instance AUTH disabled",
+      "section": "security",
+      "recommendation": "Enable AUTH on the instance:\n\n    resource \"google_redis_instance\" \"cache\" {\n      name           = \"cache\"\n      memory_size_gb = 1\n      auth_enabled   = true\n      transit_encryption_mode = \"SERVER_AUTHENTICATION\"\n    }\n\nAUTH is available on Redis 6.x and above (`redis_version = \"REDIS_6_X\"`\nor higher). After `terraform apply`, retrieve the AUTH string via\n`gcloud redis instances get-auth-string <name> --region=<region>` and\ninject it into consuming workloads via Secret Manager \u2014 do not emit it\nas a Terraform output.\n",
+      "fix_hcl": "resource \"google_redis_instance\" \"example\" {\n  # ... other arguments ...\n  auth_enabled = true\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-GCP-REDIS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 84,
+      "resource": "google_redis_instance.insecure",
+      "urgency": "MEDIUM",
+      "title": "Cloud Memorystore Redis instance transit encryption disabled",
+      "section": "security",
+      "recommendation": "Enable TLS for in-transit encryption:\n\n    resource \"google_redis_instance\" \"cache\" {\n      name                    = \"cache\"\n      memory_size_gb          = 1\n      transit_encryption_mode = \"SERVER_AUTHENTICATION\"\n      auth_enabled            = true\n    }\n\n`SERVER_AUTHENTICATION` requires clients to trust the server TLS\ncertificate (CA bundle available via the instance `server_ca_certs`\noutput). `CLIENT_AUTHENTICATION` additionally requires a client cert.\nUpdate all consumer connection strings to use `rediss://` (TLS) before\nenabling to avoid connection failures.\n",
+      "fix_hcl": "resource \"google_redis_instance\" \"example\" {\n  # ... other arguments ...\n  transit_encryption_mode = \"SERVER_AUTHENTICATION\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-GCP-KMS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 40,
+      "resource": "google_kms_crypto_key.data",
+      "urgency": "MEDIUM",
+      "title": "KMS crypto key missing rotation period",
+      "section": "stack",
+      "recommendation": "Set `rotation_period = \"7776000s\"` (90 days, the CIS maximum) or\nshorter on every symmetric encryption key:\n\n    resource \"google_kms_crypto_key\" \"data\" {\n      name     = \"data\"\n      key_ring = google_kms_key_ring.primary.id\n      purpose  = \"ENCRYPT_DECRYPT\"\n\n      rotation_period = \"7776000s\"  # 90 days\n\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAsymmetric keys (purpose = `ASYMMETRIC_SIGN` /\n`ASYMMETRIC_DECRYPT`) cannot rotate without invalidating\nsignatures and are exempt \u2014 suppress the finding via inline\n`# tf-analyze:ignore STK-KMS-001` and a one-line reason.\n",
+      "fix_hcl": "resource \"google_kms_crypto_key\" \"example\" {\n  name            = \"example\"\n  key_ring        = google_kms_key_ring.example.id\n  rotation_period = \"7776000s\"\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-PUBSUB-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 76,
+      "resource": "google_pubsub_topic.no_cmek",
+      "urgency": "LOW",
+      "title": "Pub/Sub topic missing customer-managed encryption key",
+      "section": "stack",
+      "recommendation": "Bind a Cloud KMS key to the topic:\n\n    resource \"google_pubsub_topic\" \"app\" {\n      name       = \"app-events\"\n      kms_key_name = google_kms_crypto_key.pubsub.id\n    }\n\n    resource \"google_kms_crypto_key_iam_member\" \"pubsub\" {\n      crypto_key_id = google_kms_crypto_key.pubsub.id\n      role          = \"roles/cloudkms.cryptoKeyEncrypterDecrypter\"\n      member        = \"serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com\"\n    }\n\nThe Pub/Sub service agent must have `cloudkms.cryptoKeyEncrypterDecrypter`\non the key \u2014 without the IAM binding the topic will fail to publish.\n\nFor topics in a regulated environment (HIPAA, FedRAMP), pair the CMEK\nwith `google_kms_crypto_key.rotation_period` of \u2264 90 days to satisfy\nCIS GCP 1.10.\n",
+      "fix_hcl": "resource \"google_pubsub_topic\" \"example\" {\n  name         = \"example\"\n  kms_key_name = google_kms_crypto_key.pubsub.id\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "STYLE-DESC-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 100,
+      "resource": "output.vault_token_echo",
+      "urgency": "LOW",
+      "title": "Variable or output missing description",
+      "section": "style",
+      "recommendation": "Add a `description` argument to every variable and output. Descriptions\npopulate `terraform-docs` output, IDE tooltips, and the Terraform\nregistry module page. Without them, consumers must read the source to\nunderstand what a variable controls or an output provides.\n",
+      "fix_hcl": "variable \"environment\" {\n  type        = string\n  description = \"Deployment environment: dev, staging, or prod\"\n}\n\noutput \"instance_id\" {\n  description = \"EC2 instance ID of the application server\"\n  value       = aws_instance.app.id\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+      "line": 32,
+      "resource": "google_storage_bucket.no_versioning",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+      "line": 60,
+      "resource": "google_bigquery_dataset.analytics",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-MOVED-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+      "line": 46,
+      "resource": "moved",
+      "urgency": "LOW",
+      "title": "Stale moved block may need cleanup",
+      "section": "robustness",
+      "recommendation": "After `terraform apply` has successfully run with this `moved` block and\nthe state reflects the new address, remove the block to keep the config\nclean. Stale moved blocks accumulate noise and can confuse future readers.\n",
+      "fix_hcl": "# Remove the moved block after terraform apply has reconciled state:\n# Delete the block below \u2014 it is no longer needed once state is updated.\n#\n# moved {\n#   from = aws_instance.old\n#   to   = aws_instance.new\n# }\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-REMOVED-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+      "line": 52,
+      "resource": "removed",
+      "urgency": "LOW",
+      "title": "Stale removed block may need cleanup",
+      "section": "robustness",
+      "recommendation": "Once `terraform apply` has executed the `removed` block (destroying or\nforgetting the resource), delete the block to keep the configuration\nclean. Stale `removed` blocks accumulate noise the same way stale `moved`\nblocks do, and they are a warning sign that a refactor was started but\nnever finished.\n\nIf the intent was to *forget* the resource (keep it in the cloud, drop\nit from state), confirm `lifecycle { destroy = false }` was set. If the\nintent was to *destroy*, the default `destroy = true` is correct.\n",
+      "fix_hcl": "# Remove the removed block after terraform apply has executed it:\n# Delete the block below once the resource has been destroyed/forgotten.\n#\n# removed {\n#   from = aws_instance.legacy\n#   lifecycle { destroy = false }\n# }\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-GCP-BIGQUERY-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+      "line": 60,
+      "resource": "google_bigquery_dataset.analytics",
+      "urgency": "MEDIUM",
+      "title": "BigQuery dataset missing default CMEK",
+      "section": "stack",
+      "recommendation": "Add `default_encryption_configuration { kms_key_name = <kms-key> }`\non every dataset. Without this, new tables fall back to Google-managed\nkeys and CIS GCP 7.2/7.3 are not satisfied.\n\n    resource \"google_bigquery_dataset\" \"analytics\" {\n      dataset_id = \"analytics\"\n      location   = \"US\"\n\n      default_encryption_configuration {\n        kms_key_name = google_kms_crypto_key.bq.id\n      }\n    }\n",
+      "fix_hcl": "resource \"google_bigquery_dataset\" \"example\" {\n  dataset_id = \"example\"\n  location   = \"US\"\n  default_encryption_configuration {\n    kms_key_name = google_kms_crypto_key.bq.id\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-GCP-BUCKET-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+      "line": 32,
+      "resource": "google_storage_bucket.no_versioning",
+      "urgency": "LOW",
+      "title": "GCS bucket missing versioning",
+      "section": "stack",
+      "recommendation": "Add object versioning so accidental overwrites and deletes are\nrecoverable:\n\n    resource \"google_storage_bucket\" \"data\" {\n      # ...\n      versioning {\n        enabled = true\n      }\n      lifecycle_rule {\n        condition  { num_newer_versions = 10 }\n        action     { type = \"Delete\" }\n      }\n    }\n\nPair versioning with a `lifecycle_rule` (above) to expire\nnon-current versions, otherwise storage costs grow unbounded for\nhigh-write buckets. State buckets (`*-tfstate`) and any bucket\nstoring audit logs MUST have versioning on \u2014 losing prior state\nduring a botched apply is unrecoverable otherwise.\n",
+      "fix_hcl": "resource \"google_storage_bucket\" \"example\" {\n  name     = \"example\"\n  location = \"US\"\n  versioning {\n    enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-GCP-LABELS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/04_insecure_design.tf",
+      "line": 48,
+      "resource": "google_storage_bucket.tfstate",
+      "urgency": "LOW",
+      "title": "GCP resource missing labels block",
+      "section": "ops",
+      "recommendation": "Add a `labels` (or equivalent) block to every GCP resource that supports\nit. At minimum include `environment` and `managed_by = \"terraform\"`.\nLabels are required for cost allocation, compliance dashboards, and\nautomated cleanup policies. Use a shared `locals` block or variable to\nkeep labels consistent across the module.\n",
+      "fix_hcl": "resource \"google_compute_instance\" \"example\" {\n  # ... other arguments ...\n  labels = {\n    environment = \"prod\"\n    owner       = \"platform-team\"\n    project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/04_insecure_design.tf",
+      "line": 48,
+      "resource": "google_storage_bucket.tfstate",
+      "urgency": "MEDIUM",
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-GCP-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/04_insecure_design.tf",
+      "line": 40,
+      "resource": "google_spanner_instance.main",
+      "urgency": "MEDIUM",
+      "title": "Stateful resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state. The block forces operators to remove the line\nintentionally before a destroy plan can succeed \u2014 a deliberate friction\nthat has saved real outages.\n",
+      "fix_hcl": "resource \"google_sql_database_instance\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-DATASOURCE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/03_injection.tf",
+      "line": 50,
+      "resource": "data.external.user_query",
+      "urgency": "LOW",
+      "title": "External or HTTP data source executes at plan time",
+      "section": "security",
+      "recommendation": "`data.external` runs an arbitrary program and trusts its JSON stdout.\n`data.http` fetches a URL at plan time, which may leak plan context\nor introduce non-determinism. Review each usage:\n- Can the external script be replaced with a provider data source?\n- Is the HTTP endpoint authenticated and pinned to a known host?\n- Are results used in security-sensitive contexts (IAM, secrets)?\nIf the usage is intentional and reviewed, suppress with\n`# tf-analyze:ignore SEC-DATASOURCE-001`.\n",
+      "fix_hcl": "# Replace data.external with a native provider data source where possible\ndata \"aws_ssm_parameter\" \"config\" {\n  name = \"/app/config\"\n}\n\n# If data.http is required, document intent and pin with a suppression comment\n# # tf-analyze:ignore SEC-DATASOURCE-001 \u2014 internal metadata endpoint, reviewed 2025-01\n# data \"http\" \"metadata\" {\n#   url = \"http://169.254.169.254/latest/meta-data/instance-id\"\n# }\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1552.001"
+      ]
+    },
+    {
+      "id": "SEC-PROVISIONER-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/03_injection.tf",
+      "line": 7,
+      "resource": "",
+      "urgency": "HIGH",
+      "title": "Provisioner block used for shell execution",
+      "section": "security",
+      "recommendation": "Provisioners are a last resort. Replace with provider-native resources\nwhere possible:\n- `local-exec` for scripts \u2192 `terraform_data` with `provisioner` only\n  when no provider resource exists, or use `null_resource` with explicit\n  `triggers` to control re-execution.\n- `remote-exec` \u2192 cloud-init (`user_data`), Packer images, or\n  configuration management (Ansible, Chef, Puppet).\nIf a provisioner is genuinely needed, document the justification with\nan inline `# tf-analyze:ignore SEC-PROVISIONER-001` comment.\n",
+      "fix_hcl": "# Replace remote-exec with user_data / cloud-init\nresource \"aws_instance\" \"app\" {\n  ami           = data.aws_ami.ubuntu.id\n  instance_type = \"t3.micro\"\n\n  user_data = templatefile(\"${path.module}/cloud-init.sh.tpl\", {\n    environment = var.environment\n  })\n}\n\n# Replace local-exec trigger with terraform_data\nresource \"terraform_data\" \"init\" {\n  triggers_replace = [aws_instance.app.id]\n  provisioner \"local-exec\" {\n    command = \"echo 'only use as last resort \u2014 document why'\"\n  }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1059"
+      ]
+    },
+    {
+      "id": "SEC-PROVISIONER-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/03_injection.tf",
+      "line": 40,
+      "resource": "null_resource.shell_injectable",
+      "urgency": "MEDIUM",
+      "title": "Provisioner block used for shell execution",
+      "section": "security",
+      "recommendation": "Provisioners are a last resort. Replace with provider-native resources\nwhere possible:\n- `local-exec` for scripts \u2192 `terraform_data` with `provisioner` only\n  when no provider resource exists, or use `null_resource` with explicit\n  `triggers` to control re-execution.\n- `remote-exec` \u2192 cloud-init (`user_data`), Packer images, or\n  configuration management (Ansible, Chef, Puppet).\nIf a provisioner is genuinely needed, document the justification with\nan inline `# tf-analyze:ignore SEC-PROVISIONER-001` comment.\n",
+      "fix_hcl": "# Replace remote-exec with user_data / cloud-init\nresource \"aws_instance\" \"app\" {\n  ami           = data.aws_ami.ubuntu.id\n  instance_type = \"t3.micro\"\n\n  user_data = templatefile(\"${path.module}/cloud-init.sh.tpl\", {\n    environment = var.environment\n  })\n}\n\n# Replace local-exec trigger with terraform_data\nresource \"terraform_data\" \"init\" {\n  triggers_replace = [aws_instance.app.id]\n  provisioner \"local-exec\" {\n    command = \"echo 'only use as last resort \u2014 document why'\"\n  }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1059"
+      ]
+    },
+    {
+      "id": "CI-TEST-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+      "line": 1,
+      "resource": "<module:gcp>",
+      "urgency": "LOW",
+      "title": "Module has no Terraform test files",
+      "section": "cicd",
+      "recommendation": "Add at least one `.tftest.hcl` file covering the module's primary\nresource creation path. Terraform native tests (1.6+) validate both\nplan and apply without external tooling.\n\nExample:\n```hcl\nrun \"creates_bucket\" {\n  command = plan\n  assert {\n    condition     = google_storage_bucket.main.location == \"US\"\n    error_message = \"bucket location must be US\"\n  }\n}\n```\n",
+      "fix_hcl": "# Create a <module>.tftest.hcl file in the module directory\nrun \"creates_resource\" {\n  command = plan\n\n  assert {\n    condition     = aws_s3_bucket.main.bucket != \"\"\n    error_message = \"bucket must be created with a non-empty name\"\n  }\n}\n\nrun \"apply_and_verify\" {\n  command = apply\n\n  assert {\n    condition     = aws_s3_bucket.main.region == \"us-east-1\"\n    error_message = \"bucket must be in us-east-1\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-ENV-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+      "line": 135,
+      "resource": "google_storage_bucket.prod_data",
+      "urgency": "MEDIUM",
+      "title": "Prod-scoped resource lacks deletion_protection",
+      "section": "ops",
+      "recommendation": "Production databases, GKE clusters, and storage buckets should be locked\nagainst accidental `terraform destroy`. Add `deletion_protection = true`\n(or `prevent_destroy = true` in a `lifecycle {}` block if the type doesn't\nexpose `deletion_protection`).\n\nScope of the check: path containing `prod`, or `labels = { environment =\n\"prod\" }` on the resource. Dev/staging environments are excluded by design.\n",
+      "fix_hcl": "resource \"aws_db_instance\" \"example\" {\n  identifier        = \"example-prod\"\n  deletion_protection = true\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+      "line": 45,
+      "resource": "google_project_iam_member.app_at_project",
+      "context": "member serviceAccount:app@demo-project.iam.gserviceaccount.com also has resource-level IAM at google_storage_bucket_iam_member.app_at_bucket \u2014 the project-level grant makes those redundant",
+      "id": "SEC-GCP-IAM-003",
+      "urgency": "MEDIUM",
+      "title": "Member has both project-level and resource-level IAM grants",
+      "section": "security",
+      "recommendation": "Remove the project-level binding. Keep the resource-level bindings \u2014\nthey encode the actual access boundary. If you genuinely need the\nmember to span multiple resources of the same type, prefer one\nresource-level binding per target rather than collapsing to the\nproject level (which also covers resources you didn't intend).\n\nIf the project-level grant is unavoidable (e.g. a baseline role like\n`roles/monitoring.viewer`), delete the redundant resource-level\nbinding and document why the broader scope is required.\n",
+      "fix_hcl": "# Remove the project-level binding; keep only resource-level bindings\nresource \"google_storage_bucket_iam_member\" \"app\" {\n  bucket = google_storage_bucket.app.name\n  role   = \"roles/storage.objectViewer\"\n  member = \"serviceAccount:${google_service_account.app.email}\"\n}\n# Delete: google_project_iam_member for the same service account\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-GCP-LOGGING-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp",
+      "line": 0,
+      "resource": "<absent: google_project_iam_audit_config>",
+      "urgency": "MEDIUM",
+      "title": "Cloud Audit Logs not configured",
+      "section": "security",
+      "recommendation": "Add `google_project_iam_audit_config` resources covering at minimum\n`aiplatform.googleapis.com`, `storage.googleapis.com`, `iam.googleapis.com`,\nand any service that processes regulated data. Enable ADMIN_READ,\nDATA_READ, and DATA_WRITE log types.\n",
+      "fix_hcl": "resource \"google_project_iam_audit_config\" \"all_services\" {\n  project = var.project_id\n  service = \"allServices\"\n  audit_log_config { log_type = \"ADMIN_READ\" }\n  audit_log_config { log_type = \"DATA_READ\" }\n  audit_log_config { log_type = \"DATA_WRITE\" }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.008"
+      ]
+    },
+    {
+      "id": "SEC-SENSITIVE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 100,
+      "resource": "output.vault_token_echo",
+      "urgency": "MEDIUM",
+      "title": "Sensitive output not marked sensitive=true",
+      "section": "security",
+      "recommendation": "Add `sensitive = true` to the output block. Without this marker the\nvalue appears in `terraform plan` and `terraform output` console\noutput and may end up in CI logs.\n",
+      "fix_hcl": "output \"db_password\" {\n  value     = module.db.password\n  sensitive = true\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1552.001"
+      ]
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+      "line": 57,
+      "resource": "google_storage_bucket.audit_target",
+      "context": "logging target of google_storage_bucket.logged_source (in /Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf:37) is missing public_access_prevention=enforced",
+      "id": "STK-GCP-GCS-LOGGING-001",
+      "urgency": "MEDIUM",
+      "title": "GCS bucket logging target lacks public_access_prevention",
+      "section": "stack",
+      "recommendation": "Add `public_access_prevention = \"enforced\"` to the target bucket\nblock. Also confirm `uniform_bucket_level_access = true` and that no\nIAM binding grants `allUsers` or `allAuthenticatedUsers` access. If\nthe source and target bucket have different blast-radius requirements\n(e.g., source is internal, target is shared with auditors), document\nthe rationale in a comment near the `logging` block so the next\nreviewer doesn't downgrade it.\n",
+      "fix_hcl": "resource \"google_storage_bucket\" \"logs\" {\n  name                        = \"example-logs\"\n  location                    = \"US\"\n  public_access_prevention    = \"enforced\"\n  uniform_bucket_level_access = true\n  lifecycle_rule {\n    condition { age = 90 }\n    action { type = \"Delete\" }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+      "line": 49,
+      "resource": "google_container_node_pool.default",
+      "context": "node pool attached to google_container_cluster.demo is missing: enable_secure_boot, enable_integrity_monitoring",
+      "id": "STK-GCP-GKE-NODEPOOL-001",
+      "urgency": "MEDIUM",
+      "title": "GKE node pool missing shielded-instance hardening",
+      "section": "stack",
+      "recommendation": "Add to each `google_container_node_pool`:\n\n    node_config {\n      shielded_instance_config {\n        enable_secure_boot          = true\n        enable_integrity_monitoring = true\n      }\n    }\n\nThen re-create the pool \u2014 `node_config` changes force replacement, so\nschedule the cycle during a maintenance window or use surge upgrades.\n\nTip: enforce this at cluster level via Org Policy\n`constraints/container.requireShieldedNodes`. The Terraform finding then\nbecomes a defense-in-depth check rather than the only line of defense.\n",
+      "fix_hcl": "resource \"google_container_node_pool\" \"example\" {\n  name       = \"example\"\n  cluster    = google_container_cluster.example.id\n  location   = \"us-central1\"\n  node_config {\n    shielded_instance_config {\n      enable_secure_boot          = true\n      enable_integrity_monitoring = true\n    }\n  }\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+      "line": 53,
+      "resource": "google_storage_bucket.encrypted_cross_region",
+      "context": "location 'us-central1' does not match KMS key ring location 'us-east1' (via google_kms_crypto_key.data)",
+      "id": "STK-GCP-KMS-LOCATION-001",
+      "urgency": "MEDIUM",
+      "title": "CMEK consumer location mismatches KMS key ring location",
+      "section": "stack",
+      "recommendation": "Either:\n\n1. Co-locate the key ring with the consuming resource \u2014 in most\n   deployments this is the right answer. Move the key ring (create new,\n   re-encrypt, destroy old) so its location matches.\n2. Use a multi-region key ring (`location = \"us\"`, `\"eu\"`, `\"asia\"`)\n   when the consuming resource is itself multi-region.\n\nAvoid the third option (cross-region usage) unless you have a specific\ndata-residency requirement that forces it; document in code if so.\n",
+      "fix_hcl": "# Co-locate key ring and consumer resource in the same region\nresource \"google_kms_key_ring\" \"app\" {\n  name     = \"app\"\n  location = \"us-central1\"\n}\n\nresource \"google_kms_crypto_key\" \"app\" {\n  name     = \"app\"\n  key_ring = google_kms_key_ring.app.id\n}\n\nresource \"google_storage_bucket\" \"app\" {\n  name     = \"app-data\"\n  location = \"us-central1\"   # must match key ring location\n\n  encryption {\n    default_kms_key_name = google_kms_crypto_key.app.id\n  }\n}\n",
+      "fix_disruption": "none"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "google_project_iam_member.admin_too_broad",
+        "type": "compute",
+        "label": "google_project_iam_member.admin_too_broad",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+        "line": 31,
+        "findings": [
+          "SEC-GCP-IAM-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket_iam_member.public_objects",
+        "type": "compute",
+        "label": "google_storage_bucket_iam_member.public_objects",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+        "line": 37,
+        "findings": [
+          "SEC-GCP-IAM-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_project_iam_member.app_at_project",
+        "type": "compute",
+        "label": "google_project_iam_member.app_at_project",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+        "line": 45,
+        "findings": [
+          "SEC-GCP-IAM-003"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket_iam_member.app_at_bucket",
+        "type": "compute",
+        "label": "google_storage_bucket_iam_member.app_at_bucket",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/01_broken_access_control.tf",
+        "line": 50,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_container_cluster.demo",
+        "type": "compute",
+        "label": "google_container_cluster.demo",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+        "line": 37,
+        "findings": [
+          "COST-GCP-RISK-001",
+          "OPS-GCP-LABELS-001",
+          "SEC-GCP-GKE-NETWORK-POLICY-001",
+          "STK-GCP-GKE-001",
+          "STK-GCP-GKE-002",
+          "STK-GCP-GKE-003",
+          "STK-GCP-GKE-004"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_container_node_pool.default",
+        "type": "compute",
+        "label": "google_container_node_pool.default",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+        "line": 49,
+        "findings": [
+          "STK-GCP-GKE-NODEPOOL-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_service_account.app",
+        "type": "iam",
+        "label": "google_service_account.app",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+        "line": 64,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_service_account_key.app_key",
+        "type": "compute",
+        "label": "google_service_account_key.app_key",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/07_identification_auth.tf",
+        "line": 69,
+        "findings": [
+          "SEC-GCP-SA-KEY-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_compute_instance.exposed",
+        "type": "compute",
+        "label": "google_compute_instance.exposed",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 45,
+        "findings": [
+          "COST-GCP-RISK-001",
+          "OPS-GCP-LABELS-001",
+          "SEC-GCP-COMPUTE-DISK-001",
+          "SEC-GCP-COMPUTE-PUBLIC-IP-001",
+          "SEC-GCP-COMPUTE-SA-001",
+          "SEC-GCP-COMPUTE-SHIELDED-001"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_compute_firewall.ssh_open",
+        "type": "network",
+        "label": "google_compute_firewall.ssh_open",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 67,
+        "findings": [
+          "SEC-GCP-NETWORK-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_compute_firewall.rdp_open",
+        "type": "network",
+        "label": "google_compute_firewall.rdp_open",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 82,
+        "findings": [
+          "SEC-GCP-NETWORK-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_sql_database_instance.main",
+        "type": "storage",
+        "label": "google_sql_database_instance.main",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 94,
+        "findings": [
+          "COST-GCP-RISK-001",
+          "OPS-GCP-LABELS-001",
+          "ROB-GCP-LIFECYCLE-001",
+          "SEC-GCP-SQL-PUBLIC-001",
+          "STK-GCP-CLOUDSQL-004"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": true,
+        "on_critical_path": true
+      },
+      {
+        "id": "google_sql_database_instance.no_dp",
+        "type": "storage",
+        "label": "google_sql_database_instance.no_dp",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 114,
+        "findings": [
+          "COST-GCP-RISK-001",
+          "OPS-GCP-LABELS-001",
+          "ROB-GCP-LIFECYCLE-001",
+          "STK-GCP-CLOUDSQL-003",
+          "STK-GCP-CLOUDSQL-004"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket.prod_data",
+        "type": "storage",
+        "label": "google_storage_bucket.prod_data",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 135,
+        "findings": [
+          "ROB-GCP-LIFECYCLE-001",
+          "SEC-GCP-BUCKET-001",
+          "SEC-GCP-BUCKET-002",
+          "STK-GCP-BUCKET-001",
+          "OPS-ENV-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_compute_firewall.open_postgres",
+        "type": "network",
+        "label": "google_compute_firewall.open_postgres",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 145,
+        "findings": [
+          "SEC-GCP-NETWORK-004"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_artifact_registry_repository.no_cmek",
+        "type": "compute",
+        "label": "google_artifact_registry_repository.no_cmek",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/05_security_misconfiguration.tf",
+        "line": 158,
+        "findings": [
+          "STK-GCP-ARTIFACT-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_sql_database_instance.public_db",
+        "type": "storage",
+        "label": "google_sql_database_instance.public_db",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+        "line": 42,
+        "findings": [
+          "COST-GCP-RISK-001",
+          "OPS-GCP-LABELS-001",
+          "ROB-GCP-LIFECYCLE-001",
+          "SEC-GCP-SQL-PUBLIC-001",
+          "STK-GCP-CLOUDSQL-004"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_cloud_run_v2_service.publicly_reachable",
+        "type": "compute",
+        "label": "google_cloud_run_v2_service.publicly_reachable",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/10_ssrf.tf",
+        "line": 68,
+        "findings": [
+          "SEC-GCP-CLOUDRUN-001"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_sql_database_instance.legacy",
+        "type": "storage",
+        "label": "google_sql_database_instance.legacy",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/06_vulnerable_components.tf",
+        "line": 49,
+        "findings": [
+          "COST-GCP-RISK-001",
+          "OPS-GCP-LABELS-001",
+          "ROB-GCP-LIFECYCLE-001",
+          "STK-GCP-CLOUDSQL-001",
+          "STK-GCP-CLOUDSQL-004",
+          "STK-GCP-CLOUDSQL-005"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket.logged_source",
+        "type": "storage",
+        "label": "google_storage_bucket.logged_source",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+        "line": 37,
+        "findings": [
+          "OPS-GCP-LABELS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket.audit_target",
+        "type": "storage",
+        "label": "google_storage_bucket.audit_target",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+        "line": 57,
+        "findings": [
+          "OPS-GCP-LABELS-001",
+          "ROB-GCP-LIFECYCLE-001",
+          "SEC-GCP-BUCKET-001",
+          "STK-GCP-GCS-LOGGING-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_compute_subnetwork.no_flow_logs",
+        "type": "compute",
+        "label": "google_compute_subnetwork.no_flow_logs",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+        "line": 73,
+        "findings": [
+          "SEC-GCP-NETWORK-003"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_dns_managed_zone.no_dnssec",
+        "type": "compute",
+        "label": "google_dns_managed_zone.no_dnssec",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/09_logging_monitoring.tf",
+        "line": 83,
+        "findings": [
+          "STK-GCP-DNS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_kms_key_ring.primary",
+        "type": "compute",
+        "label": "google_kms_key_ring.primary",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+        "line": 35,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_kms_crypto_key.data",
+        "type": "key",
+        "label": "google_kms_crypto_key.data",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+        "line": 40,
+        "findings": [
+          "STK-GCP-KMS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket.encrypted_cross_region",
+        "type": "storage",
+        "label": "google_storage_bucket.encrypted_cross_region",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+        "line": 53,
+        "findings": [
+          "OPS-GCP-LABELS-001",
+          "STK-GCP-KMS-LOCATION-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_pubsub_topic.no_cmek",
+        "type": "compute",
+        "label": "google_pubsub_topic.no_cmek",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+        "line": 76,
+        "findings": [
+          "OPS-GCP-LABELS-001",
+          "STK-GCP-PUBSUB-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_redis_instance.insecure",
+        "type": "compute",
+        "label": "google_redis_instance.insecure",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/02_cryptographic_failures.tf",
+        "line": 84,
+        "findings": [
+          "SEC-GCP-REDIS-001",
+          "SEC-GCP-REDIS-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket.no_versioning",
+        "type": "storage",
+        "label": "google_storage_bucket.no_versioning",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+        "line": 32,
+        "findings": [
+          "OPS-GCP-LABELS-001",
+          "STK-GCP-BUCKET-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_bigquery_dataset.analytics",
+        "type": "compute",
+        "label": "google_bigquery_dataset.analytics",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/08_data_integrity.tf",
+        "line": 60,
+        "findings": [
+          "OPS-GCP-LABELS-001",
+          "STK-GCP-BIGQUERY-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_service_account.monolith",
+        "type": "iam",
+        "label": "google_service_account.monolith",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/04_insecure_design.tf",
+        "line": 33,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_spanner_instance.main",
+        "type": "compute",
+        "label": "google_spanner_instance.main",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/04_insecure_design.tf",
+        "line": 40,
+        "findings": [
+          "ROB-GCP-LIFECYCLE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "google_storage_bucket.tfstate",
+        "type": "storage",
+        "label": "google_storage_bucket.tfstate",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/04_insecure_design.tf",
+        "line": 48,
+        "findings": [
+          "OPS-GCP-LABELS-001",
+          "ROB-GCP-LIFECYCLE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "null_resource.shell_injectable",
+        "type": "compute",
+        "label": "null_resource.shell_injectable",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/gcp/03_injection.tf",
+        "line": 38,
+        "findings": [
+          "SEC-PROVISIONER-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "INTERNET",
+        "type": "internet",
+        "label": "Internet",
+        "file": "",
+        "line": 0,
+        "findings": [],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": true
+      }
+    ],
+    "edges": [
+      {
+        "from": "google_storage_bucket.encrypted_cross_region",
+        "to": "google_kms_crypto_key.data",
+        "label": "kms_key"
+      },
+      {
+        "from": "INTERNET",
+        "to": "google_container_cluster.demo",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "google_compute_instance.exposed",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "google_sql_database_instance.main",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "google_sql_database_instance.public_db",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "google_cloud_run_v2_service.publicly_reachable",
+        "label": "internet"
+      }
+    ],
+    "critical_path": [
+      "INTERNET",
+      "google_sql_database_instance.main"
+    ],
+    "internet_node_id": "INTERNET"
+  }
+}

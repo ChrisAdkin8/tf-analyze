@@ -1,0 +1,41 @@
+id: SEC-AWS-IAM-POLICY-006
+title: "IAM policy uses `not_actions` or `not_resources`"
+section: security
+default_urgency: MEDIUM
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.16"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.004"
+patterns:
+  - kind: iam_policy_analysis
+    check: not_action_or_not_resource
+    description: |
+      Statement uses `not_actions` or `not_resources` to express
+      "everything except X". Negative-form grants are notoriously
+      error-prone: any new AWS API or resource type added in future
+      is implicitly allowed. AWS itself recommends against negative
+      form for Allow statements.
+recommendation: |
+  Rewrite the statement using `actions` and `resources` to enumerate
+  the explicit allow set. Reserve `not_actions` / `not_resources` for
+  Deny statements (a defensive deny is safe to phrase negatively).
+verification: |
+  Policy statements with `Effect: Allow` should not contain `NotAction`
+  or `NotResource`.
+fix_hcl: |
+  data "aws_iam_policy_document" "example" {
+    statement {
+      effect    = "Allow"
+      actions   = ["s3:GetObject", "s3:PutObject"]
+      resources = ["arn:aws:s3:::my-bucket/*"]
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_iam_policy_not_action

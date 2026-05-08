@@ -11,6 +11,8 @@ pci_dss:
   - "Req-10.6"
 soc2_cc:
   - "CC7.2"
+mitre:
+  - "T1562.001"
 patterns:
   - kind: resource_absent
     resource: aws_guardduty_detector

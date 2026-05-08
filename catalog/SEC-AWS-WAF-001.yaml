@@ -4,6 +4,8 @@ section: security
 default_urgency: MEDIUM
 blast_radius: module
 status: active
+mitre:
+  - "T1562.004"
 patterns:
   - kind: resource_absent
     resource: aws_wafv2_logging_configuration

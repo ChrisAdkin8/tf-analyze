@@ -165,6 +165,19 @@ In the report, note any new stubs under the **"Catalogue follow-ups"** section s
 
 Both modes require at least one of `regex` or `not_regex`. When both are present in a single pattern entry, they are OR-combined (either condition fires the rule).
 
+**`iam_policy_analysis` pattern kind** *(new in Round 24)*: walks every `data "aws_iam_policy_document"` block and inspects each `statement {}`. Statements with `effect = "Deny"` are skipped — only `Allow` statements are examined. The `check:` field selects what to look for:
+
+| `check`                            | Fires when                                                              |
+|------------------------------------|-------------------------------------------------------------------------|
+| `wildcard_action`                  | `actions` list contains `"*"`                                           |
+| `wildcard_resource`                | `resources` list contains `"*"`                                         |
+| `public_principal`                 | any `principals { identifiers = [..., "*", ...] }` block                |
+| `wildcard_action_iam`              | any `iam:*` action (privesc class)                                      |
+| `wildcard_action_and_resource`     | both `actions` and `resources` contain `"*"` in the same statement      |
+| `not_action_or_not_resource`       | uses `not_actions` or `not_resources` on an Allow statement             |
+
+See `catalog/SEC-AWS-IAM-POLICY-001..006.yaml` for shipped instances.
+
 ---
 
 ## Urgency Levels
@@ -195,6 +208,10 @@ Every finding MUST also be tagged with blast radius:
 Suppressions are applied at **both** the detection pass (via `detect.py --suppress`) and the judgement pass. The detection pass handles two suppression sources:
 
 **Inline comments:** `# tf-analyze:ignore <CATALOGUE-ID>` on the same line or the line above a finding suppresses it for that specific location.
+
+**Pattern-level suppression** *(catalogue-author concern, not user-facing)*: catalogue patterns of kind `resource_arg`, `resource_missing_arg`, and `hcl_attr` accept `suppress_if_body_contains: '<substring>'`. The pattern is skipped on any resource whose body contains the substring. Use sparingly — for clearly-defined alternative-correct shapes (e.g. an HTTP listener's `type = "redirect"` default action). Does not affect user-facing suppression.
+
+**Provider-level `default_tags` propagation**: when a directory's AWS provider declares `default_tags { ... }`, `aws_*` rules whose target arg is `tags` (or any `tags.*` path) are skipped — the provider injects the tags downstream so a missing-tags finding would be a false positive.
 
 **File-based suppressions:** `.tf-analyze-ignore.yaml` in the repo root (or target directory):
 
@@ -227,12 +244,17 @@ The detection pass supports CI gating via exit codes and multiple output formats
 - **`--apply-fixes dry-run`** — preview auto-remediation as a unified diff without writing files. Run this first to review what would change. Safe in CI (read-only).
 - **`--apply-fixes apply`** — apply `fix_hcl` patches directly to `.tf` files. Creates `.bak` backups. Handles `resource_missing_arg` (inserts missing attribute before closing `}`) and `resource_arg`/`hcl_attr` (replaces wrong-value line). After applying, re-run `detect.py` to confirm the findings are resolved.
 - **`--cache`** — enable incremental scan caching. Writes `.tf-analyze-cache.json` in the target directory keyed on a hash of all `.tf` file contents and catalogue rules. Subsequent runs on unchanged code return cached findings instantly. Use `--cache-file PATH` to override the location. Invalidated automatically when any file or rule changes.
+- **`--baseline PATH`** *(new in Round 24)* — load a prior JSON report and suppress findings whose `(id, file, line, resource)` tuple is already present. Only retained findings affect the `--fail-on` exit code; suppressed-by-baseline findings are surfaced under the JSON `suppressed_by_baseline` key. Use to ratchet on legacy repos: snapshot once, gate on no-regressions thereafter.
+- **`--format mitre`** *(new in Round 24)* — group findings by MITRE ATT&CK technique using catalogue `mitre:` fields. Findings without a mapping are placed under `(unmapped)`. SARIF output additionally tags every finding with `mitre:Tnnnn` for downstream CI consumers.
+- **`--no-hcl2`** *(new in Round 24)* — disable the python-hcl2 fast-path (which is now ON by default when the dependency is installed). Use for benchmarking or in stdlib-only environments. Equivalent env var: `TF_ANALYZE_NO_HCL2=1`. The legacy `--use-hcl2` flag still works but is now a no-op.
 
 Ready-to-use configs for pre-commit and GitHub Actions live under `integrations/`. The GitHub Actions workflow (`integrations/github-action.yml`) now includes a PR comment fallback that posts findings as a collapsible comment on every pull request — works on free-tier repos that don't have Code Scanning enabled.
 
-### Optional `python-hcl2` fast-path
+### `python-hcl2` fast-path (default-on since Round 24)
 
-By default `detect.py` is **stdlib-only** — no `pip install` required. A
+By default `detect.py` enables the python-hcl2 fast-path when the
+dependency is installed (the Docker image bundles it). When it isn't,
+the regex parser is used and a one-line stderr notice is emitted. A
 known limitation of the regex parser is that heredoc-bearing attributes
 (`user_data = <<-EOF\n...\nEOF`) return `None` from `block_arg_value`,
 so any check looking at the value of such an attribute silently misses.
@@ -1200,29 +1222,44 @@ Include the delta in the report header after the executive summary.
 
 ### Risk Score
 
-Compute the health score with a deterministic formula so two runs of the skill against the same code produce the same number:
+The score and letter grade are **emitted by `detect.py` directly** as part of every `--format json`, `--format text`, and `--format html` output. The agent should quote the engine's number, never recompute it.
+
+Single source of truth: `_RISK_WEIGHTS` and `_GRADE_TIERS` in `scripts/detect.py`. The current weights are:
 
 ```text
 score = max(0, 100 - (15 * CRITICAL + 7 * HIGH + 3 * MEDIUM + 1 * LOW))
 ```
 
-INFO findings do not affect the score. Suppressed findings count at half weight (because they have been acknowledged and accepted, but the underlying risk still exists). Map the score to a letter grade:
+INFO findings do not affect the score (weight 0). Suppressed findings (both `# tf-analyze:ignore` / `.tf-analyze-ignore.yaml` and `--baseline` matches) count at half weight — they have been acknowledged but the underlying risk still exists. The grade tiers:
 
 | Grade | Score range |
 |-------|-------------|
 | **A** | 90 – 100 |
 | **B** | 75 – 89  |
-| **B−** | 65 – 74 |
+| **B-** | 65 – 74 |
 | **C** | 50 – 64  |
 | **D** | 30 – 49  |
 | **F** | 0 – 29   |
 
-Worked examples:
+Worked examples (verified by `tests/test_output_formats.py::TestComputeSummary`):
 - 0 CRITICAL, 0 HIGH, 4 MEDIUM, 6 LOW → 100 − (0 + 0 + 12 + 6) = **82 (B)**
 - 0 CRITICAL, 4 HIGH, 11 MEDIUM, 6 LOW → 100 − (0 + 28 + 33 + 6) = **33 (D)**
 - 0 CRITICAL, 0 HIGH, 0 MEDIUM, 0 LOW → **100 (A)**
 
-The formula intentionally penalises HIGH (7) more than 2× MEDIUM (6) to reflect the reality that one HIGH usually causes more pain than two MEDIUMs. If the score formula produces a letter grade that contradicts the agent's qualitative read of the codebase (e.g., the codebase feels like a B but scores a C because of one nuanced finding), trust the formula and adjust the urgency of the borderline finding instead.
+The formula intentionally penalises HIGH (7) more than 2× MEDIUM (6) to reflect the reality that one HIGH usually causes more pain than two MEDIUMs.
+
+**Where the score appears in the engine output:**
+
+| Format       | Where                                                         |
+|--------------|---------------------------------------------------------------|
+| `text`       | First line: `# tf-analyze: 82 (B) · 0 CRITICAL · 0 HIGH · …` |
+| `json`       | Top-level `summary` key, always present                       |
+| `html`       | Colour-banded banner above the findings panel                 |
+| `sarif`      | Not emitted (SARIF v2.1 has no canonical aggregate slot)      |
+
+**Stability:** the `summary` JSON block is part of the public CLI contract. Keys (`scoring_version`, `score`, `grade`, `counts`, `suppressed_count`, `formula`) are stable; weight changes bump `_SCORING_VERSION` (currently `1`).
+
+**Don't add `--exit-on-grade`.** `--fail-on HIGH` already exists and gates on the *kind* of finding, not on a derived number. A grade gate invites suppression-to-bump-score gaming; mature scanners (tfsec, checkov) deliberately avoid it. If the agent's qualitative read disagrees with the score, fix the underlying urgency calibration in the catalogue rather than overriding the score in the report.
 
 ### 16e. Adversarial Scenarios
 

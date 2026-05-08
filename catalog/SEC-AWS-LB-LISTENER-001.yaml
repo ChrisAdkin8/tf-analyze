@@ -11,11 +11,14 @@ pci_dss:
   - "Req-4.1"
 soc2_cc:
   - "CC6.7"
+mitre:
+  - "T1071.001"
 patterns:
   - kind: resource_arg
     resource: aws_lb_listener
     arg: protocol
     regex: '^HTTP$'
+    suppress_if_body_contains: 'type = "redirect"'
     description: |
       `aws_lb_listener` has `protocol = "HTTP"`. Serving traffic over plain HTTP
       exposes session tokens, credentials, and application data to network eavesdroppers.

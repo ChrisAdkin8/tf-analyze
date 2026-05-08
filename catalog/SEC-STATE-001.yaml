@@ -28,6 +28,8 @@ pci_dss:
   - "Req-3.5"
 soc2_cc:
   - "CC6.1"
+mitre:
+  - "T1552.001"
 fix_hcl: |
   # 1. Add to .gitignore
   # *.tfstate

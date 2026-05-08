@@ -75,6 +75,21 @@ class TestResolveVarRef:
     def test_rvr_local_ref(self):
         assert detect._resolve_var_ref("local.enc", {"__local__enc": "true"}) == "true"
 
+    def test_rvr_ternary_true_branch(self):
+        # `var.x ? "a" : "b"` with var.x = true → "a"
+        assert detect._resolve_var_ref('var.x ? "a" : "b"', {"x": "true"}) == "a"
+
+    def test_rvr_ternary_false_branch(self):
+        assert detect._resolve_var_ref('var.x ? "a" : "b"', {"x": "false"}) == "b"
+
+    def test_rvr_ternary_unknown_cond_unchanged(self):
+        val = 'var.unknown ? "a" : "b"'
+        assert detect._resolve_var_ref(val, {}) == val
+
+    def test_rvr_ternary_bool_branches(self):
+        assert detect._resolve_var_ref("var.x ? true : false", {"x": "true"}) == "true"
+        assert detect._resolve_var_ref("var.x ? true : false", {"x": "false"}) == "false"
+
 
 # ---------------------------------------------------------------------------
 # _extract_var_defaults_by_dir
@@ -104,6 +119,25 @@ class TestExtractVarDefaults:
         result = detect._extract_var_defaults_by_dir(files)
         assert result["/app"]["a"] == "1"
         assert result["/app"]["b"] == "2"
+
+    def test_evd_module_input_flow_through(self, tmp_path):
+        # Parent at tmp_path/parent, child at tmp_path/child.
+        parent = tmp_path / "parent"
+        child = tmp_path / "child"
+        parent.mkdir()
+        child.mkdir()
+        (child / "variables.tf").write_text(
+            'variable "encrypted" {\n  default = false\n}\n'
+        )
+        (parent / "main.tf").write_text(
+            'module "c" {\n  source    = "../child"\n  encrypted = true\n}\n'
+        )
+        files = {
+            str(parent / "main.tf"): (parent / "main.tf").read_text(),
+            str(child / "variables.tf"): (child / "variables.tf").read_text(),
+        }
+        result = detect._extract_var_defaults_by_dir(files)
+        assert result[str(child.resolve())]["encrypted"] == "true"
 
 
 # ---------------------------------------------------------------------------

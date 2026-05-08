@@ -4,6 +4,8 @@ section: security
 default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1071.001"
 patterns:
   - kind: resource_missing_arg
     resource: aws_cloudfront_distribution

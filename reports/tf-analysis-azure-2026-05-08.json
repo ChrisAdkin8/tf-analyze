@@ -1,0 +1,1665 @@
+{
+  "summary": {
+    "scoring_version": 1,
+    "score": 0,
+    "grade": "F",
+    "counts": {
+      "CRITICAL": 3,
+      "HIGH": 11,
+      "MEDIUM": 45,
+      "LOW": 31,
+      "INFO": 0
+    },
+    "suppressed_count": 0,
+    "formula": "max(0, 100 - sum(weight * count)); weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; suppressed at half weight"
+  },
+  "findings": [
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob soft delete",
+      "section": "robustness",
+      "recommendation": "Add `blob_properties` with `delete_retention_policy` and\n`container_delete_retention_policy`. Soft delete gives a recovery window\nfor accidental deletions or ransomware.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      blob_properties {\n        delete_retention_policy {\n          days = 30\n        }\n        container_delete_retention_policy {\n          days = 30\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    delete_retention_policy {\n      days = 30\n    }\n    container_delete_retention_policy {\n      days = 30\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-RBAC-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 35,
+      "resource": "azurerm_role_assignment.subscription_contributor",
+      "urgency": "MEDIUM",
+      "title": "Azure role assignment scope is subscription-wide",
+      "section": "security",
+      "recommendation": "Replace the subscription- or management-group-wide scope with the\nnarrowest resource-level scope that still satisfies the use case.\nExamples:\n\n    # Bad \u2014 applies the role to every resource in the subscription\n    scope = data.azurerm_subscription.primary.id\n\n    # Better \u2014 applies the role to a single resource group\n    scope = azurerm_resource_group.app.id\n\n    # Best \u2014 applies the role to a specific resource\n    scope = azurerm_storage_account.app.id\n\nIf a subscription-wide scope is genuinely required (rare \u2014 usually\n`Reader` for monitoring tooling), document the rationale in a comment\nand switch to a built-in role with audit-only permissions.\n",
+      "fix_hcl": "resource \"azurerm_role_assignment\" \"example\" {\n  scope                = azurerm_resource_group.example.id\n  role_definition_name = \"Contributor\"\n  principal_id         = azurerm_user_assigned_identity.example.principal_id\n}\n",
+      "fix_disruption": "none",
+      "narrative": "A subscription-scoped role assignment on azurerm_role_assignment.subscription_contributor grants the bound principal control over every resource in the Azure subscription \u2014 VMs, storage accounts, Key Vaults, and all other services. Compromise of the assigned identity via token theft, phishing, or service principal credential leak yields immediate lateral-movement capability across the entire subscription boundary, as seen in multiple Azure post-exploitation chains. Scope the assignment to the narrowest resource group or individual resource that satisfies the use case."
+    },
+    {
+      "id": "SEC-AZURE-STORAGE-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob",
+      "urgency": "MEDIUM",
+      "title": "Azure storage account allows public blob access",
+      "section": "security",
+      "recommendation": "Set `allow_nested_items_to_be_public = false` (provider v3+). Public blob\naccess allows anonymous reads of any blob in any container with public access\n\u2014 the most common cause of cloud data breaches.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      allow_nested_items_to_be_public = false\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  allow_nested_items_to_be_public = false\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 42,
+      "resource": "azurerm_storage_account.anon_blob",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob versioning",
+      "section": "stack",
+      "recommendation": "Enable versioning in the `blob_properties` block:\n\n    resource \"azurerm_storage_account\" \"app\" {\n      blob_properties {\n        versioning_enabled = true\n        delete_retention_policy {\n          days = 7\n        }\n        container_delete_retention_policy {\n          days = 7\n        }\n      }\n    }\n\nPair with a lifecycle management rule to expire non-current versions\nafter N days to control storage costs. Azure Storage versioning is\nequivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning\n(STK-GCP-BUCKET-001).\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    versioning_enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 36,
+      "resource": "azurerm_storage_account.for_app",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 76,
+      "resource": "azurerm_mssql_server.sql_only",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 36,
+      "resource": "azurerm_storage_account.for_app",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 36,
+      "resource": "azurerm_storage_account.for_app",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob soft delete",
+      "section": "robustness",
+      "recommendation": "Add `blob_properties` with `delete_retention_policy` and\n`container_delete_retention_policy`. Soft delete gives a recovery window\nfor accidental deletions or ransomware.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      blob_properties {\n        delete_retention_policy {\n          days = 30\n        }\n        container_delete_retention_policy {\n          days = 30\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    delete_retention_policy {\n      days = 30\n    }\n    container_delete_retention_policy {\n      days = 30\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-VM-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 87,
+      "resource": "azurerm_linux_virtual_machine.password_auth",
+      "urgency": "MEDIUM",
+      "title": "Linux VM allows SSH password authentication",
+      "section": "security",
+      "recommendation": "Disable password authentication and supply an SSH public key:\n\n    resource \"azurerm_linux_virtual_machine\" \"app\" {\n      # ...\n      disable_password_authentication = true\n\n      admin_ssh_key {\n        username   = \"azureuser\"\n        public_key = data.azurerm_key_vault_secret.ssh_pubkey.value\n      }\n    }\n\nStore SSH public keys in Key Vault (`data.azurerm_key_vault_secret`)\nrather than hardcoding them in source or tfvars. Enforce across all VMs\nvia Azure Policy: `\"Audit Linux machines that allow remote connections\nfrom accounts without passwords\"` (built-in policy definition).\n",
+      "fix_hcl": "resource \"azurerm_linux_virtual_machine\" \"example\" {\n  # ... other arguments ...\n  disable_password_authentication = true\n  admin_ssh_key {\n    username   = \"adminuser\"\n    public_key = file(\"~/.ssh/id_rsa.pub\")\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-AZURE-WEBAPP-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 54,
+      "resource": "azurerm_linux_web_app.key_based",
+      "urgency": "MEDIUM",
+      "title": "Azure App Service / Function App missing IP access restrictions",
+      "section": "security",
+      "recommendation": "Add `ip_restriction` and `scm_ip_restriction` blocks inside `site_config` to\nlimit access to known CIDRs or service tags. Without this, the web app\nmanagement plane is reachable from any IP.\n\n    resource \"azurerm_linux_web_app\" \"example\" {\n      # ...\n      site_config {\n        ip_restriction {\n          ip_address = \"203.0.113.0/24\"\n          name       = \"office-network\"\n          priority   = 100\n          action     = \"Allow\"\n        }\n        scm_ip_restriction {\n          ip_address = \"203.0.113.0/24\"\n          name       = \"office-network\"\n          priority   = 100\n          action     = \"Allow\"\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_linux_web_app\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  service_plan_id     = azurerm_service_plan.example.id\n  site_config {\n    ip_restriction {\n      ip_address = \"203.0.113.0/24\"\n      name       = \"allow-corporate\"\n      priority   = 100\n      action     = \"Allow\"\n    }\n    scm_ip_restriction {\n      ip_address = \"203.0.113.0/24\"\n      name       = \"allow-corporate\"\n      priority   = 100\n      action     = \"Allow\"\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-WEBAPP-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 54,
+      "resource": "azurerm_linux_web_app.key_based",
+      "urgency": "HIGH",
+      "title": "App Service / Function App HTTPS not enforced",
+      "section": "security",
+      "recommendation": "Set `https_only = true` on every App Service and Function App:\n\n    resource \"azurerm_linux_web_app\" \"app\" {\n      name            = \"app\"\n      https_only      = true\n      # ...\n    }\n\nThis causes Azure App Service to redirect all HTTP requests to HTTPS\n(301 Permanent Redirect) before they reach the application code.\nWithout this flag, HTTP traffic is accepted \u2014 credentials and session\ntokens cross the network in plaintext.\n",
+      "fix_hcl": "resource \"azurerm_linux_web_app\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  service_plan_id     = azurerm_service_plan.example.id\n  https_only          = true\n  site_config {}\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 82,
+      "resource": "azurerm_mssql_server.sql_only",
+      "urgency": "HIGH",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 94,
+      "resource": "azurerm_linux_virtual_machine.password_auth",
+      "urgency": "HIGH",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+      "line": 36,
+      "resource": "azurerm_storage_account.for_app",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob versioning",
+      "section": "stack",
+      "recommendation": "Enable versioning in the `blob_properties` block:\n\n    resource \"azurerm_storage_account\" \"app\" {\n      blob_properties {\n        versioning_enabled = true\n        delete_retention_policy {\n          days = 7\n        }\n        container_delete_retention_policy {\n          days = 7\n        }\n      }\n    }\n\nPair with a lifecycle management rule to expire non-current versions\nafter N days to control storage costs. Azure Storage versioning is\nequivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning\n(STK-GCP-BUCKET-001).\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    versioning_enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 103,
+      "resource": "azurerm_storage_account.open_storage",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 65,
+      "resource": "azurerm_kubernetes_cluster.no_rbac",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 85,
+      "resource": "azurerm_mssql_server.demo",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 103,
+      "resource": "azurerm_storage_account.open_storage",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 103,
+      "resource": "azurerm_storage_account.open_storage",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob soft delete",
+      "section": "robustness",
+      "recommendation": "Add `blob_properties` with `delete_retention_policy` and\n`container_delete_retention_policy`. Soft delete gives a recovery window\nfor accidental deletions or ransomware.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      blob_properties {\n        delete_retention_policy {\n          days = 30\n        }\n        container_delete_retention_policy {\n          days = 30\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    delete_retention_policy {\n      days = 30\n    }\n    container_delete_retention_policy {\n      days = 30\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-AKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 65,
+      "resource": "azurerm_kubernetes_cluster.no_rbac",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster RBAC disabled",
+      "section": "security",
+      "recommendation": "Set `role_based_access_control_enabled = true` and configure\n`azure_active_directory_role_based_access_control`. Without RBAC, any\nauthenticated user can perform any action in the cluster.\n\n    resource \"azurerm_kubernetes_cluster\" \"example\" {\n      # ...\n      role_based_access_control_enabled = true\n\n      azure_active_directory_role_based_access_control {\n        managed                = true\n        admin_group_object_ids = [var.aks_admin_group_id]\n        azure_rbac_enabled     = true\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                              = \"example\"\n  resource_group_name               = azurerm_resource_group.example.name\n  location                          = azurerm_resource_group.example.location\n  dns_prefix                        = \"example\"\n  role_based_access_control_enabled = true\n  azure_active_directory_role_based_access_control {\n    managed            = true\n    azure_rbac_enabled = true\n  }\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-AZURE-AKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 65,
+      "resource": "azurerm_kubernetes_cluster.no_rbac",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster RBAC disabled",
+      "section": "security",
+      "recommendation": "Set `role_based_access_control_enabled = true` and configure\n`azure_active_directory_role_based_access_control`. Without RBAC, any\nauthenticated user can perform any action in the cluster.\n\n    resource \"azurerm_kubernetes_cluster\" \"example\" {\n      # ...\n      role_based_access_control_enabled = true\n\n      azure_active_directory_role_based_access_control {\n        managed                = true\n        admin_group_object_ids = [var.aks_admin_group_id]\n        azure_rbac_enabled     = true\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                              = \"example\"\n  resource_group_name               = azurerm_resource_group.example.name\n  location                          = azurerm_resource_group.example.location\n  dns_prefix                        = \"example\"\n  role_based_access_control_enabled = true\n  azure_active_directory_role_based_access_control {\n    managed            = true\n    azure_rbac_enabled = true\n  }\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-AZURE-AKS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 65,
+      "resource": "azurerm_kubernetes_cluster.no_rbac",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster missing network policy",
+      "section": "security",
+      "recommendation": "Set a network policy in the cluster's `network_profile` block:\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      network_profile {\n        network_plugin = \"azure\"\n        network_policy = \"azure\"   # or \"calico\" / \"cilium\"\n      }\n    }\n\nAfter enabling, deploy Kubernetes `NetworkPolicy` objects to restrict\npod-to-pod and pod-to-API-server traffic to the minimum required.\nWithout `NetworkPolicy` manifests the CNI allows all traffic even with\nthe policy engine installed.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  network_profile {\n    network_plugin = \"azure\"\n    network_policy = \"azure\"\n  }\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "SEC-AZURE-SQL-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 93,
+      "resource": "azurerm_mssql_firewall_rule.allow_all",
+      "urgency": "MEDIUM",
+      "title": "Azure SQL Server firewall rule allows access from all IPs",
+      "section": "security",
+      "recommendation": "Replace world-open firewall rules with the narrowest CIDR your workload\nneeds. Prefer Private Endpoints over firewall rules for production:\n\n    # Preferred: Private Endpoint (no public network access)\n    resource \"azurerm_mssql_server\" \"app\" {\n      public_network_access_enabled = false\n    }\n\n    resource \"azurerm_private_endpoint\" \"sql\" {\n      # ... connect the SQL server to a private VNet subnet\n    }\n\n    # If public access is required, use minimum CIDR:\n    resource \"azurerm_mssql_firewall_rule\" \"app_ci\" {\n      server_id        = azurerm_mssql_server.app.id\n      name             = \"ci-runner\"\n      start_ip_address = \"203.0.113.10\"\n      end_ip_address   = \"203.0.113.10\"\n    }\n\nEquivalent to GCP `SEC-GCP-SQL-PUBLIC-001` (Cloud SQL authorizing\nall networks via `ipv4_enabled = true`).\n",
+      "fix_hcl": "resource \"azurerm_mssql_firewall_rule\" \"example\" {\n  name             = \"allow-specific-ip\"\n  server_id        = azurerm_mssql_server.example.id\n  start_ip_address = \"203.0.113.10\"\n  end_ip_address   = \"203.0.113.10\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-SQL-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 93,
+      "resource": "azurerm_mssql_firewall_rule.allow_all",
+      "urgency": "MEDIUM",
+      "title": "Azure SQL Server firewall rule allows access from all IPs",
+      "section": "security",
+      "recommendation": "Replace world-open firewall rules with the narrowest CIDR your workload\nneeds. Prefer Private Endpoints over firewall rules for production:\n\n    # Preferred: Private Endpoint (no public network access)\n    resource \"azurerm_mssql_server\" \"app\" {\n      public_network_access_enabled = false\n    }\n\n    resource \"azurerm_private_endpoint\" \"sql\" {\n      # ... connect the SQL server to a private VNet subnet\n    }\n\n    # If public access is required, use minimum CIDR:\n    resource \"azurerm_mssql_firewall_rule\" \"app_ci\" {\n      server_id        = azurerm_mssql_server.app.id\n      name             = \"ci-runner\"\n      start_ip_address = \"203.0.113.10\"\n      end_ip_address   = \"203.0.113.10\"\n    }\n\nEquivalent to GCP `SEC-GCP-SQL-PUBLIC-001` (Cloud SQL authorizing\nall networks via `ipv4_enabled = true`).\n",
+      "fix_hcl": "resource \"azurerm_mssql_firewall_rule\" \"example\" {\n  name             = \"allow-specific-ip\"\n  server_id        = azurerm_mssql_server.example.id\n  start_ip_address = \"203.0.113.10\"\n  end_ip_address   = \"203.0.113.10\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 91,
+      "resource": "azurerm_mssql_server.demo",
+      "urgency": "HIGH",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-AKS-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 65,
+      "resource": "azurerm_kubernetes_cluster.no_rbac",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster workload identity not enabled",
+      "section": "stack",
+      "recommendation": "Enable Workload Identity and the OIDC issuer on the cluster:\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      oidc_issuer_enabled       = true\n      workload_identity_enabled = true\n    }\n\nThen bind a User-Assigned Managed Identity to a Kubernetes ServiceAccount\nvia a `azurerm_federated_identity_credential` resource. Pods annotated\nwith `azure.workload.identity/client-id` receive short-lived Azure AD\ntokens scoped to that identity's role assignments.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  oidc_issuer_enabled       = true\n  workload_identity_enabled = true\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AZURE-AKS-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 65,
+      "resource": "azurerm_kubernetes_cluster.no_rbac",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster API server is publicly accessible",
+      "section": "stack",
+      "recommendation": "Enable the private cluster feature so the API server is only reachable\nfrom within the VNet:\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      private_cluster_enabled             = true\n      private_cluster_public_fqdn_enabled = false\n    }\n\nWhen the cluster is private, `kubectl` must run from a jumpbox or VPN\nhost inside (or peered with) the cluster VNet. Integrate with Azure\nPrivate DNS for internal FQDN resolution. Equivalent to GKE\n`private_cluster_config.enable_private_endpoint = true`.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  private_cluster_enabled = true\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "STK-AZURE-AKS-005",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 65,
+      "resource": "azurerm_kubernetes_cluster.no_rbac",
+      "urgency": "LOW",
+      "title": "AKS cluster API server missing authorized IP ranges",
+      "section": "stack",
+      "recommendation": "Restrict API server access to known CIDRs (CI runners, operator VPN\negress IPs, bastion host subnets):\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      api_server_access_profile {\n        authorized_ip_ranges = [\n          \"203.0.113.0/24\",  # CI runner egress\n          \"10.0.0.0/8\",      # internal VNet\n        ]\n      }\n    }\n\nThe recommended target is `private_cluster_enabled = true`\n(STK-AZURE-AKS-004). Authorized IP ranges are a defence-in-depth\nlayer for clusters that must retain a public endpoint.\nEquivalent to GKE `master_authorized_networks_config`.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  api_server_access_profile {\n    authorized_ip_ranges = [\"203.0.113.0/24\"]\n  }\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-NSG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 7,
+      "resource": "",
+      "urgency": "HIGH",
+      "title": "Azure NSG rule open to the internet on sensitive ports",
+      "section": "stack",
+      "recommendation": "Replace `source_address_prefix = \"*\"` with a specific CIDR or Azure service\ntag. For SSH/RDP, use Azure Bastion instead of opening ports to the internet.\nFor internal services, use VNet service tags (`VirtualNetwork`) rather than `*`.\n\n    # Bad \u2014 any IP on the internet can reach this port\n    source_address_prefix = \"*\"\n\n    # Better \u2014 restrict to a known CIDR\n    source_address_prefix = \"10.0.0.0/8\"\n\n    # Best for management ports \u2014 use Azure Bastion and remove the rule\nIf port 22 or 3389 is involved, treat this as CRITICAL and remediate\nimmediately.\n",
+      "fix_hcl": "resource \"azurerm_network_security_rule\" \"example\" {\n  name                        = \"allow-https\"\n  resource_group_name         = azurerm_resource_group.example.name\n  network_security_group_name = azurerm_network_security_group.example.name\n  priority                    = 100\n  direction                   = \"Inbound\"\n  access                      = \"Allow\"\n  protocol                    = \"Tcp\"\n  source_port_range           = \"*\"\n  destination_port_range      = \"443\"\n  source_address_prefix       = \"203.0.113.0/24\"\n  destination_address_prefix  = \"*\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-NSG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 46,
+      "resource": "azurerm_network_security_group.open_ssh",
+      "urgency": "MEDIUM",
+      "title": "Azure NSG rule open to the internet on sensitive ports",
+      "section": "stack",
+      "recommendation": "Replace `source_address_prefix = \"*\"` with a specific CIDR or Azure service\ntag. For SSH/RDP, use Azure Bastion instead of opening ports to the internet.\nFor internal services, use VNet service tags (`VirtualNetwork`) rather than `*`.\n\n    # Bad \u2014 any IP on the internet can reach this port\n    source_address_prefix = \"*\"\n\n    # Better \u2014 restrict to a known CIDR\n    source_address_prefix = \"10.0.0.0/8\"\n\n    # Best for management ports \u2014 use Azure Bastion and remove the rule\nIf port 22 or 3389 is involved, treat this as CRITICAL and remediate\nimmediately.\n",
+      "fix_hcl": "resource \"azurerm_network_security_rule\" \"example\" {\n  name                        = \"allow-https\"\n  resource_group_name         = azurerm_resource_group.example.name\n  network_security_group_name = azurerm_network_security_group.example.name\n  priority                    = 100\n  direction                   = \"Inbound\"\n  access                      = \"Allow\"\n  protocol                    = \"Tcp\"\n  source_port_range           = \"*\"\n  destination_port_range      = \"443\"\n  source_address_prefix       = \"203.0.113.0/24\"\n  destination_address_prefix  = \"*\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-NSG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 58,
+      "resource": "azurerm_network_security_group.open_ssh",
+      "urgency": "MEDIUM",
+      "title": "Azure NSG rule open to the internet on sensitive ports",
+      "section": "stack",
+      "recommendation": "Replace `source_address_prefix = \"*\"` with a specific CIDR or Azure service\ntag. For SSH/RDP, use Azure Bastion instead of opening ports to the internet.\nFor internal services, use VNet service tags (`VirtualNetwork`) rather than `*`.\n\n    # Bad \u2014 any IP on the internet can reach this port\n    source_address_prefix = \"*\"\n\n    # Better \u2014 restrict to a known CIDR\n    source_address_prefix = \"10.0.0.0/8\"\n\n    # Best for management ports \u2014 use Azure Bastion and remove the rule\nIf port 22 or 3389 is involved, treat this as CRITICAL and remediate\nimmediately.\n",
+      "fix_hcl": "resource \"azurerm_network_security_rule\" \"example\" {\n  name                        = \"allow-https\"\n  resource_group_name         = azurerm_resource_group.example.name\n  network_security_group_name = azurerm_network_security_group.example.name\n  priority                    = 100\n  direction                   = \"Inbound\"\n  access                      = \"Allow\"\n  protocol                    = \"Tcp\"\n  source_port_range           = \"*\"\n  destination_port_range      = \"443\"\n  source_address_prefix       = \"203.0.113.0/24\"\n  destination_address_prefix  = \"*\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+      "line": 103,
+      "resource": "azurerm_storage_account.open_storage",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob versioning",
+      "section": "stack",
+      "recommendation": "Enable versioning in the `blob_properties` block:\n\n    resource \"azurerm_storage_account\" \"app\" {\n      blob_properties {\n        versioning_enabled = true\n        delete_retention_policy {\n          days = 7\n        }\n        container_delete_retention_policy {\n          days = 7\n        }\n      }\n    }\n\nPair with a lifecycle management rule to expire non-current versions\nafter N days to control storage costs. Azure Storage versioning is\nequivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning\n(STK-GCP-BUCKET-001).\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    versioning_enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 61,
+      "resource": "azurerm_storage_account.ssrf_target",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 61,
+      "resource": "azurerm_storage_account.ssrf_target",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 61,
+      "resource": "azurerm_storage_account.ssrf_target",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob soft delete",
+      "section": "robustness",
+      "recommendation": "Add `blob_properties` with `delete_retention_policy` and\n`container_delete_retention_policy`. Soft delete gives a recovery window\nfor accidental deletions or ransomware.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      blob_properties {\n        delete_retention_policy {\n          days = 30\n        }\n        container_delete_retention_policy {\n          days = 30\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    delete_retention_policy {\n      days = 30\n    }\n    container_delete_retention_policy {\n      days = 30\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-WEBAPP-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 45,
+      "resource": "azurerm_linux_web_app.publicly_reachable",
+      "urgency": "MEDIUM",
+      "title": "Azure App Service / Function App missing IP access restrictions",
+      "section": "security",
+      "recommendation": "Add `ip_restriction` and `scm_ip_restriction` blocks inside `site_config` to\nlimit access to known CIDRs or service tags. Without this, the web app\nmanagement plane is reachable from any IP.\n\n    resource \"azurerm_linux_web_app\" \"example\" {\n      # ...\n      site_config {\n        ip_restriction {\n          ip_address = \"203.0.113.0/24\"\n          name       = \"office-network\"\n          priority   = 100\n          action     = \"Allow\"\n        }\n        scm_ip_restriction {\n          ip_address = \"203.0.113.0/24\"\n          name       = \"office-network\"\n          priority   = 100\n          action     = \"Allow\"\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_linux_web_app\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  service_plan_id     = azurerm_service_plan.example.id\n  site_config {\n    ip_restriction {\n      ip_address = \"203.0.113.0/24\"\n      name       = \"allow-corporate\"\n      priority   = 100\n      action     = \"Allow\"\n    }\n    scm_ip_restriction {\n      ip_address = \"203.0.113.0/24\"\n      name       = \"allow-corporate\"\n      priority   = 100\n      action     = \"Allow\"\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-WEBAPP-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 45,
+      "resource": "azurerm_linux_web_app.publicly_reachable",
+      "urgency": "HIGH",
+      "title": "App Service / Function App HTTPS not enforced",
+      "section": "security",
+      "recommendation": "Set `https_only = true` on every App Service and Function App:\n\n    resource \"azurerm_linux_web_app\" \"app\" {\n      name            = \"app\"\n      https_only      = true\n      # ...\n    }\n\nThis causes Azure App Service to redirect all HTTP requests to HTTPS\n(301 Permanent Redirect) before they reach the application code.\nWithout this flag, HTTP traffic is accepted \u2014 credentials and session\ntokens cross the network in plaintext.\n",
+      "fix_hcl": "resource \"azurerm_linux_web_app\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  service_plan_id     = azurerm_service_plan.example.id\n  https_only          = true\n  site_config {}\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+      "line": 61,
+      "resource": "azurerm_storage_account.ssrf_target",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob versioning",
+      "section": "stack",
+      "recommendation": "Enable versioning in the `blob_properties` block:\n\n    resource \"azurerm_storage_account\" \"app\" {\n      blob_properties {\n        versioning_enabled = true\n        delete_retention_policy {\n          days = 7\n        }\n        container_delete_retention_policy {\n          days = 7\n        }\n      }\n    }\n\nPair with a lifecycle management rule to expire non-current versions\nafter N days to control storage costs. Azure Storage versioning is\nequivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning\n(STK-GCP-BUCKET-001).\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    versioning_enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/versions.tf",
+      "line": 26,
+      "resource": "azurerm_resource_group.demo",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-VERSION-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/versions.tf",
+      "line": 9,
+      "resource": "",
+      "urgency": "MEDIUM",
+      "title": "required_version floor too old for skill assumptions",
+      "section": "robustness",
+      "recommendation": "Set `required_version = \"~> 1.10\"` (or whatever the current Terraform\nmajor is). Many checks in this skill assume features only available in\nTerraform 1.6+: native test framework (`*.tftest.hcl`), `import` blocks,\n`optional()` in object types, `moved` blocks, conditional outputs.\n",
+      "fix_hcl": "terraform {\n  required_version = \">= 1.5.0, < 2.0.0\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "MOD-PIN-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 124,
+      "resource": "module.unpinned_aks",
+      "urgency": "MEDIUM",
+      "title": "Module source not pinned",
+      "section": "module",
+      "recommendation": "Pin every external module:\n - Registry: add `version = \"~> X.Y\"`.\n - Git: add `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL.\n - Local (`./modules/foo`): no pin needed but verify the path is stable.\n",
+      "fix_hcl": "module \"example\" {\n  source  = \"hashicorp/consul/aws\"\n  version = \"= 0.11.0\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "MOD-STALE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 125,
+      "resource": "",
+      "urgency": "LOW",
+      "title": "Registry module is significantly behind latest version",
+      "section": "dry",
+      "recommendation": "Run `detect.py --check-registry` to identify modules pinned significantly behind their\nlatest published version on the Terraform Registry. Upgrade the `version` constraint and\nrun `terraform init -upgrade` to pull the newer release. Review the module's CHANGELOG\nfor breaking changes before upgrading across major versions.\n\nStaleness thresholds:\n- MEDIUM: pinned version is >= 1 major version behind latest\n- LOW: pinned version is >= 3 minor versions behind latest (within the same major)\n\nFindings are only emitted by `--check-registry` (requires outbound HTTPS to\nregistry.terraform.io). The static pass records the source pattern but does not\nquery the registry \u2014 keeping normal scans offline-capable.\n",
+      "fix_hcl": "# Update the version constraint to the latest (check with --check-registry)\nmodule \"vpc\" {\n  source  = \"terraform-aws-modules/vpc/aws\"\n  version = \"~> 5.1\"   # was ~> 3.0\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "MOD-SUPPLY-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 125,
+      "resource": "",
+      "urgency": "HIGH",
+      "title": "Registry module missing version constraint",
+      "section": "module",
+      "recommendation": "Add `version = \"~> X.Y\"` to every registry module block. Without a\nversion constraint, `terraform init` resolves the latest available\nversion making builds non-reproducible.\n",
+      "fix_hcl": "module \"example\" {\n  source  = \"hashicorp/consul/aws\"\n  version = \">= 0.11.0, < 0.12.0\"\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1195.002"
+      ]
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 50,
+      "resource": "azurerm_storage_account.fnapp",
+      "urgency": "HIGH",
+      "on_critical_path": true,
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 79,
+      "resource": "azurerm_kubernetes_cluster.old_k8s",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 99,
+      "resource": "azurerm_mysql_server.deprecated",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 50,
+      "resource": "azurerm_storage_account.fnapp",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 50,
+      "resource": "azurerm_storage_account.fnapp",
+      "urgency": "HIGH",
+      "on_critical_path": true,
+      "title": "Azure storage account missing blob soft delete",
+      "section": "robustness",
+      "recommendation": "Add `blob_properties` with `delete_retention_policy` and\n`container_delete_retention_policy`. Soft delete gives a recovery window\nfor accidental deletions or ransomware.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      blob_properties {\n        delete_retention_policy {\n          days = 30\n        }\n        container_delete_retention_policy {\n          days = 30\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    delete_retention_policy {\n      days = 30\n    }\n    container_delete_retention_policy {\n      days = 30\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-ACR-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 114,
+      "resource": "azurerm_container_registry.admin_on",
+      "urgency": "MEDIUM",
+      "title": "Azure Container Registry admin account enabled",
+      "section": "security",
+      "recommendation": "Disable the admin account and use Entra ID authentication:\n\n    resource \"azurerm_container_registry\" \"app\" {\n      name                = \"acrapp\"\n      resource_group_name = azurerm_resource_group.app.name\n      location            = azurerm_resource_group.app.location\n      sku                 = \"Standard\"\n      admin_enabled       = false\n    }\n\n    resource \"azurerm_role_assignment\" \"aks_pull\" {\n      scope                = azurerm_container_registry.app.id\n      role_definition_name = \"AcrPull\"\n      principal_id         = azurerm_kubernetes_cluster.app.kubelet_identity[0].object_id\n    }\n\nACR supports task identities, managed identities for Azure services,\nand service principal tokens \u2014 none of which need the admin account.\n",
+      "fix_hcl": "resource \"azurerm_container_registry\" \"example\" {\n  name                = \"exampleacr\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  sku                 = \"Standard\"\n  admin_enabled       = false\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-AKS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 79,
+      "resource": "azurerm_kubernetes_cluster.old_k8s",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster RBAC disabled",
+      "section": "security",
+      "recommendation": "Set `role_based_access_control_enabled = true` and configure\n`azure_active_directory_role_based_access_control`. Without RBAC, any\nauthenticated user can perform any action in the cluster.\n\n    resource \"azurerm_kubernetes_cluster\" \"example\" {\n      # ...\n      role_based_access_control_enabled = true\n\n      azure_active_directory_role_based_access_control {\n        managed                = true\n        admin_group_object_ids = [var.aks_admin_group_id]\n        azure_rbac_enabled     = true\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                              = \"example\"\n  resource_group_name               = azurerm_resource_group.example.name\n  location                          = azurerm_resource_group.example.location\n  dns_prefix                        = \"example\"\n  role_based_access_control_enabled = true\n  azure_active_directory_role_based_access_control {\n    managed            = true\n    azure_rbac_enabled = true\n  }\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-AZURE-AKS-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 79,
+      "resource": "azurerm_kubernetes_cluster.old_k8s",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster missing network policy",
+      "section": "security",
+      "recommendation": "Set a network policy in the cluster's `network_profile` block:\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      network_profile {\n        network_plugin = \"azure\"\n        network_policy = \"azure\"   # or \"calico\" / \"cilium\"\n      }\n    }\n\nAfter enabling, deploy Kubernetes `NetworkPolicy` objects to restrict\npod-to-pod and pod-to-API-server traffic to the minimum required.\nWithout `NetworkPolicy` manifests the CNI allows all traffic even with\nthe policy engine installed.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  network_profile {\n    network_plugin = \"azure\"\n    network_policy = \"azure\"\n  }\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "SEC-AZURE-WEBAPP-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 61,
+      "resource": "azurerm_linux_function_app.eol_runtime",
+      "urgency": "CRITICAL",
+      "on_critical_path": true,
+      "title": "App Service / Function App HTTPS not enforced",
+      "section": "security",
+      "recommendation": "Set `https_only = true` on every App Service and Function App:\n\n    resource \"azurerm_linux_web_app\" \"app\" {\n      name            = \"app\"\n      https_only      = true\n      # ...\n    }\n\nThis causes Azure App Service to redirect all HTTP requests to HTTPS\n(301 Permanent Redirect) before they reach the application code.\nWithout this flag, HTTP traffic is accepted \u2014 credentials and session\ntokens cross the network in plaintext.\n",
+      "fix_hcl": "resource \"azurerm_linux_web_app\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  service_plan_id     = azurerm_service_plan.example.id\n  https_only          = true\n  site_config {}\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 107,
+      "resource": "azurerm_mysql_server.deprecated",
+      "urgency": "HIGH",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-AKS-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 79,
+      "resource": "azurerm_kubernetes_cluster.old_k8s",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster workload identity not enabled",
+      "section": "stack",
+      "recommendation": "Enable Workload Identity and the OIDC issuer on the cluster:\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      oidc_issuer_enabled       = true\n      workload_identity_enabled = true\n    }\n\nThen bind a User-Assigned Managed Identity to a Kubernetes ServiceAccount\nvia a `azurerm_federated_identity_credential` resource. Pods annotated\nwith `azure.workload.identity/client-id` receive short-lived Azure AD\ntokens scoped to that identity's role assignments.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  oidc_issuer_enabled       = true\n  workload_identity_enabled = true\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AZURE-AKS-004",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 79,
+      "resource": "azurerm_kubernetes_cluster.old_k8s",
+      "urgency": "MEDIUM",
+      "title": "AKS cluster API server is publicly accessible",
+      "section": "stack",
+      "recommendation": "Enable the private cluster feature so the API server is only reachable\nfrom within the VNet:\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      private_cluster_enabled             = true\n      private_cluster_public_fqdn_enabled = false\n    }\n\nWhen the cluster is private, `kubectl` must run from a jumpbox or VPN\nhost inside (or peered with) the cluster VNet. Integrate with Azure\nPrivate DNS for internal FQDN resolution. Equivalent to GKE\n`private_cluster_config.enable_private_endpoint = true`.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  private_cluster_enabled = true\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "STK-AZURE-AKS-005",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 79,
+      "resource": "azurerm_kubernetes_cluster.old_k8s",
+      "urgency": "LOW",
+      "title": "AKS cluster API server missing authorized IP ranges",
+      "section": "stack",
+      "recommendation": "Restrict API server access to known CIDRs (CI runners, operator VPN\negress IPs, bastion host subnets):\n\n    resource \"azurerm_kubernetes_cluster\" \"app\" {\n      api_server_access_profile {\n        authorized_ip_ranges = [\n          \"203.0.113.0/24\",  # CI runner egress\n          \"10.0.0.0/8\",      # internal VNet\n        ]\n      }\n    }\n\nThe recommended target is `private_cluster_enabled = true`\n(STK-AZURE-AKS-004). Authorized IP ranges are a defence-in-depth\nlayer for clusters that must retain a public endpoint.\nEquivalent to GKE `master_authorized_networks_config`.\n",
+      "fix_hcl": "resource \"azurerm_kubernetes_cluster\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  dns_prefix          = \"example\"\n  api_server_access_profile {\n    authorized_ip_ranges = [\"203.0.113.0/24\"]\n  }\n  default_node_pool {\n    name       = \"default\"\n    node_count = 1\n    vm_size    = \"Standard_D2_v2\"\n  }\n  identity { type = \"SystemAssigned\" }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-DB-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 99,
+      "resource": "azurerm_mysql_server.deprecated",
+      "urgency": "MEDIUM",
+      "title": "Azure MySQL/PostgreSQL server missing SSL enforcement",
+      "section": "stack",
+      "recommendation": "Set `ssl_enforcement_enabled = true` on every MySQL and PostgreSQL\nSingle Server resource:\n\n    resource \"azurerm_mysql_server\" \"app\" {\n      ssl_enforcement_enabled          = true\n      ssl_minimal_tls_version_enforced = \"TLS1_2\"\n      # ...\n    }\n\nFor Flexible Server (the preferred, non-deprecated resource), SSL is\nenforced by default and controlled via `azurerm_mysql_flexible_server_configuration`\nwith the `require_secure_transport` parameter.\n\nEquivalent to GCP `STK-GCP-CLOUDSQL-004` (require_ssl).\n",
+      "fix_hcl": "resource \"azurerm_mysql_server\" \"example\" {\n  name                = \"example\"\n  resource_group_name = azurerm_resource_group.example.name\n  location            = azurerm_resource_group.example.location\n  sku_name            = \"B_Gen5_1\"\n  ssl_enforcement_enabled          = true\n  ssl_minimal_tls_version_enforced = \"TLS1_2\"\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-SQL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 99,
+      "resource": "azurerm_mysql_server.deprecated",
+      "urgency": "MEDIUM",
+      "title": "Azure MySQL/PostgreSQL single server is deprecated",
+      "section": "stack",
+      "recommendation": "Migrate to the Flexible Server SKU:\n\n    # MySQL\n    resource \"azurerm_mysql_flexible_server\" \"app\" {\n      name                   = \"mysql-app\"\n      resource_group_name    = azurerm_resource_group.app.name\n      location               = azurerm_resource_group.app.location\n      administrator_login    = \"mysqladmin\"\n      administrator_password = var.mysql_password\n      backup_retention_days  = 7\n      sku_name               = \"B_Standard_B1ms\"\n      version                = \"8.0.21\"\n    }\n\n    # PostgreSQL\n    resource \"azurerm_postgresql_flexible_server\" \"app\" {\n      name                   = \"psql-app\"\n      resource_group_name    = azurerm_resource_group.app.name\n      location               = azurerm_resource_group.app.location\n      administrator_login    = \"psqladmin\"\n      administrator_password = var.psql_password\n      sku_name               = \"B_Standard_B1ms\"\n      version                = \"16\"\n    }\n\nEquivalent to GCP `STK-GCP-CLOUDSQL-005` (EOL engine version).\n",
+      "fix_hcl": "resource \"azurerm_mysql_flexible_server\" \"example\" {\n  name                   = \"example\"\n  resource_group_name    = azurerm_resource_group.example.name\n  location               = azurerm_resource_group.example.location\n  administrator_login    = \"adminuser\"\n  administrator_password = var.db_password\n  sku_name               = \"GP_Standard_D2ds_v4\"\n  version                = \"8.0.21\"\n}\n",
+      "fix_disruption": "forces_replacement"
+    },
+    {
+      "id": "STK-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+      "line": 50,
+      "resource": "azurerm_storage_account.fnapp",
+      "urgency": "HIGH",
+      "on_critical_path": true,
+      "title": "Azure storage account missing blob versioning",
+      "section": "stack",
+      "recommendation": "Enable versioning in the `blob_properties` block:\n\n    resource \"azurerm_storage_account\" \"app\" {\n      blob_properties {\n        versioning_enabled = true\n        delete_retention_policy {\n          days = 7\n        }\n        container_delete_retention_policy {\n          days = 7\n        }\n      }\n    }\n\nPair with a lifecycle management rule to expire non-current versions\nafter N days to control storage costs. Azure Storage versioning is\nequivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning\n(STK-GCP-BUCKET-001).\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    versioning_enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/09_logging_monitoring.tf",
+      "line": 35,
+      "resource": "azurerm_key_vault.unaudited",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-KV-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/09_logging_monitoring.tf",
+      "line": 35,
+      "resource": "azurerm_key_vault.unaudited",
+      "urgency": "MEDIUM",
+      "title": "Key Vault missing network ACL deny-by-default",
+      "section": "security",
+      "recommendation": "Set the default action to `\"Deny\"` and enumerate the allowed CIDRs /\nVNet subnets explicitly:\n\n    resource \"azurerm_key_vault\" \"app\" {\n      name = \"kv-app\"\n      # ...\n\n      network_acls {\n        default_action             = \"Deny\"\n        bypass                     = \"AzureServices\"\n        ip_rules                   = [\"203.0.113.0/24\"]\n        virtual_network_subnet_ids = [azurerm_subnet.app.id]\n      }\n    }\n\n`bypass = \"AzureServices\"` allows diagnostic and monitoring services\nthat run in the Azure backbone to reach the vault \u2014 omitting it breaks\nKey Vault audit logging.\n",
+      "fix_hcl": "resource \"azurerm_key_vault\" \"example\" {\n  # ... other arguments ...\n  network_acls {\n    default_action = \"Deny\"\n    bypass         = [\"AzureServices\"]\n    ip_rules       = []\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530",
+        "T1133"
+      ]
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 40,
+      "resource": "azurerm_storage_account.weak_tls",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 40,
+      "resource": "azurerm_storage_account.weak_tls",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 64,
+      "resource": "azurerm_key_vault.no_purge_protection",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 40,
+      "resource": "azurerm_storage_account.weak_tls",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob soft delete",
+      "section": "robustness",
+      "recommendation": "Add `blob_properties` with `delete_retention_policy` and\n`container_delete_retention_policy`. Soft delete gives a recovery window\nfor accidental deletions or ransomware.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      blob_properties {\n        delete_retention_policy {\n          days = 30\n        }\n        container_delete_retention_policy {\n          days = 30\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    delete_retention_policy {\n      days = 30\n    }\n    container_delete_retention_policy {\n      days = 30\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-KV-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 64,
+      "resource": "azurerm_key_vault.no_purge_protection",
+      "urgency": "MEDIUM",
+      "title": "Azure Key Vault missing purge protection or soft delete",
+      "section": "security",
+      "recommendation": "Set `purge_protection_enabled = true` and `soft_delete_retention_days = 90`.\nWithout purge protection, an attacker (or accident) that deletes the Key Vault\nbypasses the soft-delete window by purging \u2014 secrets, keys, and certificates\nare gone permanently.\n\n    resource \"azurerm_key_vault\" \"example\" {\n      # ...\n      purge_protection_enabled    = true\n      soft_delete_retention_days  = 90\n    }\n",
+      "fix_hcl": "resource \"azurerm_key_vault\" \"example\" {\n  # ... other arguments ...\n  purge_protection_enabled    = true\n  soft_delete_retention_days  = 90\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530"
+      ]
+    },
+    {
+      "id": "SEC-AZURE-KV-002",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 64,
+      "resource": "azurerm_key_vault.no_purge_protection",
+      "urgency": "MEDIUM",
+      "title": "Key Vault missing network ACL deny-by-default",
+      "section": "security",
+      "recommendation": "Set the default action to `\"Deny\"` and enumerate the allowed CIDRs /\nVNet subnets explicitly:\n\n    resource \"azurerm_key_vault\" \"app\" {\n      name = \"kv-app\"\n      # ...\n\n      network_acls {\n        default_action             = \"Deny\"\n        bypass                     = \"AzureServices\"\n        ip_rules                   = [\"203.0.113.0/24\"]\n        virtual_network_subnet_ids = [azurerm_subnet.app.id]\n      }\n    }\n\n`bypass = \"AzureServices\"` allows diagnostic and monitoring services\nthat run in the Azure backbone to reach the vault \u2014 omitting it breaks\nKey Vault audit logging.\n",
+      "fix_hcl": "resource \"azurerm_key_vault\" \"example\" {\n  # ... other arguments ...\n  network_acls {\n    default_action = \"Deny\"\n    bypass         = [\"AzureServices\"]\n    ip_rules       = []\n  }\n}\n",
+      "fix_disruption": "plan_required",
+      "mitre": [
+        "T1530",
+        "T1133"
+      ]
+    },
+    {
+      "id": "SEC-AZURE-KV-003",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 53,
+      "resource": "azurerm_key_vault_key.no_rotation",
+      "urgency": "LOW",
+      "title": "Azure Key Vault key missing rotation policy",
+      "section": "security",
+      "recommendation": "Add a rotation policy to every Key Vault key:\n\n    resource \"azurerm_key_vault_key\" \"app\" {\n      name         = \"app-key\"\n      key_vault_id = azurerm_key_vault.app.id\n      key_type     = \"RSA\"\n      key_size     = 2048\n      key_opts     = [\"decrypt\", \"encrypt\", \"sign\", \"verify\"]\n\n      rotation_policy {\n        automatic {\n          time_before_expiry = \"P30D\"  # rotate 30 days before expiry\n        }\n        expire_after         = \"P90D\"  # 90-day key lifetime\n        notify_before_expiry = \"P29D\"\n      }\n    }\n\n`time_before_expiry` uses ISO 8601 duration format (P30D = 30 days).\nSet the key lifetime (`expire_after`) to \u2264 90 days for CIS compliance.\n",
+      "fix_hcl": "resource \"azurerm_key_vault_key\" \"example\" {\n  name         = \"example\"\n  key_vault_id = azurerm_key_vault.example.id\n  key_type     = \"RSA\"\n  key_size     = 2048\n  key_opts     = [\"decrypt\", \"encrypt\", \"sign\", \"verify\"]\n  rotation_policy {\n    automatic {\n      time_before_expiry = \"P30D\"\n    }\n    expire_after         = \"P90D\"\n    notify_before_expiry = \"P29D\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 40,
+      "resource": "azurerm_storage_account.weak_tls",
+      "urgency": "MEDIUM",
+      "title": "Azure storage account allows non-HTTPS traffic",
+      "section": "security",
+      "recommendation": "Set `https_only = true` (provider v3+) or `enable_https_traffic_only = true`\n(provider v2). Also set `min_tls_version = \"TLS1_2\"`. Allowing HTTP exposes\nstorage account keys and SAS tokens in transit.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      https_only       = true\n      min_tls_version  = \"TLS1_2\"\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  https_traffic_only_enabled = true\n  min_tls_version            = \"TLS1_2\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 40,
+      "resource": "azurerm_storage_account.weak_tls",
+      "urgency": "MEDIUM",
+      "title": "Azure storage account allows non-HTTPS traffic",
+      "section": "security",
+      "recommendation": "Set `https_only = true` (provider v3+) or `enable_https_traffic_only = true`\n(provider v2). Also set `min_tls_version = \"TLS1_2\"`. Allowing HTTP exposes\nstorage account keys and SAS tokens in transit.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      https_only       = true\n      min_tls_version  = \"TLS1_2\"\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  https_traffic_only_enabled = true\n  min_tls_version            = \"TLS1_2\"\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "STK-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+      "line": 40,
+      "resource": "azurerm_storage_account.weak_tls",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob versioning",
+      "section": "stack",
+      "recommendation": "Enable versioning in the `blob_properties` block:\n\n    resource \"azurerm_storage_account\" \"app\" {\n      blob_properties {\n        versioning_enabled = true\n        delete_retention_policy {\n          days = 7\n        }\n        container_delete_retention_policy {\n          days = 7\n        }\n      }\n    }\n\nPair with a lifecycle management rule to expire non-current versions\nafter N days to control storage costs. Azure Storage versioning is\nequivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning\n(STK-GCP-BUCKET-001).\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    versioning_enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 30,
+      "resource": "azurerm_storage_account.no_soft_delete",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 45,
+      "resource": "azurerm_mssql_database.no_retention",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-LIFECYCLE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 30,
+      "resource": "azurerm_storage_account.no_soft_delete",
+      "urgency": "MEDIUM",
+      "title": "Stateful Azure resource missing lifecycle.prevent_destroy",
+      "section": "robustness",
+      "recommendation": "Add `lifecycle { prevent_destroy = true }` to any resource that holds\nirrecoverable state:\n\n    resource \"azurerm_mssql_database\" \"app\" {\n      # ...\n      lifecycle {\n        prevent_destroy = true\n      }\n    }\n\nAzure SQL databases, storage accounts, and Key Vaults do not have\na Terraform-provider-level deletion protection flag equivalent to GCP's\n`deletion_protection`. The `lifecycle` block is the only guard.\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  # ... other arguments ...\n  lifecycle {\n    prevent_destroy = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-SQL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 45,
+      "resource": "azurerm_mssql_database.no_retention",
+      "urgency": "LOW",
+      "title": "Azure SQL database missing short-term backup retention policy",
+      "section": "robustness",
+      "recommendation": "Add `short_term_retention_policy { retention_days = 35 }`. The default is\n7 days \u2014 too short for post-incident recovery in production. 35 days covers\na typical monthly billing cycle.\n\n    resource \"azurerm_mssql_database\" \"example\" {\n      # ...\n      short_term_retention_policy {\n        retention_days           = 35\n        backup_interval_in_hours = 12\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_mssql_database\" \"example\" {\n  name      = \"example\"\n  server_id = azurerm_mssql_server.example.id\n  short_term_retention_policy {\n    retention_days           = 35\n    backup_interval_in_hours = 12\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "ROB-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 30,
+      "resource": "azurerm_storage_account.no_soft_delete",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob soft delete",
+      "section": "robustness",
+      "recommendation": "Add `blob_properties` with `delete_retention_policy` and\n`container_delete_retention_policy`. Soft delete gives a recovery window\nfor accidental deletions or ransomware.\n\n    resource \"azurerm_storage_account\" \"example\" {\n      # ...\n      blob_properties {\n        delete_retention_policy {\n          days = 30\n        }\n        container_delete_retention_policy {\n          days = 30\n        }\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    delete_retention_policy {\n      days = 30\n    }\n    container_delete_retention_policy {\n      days = 30\n    }\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-STORAGE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+      "line": 30,
+      "resource": "azurerm_storage_account.no_soft_delete",
+      "urgency": "LOW",
+      "title": "Azure storage account missing blob versioning",
+      "section": "stack",
+      "recommendation": "Enable versioning in the `blob_properties` block:\n\n    resource \"azurerm_storage_account\" \"app\" {\n      blob_properties {\n        versioning_enabled = true\n        delete_retention_policy {\n          days = 7\n        }\n        container_delete_retention_policy {\n          days = 7\n        }\n      }\n    }\n\nPair with a lifecycle management rule to expire non-current versions\nafter N days to control storage costs. Azure Storage versioning is\nequivalent to S3 versioning (ROB-AWS-S3-001) and GCS versioning\n(STK-GCP-BUCKET-001).\n",
+      "fix_hcl": "resource \"azurerm_storage_account\" \"example\" {\n  name                     = \"example\"\n  resource_group_name      = azurerm_resource_group.example.name\n  location                 = azurerm_resource_group.example.location\n  account_tier             = \"Standard\"\n  account_replication_type = \"LRS\"\n  blob_properties {\n    versioning_enabled = true\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "OPS-AZURE-TAGS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+      "line": 46,
+      "resource": "azurerm_mssql_server.stateful",
+      "urgency": "LOW",
+      "title": "Azure resource missing tags",
+      "section": "ops",
+      "recommendation": "Add a `tags` block with at minimum `environment`, `managed_by = \"terraform\"`,\nand `project`. Use a `locals { common_tags = {...} }` pattern and merge with\n`merge(local.common_tags, {...})` for resource-specific tags.\n\n    locals {\n      common_tags = {\n        environment = var.environment\n        managed_by  = \"terraform\"\n        project     = var.project_name\n      }\n    }\n\n    resource \"azurerm_resource_group\" \"example\" {\n      # ...\n      tags = local.common_tags\n    }\n",
+      "fix_hcl": "resource \"azurerm_resource_group\" \"example\" {\n  # ... other arguments ...\n  tags = {\n    Environment = \"prod\"\n    Owner       = \"platform-team\"\n    Project     = \"my-project\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-SECRETS-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+      "line": 35,
+      "resource": "",
+      "urgency": "CRITICAL",
+      "title": "Hardcoded credential or API key in Terraform source",
+      "section": "security",
+      "recommendation": "Replace every hardcoded credential with a reference to a secrets\nmanager:\n- GCP: `data.google_secret_manager_secret_version.creds.secret_data`\n- AWS: `data.aws_secretsmanager_secret_version.creds.secret_string`\n- Azure: `data.azurerm_key_vault_secret.creds.value`\n- HashiCorp Vault: `data.vault_generic_secret.creds.data[\"password\"]`\n\nFor passwords on managed databases, prefer `random_password` resource\nwith the result stored in the secrets manager \u2014 avoids checked-in\nvalues entirely.\n\nIf the credential is already committed, rotate it immediately \u2014 git\nhistory retains it even after the line is removed. Use `git filter-repo`\nor BFG Repo Cleaner to purge the history.\n",
+      "fix_hcl": "# Replace hardcoded credential with a variable (never set a default)\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\n# Or fetch from AWS Secrets Manager\ndata \"aws_secretsmanager_secret_version\" \"db\" {\n  secret_id = \"prod/app/db_password\"\n}\n\nresource \"aws_db_instance\" \"app\" {\n  password = var.db_password\n  # or: password = jsondecode(data.aws_secretsmanager_secret_version.db.secret_string)[\"password\"]\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-VM-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/03_injection.tf",
+      "line": 33,
+      "resource": "azurerm_linux_virtual_machine.user_data_inject",
+      "urgency": "MEDIUM",
+      "title": "Linux VM allows SSH password authentication",
+      "section": "security",
+      "recommendation": "Disable password authentication and supply an SSH public key:\n\n    resource \"azurerm_linux_virtual_machine\" \"app\" {\n      # ...\n      disable_password_authentication = true\n\n      admin_ssh_key {\n        username   = \"azureuser\"\n        public_key = data.azurerm_key_vault_secret.ssh_pubkey.value\n      }\n    }\n\nStore SSH public keys in Key Vault (`data.azurerm_key_vault_secret`)\nrather than hardcoding them in source or tfvars. Enforce across all VMs\nvia Azure Policy: `\"Audit Linux machines that allow remote connections\nfrom accounts without passwords\"` (built-in policy definition).\n",
+      "fix_hcl": "resource \"azurerm_linux_virtual_machine\" \"example\" {\n  # ... other arguments ...\n  disable_password_authentication = true\n  admin_ssh_key {\n    username   = \"adminuser\"\n    public_key = file(\"~/.ssh/id_rsa.pub\")\n  }\n}\n",
+      "fix_disruption": "plan_required"
+    },
+    {
+      "id": "SEC-PROVISIONER-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/03_injection.tf",
+      "line": 66,
+      "resource": "null_resource.az_cli_inject",
+      "urgency": "MEDIUM",
+      "title": "Provisioner block used for shell execution",
+      "section": "security",
+      "recommendation": "Provisioners are a last resort. Replace with provider-native resources\nwhere possible:\n- `local-exec` for scripts \u2192 `terraform_data` with `provisioner` only\n  when no provider resource exists, or use `null_resource` with explicit\n  `triggers` to control re-execution.\n- `remote-exec` \u2192 cloud-init (`user_data`), Packer images, or\n  configuration management (Ansible, Chef, Puppet).\nIf a provisioner is genuinely needed, document the justification with\nan inline `# tf-analyze:ignore SEC-PROVISIONER-001` comment.\n",
+      "fix_hcl": "# Replace remote-exec with user_data / cloud-init\nresource \"aws_instance\" \"app\" {\n  ami           = data.aws_ami.ubuntu.id\n  instance_type = \"t3.micro\"\n\n  user_data = templatefile(\"${path.module}/cloud-init.sh.tpl\", {\n    environment = var.environment\n  })\n}\n\n# Replace local-exec trigger with terraform_data\nresource \"terraform_data\" \"init\" {\n  triggers_replace = [aws_instance.app.id]\n  provisioner \"local-exec\" {\n    command = \"echo 'only use as last resort \u2014 document why'\"\n  }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1059"
+      ]
+    },
+    {
+      "id": "CI-TEST-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+      "line": 1,
+      "resource": "<module:azure>",
+      "urgency": "LOW",
+      "title": "Module has no Terraform test files",
+      "section": "cicd",
+      "recommendation": "Add at least one `.tftest.hcl` file covering the module's primary\nresource creation path. Terraform native tests (1.6+) validate both\nplan and apply without external tooling.\n\nExample:\n```hcl\nrun \"creates_bucket\" {\n  command = plan\n  assert {\n    condition     = google_storage_bucket.main.location == \"US\"\n    error_message = \"bucket location must be US\"\n  }\n}\n```\n",
+      "fix_hcl": "# Create a <module>.tftest.hcl file in the module directory\nrun \"creates_resource\" {\n  command = plan\n\n  assert {\n    condition     = aws_s3_bucket.main.bucket != \"\"\n    error_message = \"bucket must be created with a non-empty name\"\n  }\n}\n\nrun \"apply_and_verify\" {\n  command = apply\n\n  assert {\n    condition     = aws_s3_bucket.main.region == \"us-east-1\"\n    error_message = \"bucket must be in us-east-1\"\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-LOGGING-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_monitor_diagnostic_setting>",
+      "urgency": "MEDIUM",
+      "title": "Azure Key Vault missing diagnostic settings",
+      "section": "security",
+      "recommendation": "Add `azurerm_monitor_diagnostic_setting` targeting the Key Vault with\n`AuditEvent` logs enabled and at minimum a `log_analytics_workspace_id`\ndestination. Without this, secret access and modification events are\nunlogged.\n\n    resource \"azurerm_monitor_diagnostic_setting\" \"kv\" {\n      name                       = \"kv-diagnostics\"\n      target_resource_id         = azurerm_key_vault.example.id\n      log_analytics_workspace_id = azurerm_log_analytics_workspace.example.id\n\n      enabled_log {\n        category = \"AuditEvent\"\n      }\n\n      metric {\n        category = \"AllMetrics\"\n        enabled  = true\n      }\n    }\n",
+      "fix_hcl": "resource \"azurerm_monitor_diagnostic_setting\" \"kv\" {\n  name                       = \"kv-diagnostics\"\n  target_resource_id         = azurerm_key_vault.example.id\n  log_analytics_workspace_id = azurerm_log_analytics_workspace.example.id\n  enabled_log { category = \"AuditEvent\" }\n  metric {\n    category = \"AllMetrics\"\n    enabled  = true\n  }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.008"
+      ]
+    },
+    {
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+      "line": 39,
+      "resource": "azurerm_user_assigned_identity.monolith",
+      "context": "UAMI has no azurerm_role_assignment binding \u2014 orphan identity widens blast radius without granting intent",
+      "id": "SEC-AZURE-MI-001",
+      "urgency": "LOW",
+      "title": "Azure user-assigned identity with no role assignment (orphan UAMI)",
+      "section": "security",
+      "recommendation": "Either attach the identity to a role assignment with minimum-privilege\nscope, or delete it if it is no longer needed:\n\n    # Option A \u2014 wire to a scoped role assignment\n    resource \"azurerm_role_assignment\" \"app\" {\n      scope                = azurerm_resource_group.app.id\n      role_definition_name = \"Storage Blob Data Reader\"\n      principal_id         = azurerm_user_assigned_identity.app.principal_id\n    }\n\n    # Option B \u2014 remove the orphan identity entirely\n    # (delete the azurerm_user_assigned_identity block)\n\nAudit existing role assignments with:\n`az role assignment list --assignee <principal-id> -o table`\n",
+      "fix_hcl": "resource \"azurerm_role_assignment\" \"example\" {\n  scope                = azurerm_storage_account.example.id\n  role_definition_name = \"Storage Blob Data Reader\"\n  principal_id         = azurerm_user_assigned_identity.example.principal_id\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "SEC-AZURE-MONITOR-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_subscription_diagnostic_setting>",
+      "urgency": "MEDIUM",
+      "title": "Azure subscription missing activity log diagnostic setting",
+      "section": "security",
+      "recommendation": "Add an `azurerm_subscription_diagnostic_setting` to forward subscription\nActivity Logs to a Log Analytics workspace or storage account:\n\n    resource \"azurerm_subscription_diagnostic_setting\" \"activity\" {\n      name               = \"activity-log-to-law\"\n      target_resource_id = \"/subscriptions/${var.subscription_id}\"\n\n      log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id\n\n      enabled_log {\n        category = \"Administrative\"\n      }\n      enabled_log {\n        category = \"Security\"\n      }\n      enabled_log {\n        category = \"Alert\"\n      }\n      enabled_log {\n        category = \"Policy\"\n      }\n    }\n\nWithout this, all Resource Manager API calls (create/delete/modify) age out\nat the platform's 90-day retention with no long-term archive. Post-incident\ninvestigations are blind beyond that window.\n",
+      "fix_hcl": "resource \"azurerm_subscription_diagnostic_setting\" \"activity\" {\n  name                       = \"activity-to-law\"\n  target_resource_id         = \"/subscriptions/${var.subscription_id}\"\n  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id\n  enabled_log { category = \"Administrative\" }\n  enabled_log { category = \"Security\" }\n  enabled_log { category = \"Alert\" }\n  enabled_log { category = \"Policy\" }\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1562.008"
+      ]
+    },
+    {
+      "id": "SEC-AZURE-SQL-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_mssql_server_azure_ad_administrator>",
+      "urgency": "MEDIUM",
+      "title": "Azure SQL Server has no Azure AD administrator configured",
+      "section": "security",
+      "recommendation": "Add an `azurerm_mssql_server_azure_ad_administrator` resource. Without Azure\nAD auth, the server relies on SQL authentication (username/password) which is\nharder to audit and enforce MFA on.\n\n    resource \"azurerm_mssql_server_azure_ad_administrator\" \"example\" {\n      server_id           = azurerm_mssql_server.example.id\n      login               = \"sqladmin\"\n      object_id           = var.aad_admin_object_id\n      tenant_id           = data.azurerm_client_config.current.tenant_id\n      azuread_authentication_only = true\n    }\n",
+      "fix_hcl": "resource \"azurerm_mssql_server_azure_ad_administrator\" \"example\" {\n  server_id                   = azurerm_mssql_server.example.id\n  login                       = \"sqladmin\"\n  object_id                   = var.aad_admin_object_id\n  tenant_id                   = data.azurerm_client_config.current.tenant_id\n  azuread_authentication_only = true\n}\n",
+      "fix_disruption": "none",
+      "mitre": [
+        "T1530"
+      ]
+    },
+    {
+      "id": "STK-AZURE-NSG-FLOWLOG-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_network_watcher_flow_log>",
+      "urgency": "MEDIUM",
+      "title": "Azure NSG missing flow log resource",
+      "section": "stack",
+      "recommendation": "Add an `azurerm_network_watcher_flow_log` resource for every NSG:\n\n    resource \"azurerm_network_watcher_flow_log\" \"nsg\" {\n      network_watcher_name = azurerm_network_watcher.main.name\n      resource_group_name  = azurerm_resource_group.main.name\n      name                 = \"nsg-flow-log\"\n\n      network_security_group_id = azurerm_network_security_group.main.id\n      storage_account_id        = azurerm_storage_account.flow_logs.id\n      enabled                   = true\n\n      retention_policy {\n        enabled = true\n        days    = 90\n      }\n\n      traffic_analytics {\n        enabled               = true\n        workspace_id          = azurerm_log_analytics_workspace.main.workspace_id\n        workspace_region      = azurerm_log_analytics_workspace.main.location\n        workspace_resource_id = azurerm_log_analytics_workspace.main.id\n        interval_in_minutes   = 10\n      }\n    }\n\nNSG flow logs are the Azure equivalent of AWS VPC flow logs \u2014 the primary\nsource of network-layer evidence for post-incident investigation. Without\nthem, lateral movement and data exfiltration within a subnet are invisible.\n",
+      "fix_hcl": "resource \"azurerm_network_watcher_flow_log\" \"example\" {\n  name                      = \"example\"\n  resource_group_name       = azurerm_resource_group.example.name\n  network_watcher_name      = azurerm_network_watcher.example.name\n  network_security_group_id = azurerm_network_security_group.example.id\n  storage_account_id        = azurerm_storage_account.logs.id\n  enabled                   = true\n  retention_policy {\n    enabled = true\n    days    = 30\n  }\n}\n",
+      "fix_disruption": "none"
+    },
+    {
+      "id": "STK-AZURE-SQL-TDE-001",
+      "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure",
+      "line": 0,
+      "resource": "<absent: azurerm_mssql_database_transparent_data_encryption>",
+      "urgency": "MEDIUM",
+      "title": "Azure SQL Database missing transparent data encryption resource",
+      "section": "stack",
+      "recommendation": "Add a TDE resource for every SQL database and pin it to `\"Enabled\"`:\n\n    resource \"azurerm_mssql_database_transparent_data_encryption\" \"app\" {\n      database_id = azurerm_mssql_database.app.id\n      state       = \"Enabled\"\n    }\n\nFor databases on SQL Managed Instance (not SQL Server), TDE is enabled\nby default and managed at the instance level \u2014 this rule applies only\nto `azurerm_mssql_database` on `azurerm_mssql_server`.\n",
+      "fix_hcl": "resource \"azurerm_mssql_database_transparent_data_encryption\" \"example\" {\n  database_id = azurerm_mssql_database.example.id\n  state       = \"Enabled\"\n}\n",
+      "fix_disruption": "none"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "azurerm_role_assignment.subscription_contributor",
+        "type": "iam",
+        "label": "azurerm_role_assignment.subscription_contributor",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+        "line": 35,
+        "findings": [
+          "SEC-AZURE-RBAC-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_account.anon_blob",
+        "type": "storage",
+        "label": "azurerm_storage_account.anon_blob",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+        "line": 42,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-STORAGE-001",
+          "SEC-AZURE-STORAGE-002",
+          "STK-AZURE-STORAGE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_container.public",
+        "type": "compute",
+        "label": "azurerm_storage_container.public",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/01_broken_access_control.tf",
+        "line": 50,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_account.for_app",
+        "type": "storage",
+        "label": "azurerm_storage_account.for_app",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+        "line": 36,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-STORAGE-001",
+          "STK-AZURE-STORAGE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_service_plan.auth_plan",
+        "type": "compute",
+        "label": "azurerm_service_plan.auth_plan",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+        "line": 46,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_linux_web_app.key_based",
+        "type": "compute",
+        "label": "azurerm_linux_web_app.key_based",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+        "line": 54,
+        "findings": [
+          "SEC-AZURE-WEBAPP-001",
+          "SEC-AZURE-WEBAPP-002"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_mssql_server.sql_only",
+        "type": "storage",
+        "label": "azurerm_mssql_server.sql_only",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+        "line": 76,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "SEC-SECRETS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_linux_virtual_machine.password_auth",
+        "type": "compute",
+        "label": "azurerm_linux_virtual_machine.password_auth",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/07_identification_auth.tf",
+        "line": 87,
+        "findings": [
+          "SEC-AZURE-VM-001",
+          "SEC-SECRETS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_network_security_group.open_ssh",
+        "type": "network",
+        "label": "azurerm_network_security_group.open_ssh",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+        "line": 33,
+        "findings": [
+          "STK-AZURE-NSG-001",
+          "STK-AZURE-NSG-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_kubernetes_cluster.no_rbac",
+        "type": "compute",
+        "label": "azurerm_kubernetes_cluster.no_rbac",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+        "line": 65,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "SEC-AZURE-AKS-001",
+          "SEC-AZURE-AKS-001",
+          "SEC-AZURE-AKS-002",
+          "STK-AZURE-AKS-003",
+          "STK-AZURE-AKS-004",
+          "STK-AZURE-AKS-005"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_mssql_server.demo",
+        "type": "storage",
+        "label": "azurerm_mssql_server.demo",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+        "line": 85,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "SEC-SECRETS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_mssql_firewall_rule.allow_all",
+        "type": "compute",
+        "label": "azurerm_mssql_firewall_rule.allow_all",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+        "line": 93,
+        "findings": [
+          "SEC-AZURE-SQL-002",
+          "SEC-AZURE-SQL-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_account.open_storage",
+        "type": "storage",
+        "label": "azurerm_storage_account.open_storage",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/05_security_misconfiguration.tf",
+        "line": 103,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-STORAGE-001",
+          "STK-AZURE-STORAGE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_service_plan.ssrf_plan",
+        "type": "compute",
+        "label": "azurerm_service_plan.ssrf_plan",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+        "line": 38,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_linux_web_app.publicly_reachable",
+        "type": "compute",
+        "label": "azurerm_linux_web_app.publicly_reachable",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+        "line": 45,
+        "findings": [
+          "SEC-AZURE-WEBAPP-001",
+          "SEC-AZURE-WEBAPP-002"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_account.ssrf_target",
+        "type": "storage",
+        "label": "azurerm_storage_account.ssrf_target",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/10_ssrf.tf",
+        "line": 61,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-STORAGE-001",
+          "STK-AZURE-STORAGE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_resource_group.demo",
+        "type": "compute",
+        "label": "azurerm_resource_group.demo",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/versions.tf",
+        "line": 26,
+        "findings": [
+          "OPS-AZURE-TAGS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_service_plan.linux_plan",
+        "type": "compute",
+        "label": "azurerm_service_plan.linux_plan",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+        "line": 43,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_account.fnapp",
+        "type": "storage",
+        "label": "azurerm_storage_account.fnapp",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+        "line": 50,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-STORAGE-001",
+          "STK-AZURE-STORAGE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": true
+      },
+      {
+        "id": "azurerm_linux_function_app.eol_runtime",
+        "type": "compute",
+        "label": "azurerm_linux_function_app.eol_runtime",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+        "line": 61,
+        "findings": [
+          "SEC-AZURE-WEBAPP-002"
+        ],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": true
+      },
+      {
+        "id": "azurerm_kubernetes_cluster.old_k8s",
+        "type": "compute",
+        "label": "azurerm_kubernetes_cluster.old_k8s",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+        "line": 79,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "SEC-AZURE-AKS-001",
+          "SEC-AZURE-AKS-002",
+          "STK-AZURE-AKS-003",
+          "STK-AZURE-AKS-004",
+          "STK-AZURE-AKS-005"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_mysql_server.deprecated",
+        "type": "storage",
+        "label": "azurerm_mysql_server.deprecated",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+        "line": 99,
+        "findings": [
+          "ROB-AZURE-LIFECYCLE-001",
+          "SEC-SECRETS-001",
+          "STK-AZURE-DB-001",
+          "STK-AZURE-SQL-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_container_registry.admin_on",
+        "type": "compute",
+        "label": "azurerm_container_registry.admin_on",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/06_vulnerable_components.tf",
+        "line": 114,
+        "findings": [
+          "SEC-AZURE-ACR-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_key_vault.unaudited",
+        "type": "key",
+        "label": "azurerm_key_vault.unaudited",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/09_logging_monitoring.tf",
+        "line": 35,
+        "findings": [
+          "ROB-AZURE-LIFECYCLE-001",
+          "SEC-AZURE-KV-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_network_security_group.unmonitored",
+        "type": "network",
+        "label": "azurerm_network_security_group.unmonitored",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/09_logging_monitoring.tf",
+        "line": 49,
+        "findings": [],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_account.weak_tls",
+        "type": "storage",
+        "label": "azurerm_storage_account.weak_tls",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+        "line": 40,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-STORAGE-001",
+          "SEC-AZURE-STORAGE-001",
+          "SEC-AZURE-STORAGE-001",
+          "STK-AZURE-STORAGE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_key_vault_key.no_rotation",
+        "type": "key",
+        "label": "azurerm_key_vault_key.no_rotation",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+        "line": 53,
+        "findings": [
+          "SEC-AZURE-KV-003"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_key_vault.no_purge_protection",
+        "type": "key",
+        "label": "azurerm_key_vault.no_purge_protection",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/02_cryptographic_failures.tf",
+        "line": 64,
+        "findings": [
+          "ROB-AZURE-LIFECYCLE-001",
+          "SEC-AZURE-KV-001",
+          "SEC-AZURE-KV-002"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_storage_account.no_soft_delete",
+        "type": "storage",
+        "label": "azurerm_storage_account.no_soft_delete",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+        "line": 30,
+        "findings": [
+          "OPS-AZURE-TAGS-001",
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-STORAGE-001",
+          "STK-AZURE-STORAGE-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_mssql_database.no_retention",
+        "type": "compute",
+        "label": "azurerm_mssql_database.no_retention",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/08_data_integrity.tf",
+        "line": 45,
+        "findings": [
+          "ROB-AZURE-LIFECYCLE-001",
+          "ROB-AZURE-SQL-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_user_assigned_identity.monolith",
+        "type": "iam",
+        "label": "azurerm_user_assigned_identity.monolith",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+        "line": 39,
+        "findings": [
+          "SEC-AZURE-MI-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_mssql_server.stateful",
+        "type": "storage",
+        "label": "azurerm_mssql_server.stateful",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/04_insecure_design.tf",
+        "line": 46,
+        "findings": [
+          "OPS-AZURE-TAGS-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": true,
+        "on_critical_path": false
+      },
+      {
+        "id": "azurerm_linux_virtual_machine.user_data_inject",
+        "type": "compute",
+        "label": "azurerm_linux_virtual_machine.user_data_inject",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/03_injection.tf",
+        "line": 33,
+        "findings": [
+          "SEC-AZURE-VM-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "null_resource.az_cli_inject",
+        "type": "compute",
+        "label": "null_resource.az_cli_inject",
+        "file": "/Users/chris.adkin/Projects/tf-analyze/examples/terragoat/azure/03_injection.tf",
+        "line": 64,
+        "findings": [
+          "SEC-PROVISIONER-001"
+        ],
+        "internet_reachable": false,
+        "is_crown_jewel": false,
+        "on_critical_path": false
+      },
+      {
+        "id": "INTERNET",
+        "type": "internet",
+        "label": "Internet",
+        "file": "",
+        "line": 0,
+        "findings": [],
+        "internet_reachable": true,
+        "is_crown_jewel": false,
+        "on_critical_path": true
+      }
+    ],
+    "edges": [
+      {
+        "from": "azurerm_storage_container.public",
+        "to": "azurerm_storage_account.anon_blob",
+        "label": "storage_ref"
+      },
+      {
+        "from": "azurerm_linux_function_app.eol_runtime",
+        "to": "azurerm_storage_account.fnapp",
+        "label": "storage_ref"
+      },
+      {
+        "from": "azurerm_key_vault_key.no_rotation",
+        "to": "azurerm_key_vault.no_purge_protection",
+        "label": "key_vault_ref"
+      },
+      {
+        "from": "INTERNET",
+        "to": "azurerm_linux_web_app.key_based",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "azurerm_linux_web_app.publicly_reachable",
+        "label": "internet"
+      },
+      {
+        "from": "INTERNET",
+        "to": "azurerm_linux_function_app.eol_runtime",
+        "label": "internet"
+      }
+    ],
+    "critical_path": [
+      "INTERNET",
+      "azurerm_linux_function_app.eol_runtime",
+      "azurerm_storage_account.fnapp"
+    ],
+    "internet_node_id": "INTERNET"
+  }
+}
