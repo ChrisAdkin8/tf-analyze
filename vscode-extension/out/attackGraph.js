@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AttackGraphPanel = void 0;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
+const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 class AttackGraphPanel {
     static createOrShow(context) {
@@ -59,20 +60,98 @@ class AttackGraphPanel {
     }
     _refresh() {
         const cfg = vscode.workspace.getConfiguration('tf-analyze');
-        const scriptPath = cfg.get('scriptPath', 'scripts/detect.py');
         const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
-        const absScript = path.isAbsolute(scriptPath)
-            ? scriptPath
-            : path.join(wsFolder, scriptPath);
-        cp.exec(`python3 "${absScript}" --target "${wsFolder}" --format json --attack-graph`, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
-            let graph = { nodes: [], edges: [] };
-            try {
-                const data = JSON.parse(stdout);
-                graph = data.attack_graph ?? graph;
+        const absScript = AttackGraphPanel._resolveScriptPath(cfg, wsFolder);
+        if (!absScript) {
+            this._panel.webview.html = this._getErrorHtml("detect.py not found", "Set <code>tf-analyze.scriptPath</code> in settings to the absolute path of " +
+                "<code>scripts/detect.py</code>, or open the tf-analyze project as part of your " +
+                "workspace.\n\nLooked in: " + this._defaultSearchPaths(wsFolder).map(p => `<li><code>${p}</code></li>`).join(""));
+            return;
+        }
+        cp.exec(`python3 "${absScript}" --target "${wsFolder}" --format json --attack-graph`, { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+            // exit 1 = findings exist (expected); exit > 1 = real error
+            const realError = err && err.code !== undefined
+                && err.code > 1;
+            if (realError) {
+                this._panel.webview.html = this._getErrorHtml("detect.py failed", `<pre>${this._escape(stderr || (err && err.message) || "unknown error")}</pre>` +
+                    `<p>Command: <code>python3 ${absScript} --target ${wsFolder} --format json --attack-graph</code></p>`);
+                return;
             }
-            catch (_) { }
+            let data = {};
+            try {
+                data = JSON.parse(stdout);
+            }
+            catch (parseErr) {
+                this._panel.webview.html = this._getErrorHtml("Could not parse detect.py output", `<pre>${this._escape(parseErr.message)}</pre>` +
+                    `<p>First 500 chars of stdout:</p><pre>${this._escape(stdout.slice(0, 500))}</pre>`);
+                return;
+            }
+            // The engine emits the graph under the top-level `graph` key
+            // (since Round 25). Older builds used `attack_graph`; check both
+            // for backwards-compat with users running pinned older detect.py.
+            const graph = data.graph ?? data.attack_graph ?? { nodes: [], edges: [] };
+            if (!graph.nodes || graph.nodes.length === 0) {
+                this._panel.webview.html = this._getErrorHtml("Empty attack graph", "<p>The scan ran successfully but produced no graph nodes. Either:</p>" +
+                    "<ul>" +
+                    "<li>The workspace contains no resources the graph engine recognises</li>" +
+                    "<li>No resource is internet-reachable (no entry point → no path to crown jewels)</li>" +
+                    "<li>The workspace's <code>.tf</code> files only declare modules, providers, or data sources without resources</li>" +
+                    "</ul>" +
+                    "<p>Try the bundled demo: open <code>examples/terragoat/aws/</code> in this workspace and re-run.</p>");
+                return;
+            }
+            // Derive critical-path edges by walking consecutive node pairs in
+            // the graph.critical_path array. The engine exports the path as
+            // node IDs; the webview wants per-edge `is_critical: true` for
+            // styling.
+            const critPairs = new Set();
+            const cp_ = graph.critical_path ?? [];
+            for (let i = 0; i < cp_.length - 1; i++) {
+                critPairs.add(`${cp_[i]}->${cp_[i + 1]}`);
+            }
+            for (const e of graph.edges) {
+                e.is_critical = critPairs.has(`${e.from}->${e.to}`);
+            }
             this._panel.webview.html = this._getHtml(graph);
         });
+    }
+    /** Mirror the resolution strategy used by the main scan path so both
+     * surfaces find the same script. Honour the user's setting first; fall
+     * back to common workspace layouts. */
+    static _resolveScriptPath(cfg, wsFolder) {
+        const configured = cfg.get('scriptPath', '').trim();
+        if (configured) {
+            const abs = path.isAbsolute(configured) ? configured : path.join(wsFolder, configured);
+            if (fs.existsSync(abs))
+                return abs;
+        }
+        for (const cand of [
+            path.join(wsFolder, 'scripts', 'detect.py'),
+            path.join(wsFolder, 'detect.py'),
+            // tf-analyze repo cloned alongside the user's TF code:
+            path.join(wsFolder, '..', 'tf-analyze', 'scripts', 'detect.py'),
+        ]) {
+            if (fs.existsSync(cand))
+                return cand;
+        }
+        return null;
+    }
+    _defaultSearchPaths(wsFolder) {
+        return [
+            path.join(wsFolder, 'scripts', 'detect.py'),
+            path.join(wsFolder, 'detect.py'),
+            path.join(wsFolder, '..', 'tf-analyze', 'scripts', 'detect.py'),
+        ];
+    }
+    _escape(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    _getErrorHtml(title, body) {
+        return `<!DOCTYPE html><html><body style="background:#1e1e1e;color:#ccc;padding:24px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;line-height:1.5">
+<h2 style="color:#e53e3e;margin-top:0">${this._escape(title)}</h2>
+<div>${body}</div>
+<p style="margin-top:24px;color:#888">Re-run with <code>tf-analyze: Show Attack Graph</code> after fixing the issue.</p>
+</body></html>`;
     }
     _getLoadingHtml() {
         return `<!DOCTYPE html><html><body style="background:#1e1e1e;color:#ccc;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><p>Building attack graph…</p></body></html>`;
@@ -161,8 +240,8 @@ const sim = d3.forceSimulation(nodes)
 
 const link = root.append('g').selectAll('line')
   .data(edges).join('line')
-  .attr('class', d => 'link ' + (d.label === 'critical' ? 'critical' : 'normal'))
-  .attr('marker-end', d => d.label === 'critical' ? 'url(#arrow-critical)' : 'url(#arrow)');
+  .attr('class', d => 'link ' + (d.is_critical ? 'critical' : 'normal'))
+  .attr('marker-end', d => d.is_critical ? 'url(#arrow-critical)' : 'url(#arrow)');
 
 const node = root.append('g').selectAll('g')
   .data(nodes).join('g')

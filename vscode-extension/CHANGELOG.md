@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.8] — 2026-05-09
+
+### Fixed
+- **Attack graph webview rendered an empty panel.** The webview was reading the JSON output under `data.attack_graph`, but `detect.py` has emitted the graph under `data.graph` since v0.2 (Round 25). The reader now accepts both keys for backwards-compat with users running pinned older `detect.py` builds, but prefers the canonical `graph` key.
+- **Critical-path edges weren't highlighted in red.** The webview was checking `edge.label === 'critical'`, but edge labels are actual relationship names (`security_group`, `iam`, etc.). Critical-path information lives at `graph.critical_path` as a node-ID list; the webview now derives `is_critical` per edge by walking consecutive pairs.
+- **Silent failure modes.** When `detect.py` errored, was missing, or produced unparseable output, the catch block swallowed everything and rendered a blank SVG. The webview now surfaces a dedicated error panel for each failure class (script not found, scan exit code > 1, JSON parse error, empty graph) with the underlying stderr or stack trace and a hint at how to fix it.
+- **Fragile script-path lookup.** The graph view used a different (weaker) resolution path than the main scan, so workspaces with the tf-analyze repo cloned alongside (e.g. `~/projects/my-tf` next to `~/projects/tf-analyze`) couldn't find `detect.py`. The two surfaces now use the same lookup order: `scriptPath` setting → `scripts/detect.py` in workspace → `detect.py` in workspace → `../tf-analyze/scripts/detect.py`.
+
+---
+
 ## [0.1.7] — 2026-05-09
 
 ### Added
