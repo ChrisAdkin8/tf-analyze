@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.9] — 2026-05-09
+
+### Fixed
+- **Attack graph rendered an empty panel for workspaces with no resources at the root.** The 0.1.8 fix correctly read the JSON under `data.graph` and tightened the empty check to `nodes.length === 0`, but `build_attack_graph` always emits a synthetic `INTERNET` entry node, so for a workspace with no `.tf` resources the webview saw `nodes.length === 1` and rendered a single floating red dot. The empty-graph guard now ignores the synthetic entry node and also requires at least one edge — if neither holds, the panel surfaces the dedicated help text.
+
+### Changed
+- **Empty-graph help panel now shows the actual `--target` path that was scanned**, plus three concrete causes (workspace-root mismatch · no internet entry point · only modules/providers/data sources) and the exact terminal command you can paste to reproduce. Most users hitting this had opened a parent folder or the extension subfolder as the workspace root rather than the directory containing their `.tf` files.
+
+---
+
 ## [0.1.8] — 2026-05-09
 
 ### Fixed

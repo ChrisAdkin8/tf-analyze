@@ -136,7 +136,20 @@ Not every rule has an auto-fix. Rules with `fix_hcl` support get Quick Fix; othe
 <details>
 <summary><b>The attack-graph view is empty.</b></summary>
 
-Graph edges are only computed for resources where intent (IAM, networking, KMS) can be resolved statically. Workspaces that lean heavily on `for_each` or computed module outputs may resolve few or no edges from source alone. Run `detect.py` from the CLI with `--verbose` to see what the engine resolved, and consult the [project docs](https://github.com/ChrisAdkin8/tf-analyze/blob/main/docs/cli.md) for advanced modes.
+The graph runs against the **first workspace folder** — `vscode.workspace.workspaceFolders[0]`. The most common cause of an empty graph is that your `.tf` files live in a subfolder, not at the workspace root.
+
+The empty-graph panel now prints the exact path it scanned. If that path doesn't contain `resource` blocks, either:
+
+- Open the subfolder containing your Terraform as the workspace root, **or**
+- Add it as an additional folder via **File → Add Folder to Workspace…**
+
+Other causes:
+
+- **No internet entry point.** The graph starts from public LBs, public S3, security groups with `0.0.0.0/0`, etc., and walks to crown jewels (RDS, KMS, Secrets). With no entry point, there's no path to draw.
+- **Only modules/providers/data sources at the root.** The engine builds nodes from `resource` blocks; `module` calls don't expand. Open the module's own folder.
+- **Heavy `for_each` or computed module outputs** that the static analyser can't resolve. Run `detect.py --target <path> --attack-graph --verbose` in a terminal to see what was discovered.
+
+Quick demo: open the [`fixtures/attack_graph_demo/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/fixtures/attack_graph_demo) folder from the tf-analyze repo as your workspace — it produces 8 nodes and 5 edges.
 </details>
 
 ---

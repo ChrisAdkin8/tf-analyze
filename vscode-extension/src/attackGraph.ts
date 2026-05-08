@@ -107,16 +107,24 @@ export class AttackGraphPanel {
         const graph: AttackGraph =
           data.graph ?? (data as { attack_graph?: AttackGraph }).attack_graph ?? { nodes: [], edges: [] };
 
-        if (!graph.nodes || graph.nodes.length === 0) {
+        // Treat "only the synthetic INTERNET entry node and no edges" as
+        // empty — otherwise the webview renders a lone red dot which users
+        // (rightly) call empty. Common cause: the workspace root contains
+        // no .tf resources (e.g. a parent folder, the extension subfolder,
+        // or a project-of-modules where resources live in submodules).
+        const realNodes = (graph.nodes ?? []).filter(n => n.id !== 'INTERNET');
+        if (realNodes.length === 0 || (graph.edges ?? []).length === 0) {
           this._panel.webview.html = this._getErrorHtml(
             "Empty attack graph",
-            "<p>The scan ran successfully but produced no graph nodes. Either:</p>" +
-            "<ul>" +
-            "<li>The workspace contains no resources the graph engine recognises</li>" +
-            "<li>No resource is internet-reachable (no entry point → no path to crown jewels)</li>" +
-            "<li>The workspace's <code>.tf</code> files only declare modules, providers, or data sources without resources</li>" +
-            "</ul>" +
-            "<p>Try the bundled demo: open <code>examples/terragoat/aws/</code> in this workspace and re-run.</p>"
+            `<p><strong>Scanned:</strong> <code>${this._escape(wsFolder)}</code></p>` +
+            `<p>The scan completed but produced no attack paths. Most common causes:</p>` +
+            "<ol>" +
+            "<li><b>The workspace root has no <code>.tf</code> files with resources.</b> If your Terraform code lives in a subfolder, open that subfolder as the workspace root, or add it to a multi-root workspace.</li>" +
+            "<li><b>No resource is internet-reachable.</b> The graph starts from internet entry points (public LBs, public S3, security groups with <code>0.0.0.0/0</code>) and walks toward crown jewels (RDS, KMS, Secrets, etc.). With no entry point, there's no path to draw.</li>" +
+            "<li><b>The files only declare modules, providers, or data sources.</b> The engine builds nodes from <code>resource</code> blocks, not <code>module</code> calls — open the module's own folder.</li>" +
+            "</ol>" +
+            `<p>Quick sanity check: <code>python3 detect.py --target ${this._escape(wsFolder)} --format json --attack-graph</code> in a terminal should print the same node count.</p>` +
+            `<p>Try the bundled demo: open <code>fixtures/attack_graph_demo/</code> from the tf-analyze repo as your workspace and re-run — that produces 8 nodes / 5 edges.</p>`
           );
           return;
         }
