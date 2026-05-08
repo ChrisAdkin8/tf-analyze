@@ -63,12 +63,15 @@ jump to the source line.
 
 ### Status bar
 
-The status bar shows the current scan state:
-- `⏳ tf-analyze scanning…` — scan in progress
-- `✓ tf-analyze: clean` — zero findings
-- `🛡 tf-analyze: 7 (C:1 H:2 M:4)` — summary by urgency
+The extension contributes two status-bar items, anchored bottom-left:
 
-Click the status bar item to run a new scan.
+1. **Scan summary** — shows the current scan state and is clickable to run a fresh scan:
+   - `⏳ tf-analyze scanning…` — scan in progress
+   - `✓ tf-analyze: clean` — zero findings
+   - `🛡 tf-analyze: 7 (C:1 H:2 M:4)` — summary by urgency
+2. **Attack Graph shortcut** — `🛤️ Attack Graph`, sits immediately to the right of the scan summary. One click opens the internet → crown-jewels webview. Hidden in workspaces that contain no `.tf` files (so non-Terraform projects don't see a useless button).
+
+Both items are wired to the same commands available from the Command Palette (`tf-analyze: Run Scan`, `tf-analyze: Show Attack Graph`) — the status-bar buttons are just the fast path.
 
 ### Auto-scan on save
 

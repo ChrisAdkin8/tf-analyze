@@ -56,6 +56,7 @@ Open any `.tf` file. You'll see:
 - 🛡️ A **shield icon** on the left Activity Bar — click it to open the **Findings** tree.
 - 🔴 Squiggles on offending lines.
 - 📊 The status bar shows the scan summary, e.g. `🛡 tf-analyze: 6 (C:1 H:4 M:1)`. Click it to re-run the scan.
+- 🛤️ Right next to it, an **Attack Graph** status-bar shortcut. One click opens the interactive internet → crown-jewels webview without leaving the editor — `tf-analyze`'s most distinctive feature is now one click away.
 
 ---
 
@@ -70,7 +71,7 @@ All commands are available via the Command Palette (`⌘⇧P` / `Ctrl+Shift+P`):
 | `tf-analyze: Show Attack Graph` | Open the interactive resource-graph webview. |
 | `tf-analyze: Open Finding` | Jump to the file/line of a Findings-tree entry. |
 
-The 🛡️ scan and 🕸️ graph commands also appear as title-bar buttons on the Findings view.
+The 🛡️ scan and 🕸️ graph commands also appear as title-bar buttons on the Findings view, and as status-bar shortcuts at the bottom-left.
 
 ---
 

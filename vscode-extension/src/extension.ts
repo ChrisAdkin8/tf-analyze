@@ -357,6 +357,21 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar.tooltip = "Click to run tf-analyze scan";
   statusBar.show();
 
+  // Second status-bar item: one-click attack-graph open. Sits immediately
+  // to the right of the scan shield (priority 99) so the two read as a
+  // pair. Hidden until the workspace contains at least one .tf file —
+  // there's nothing useful to graph in a non-Terraform project.
+  const graphStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+  graphStatusBar.command = "tf-analyze.showAttackGraph";
+  graphStatusBar.text = "$(type-hierarchy) Attack Graph";
+  graphStatusBar.tooltip = "tf-analyze: open the internet → crown-jewels attack graph for this workspace";
+  // Only surface the shortcut when there's something to graph.
+  void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
+    if (found.length > 0) {
+      graphStatusBar.show();
+    }
+  });
+
   const treeView = vscode.window.createTreeView("tfAnalyzeFindings", {
     treeDataProvider: provider,
     showCollapseAll: true,
@@ -368,6 +383,7 @@ export function activate(context: vscode.ExtensionContext): void {
     diagnosticCollection,
     outputChannel,
     statusBar,
+    graphStatusBar,
     treeView,
 
     vscode.languages.registerCodeActionsProvider(
