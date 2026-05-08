@@ -103,6 +103,16 @@ This is the upfront list — what the skill detects, what outputs it produces, a
 
 ## Quickstart
 
+### Docker (no Python required)
+
+```sh
+docker run --rm -v $(pwd):/workspace \
+  ghcr.io/hashicorp/tf-analyze \
+  --target /workspace --format html > report.html
+```
+
+### Python
+
 ```sh
 # Install (symlinks the repo into ~/.claude/skills/tf-analyze)
 git clone <this-repo> ~/Projects/tf-analyze

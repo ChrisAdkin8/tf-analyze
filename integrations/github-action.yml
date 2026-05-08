@@ -17,6 +17,17 @@ on:
         required: false
         default: "true"
 
+inputs:
+  fail-on:
+    description: 'Minimum urgency level to fail CI (CRITICAL, HIGH, MEDIUM, LOW)'
+    default: 'HIGH'
+  section:
+    description: 'Restrict findings to a catalogue section (security, robustness, ops, …). Empty = all.'
+    default: ''
+  post-pr-comment:
+    description: 'Post PR suggestion comments on pull_request events'
+    default: 'true'
+
 permissions:
   contents: read
   security-events: write  # for SARIF upload
@@ -40,34 +51,43 @@ jobs:
             /tmp/tf-analyze-skill
           ln -s /tmp/tf-analyze-skill/tf-analyze ~/.tf-analyze
 
-      - name: Run tf-analyze (diff on PR, full on push)
+      - name: Run tf-analyze
         id: analyze
         run: |
           MODE=static
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             MODE=diff
           fi
+          SECTION_ARG=""
+          if [ -n "${{ inputs.section }}" ]; then
+            SECTION_ARG="--section ${{ inputs.section }}"
+          fi
+          FAIL_ON="${{ inputs.fail-on || 'HIGH' }}"
+          # Write JSON for suggestion-block step and exit-code evaluation
+          python3 ~/.tf-analyze/scripts/detect.py \
+            --target . \
+            --mode "$MODE" \
+            --format json \
+            $SECTION_ARG \
+            > tf-analyze-findings.json 2>tf-analyze-stderr.txt || true
           # Write SARIF for Code Scanning (enterprise/paid orgs)
           python3 ~/.tf-analyze/scripts/detect.py \
             --target . \
             --mode "$MODE" \
             --format sarif \
-            --fail-on HIGH \
-            > tf-analyze.sarif 2>tf-analyze-stderr.txt \
-            || echo "::warning::tf-analyze found HIGH+ findings"
-          # Write markdown summary for PR comment fallback
-          python3 ~/.tf-analyze/scripts/detect.py \
-            --target . \
-            --mode "$MODE" \
-            --format markdown \
-            > tf-analyze-summary.md 2>/dev/null || true
-          # Capture finding count for comment header
-          FINDING_COUNT=$(python3 ~/.tf-analyze/scripts/detect.py \
-            --target . --mode "$MODE" --format json 2>/dev/null \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); \
-              print(len(d.get('findings', d if isinstance(d,list) else [])))" \
-            2>/dev/null || echo "?")
-          echo "finding_count=${FINDING_COUNT}" >> "$GITHUB_OUTPUT"
+            $SECTION_ARG \
+            > tf-analyze.sarif 2>/dev/null || true
+          # Determine exit code based on fail-on threshold
+          python3 -c "
+          import json, sys
+          d = json.load(open('tf-analyze-findings.json'))
+          findings = d.get('findings', d if isinstance(d, list) else [])
+          rank = {'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1, 'INFO': 0}
+          threshold = rank.get('${FAIL_ON}', 3)
+          breach = [f for f in findings if rank.get(f.get('urgency',''), 0) >= threshold]
+          print(f'finding_count={len(findings)}')
+          sys.exit(1 if breach else 0)
+          " | tee -a \$GITHUB_OUTPUT
 
       - name: Upload SARIF to Code Scanning
         if: always()
@@ -77,56 +97,110 @@ jobs:
           sarif_file: tf-analyze.sarif
           category: tf-analyze
 
-      # Fallback: post findings as a PR comment when SARIF upload isn't available
-      # (free-tier repos, forks without Code Scanning enabled).
-      # Uses GITHUB_TOKEN which is always available in pull_request events.
-      - name: Post PR comment with findings summary
+      - name: Post PR suggestion comments
         if: >
           always() &&
           github.event_name == 'pull_request' &&
-          (github.event.inputs.post-pr-comment != 'false')
+          (inputs.post-pr-comment != 'false')
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const findingCount = '${{ steps.analyze.outputs.finding_count }}';
-            let summary = '';
+            let findings = [];
             try {
-              summary = fs.readFileSync('tf-analyze-summary.md', 'utf8');
+              const raw = JSON.parse(fs.readFileSync('tf-analyze-findings.json', 'utf8'));
+              findings = raw.findings ?? (Array.isArray(raw) ? raw : []);
             } catch(e) {
-              summary = '_No findings summary available._';
+              core.warning('Could not read tf-analyze-findings.json: ' + e.message);
             }
 
-            const header = findingCount === '0'
-              ? '✅ **tf-analyze**: no findings on changed files.'
-              : `⚠️ **tf-analyze** found **${findingCount} finding(s)** on changed files.`;
-
-            const body = `<details>\n<summary>${header}</summary>\n\n${summary}\n</details>\n\n` +
-              `> Run \`detect.py --show-fixes\` locally for one-click HCL fix suggestions. ` +
-              `[View full report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
-
-            // Find and update existing comment, or create new one
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
+            const changedFiles = await github.rest.pulls.listFiles({
+              owner: context.repo.owner, repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
             });
-            const existing = comments.find(c =>
-              c.user.type === 'Bot' && c.body.includes('**tf-analyze**')
+            const changedPaths = new Set(changedFiles.data.map(f => f.filename));
+
+            function urgencyRank(u) {
+              return { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 }[u] ?? 0;
+            }
+            const URGENCY_EMOJI = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: '💡', LOW: 'ℹ️' };
+
+            // Deduplicate: one comment per (file, line) using highest-urgency finding
+            const byLocation = new Map();
+            for (const f of findings) {
+              if (!f.fix_hcl) continue;
+              const key = `${f.file}:${f.line}`;
+              const existing = byLocation.get(key);
+              if (!existing || urgencyRank(f.urgency) > urgencyRank(existing.urgency)) {
+                byLocation.set(key, f);
+              }
+            }
+
+            let suggestionsPosted = 0;
+            for (const [, finding] of byLocation) {
+              if (!changedPaths.has(finding.file)) continue;
+              const emoji = URGENCY_EMOJI[finding.urgency] ?? '•';
+              const disruption = finding.fix_disruption ? ` · Disruption: \`${finding.fix_disruption}\`` : '';
+              const body = [
+                `${emoji} **[${finding.id}]** — ${finding.title}`,
+                '',
+                `> Urgency: \`${finding.urgency}\`${disruption}`,
+                '',
+                '```suggestion',
+                finding.fix_hcl.trimEnd(),
+                '```',
+              ].join('\n');
+              try {
+                await github.rest.pulls.createReviewComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  body,
+                  path: finding.file,
+                  line: finding.line,
+                  side: 'RIGHT',
+                });
+                suggestionsPosted++;
+              } catch (e) {
+                core.warning(`Could not post suggestion for ${finding.id} at ${finding.file}:${finding.line}: ${e.message}`);
+              }
+            }
+
+            // Summary comment (upserted)
+            const critical = findings.filter(f => f.urgency === 'CRITICAL').length;
+            const high = findings.filter(f => f.urgency === 'HIGH').length;
+            const medium = findings.filter(f => f.urgency === 'MEDIUM').length;
+            const summaryBody = findings.length === 0
+              ? '✅ **tf-analyze**: no findings above threshold'
+              : [
+                  '## tf-analyze findings',
+                  '',
+                  '| Urgency | Count |',
+                  '|---------|-------|',
+                  `| 🚨 CRITICAL | ${critical} |`,
+                  `| ⚠️ HIGH | ${high} |`,
+                  `| 💡 MEDIUM | ${medium} |`,
+                  '',
+                  suggestionsPosted > 0
+                    ? `${suggestionsPosted} finding(s) have inline suggestion fixes — click **Apply suggestion** to fix in one click.`
+                    : '_No inline suggestions available for changed files._',
+                ].join('\n');
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const prior = comments.data.find(c =>
+              c.body.startsWith('## tf-analyze findings') || c.body.startsWith('✅ **tf-analyze**')
             );
-            if (existing) {
+            if (prior) {
               await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: prior.id, body: summaryBody,
               });
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number, body: summaryBody,
               });
             }
 

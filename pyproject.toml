@@ -1,0 +1,22 @@
+[project]
+name = "tf-analyze"
+version = "0.1.0"
+description = "Terraform static analysis and security scanner"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MPL-2.0" }
+keywords = ["terraform", "security", "static-analysis", "iac"]
+
+[project.scripts]
+tf-analyze = "detect:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-xdist>=3.5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.backends.legacy:build"

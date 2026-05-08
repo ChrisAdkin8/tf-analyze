@@ -97,8 +97,27 @@ def catalog_entries_without_fixtures() -> list[str]:
     return missing
 
 
+def _run_clean_pass() -> tuple[int, int]:
+    """For every *_clean fixture dir, assert its corresponding rule does NOT fire."""
+    clean_dirs = sorted(FIXTURES_DIR.glob("*_clean"))
+    if not clean_dirs:
+        return 0, 0
+    passed = failed = 0
+    print("\n--- clean-fixture pass ---")
+    for clean_dir in clean_dirs:
+        rule_id = clean_dir.name.removesuffix("_clean")
+        actual = run_detect(clean_dir, clean_dir.name, all_rules=True)
+        if rule_id not in actual:
+            print(f"PASS {clean_dir.name}: {rule_id} did not fire")
+            passed += 1
+        else:
+            print(f"FAIL {clean_dir.name}: {rule_id} fired unexpectedly (false positive)")
+            failed += 1
+    return passed, failed
+
+
 def main() -> int:
-    fixtures = sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir())
+    fixtures = sorted(p for p in FIXTURES_DIR.iterdir() if p.is_dir() and not p.name.endswith("_clean"))
     if not fixtures:
         print(f"ERROR: no fixtures in {FIXTURES_DIR}", file=sys.stderr)
         return 2
@@ -154,9 +173,14 @@ def main() -> int:
         for cid in uncovered:
             print(f"  - {cid}")
 
+    clean_passed, clean_failed = _run_clean_pass()
+    total_clean = clean_passed + clean_failed
+
     print()
-    print(f"Result: {len(fixtures) - failures}/{len(fixtures)} fixtures passed")
-    return 0 if failures == 0 else 1
+    print(f"Result: {len(fixtures) - failures}/{len(fixtures)} positive fixtures passed")
+    if total_clean:
+        print(f"Result: {clean_passed}/{total_clean} clean fixtures passed")
+    return 0 if (failures == 0 and clean_failed == 0) else 1
 
 
 def _parse_guards(main_tf: Path) -> set[str]:
