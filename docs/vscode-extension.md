@@ -114,3 +114,41 @@ No network calls are made. All analysis is local.
 To add a new command or view, edit `src/extension.ts` and update
 `contributes` in `package.json`. The `FindingsProvider` drives the tree;
 the `TfAnalyzeCodeActionProvider` drives Quick Fix.
+
+## Troubleshooting
+
+### The Attack Graph panel opens but is blank
+
+Fixed in v0.1.8. The webview was reading the graph at the wrong JSON
+key (`data.attack_graph` vs the engine's actual `data.graph`). Upgrade
+to v0.1.8+ — the webview now also surfaces a dedicated error panel
+when something else goes wrong instead of silently rendering an empty
+SVG.
+
+If you see a blank panel on v0.1.8+, the displayed error message tells
+you which class of failure hit:
+
+| Error panel says | What to check |
+|---|---|
+| **detect.py not found** | Set `tf-analyze.scriptPath` in settings to the absolute path of `scripts/detect.py`, or open the tf-analyze repo as part of your workspace. |
+| **detect.py failed (exit > 1)** | The scan crashed. The panel shows stderr — usually a syntax error in your HCL or a missing Python dependency. |
+| **Could not parse detect.py output** | The script printed non-JSON to stdout (often a Python warning leaking through). Run the same command at the terminal and inspect. |
+| **Empty attack graph** | The workspace has no resources the graph engine recognises, or no resource is internet-reachable (no entry point → no path). Try the bundled `examples/terragoat/aws/` corpus to confirm the wiring works. |
+
+### Critical-path edges aren't red
+
+Fixed in v0.1.8 — the webview was checking the wrong field. Upgrade.
+
+### Findings panel shows but Quick Fix is greyed out
+
+Quick Fix is only offered for findings whose catalogue rule has a
+`fix_hcl` field (currently 100% of catalogue rules ship one, so this
+should always be available for built-in rules). Custom `CUSTOM-*`
+rules without `fix_hcl` won't show the Quick Fix action — that's by
+design; add `fix_hcl` to the rule YAML.
+
+### Status bar shows `🛡 tf-analyze: undefined`
+
+Fixed in v0.1.6 — extension was reading legacy lowercase keys
+(`summary.critical/.high/.medium`) but the engine emits counts under
+`summary.counts` with uppercase severity keys. Upgrade.

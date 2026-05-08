@@ -5,6 +5,36 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## VS Code extension v0.1.8 — 2026-05-09
+
+**Hotfix: attack-graph webview rendered an empty panel.**
+
+Root cause: the webview read the graph JSON from `data.attack_graph`, but the engine has emitted it at `data.graph` since Round 25 (`output["graph"] = attack_graph` in `detect.py`). The optional-chain `?? graph` fell silently through to an empty placeholder; every render produced a blank SVG with no diagnostic.
+
+Verified against `examples/terragoat/aws/`: 46 nodes, 5 edges, 1 critical edge correctly populated after the fix.
+
+**Three other bugs surfaced while debugging the blank-panel report:**
+
+1. Critical-path edges weren't highlighted. The webview was matching `edge.label === 'critical'`, but edge labels are real relationship names (`security_group`, `iam`, etc.). Critical-path data lives at `graph.critical_path` as a node-ID list. Webview now derives `is_critical` per edge by walking consecutive pairs.
+2. The single `try/catch` block swallowed every failure mode — exec error, parse error, empty graph — and rendered a blank SVG. Four dedicated error panels now report the failure class, underlying stderr, and the offending command.
+3. Graph view and main scan used different `detect.py` resolution paths. The graph view couldn't find the script in workspaces with tf-analyze cloned next to the user's TF code. Both surfaces now use the same resolver: `scriptPath` setting → `<ws>/scripts/detect.py` → `<ws>/detect.py` → `../tf-analyze/scripts/detect.py`.
+
+Built artefact: `vscode-extension/tf-analyze-0.1.8.vsix`. CHANGELOG entry under `vscode-extension/CHANGELOG.md`.
+
+---
+
+## VS Code extension v0.1.7 — 2026-05-09
+
+**One-click attack-graph shortcut in the status bar.**
+
+The attack-graph view was previously only reachable from three places — Command Palette, Findings view title bar, walkthrough — none of them as discoverable as the scanner's most distinctive feature deserves. The new status-bar item sits next to the existing `🛡 tf-analyze` scan shield (priority 99 — to its right) and opens the graph webview on click.
+
+The shortcut is hidden when the workspace has no `.tf` files, so non-Terraform projects don't see a useless button. Visibility is checked once at activation via `vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1)`.
+
+Built artefact: `vscode-extension/tf-analyze-0.1.7.vsix`. README and `docs/vscode-extension.md` updated to describe both status-bar items as a pair.
+
+---
+
 ## Round 26 — 2026-05-08
 
 **Tier A correctness gaps + Tier B detection depth (411/411 tests passing).**
