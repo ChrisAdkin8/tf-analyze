@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "all_access" {
   statement {
     effect    = "Allow"
     actions   = ["*"]
-    resources = ["*"]
+       resources = ["*"]
   }
 }
 

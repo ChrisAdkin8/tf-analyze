@@ -1,0 +1,64 @@
+id: SEC-K8S-HELM-002
+title: "helm_release sets `securityContext.privileged=true`"
+section: security
+default_urgency: CRITICAL
+blast_radius: environment
+status: active
+cis:
+  - "5.2.4"
+pci_dss:
+  - "Req-2.2"
+soc2_cc:
+  - "CC6.6"
+mitre:
+  - "T1611"
+  - "T1068"
+patterns:
+  - kind: helm_set_value
+    name: "securityContext.privileged"
+    regex: '(?i)^true$'
+    description: |
+      A `helm_release` override sets `securityContext.privileged=true`
+      on the chart's pod spec. Privileged containers run with full
+      host capabilities, including write access to the host filesystem
+      via `/proc` and `/sys`, and can mount arbitrary host devices.
+      A single RCE in such a container yields node-level compromise
+      (the standard cloud-native breakout pattern).
+recommendation: |
+  Drop `privileged=true`. Almost no production workload genuinely
+  needs it — required capabilities should be granted explicitly via
+  `securityContext.capabilities.add`. If the chart truly requires it,
+  pin to a Pod Security Admission `privileged` namespace and require
+  manual sign-off.
+
+      resource "helm_release" "app" {
+        set {
+          name  = "securityContext.privileged"
+          value = "false"
+        }
+        set {
+          name  = "securityContext.runAsNonRoot"
+          value = "true"
+        }
+      }
+verification: |
+  `kubectl get pods -A -o jsonpath='{.items[?(@.spec.containers[*].securityContext.privileged==true)].metadata.name}'`
+  must return empty.
+fix_hcl: |
+  resource "helm_release" "example" {
+    name       = "example"
+    repository = "https://charts.example.io"
+    chart      = "example"
+    set {
+      name  = "securityContext.privileged"
+      value = "false"
+    }
+    set {
+      name  = "securityContext.runAsNonRoot"
+      value = "true"
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Pods will be recreated with the new securityContext; charts that genuinely require host access will fail to start."
+fixtures:
+  - helm_privileged

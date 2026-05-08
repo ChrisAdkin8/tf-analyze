@@ -5,6 +5,50 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 26 — 2026-05-08
+
+**Tier A correctness gaps + Tier B detection depth (411/411 tests passing).**
+
+### Tier A — correctness gaps that would have bitten real users
+
+- **A1: `iam_json_policy_analysis` pattern kind.** Walks `policy = jsonencode({...})` blocks on `aws_iam_policy`, `aws_iam_role_policy`, `aws_iam_user_policy`, `aws_iam_group_policy`. Same six checks as the data-source variant. Ships 4 rules (`SEC-AWS-IAM-JSON-001..004`) covering wildcard action, `iam:*` privesc, full-admin, public principal. Closes the largest detection gap vs. tfsec/checkov.
+- **A2: All stale `hashicorp/tf-analyze` references replaced with `ChrisAdkin8/tf-analyze`.** README, TODO, PLAN, docker workflow. Quickstart paths now actually work on first contact (was 404 across the board).
+- **A3: `tests/test_apply_fixes.py` round-trip tests.** New file: copy fixture → `--apply-fixes apply` → re-scan → assert finding cleared + balanced braces + `.bak` backup written. Surfaced and documented two engine limitations (`fire_if_absent` rules and `nested_path` `resource_missing_arg`). Adds a wider corruption-safety net that asserts no patcher run produces brace-imbalanced source.
+- **A4: Multi-file fixtures + `tests/test_multi_file.py`.** Four representative layouts: `_multi_variables_split` (variables.tf separation), `_multi_module_input` (parent/child), `_multi_provider_aliases` (multi-region), `_multi_outputs_sensitive_leak`. Surfaced and fixed a comment-stripping bug in the module-input flow-through extractor (caller's `module "x" { encrypted = false  # note }` was flowing the literal `"false # note"`).
+- **A5: Scoring-version stability tripwire.** `tests/test_output_formats.py::test_scoring_constants_pinned_to_v1` locks `_RISK_WEIGHTS`, `_GRADE_TIERS`, `_SCORING_VERSION` to documented values. Future weight changes must be deliberate version bumps.
+
+### Tier B — depth-of-detection gaps
+
+- **B6: Kubernetes resource rules.** `SEC-K8S-PSA-001` (namespace missing PSA enforce label, HIGH), `SEC-K8S-NETPOL-001` (corpus has namespaces but no network policies, HIGH), `SEC-K8S-RBAC-001` (`cluster-admin` ClusterRoleBinding, CRITICAL).
+- **B7: `applies_when:` version gating.** Engine support already existed; this round added contract tests + documentation + annotated 2 rules with real version dependencies (`STK-GCP-CLOUDSQL-004` requires google ≥4.0 for `ssl_mode`; `STK-AWS-LAUNCH-TEMPLATE-001` requires aws ≥3.0 for `metadata_options`).
+- **B9: `helm_set_value` pattern kind + 2 rules.** Walks `resource "helm_release" { set { name = "..."; value = "..." } }` blocks. Ships `SEC-K8S-HELM-001` (`service.type=LoadBalancer` exposes pods publicly, HIGH) and `SEC-K8S-HELM-002` (`securityContext.privileged=true` allows host breakout, CRITICAL).
+
+### Engine fixes surfaced this round
+
+- **Module-input flow-through dropped trailing comments into the propagated value** (`encrypted = false  # note` flowed as `"false # note"`, breaking downstream comparisons). Fixed in both the locals extractor and the module-call extractor.
+- **`re.compile(r'^(?i)true$')` no longer compiles in Python 3.11+** (global flags must be at start). Inline-flag pattern in helm value regex moved to `(?i)^...$`. The schema validator should probably reject mid-pattern global flags going forward; flagged in TODO.
+
+### New tests: 411 (was 382)
+
+| File                          | Tests | Notes                                                                  |
+|-------------------------------|------:|------------------------------------------------------------------------|
+| `test_apply_fixes.py`         |     7 | NEW — round-trip + brace-corruption safety net                         |
+| `test_multi_file.py`          |     4 | NEW — cross-file resolution paths                                      |
+| `test_detection_core.py`      |    +5 | applies_when gating tests                                              |
+| `test_output_formats.py`      |    +1 | scoring-constants pinned                                               |
+| `test_fixtures.py`            |   +13 | new IAM-JSON, K8s, Helm fixtures                                       |
+
+### Catalog: 200 → 209 active rules
+
+| Family                     | Rules added | Notes                                                          |
+|----------------------------|------------:|----------------------------------------------------------------|
+| AWS IAM (inline JSON)      |           4 | `SEC-AWS-IAM-JSON-001..004`                                    |
+| Kubernetes                 |           3 | `SEC-K8S-PSA-001`, `SEC-K8S-NETPOL-001`, `SEC-K8S-RBAC-001`    |
+| Helm                       |           2 | `SEC-K8S-HELM-001..002`                                        |
+| Total                      |           9 | All ship with positive fixtures; auto-generated clean fixtures where the kind supports it |
+
+---
+
 ## Round 25 — 2026-05-08
 
 **Risk score / letter grade now emitted by `detect.py` (381/381 tests passing).**

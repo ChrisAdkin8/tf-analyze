@@ -554,6 +554,31 @@ def block_has_arg(body: str, arg: str) -> bool:
     return bool(pat.search(body))
 
 
+def _hcl_object_to_json(text: str) -> dict | None:
+    """Best-effort convert an HCL object literal (used inside ``jsonencode(...)``)
+    to a Python dict.
+
+    HCL accepts JSON-like object literals but with `=` instead of `:` and
+    bareword keys. We do a small, conservative rewrite to canonical JSON,
+    then ``json.loads`` it. Returns None on any parse failure — callers
+    fall back gracefully rather than raising.
+    """
+    if not text or not text.strip().startswith("{"):
+        return None
+    s = text
+    # `key = value` → `"key": value` (only when key is a bareword)
+    s = re.sub(r'(?m)([{,]\s*)([A-Za-z_][\w]*)\s*=\s*', r'\1"\2": ', s)
+    # Top-level (no leading delimiter) bareword `key = `
+    s = re.sub(r'^\s*([A-Za-z_][\w]*)\s*=\s*', r'"\1": ', s)
+    # Strip trailing commas before `}` or `]` (HCL allows them, JSON doesn't).
+    s = re.sub(r',(\s*[}\]])', r'\1', s)
+    # HCL list trailing commas after multi-line items
+    try:
+        return json.loads(s)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
 def block_arg_value(body: str, arg: str) -> str | None:
     """Return the literal value of a top-level argument, stripped of quotes/comments.
 
@@ -652,7 +677,8 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
             body = blk["body"]
             # Each line of the body is a `name = value` assignment.
             for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', body):
-                lname, lval = lm.group(1), lm.group(2).strip().strip('"').strip("'")
+                lname, raw = lm.group(1), lm.group(2)
+                lval = re.sub(r'\s*#.*$', '', raw).strip().strip('"').strip("'")
                 result.setdefault(dir_key, {})["__local__" + lname] = lval
 
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
@@ -697,7 +723,12 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
             except (OSError, ValueError):
                 continue
             for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', mblk["body"]):
-                k, v = lm.group(1), lm.group(2).strip()
+                k, raw = lm.group(1), lm.group(2)
+                # Strip trailing `#` comments before resolution. Otherwise
+                # `encrypted = false   # caller note` flows as the literal
+                # string `false   # caller note` and downstream rules miss
+                # the value match.
+                v = re.sub(r'\s*#.*$', '', raw).strip()
                 if k in ("source", "version", "providers", "count", "for_each",
                          "depends_on", "lifecycle"):
                     continue
@@ -1118,6 +1149,166 @@ def detect_in_file(
                                 "line": stmt_line,
                                 "resource": f"data.aws_iam_policy_document.{dname}",
                             })
+            elif kind == "helm_set_value":
+                # Walk `resource "helm_release" "x" { set { name=...; value=... } }`
+                # and fire when a specific (name, regex) pair matches.
+                # Pattern fields:
+                #   name: chart-side override key (exact match, e.g. "service.type")
+                #   regex: regex against the value
+                target_name = pat.get("name")
+                value_regex = pat.get("regex")
+                if not target_name or not value_regex:
+                    continue
+                vrx = re.compile(value_regex)
+                for blk in resources:
+                    btype, bname = blk["groups"]
+                    if btype != "helm_release":
+                        continue
+                    body = blk["body"]
+                    # Find each `set { ... }` sub-block (helm_release uses
+                    # `set` with no label).
+                    for sm in re.finditer(r'(?m)^\s*set\s*\{', body):
+                        depth = 0
+                        i = sm.end() - 1
+                        end = None
+                        while i < len(body):
+                            c = body[i]
+                            if c == "{":
+                                depth += 1
+                            elif c == "}":
+                                depth -= 1
+                                if depth == 0:
+                                    end = i
+                                    break
+                            i += 1
+                        if end is None:
+                            continue
+                        sbody = body[sm.end():end]
+                        n = block_arg_value(sbody, "name") or ""
+                        v = block_arg_value(sbody, "value") or ""
+                        if n.strip() == target_name and vrx.search(str(v)):
+                            findings.append({
+                                "id": eid,
+                                "file": str(file_path),
+                                "line": blk["start_line"],
+                                "resource": f"helm_release.{bname}",
+                            })
+                            break
+            elif kind == "iam_json_policy_analysis":
+                # Inline JSON policy analysis. The classic shape is:
+                #
+                #   resource "aws_iam_policy" "x" {
+                #     policy = jsonencode({
+                #       Version = "2012-10-17",
+                #       Statement = [{
+                #         Effect = "Allow", Action = "*", Resource = "*"
+                #       }]
+                #     })
+                #   }
+                #
+                # We pull the `policy = jsonencode({...})` body out
+                # textually, then JSON-parse the embedded object after
+                # converting HCL-syntax (`=`) to JSON (`:`) and quoting
+                # bareword keys. This is intentionally cheap: misparses
+                # are tolerated (bail out) rather than raising.
+                check = pat.get("check")
+                resource_types = pat.get("resources") or [
+                    "aws_iam_policy",
+                    "aws_iam_role_policy",
+                    "aws_iam_user_policy",
+                    "aws_iam_group_policy",
+                ]
+                if not check:
+                    continue
+                for blk in resources:
+                    btype, bname = blk["groups"]
+                    if btype not in resource_types:
+                        continue
+                    body = blk["body"]
+                    # Locate `policy = jsonencode(`. Walk paren depth to
+                    # find the matching close.
+                    pm = re.search(
+                        r'(?m)^\s*policy\s*=\s*jsonencode\(', body
+                    )
+                    if not pm:
+                        continue
+                    depth = 1
+                    j = pm.end()
+                    end = None
+                    while j < len(body):
+                        c = body[j]
+                        if c == "(":
+                            depth += 1
+                        elif c == ")":
+                            depth -= 1
+                            if depth == 0:
+                                end = j
+                                break
+                        j += 1
+                    if end is None:
+                        continue
+                    raw = body[pm.end():end].strip()
+                    parsed = _hcl_object_to_json(raw)
+                    if parsed is None:
+                        continue
+                    statements = parsed.get("Statement") or []
+                    if isinstance(statements, dict):
+                        statements = [statements]
+                    for stmt in statements:
+                        if not isinstance(stmt, dict):
+                            continue
+                        eff = str(stmt.get("Effect", "Allow")).lower()
+                        if eff == "deny":
+                            continue
+                        actions = stmt.get("Action") or []
+                        resources_l = stmt.get("Resource") or []
+                        not_actions = stmt.get("NotAction") or []
+                        not_resources = stmt.get("NotResource") or []
+                        if isinstance(actions, str): actions = [actions]
+                        if isinstance(resources_l, str): resources_l = [resources_l]
+                        principal = stmt.get("Principal") or {}
+                        # public principal: "*" string OR {"AWS": "*"} OR
+                        # {"AWS": ["*", ...]}
+                        has_public_principal = False
+                        if principal == "*":
+                            has_public_principal = True
+                        elif isinstance(principal, dict):
+                            for v in principal.values():
+                                if v == "*" or (isinstance(v, list) and "*" in v):
+                                    has_public_principal = True
+                                    break
+                        has_wild_action = "*" in actions
+                        has_wild_resource = "*" in resources_l
+                        has_iam_wild = any(
+                            isinstance(a, str) and a.startswith("iam:") and "*" in a
+                            for a in actions
+                        )
+                        triggered = False
+                        if check == "wildcard_action" and has_wild_action:
+                            triggered = True
+                        elif check == "wildcard_resource" and has_wild_resource:
+                            triggered = True
+                        elif check == "public_principal" and has_public_principal:
+                            triggered = True
+                        elif check == "wildcard_action_iam" and has_iam_wild:
+                            triggered = True
+                        elif (
+                            check == "wildcard_action_and_resource"
+                            and has_wild_action and has_wild_resource
+                        ):
+                            triggered = True
+                        elif check == "not_action_or_not_resource" and (
+                            not_actions or not_resources
+                        ):
+                            triggered = True
+                        if triggered:
+                            findings.append({
+                                "id": eid,
+                                "file": str(file_path),
+                                "line": blk["start_line"],
+                                "resource": f"{btype}.{bname}",
+                            })
+                            break  # one finding per resource is enough
             elif kind == "firewall_open_port":
                 # google_compute_firewall with source_ranges containing
                 # 0.0.0.0/0 AND an allow{} block whose `ports` list

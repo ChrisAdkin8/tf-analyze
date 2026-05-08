@@ -1,0 +1,49 @@
+id: SEC-AWS-IAM-JSON-001
+title: "Inline IAM policy JSON grants wildcard `Action: \"*\"`"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.16"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.004"
+patterns:
+  - kind: iam_json_policy_analysis
+    check: wildcard_action
+    description: |
+      An inline `policy = jsonencode({...})` on `aws_iam_policy`,
+      `aws_iam_role_policy`, `aws_iam_user_policy`, or
+      `aws_iam_group_policy` declares an Allow statement with
+      `Action: "*"`. The principal bound to this policy can perform
+      any AWS API call against the scoped resources — the canonical
+      privilege-escalation foothold.
+recommendation: |
+  Replace `Action: "*"` with the explicit minimum API set the workload
+  requires. Use `aws iam simulate-principal-policy` to validate that
+  the trimmed list still passes for legitimate flows.
+verification: |
+  `aws iam get-policy-version --policy-arn <arn> --version-id v1
+    --query 'PolicyVersion.Document.Statement[*].Action'`
+  must return finite lists, never `"*"`.
+fix_hcl: |
+  resource "aws_iam_policy" "example" {
+    name   = "example"
+    policy = jsonencode({
+      Version = "2012-10-17",
+      Statement = [
+        {
+          Effect   = "Allow",
+          Action   = ["s3:GetObject", "s3:PutObject"],
+          Resource = "arn:aws:s3:::my-bucket/*"
+        }
+      ]
+    })
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_iam_json_wildcard_action

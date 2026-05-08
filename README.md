@@ -7,9 +7,9 @@
 > Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE ATT&CK mapping, and one-click PR fix suggestions. **Drop into CI in under 5 minutes.**
 
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 200](https://img.shields.io/badge/rules-200-brightgreen)
+![Rules: 209](https://img.shields.io/badge/rules-209-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 381](https://img.shields.io/badge/tests-381%20passing-brightgreen)
+![Tests: 411](https://img.shields.io/badge/tests-411%20passing-brightgreen)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
@@ -24,7 +24,7 @@
 
 ```sh
 docker run --rm -v "$(pwd):/workspace" \
-  ghcr.io/hashicorp/tf-analyze \
+  ghcr.io/chrisadkin8/tf-analyze \
   --target /workspace --format html > report.html
 open report.html
 ```
@@ -32,7 +32,7 @@ open report.html
 ### 2. From source (Python ≥ 3.10)
 
 ```sh
-git clone https://github.com/hashicorp/tf-analyze.git
+git clone https://github.com/ChrisAdkin8/tf-analyze.git
 cd tf-analyze
 ./install.sh                                          # installs as a Claude Code skill
 pip install python-hcl2                               # optional fast-path (default-on if present)
@@ -54,7 +54,7 @@ python3 scripts/detect.py --explain SEC-AWS-IAM-POLICY-005
 ### 4. GitHub Action
 
 ```yaml
-- uses: hashicorp/tf-analyze@v1
+- uses: ChrisAdkin8/tf-analyze@v1
   with:
     fail-on: HIGH
     post-pr-comment: true     # inline `suggestion` blocks on every PR
@@ -90,8 +90,10 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 1. **Attack-path graph + fix centrality** — BFS from internet-reachable resources to crown jewels. Findings on the critical path are promoted one urgency tier; fixes are ranked by how many crown jewels each one unblocks.
 2. **`fix_hcl` on every rule, with disruption classification** — every finding ships an HCL snippet plus a `Non-disruptive` / `Plan required` / `Forces replacement` badge, so reviewers see operational impact before applying.
 3. **Adversarial scenario narratives** — HIGH/CRITICAL findings come with a 3–4 sentence breach story (Capital One, Accenture, SolarWinds) to anchor severity in real outcomes.
-4. **`iam_policy_document` analysis** — six dedicated rules walking every `data "aws_iam_policy_document"` Allow statement (wildcard action / resource / principal, `iam:*` privesc, full-admin, NotAction).
+4. **IAM policy analysis (HCL + inline JSON)** — ten dedicated rules walking both `data "aws_iam_policy_document"` blocks AND `policy = jsonencode({...})` strings on `aws_iam_policy` / `aws_iam_role_policy`. Covers wildcard action, wildcard resource, public principal, `iam:*` privesc, full-admin, NotAction.
 5. **Baseline ratcheting** — adopt on a noisy legacy repo by snapshotting today's findings; only regressions block CI thereafter.
+6. **Kubernetes + Helm coverage** — `kubernetes_namespace` Pod Security Admission, missing `kubernetes_network_policy`, `cluster-admin` `RoleBinding`s, plus `helm_release` overrides like `service.type=LoadBalancer` and `securityContext.privileged=true`.
+7. **Provider-version-aware** — rules can declare `applies_when: { min_provider: { aws: "5.0" } }` so they self-skip on older provider versions instead of false-positiving.
 
 ---
 
@@ -99,7 +101,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-200 rules across five families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+209 rules across five families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -109,7 +111,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Ops & Governance | `OPS-*`, `MOD-*`, `COST-*` | Tags/labels, unpinned modules, supply-chain refs, cost controls |
 | Cross-resource | `INT-*`, `graph_check` | Intent–implementation gaps, KMS location parity, IAM breadth |
 
-**Per-cloud breakdown:** AWS 81 · GCP 42 · Azure 33 · cross-cloud 44.
+**Per-cloud breakdown:** AWS 81 · GCP 42 · Azure 33 · Kubernetes/Helm 5 · cross-cloud 48.
 
 ### Execution modes
 
@@ -177,7 +179,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks |
 | VS Code extension | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
-| Docker image | `ghcr.io/hashicorp/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
+| Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |
 | Pre-commit hook | [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) | [`docs/pre-commit.md`](docs/pre-commit.md) |
 | HCP Terraform Run Task | [`integrations/run-task/`](integrations/run-task/) | [`docs/run-task.md`](docs/run-task.md) |
@@ -264,7 +266,7 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (199 positive + 131 clea
 ├── TODO.md                     # Roadmap and backlog
 ├── CONTRIBUTING.md
 ├── LICENSE                     # MPL-2.0
-├── Dockerfile                  # ghcr.io/hashicorp/tf-analyze
+├── Dockerfile                  # ghcr.io/chrisadkin8/tf-analyze
 ├── pyproject.toml
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration

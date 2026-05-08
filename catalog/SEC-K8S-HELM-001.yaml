@@ -1,0 +1,60 @@
+id: SEC-K8S-HELM-001
+title: "helm_release sets `service.type=LoadBalancer` (publicly exposed)"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.3.2"
+pci_dss:
+  - "Req-1.2"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1190"
+  - "T1133"
+patterns:
+  - kind: helm_set_value
+    name: "service.type"
+    regex: '^LoadBalancer$'
+    description: |
+      A `helm_release` block overrides `service.type` to `LoadBalancer`,
+      which provisions a cloud-level LB (ELB on AWS, GCLB on GCP,
+      Standard LB on Azure) directly attached to the chart's pods. The
+      pods are reachable from the public internet on whatever port the
+      chart exposes — no Ingress controller, WAF, or auth layer is
+      forced in front.
+recommendation: |
+  Prefer `service.type = ClusterIP` plus an Ingress resource gated by
+  an Ingress controller you control. The Ingress controller terminates
+  TLS, enforces auth, and goes through a hardened LB once for the
+  whole cluster.
+
+      resource "helm_release" "app" {
+        # ...
+        set {
+          name  = "service.type"
+          value = "ClusterIP"
+        }
+        set {
+          name  = "ingress.enabled"
+          value = "true"
+        }
+      }
+verification: |
+  `kubectl get svc -A -o jsonpath='{.items[?(@.spec.type=="LoadBalancer")].metadata.name}'`
+  should not list workload services.
+fix_hcl: |
+  resource "helm_release" "example" {
+    name       = "example"
+    repository = "https://charts.example.io"
+    chart      = "example"
+    set {
+      name  = "service.type"
+      value = "ClusterIP"
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Switching service type drops the existing LB and reprovisions; in-flight connections drop."
+fixtures:
+  - helm_loadbalancer

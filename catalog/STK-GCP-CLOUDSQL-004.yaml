@@ -4,6 +4,12 @@ section: stack
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+applies_when:
+  # `ssl_mode` was added in google provider 5.x; on older providers the
+  # rule could only check `require_ssl`. Skip on pre-5.x to avoid
+  # false-positives on the legacy attribute.
+  min_provider:
+    google: "4.0"
 cis:
   - "6.1.2"
 patterns:

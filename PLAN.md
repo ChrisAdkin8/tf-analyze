@@ -188,7 +188,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/hashicorp/tf-analyze
+          images: ghcr.io/chrisadkin8/tf-analyze
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -211,7 +211,7 @@ Add immediately after the existing install block:
 ```markdown
 ### Docker (no Python required)
 docker run --rm -v $(pwd):/workspace \
-  ghcr.io/hashicorp/tf-analyze \
+  ghcr.io/chrisadkin8/tf-analyze \
   --target /workspace --format html > report.html
 ```
 
@@ -219,8 +219,8 @@ docker run --rm -v $(pwd):/workspace \
 - [ ] `docker build -t tf-analyze-local .` completes in < 60s
 - [ ] `docker run --rm tf-analyze-local --list-rules` prints all 194 rules
 - [ ] `docker run --rm -v ./fixtures/aws_rds_eol_version:/workspace tf-analyze-local --target /workspace --format json` produces valid JSON with `STK-AWS-RDS-004` finding
-- [ ] GitHub Actions workflow builds and pushes on `main` commit; `ghcr.io/hashicorp/tf-analyze:latest` is pullable
-- [ ] Multi-arch: `docker manifest inspect ghcr.io/hashicorp/tf-analyze:latest` shows both `amd64` and `arm64` digests
+- [ ] GitHub Actions workflow builds and pushes on `main` commit; `ghcr.io/chrisadkin8/tf-analyze:latest` is pullable
+- [ ] Multi-arch: `docker manifest inspect ghcr.io/chrisadkin8/tf-analyze:latest` shows both `amd64` and `arm64` digests
 
 ---
 
@@ -1340,7 +1340,7 @@ Item #8 reuses the d3.js graph code from #1 — do after #1.
 # §1
 code --install-extension hashicorp.tf-analyze   # Marketplace install works
 # §2
-docker run --rm ghcr.io/hashicorp/tf-analyze --list-rules | grep "SEC-AWS"
+docker run --rm ghcr.io/chrisadkin8/tf-analyze --list-rules | grep "SEC-AWS"
 # §3  open a PR with an unencrypted EBS volume; confirm suggestion block appears
 # §4
 pytest tests/test_clean_fixtures.py -v          # 26 clean fixtures pass

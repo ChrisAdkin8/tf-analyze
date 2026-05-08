@@ -165,7 +165,7 @@ In the report, note any new stubs under the **"Catalogue follow-ups"** section s
 
 Both modes require at least one of `regex` or `not_regex`. When both are present in a single pattern entry, they are OR-combined (either condition fires the rule).
 
-**`iam_policy_analysis` pattern kind** *(new in Round 24)*: walks every `data "aws_iam_policy_document"` block and inspects each `statement {}`. Statements with `effect = "Deny"` are skipped — only `Allow` statements are examined. The `check:` field selects what to look for:
+**`iam_policy_analysis` pattern kind** *(new in Round 24)*: walks every `data "aws_iam_policy_document"` block and inspects each `statement {}`. Companion `iam_json_policy_analysis` *(new in Round 26)* parses inline `policy = jsonencode({...})` on `aws_iam_policy`, `aws_iam_role_policy`, `aws_iam_user_policy`, and `aws_iam_group_policy` — closes the historic uncovered case where teams build the policy directly rather than via the data-source pattern. Statements with `effect = "Deny"` are skipped in both kinds — only `Allow` statements are examined. The `check:` field selects what to look for:
 
 | `check`                            | Fires when                                                              |
 |------------------------------------|-------------------------------------------------------------------------|
@@ -176,7 +176,11 @@ Both modes require at least one of `regex` or `not_regex`. When both are present
 | `wildcard_action_and_resource`     | both `actions` and `resources` contain `"*"` in the same statement      |
 | `not_action_or_not_resource`       | uses `not_actions` or `not_resources` on an Allow statement             |
 
-See `catalog/SEC-AWS-IAM-POLICY-001..006.yaml` for shipped instances.
+See `catalog/SEC-AWS-IAM-POLICY-001..006.yaml` (data-source) and `catalog/SEC-AWS-IAM-JSON-001..004.yaml` (inline JSON) for shipped instances.
+
+**`helm_set_value` pattern kind** *(new in Round 26)*: walks every `resource "helm_release" "..." { set { name = "..."; value = "..." } }` block and fires when the (name, regex) pair matches. Lets the catalogue express "this chart override is unsafe" without needing every chart's value schema. Pattern fields: `name:` (exact key like `service.type`) and `regex:` (against the value). See `catalog/SEC-K8S-HELM-001..002.yaml`.
+
+**`applies_when:` rule gating** (engine support since Round 1; documented here): catalogue rules can declare `applies_when: { min_provider: { aws: "5.0" }, min_terraform: "1.6" }`. Rules whose constraints can't be satisfied by the repo's `required_providers` / `required_version` are silently skipped, with a stderr count. Use this when a rule depends on attributes added in a specific provider version (e.g. `ssl_mode` was added in google provider 5.x).
 
 ---
 

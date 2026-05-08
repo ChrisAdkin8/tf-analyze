@@ -140,6 +140,28 @@ class TestComputeSummary:
             "formula",
         }
 
+    def test_scoring_constants_pinned_to_v1(self):
+        # Tripwire — any change to the formula constants is a breaking
+        # change for downstream gates (CI thresholds, dashboards, the
+        # `summary` block consumers in PR comments and run-task callbacks).
+        # Bump _SCORING_VERSION and update this test in lockstep.
+        assert detect._SCORING_VERSION == 1
+        assert detect._RISK_WEIGHTS == {
+            "CRITICAL": 15,
+            "HIGH":     7,
+            "MEDIUM":   3,
+            "LOW":      1,
+            "INFO":     0,
+        }
+        assert detect._GRADE_TIERS == [
+            (90, "A"),
+            (75, "B"),
+            (65, "B-"),
+            (50, "C"),
+            (30, "D"),
+            (0,  "F"),
+        ]
+
 
 # ---------------------------------------------------------------------------
 # CLI integration: summary appears in JSON and text output

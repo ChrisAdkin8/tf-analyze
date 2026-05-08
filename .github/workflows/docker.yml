@@ -27,7 +27,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/hashicorp/tf-analyze
+          images: ghcr.io/chrisadkin8/tf-analyze
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

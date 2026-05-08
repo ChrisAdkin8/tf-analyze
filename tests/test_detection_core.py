@@ -92,6 +92,63 @@ class TestResolveVarRef:
 
 
 # ---------------------------------------------------------------------------
+# applies_when version gating
+# ---------------------------------------------------------------------------
+
+
+class TestAppliesWhen:
+    def test_no_applies_when_runs_unconditionally(self):
+        # Rules without `applies_when` always apply.
+        entry = {"id": "R1", "patterns": []}
+        assert detect._entry_applies_to_providers(entry, {}, "") is True
+
+    def test_min_provider_skips_when_constraint_too_low(self):
+        # Rule needs aws ~> 5.0, repo pins ~> 4.x — must be skipped.
+        entry = {
+            "id": "R1",
+            "applies_when": {"min_provider": {"aws": "5.0"}},
+            "patterns": [],
+        }
+        assert detect._entry_applies_to_providers(
+            entry, {"aws": "~> 4.0"}, ""
+        ) is False
+
+    def test_min_provider_runs_when_constraint_allows(self):
+        entry = {
+            "id": "R1",
+            "applies_when": {"min_provider": {"aws": "5.0"}},
+            "patterns": [],
+        }
+        assert detect._entry_applies_to_providers(
+            entry, {"aws": "~> 5.0"}, ""
+        ) is True
+
+    def test_min_terraform_skips_when_too_old(self):
+        # Repo pins `~> 0.13` (Terraform 0.13.x). Rule needs 1.6+ → skip.
+        entry = {
+            "id": "R1",
+            "applies_when": {"min_terraform": "1.6"},
+            "patterns": [],
+        }
+        assert detect._entry_applies_to_providers(
+            entry, {}, "~> 0.13"
+        ) is False
+
+    def test_unparseable_constraint_runs(self):
+        # Permissive design: if the user's constraint can't be parsed,
+        # we don't silently skip the rule.
+        entry = {
+            "id": "R1",
+            "applies_when": {"min_provider": {"aws": "5.0"}},
+            "patterns": [],
+        }
+        # Empty user constraint → unparseable → run
+        assert detect._entry_applies_to_providers(
+            entry, {"aws": ""}, ""
+        ) is True
+
+
+# ---------------------------------------------------------------------------
 # _extract_var_defaults_by_dir
 # ---------------------------------------------------------------------------
 

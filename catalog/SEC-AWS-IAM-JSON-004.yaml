@@ -1,0 +1,50 @@
+id: SEC-AWS-IAM-JSON-004
+title: "Inline IAM policy JSON has public principal (`Principal: \"*\"`)"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.16"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.004"
+patterns:
+  - kind: iam_json_policy_analysis
+    check: public_principal
+    description: |
+      Inline JSON policy includes an Allow statement whose `Principal`
+      is `"*"` (or any sub-key whose value contains `"*"`). This makes
+      whatever resource the policy attaches to public — every account
+      on the planet plus AWS service principals can invoke the
+      granted actions.
+recommendation: |
+  Replace the wildcard principal with the specific account or role
+  ARNs that should have access. If true public exposure is the
+  intent, gate it behind explicit `Condition` keys and a documented
+  exception in your security review process.
+verification: |
+  The policy's `Principal` field must be a structured object listing
+  AWS account IDs or service principals, not `"*"`.
+fix_hcl: |
+  resource "aws_iam_role_policy" "example" {
+    name = "example"
+    role = aws_iam_role.target.id
+    policy = jsonencode({
+      Version = "2012-10-17",
+      Statement = [
+        {
+          Effect    = "Allow",
+          Action    = "sts:AssumeRole",
+          Resource  = "*",
+          Principal = { AWS = ["arn:aws:iam::123456789012:root"] }
+        }
+      ]
+    })
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_iam_json_public_principal

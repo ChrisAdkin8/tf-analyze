@@ -1,0 +1,57 @@
+id: SEC-K8S-PSA-001
+title: "kubernetes_namespace missing Pod Security Admission label"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.2.1"
+pci_dss:
+  - "Req-2.2"
+soc2_cc:
+  - "CC6.6"
+mitre:
+  - "T1611"
+patterns:
+  - kind: resource_missing_arg
+    resource: kubernetes_namespace
+    nested_path: metadata.labels
+    description: |
+      `kubernetes_namespace` block has no `metadata.labels` (or labels
+      without `pod-security.kubernetes.io/enforce`). Without a Pod
+      Security Admission level, the namespace defaults to no enforcement
+      — privileged pods, hostPath mounts, and host-network pods are all
+      permitted. PSA replaced the deprecated PodSecurityPolicy in 1.25.
+recommendation: |
+  Add the PSA enforcement label to every namespace, scoped to the
+  least-privileged level the workload tolerates:
+
+      resource "kubernetes_namespace" "app" {
+        metadata {
+          name = "app"
+          labels = {
+            "pod-security.kubernetes.io/enforce"         = "restricted"
+            "pod-security.kubernetes.io/enforce-version" = "latest"
+          }
+        }
+      }
+
+  Use `baseline` for legacy workloads that still need privileged
+  capabilities; `restricted` is the right default for new workloads.
+verification: |
+  `kubectl get ns -o jsonpath='{.items[*].metadata.labels.pod-security\.kubernetes\.io/enforce}'`
+  must list a level for every non-system namespace.
+fix_hcl: |
+  resource "kubernetes_namespace" "example" {
+    metadata {
+      name = "example"
+      labels = {
+        "pod-security.kubernetes.io/enforce"         = "restricted"
+        "pod-security.kubernetes.io/enforce-version" = "latest"
+      }
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Tightening PSA on a running namespace can reject pending pods that violate the level. Roll out in audit mode first."
+fixtures:
+  - k8s_namespace_no_psa

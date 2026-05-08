@@ -271,12 +271,13 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, o
         }
         applyDiagnostics(diagnosticCollection, findings);
         provider.setFindings(findings);
-        const summary = parsed.summary ?? { total: findings.length, critical: 0, high: 0, medium: 0, low: 0 };
-        const label = summary.total === 0
+        const counts = parsed.summary?.counts ?? { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
+        const total = findings.length;
+        const label = total === 0
             ? "$(check) tf-analyze: clean"
-            : `$(shield) tf-analyze: ${summary.total} (C:${summary.critical} H:${summary.high} M:${summary.medium})`;
+            : `$(shield) tf-analyze: ${total} (C:${counts.CRITICAL} H:${counts.HIGH} M:${counts.MEDIUM})`;
         statusBar.text = label;
-        outputChannel.appendLine(`[tf-analyze] Scan complete: ${summary.total} finding(s)`);
+        outputChannel.appendLine(`[tf-analyze] Scan complete: ${total} finding(s)`);
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

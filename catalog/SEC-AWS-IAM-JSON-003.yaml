@@ -1,0 +1,50 @@
+id: SEC-AWS-IAM-JSON-003
+title: "Inline IAM policy JSON grants `Action: \"*\"` AND `Resource: \"*\"`"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "1.16"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.004"
+  - "T1098.001"
+patterns:
+  - kind: iam_json_policy_analysis
+    check: wildcard_action_and_resource
+    description: |
+      Inline JSON policy contains a single Allow statement granting
+      both `Action: "*"` and `Resource: "*"` — the canonical
+      AdministratorAccess shape, hand-rolled inline rather than via
+      the named AWS-managed policy. Bypasses org-level controls and
+      audit tools that recognise `AdministratorAccess`.
+recommendation: |
+  If true administrator access is intended, attach
+  `arn:aws:iam::aws:policy/AdministratorAccess` directly via
+  `aws_iam_role_policy_attachment`. Otherwise, scope to the explicit
+  minimum action and resource set.
+verification: |
+  No statement in the rendered policy may combine `Action: "*"` and
+  `Resource: "*"`. CloudTrail data events on this principal should
+  narrow to a small set of services after the fix.
+fix_hcl: |
+  resource "aws_iam_policy" "example" {
+    name   = "example"
+    policy = jsonencode({
+      Version = "2012-10-17",
+      Statement = [
+        {
+          Effect   = "Allow",
+          Action   = ["s3:GetObject", "s3:PutObject"],
+          Resource = "arn:aws:s3:::my-bucket/*"
+        }
+      ]
+    })
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_iam_json_full_admin

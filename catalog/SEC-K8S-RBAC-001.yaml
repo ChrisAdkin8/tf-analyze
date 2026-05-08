@@ -1,0 +1,73 @@
+id: SEC-K8S-RBAC-001
+title: "ClusterRoleBinding grants cluster-admin"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "5.1.1"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.004"
+  - "T1098.001"
+patterns:
+  - kind: resource_body_contains
+    resource: kubernetes_cluster_role_binding
+    regex: 'name\s*=\s*"cluster-admin"'
+    description: |
+      `kubernetes_cluster_role_binding` references the built-in
+      `cluster-admin` ClusterRole. Any subject bound to this binding
+      (ServiceAccount, User, Group) has full unrestricted access to
+      every API across every namespace — equivalent to root on every
+      node. Compromise of any pod or token bound through this binding
+      yields full cluster takeover.
+recommendation: |
+  Replace the cluster-admin reference with a scoped ClusterRole or a
+  namespaced RoleBinding. If absolute-power access is genuinely
+  required (rare; usually only for cluster operators), keep the
+  binding short-lived and attach it to a specific User identity, not
+  a long-lived ServiceAccount.
+
+      resource "kubernetes_role_binding" "app" {
+        metadata {
+          name      = "app"
+          namespace = "app"
+        }
+        role_ref {
+          api_group = "rbac.authorization.k8s.io"
+          kind      = "ClusterRole"
+          name      = "view"   # scoped, read-only
+        }
+        subject {
+          kind      = "ServiceAccount"
+          name      = "app"
+          namespace = "app"
+        }
+      }
+verification: |
+  `kubectl get clusterrolebindings -o jsonpath='{.items[?(@.roleRef.name=="cluster-admin")].subjects[*].name}'`
+  should not include any ServiceAccount in a workload namespace.
+fix_hcl: |
+  resource "kubernetes_role_binding" "scoped" {
+    metadata {
+      name      = "app-scoped"
+      namespace = "app"
+    }
+    role_ref {
+      api_group = "rbac.authorization.k8s.io"
+      kind      = "ClusterRole"
+      name      = "view"
+    }
+    subject {
+      kind      = "ServiceAccount"
+      name      = "app"
+      namespace = "app"
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Replacing the binding is destructive — pods using the previous role will lose access until rebound. Stage the new binding alongside, migrate workloads, then delete the old one."
+fixtures:
+  - k8s_cluster_admin_binding

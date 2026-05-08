@@ -29,10 +29,10 @@ Each has a corresponding section in **PLAN.md** with full implementation detail.
 *PLAN.md §2*
 
 - [x] **P0 · S** Write `Dockerfile` at repo root (python:3.12-slim, COPY `scripts/detect.py` + `catalog/`, ENTRYPOINT)
-- [x] **P0 · S** Write `.github/workflows/docker.yml`: build + push `ghcr.io/hashicorp/tf-analyze` on semver tags and `main`; multi-arch `linux/amd64` + `linux/arm64`
+- [x] **P0 · S** Write `.github/workflows/docker.yml`: build + push `ghcr.io/chrisadkin8/tf-analyze` on semver tags and `main`; multi-arch `linux/amd64` + `linux/arm64`
 - [x] **P0 · S** Add `docker run` one-liner to `README.md` Quick Start section
 - [ ] **P1 · S** Add `pyproject.toml` with `[project]` metadata so `pip install .` also works
-- [ ] **P2 · S** Mirror to Docker Hub as `hashicorp/tf-analyze`
+- [ ] **P2 · S** Mirror to Docker Hub as `ChrisAdkin8/tf-analyze`
 
 ### #3 — GitHub Action: PR suggestion blocks
 *PLAN.md §3*
@@ -113,13 +113,16 @@ Items beyond the 8 priority recommendations. Implement after the priority items 
 - [ ] **P1 · S** `SEC-AWS-SHIELD-001` — Shield protection absence for EIP/LB
 - [ ] **P1 · S** `SEC-AZURE-DEFENDER-001/002` — Microsoft Defender disabled
 - [ ] **P1 · S** `SEC-GCP-BINARY-AUTH-001` — Binary Authorization not enforced on GKE
-- [ ] **P1 · M** `SEC-K8S-PSA-001` — Pod Security Admission label missing from namespace
-- [ ] **P1 · M** `SEC-K8S-NETPOL-001` — namespace without NetworkPolicy
+- [x] **P1 · M** `SEC-K8S-PSA-001` — Pod Security Admission label missing from namespace  *(Round 26)*
+- [x] **P1 · M** `SEC-K8S-NETPOL-001` — namespace without NetworkPolicy  *(Round 26)*
+- [x] **P1 · M** `SEC-K8S-RBAC-001` — ClusterRoleBinding to cluster-admin  *(Round 26)*
+- [x] **P1 · M** `SEC-K8S-HELM-001..002` — helm_release service.type=LoadBalancer + privileged  *(Round 26)*
+- [x] **P1 · M** Inline `aws_iam_policy` JSON analysis (`iam_json_policy_analysis` kind)  *(Round 26, SEC-AWS-IAM-JSON-001..004)*
 
 ### Test coverage
 
-- [ ] **P1 · L** `tests/test_apply_fixes.py` — round-trip: copy fixture → apply fixes → re-scan → assert rule resolved
-- [ ] **P1 · M** Multi-file fixture: `fixtures/sensitive_module_boundary/` (exercises `SEC-SENSITIVE-002`)
+- [x] **P1 · L** `tests/test_apply_fixes.py` — round-trip: copy fixture → apply fixes → re-scan → assert rule resolved  *(Round 26, 7 tests; surfaced 2 engine limitations docs in test comments)*
+- [x] **P1 · M** Multi-file fixtures + cross-file resolution tests  *(Round 26, 4 fixtures + tests/test_multi_file.py)*
 - [ ] **P1 · M** Multi-file fixture: `fixtures/inconsistent_backend_types/` (exercises `ROB-BACKEND-001`)
 - [ ] **P1 · M** Catalogue invariant tests in `test_schema.py`: fixture dirs exist on disk, no duplicate IDs, `fix_disruption` is valid enum
 - [x] **P2 · S** Performance regression test: 219-fixture corpus scans in < 5s  *(Round 24, `tests/test_perf.py` — current 0.35s)*

@@ -4,6 +4,11 @@ section: stack
 default_urgency: HIGH
 blast_radius: environment
 status: active
+applies_when:
+  # metadata_options on aws_launch_template is provider 3.x+. Older
+  # providers used a separate aws_instance metadata_options block.
+  min_provider:
+    aws: "3.0"
 mitre:
   - "T1552.005"
 patterns:
