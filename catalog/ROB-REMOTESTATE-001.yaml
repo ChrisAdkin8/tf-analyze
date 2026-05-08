@@ -21,5 +21,13 @@ verification: |
   Grep for `data "terraform_remote_state"` under the scanned path — zero hits.
   If the replacement uses provider data sources, run `terraform plan` and
   confirm the same values resolve.
+fix_hcl: |
+  data "aws_ssm_parameter" "vpc_id" {
+    name = "/networking/vpc_id"
+  }
+  locals {
+    vpc_id = data.aws_ssm_parameter.vpc_id.value
+  }
+fix_disruption: none
 fixtures:
   - remote_state_coupling

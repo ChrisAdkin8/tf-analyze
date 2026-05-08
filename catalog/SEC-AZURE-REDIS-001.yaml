@@ -1,0 +1,55 @@
+id: SEC-AZURE-REDIS-001
+title: "Azure Redis Cache allows non-TLS connections"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_redis_cache
+    arg: enable_non_ssl_port
+    regex: '^true$'
+    description: |
+      `azurerm_redis_cache` has `enable_non_ssl_port = true`. This opens
+      port 6379 for unencrypted Redis connections. Cache data — which often
+      includes session tokens, application state, and materialised query
+      results — is transmitted in cleartext over the network.
+  - kind: resource_arg
+    resource: azurerm_redis_cache
+    arg: minimum_tls_version
+    not_regex: '^1\.2$'
+    fire_if_absent: true
+    description: |
+      `azurerm_redis_cache` has `minimum_tls_version` below 1.2 or absent.
+      TLS 1.0 and 1.1 are vulnerable to POODLE, BEAST, and related attacks.
+      Require TLS 1.2 as the minimum.
+recommendation: |
+  Disable the non-SSL port and enforce TLS 1.2:
+
+      resource "azurerm_redis_cache" "main" {
+        # ...
+        enable_non_ssl_port = false
+        minimum_tls_version = "1.2"
+      }
+verification: |
+  `az redis show --name <name> --resource-group <rg> \
+    --query '[enableNonSslPort, minimumTlsVersion]'`
+  must return `[false, "1.2"]`.
+fix_hcl: |
+  resource "azurerm_redis_cache" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    capacity            = 1
+    family              = "C"
+    sku_name            = "Standard"
+    enable_non_ssl_port = false
+    minimum_tls_version = "1.2"
+  }
+fix_disruption: none
+fixtures:
+  - azure_redis_non_ssl

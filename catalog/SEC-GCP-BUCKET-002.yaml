@@ -20,5 +20,13 @@ recommendation: |
 verification: |
   After applying, run `gcloud storage buckets describe gs://<bucket>
   --format='value(iamConfiguration.uniformBucketLevelAccess.enabled)'`.
+fix_hcl: |
+  resource "google_storage_bucket" "example" {
+    name                        = "example"
+    location                    = "US"
+    uniform_bucket_level_access = true
+    public_access_prevention    = "enforced"
+  }
+fix_disruption: none
 fixtures:
   - public_bucket

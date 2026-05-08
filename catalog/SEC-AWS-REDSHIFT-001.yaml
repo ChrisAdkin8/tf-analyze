@@ -1,0 +1,49 @@
+id: SEC-AWS-REDSHIFT-001
+title: "Redshift cluster encryption disabled"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - id: "2.3"
+    title: "Ensure that encryption is enabled for Amazon Redshift Clusters"
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_arg
+    resource: aws_redshift_cluster
+    arg: encrypted
+    not_regex: '^true$'
+    fire_if_absent: true
+    description: |
+      `aws_redshift_cluster` has `encrypted = false` or the attribute is absent.
+      Unencrypted Redshift clusters expose warehouse data — which typically contains
+      production analytics, PII, and financial records — to anyone with access to
+      the underlying storage. Encryption is required by PCI-DSS Req-3.4 and CIS 2.3.
+recommendation: |
+  Enable encryption with a CMK:
+
+      resource "aws_redshift_cluster" "main" {
+        cluster_identifier = "main"
+        # ...
+        encrypted  = true
+        kms_key_id = aws_kms_key.redshift.arn
+      }
+
+  Encryption cannot be added to an existing cluster without a snapshot-restore
+  cycle. Plan for this during initial provisioning.
+verification: |
+  `aws redshift describe-clusters --cluster-identifier <id> \
+    --query 'Clusters[*].Encrypted'`
+  must return `true`.
+fix_hcl: |
+  resource "aws_redshift_cluster" "example" {
+    cluster_identifier = "example"
+    encrypted          = true
+    kms_key_id         = aws_kms_key.redshift.arn
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_redshift_no_encryption

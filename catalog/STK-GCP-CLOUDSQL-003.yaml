@@ -24,5 +24,15 @@ verification: |
 escalation:
   - condition: "is_production_environment"
     new_urgency: CRITICAL
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    name             = "example"
+    database_version = "POSTGRES_15"
+    deletion_protection = true
+    settings {
+      tier = "db-f1-micro"
+    }
+  }
+fix_disruption: none
 fixtures:
   - cloudsql_no_deletion_protection

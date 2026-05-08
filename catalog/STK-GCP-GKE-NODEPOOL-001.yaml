@@ -40,5 +40,18 @@ verification: |
   Both fields should print `True`. Re-run tf-analyze to confirm clean.
 related:
   - SEC-IAM-001
+fix_hcl: |
+  resource "google_container_node_pool" "example" {
+    name       = "example"
+    cluster    = google_container_cluster.example.id
+    location   = "us-central1"
+    node_config {
+      shielded_instance_config {
+        enable_secure_boot          = true
+        enable_integrity_monitoring = true
+      }
+    }
+  }
+fix_disruption: forces_replacement
 fixtures:
   - gke_nodepool_no_secureboot

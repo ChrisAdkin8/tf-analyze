@@ -1,0 +1,53 @@
+id: SEC-AWS-ES-002
+title: "OpenSearch / Elasticsearch domain missing node-to-node encryption"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - id: "2.8"
+    title: "Ensure that OpenSearch domains have node-to-node encryption enabled"
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_opensearch_domain
+    arg: node_to_node_encryption
+    nested_path: node_to_node_encryption.enabled
+    description: |
+      `aws_opensearch_domain` has no `node_to_node_encryption { enabled = true }`.
+      Without this setting, data transferred between cluster nodes travels
+      unencrypted inside the VPC. An adversary with VPC-level access (e.g.,
+      via a compromised EC2 instance) can intercept index data in transit.
+  - kind: resource_missing_arg
+    resource: aws_elasticsearch_domain
+    arg: node_to_node_encryption
+    nested_path: node_to_node_encryption.enabled
+    description: |
+      `aws_elasticsearch_domain` (legacy) missing node-to-node encryption.
+recommendation: |
+  Enable node-to-node encryption:
+
+      resource "aws_opensearch_domain" "main" {
+        # ...
+        node_to_node_encryption {
+          enabled = true
+        }
+      }
+verification: |
+  `aws opensearch describe-domain --domain-name <name> \
+    --query 'DomainStatus.NodeToNodeEncryptionOptions'`
+  must show `Enabled: true`.
+fix_hcl: |
+  resource "aws_opensearch_domain" "example" {
+    domain_name    = "example"
+    engine_version = "OpenSearch_2.11"
+    node_to_node_encryption {
+      enabled = true
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_opensearch_no_node_encryption

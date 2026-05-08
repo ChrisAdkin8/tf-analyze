@@ -40,5 +40,17 @@ verification: |
   `az storage account blob-service-properties show \
     --account-name <name> --query 'isVersioningEnabled'`
   must return `true`.
+fix_hcl: |
+  resource "azurerm_storage_account" "example" {
+    name                     = "example"
+    resource_group_name      = azurerm_resource_group.example.name
+    location                 = azurerm_resource_group.example.location
+    account_tier             = "Standard"
+    account_replication_type = "LRS"
+    blob_properties {
+      versioning_enabled = true
+    }
+  }
+fix_disruption: none
 fixtures:
   - azure_storage_no_versioning

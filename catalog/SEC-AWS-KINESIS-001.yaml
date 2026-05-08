@@ -1,0 +1,44 @@
+id: SEC-AWS-KINESIS-001
+title: "Kinesis Data Stream not encrypted with KMS"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_arg
+    resource: aws_kinesis_stream
+    arg: encryption_type
+    not_regex: '^KMS$'
+    fire_if_absent: true
+    description: |
+      `aws_kinesis_stream` has `encryption_type` absent or not set to `KMS`.
+      The default `NONE` encryption leaves stream data in plaintext at rest.
+      Anyone with access to the underlying storage can read records. Use
+      KMS encryption so that key-policy controls who can decrypt stream data.
+recommendation: |
+  Enable KMS encryption on every Kinesis stream:
+
+      resource "aws_kinesis_stream" "main" {
+        name             = "main"
+        shard_count      = 1
+        encryption_type  = "KMS"
+        kms_key_id       = aws_kms_key.kinesis.id
+      }
+verification: |
+  `aws kinesis describe-stream-summary --stream-name <name> \
+    --query 'StreamDescriptionSummary.EncryptionType'`
+  must return `"KMS"`.
+fix_hcl: |
+  resource "aws_kinesis_stream" "example" {
+    name            = "example"
+    shard_count     = 1
+    encryption_type = "KMS"
+    kms_key_id      = aws_kms_key.kinesis.id
+  }
+fix_disruption: none
+fixtures:
+  - aws_kinesis_no_encryption

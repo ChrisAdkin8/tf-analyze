@@ -5,6 +5,49 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 20 — 2026-05-08
+
+**Detection quality, fix_hcl coverage, and new cloud service rules (192/192 fixtures):**
+
+### 1. Detection quality fixes (Round 19 carry-over)
+
+- **`verification` fields** added to 3 catalogue YAML files that were missing them (`ROB-AWS-BACKUP-001`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-SECURITYHUB-001`), resolving 3 failing fixtures.
+- **`when_present` gates** added to all 3 `resource_absent` rules to prevent false positives on non-AWS Terraform codebases (GCP-only fixtures no longer trigger AWS-specific absence rules).
+
+### 2. New catalogue rules (15 rules, 15 fixtures)
+
+| Rule | Title | Urgency |
+|------|-------|---------|
+| `SEC-AWS-MSK-001` | MSK cluster allows unencrypted client-broker traffic | HIGH |
+| `SEC-AWS-MSK-002` | MSK cluster does not use CMK for encryption at rest | MEDIUM |
+| `SEC-AWS-KINESIS-001` | Kinesis Data Stream not encrypted with KMS | MEDIUM |
+| `SEC-AZURE-EVENTHUB-001` | Event Hub namespace does not use CMK encryption | MEDIUM |
+| `SEC-AZURE-SERVICEBUS-001` | Service Bus namespace does not use CMK encryption | MEDIUM |
+| `SEC-AWS-CWL-001` | CloudWatch log group not encrypted with KMS CMK | MEDIUM |
+| `OPS-AWS-CWL-001` | CloudWatch log group has no retention policy | LOW |
+| `SEC-AWS-REDSHIFT-001` | Redshift cluster encryption disabled | HIGH |
+| `ROB-AWS-REDSHIFT-001` | Redshift cluster has no automated snapshot retention | MEDIUM |
+| `SEC-AWS-DOCDB-001` | DocumentDB cluster storage not encrypted | HIGH |
+| `SEC-AWS-NEPTUNE-001` | Neptune cluster storage not encrypted | HIGH |
+| `SEC-AWS-IAM-003` | IAM account password policy not configured or too weak | MEDIUM |
+| `SEC-AZURE-REDIS-001` | Azure Redis Cache allows non-TLS connections | HIGH |
+| `SEC-AWS-ATHENA-001` | Athena workgroup results not encrypted | MEDIUM |
+| `SEC-GCP-COMPUTE-DISK-001` | GCP compute disk not encrypted with CSEK/CMEK | MEDIUM |
+
+All 15 rules include `fix_hcl`, `fix_disruption`, `verification`, and fixtures.
+
+### 3. `fix_hcl` coverage lifted from ~40% to 80%
+
+Added `fix_hcl` + `fix_disruption` fields to **~100 existing catalogue rules** that were missing them, spanning all three cloud providers and all rule categories (SEC, ROB, STK, OPS, MOD). Coverage: **156/194 rules (80%)**.
+
+Key additions by category:
+- **AWS**: S3 public-access block, S3 access logging, VPC flow logs, LB HTTP redirect, SSM SecureString, CloudFront HTTPS, IAM wildcard principal, EKS (private endpoint, secrets encryption, OIDC, log types), ECR lifecycle, Redshift, DocumentDB, Neptune, Athena, MSK, Kinesis
+- **Azure**: AKS (RBAC, network policy, workload identity, private cluster, IP ranges), ACR admin, Redis TLS, Service Bus/Event Hub CMK, SQL AAD admin, storage soft-delete, NSG flow logs, Key Vault diagnostics, App Service HTTPS/IP restrictions
+- **GCP**: IAM broad roles, public IP, Cloud SQL public IP, CloudRun ingress, compute SA, GKE (private nodes, workload identity, secrets encryption, master auth networks, node pool shielded), DNS DNSSEC, KMS rotation, Pub/Sub CMK, BigQuery CMK, Artifact Registry CMK, Cloud SQL backup/deletion protection, bucket versioning/public access prevention, GCS logging target, firewall (SSH, RDP, DB ports), subnet flow logs, Cloud Audit Logs
+- **Cross-provider**: Module pinning, supply chain, backend locking, remote state decoupling, variable validation, lifecycle rules, provider version bounds
+
+---
+
 ## Round 18 — 2026-05-08
 
 **Bug-fix round: `--apply-fixes` nested blocks + `block_has_arg` false positives (166/166 fixtures):**

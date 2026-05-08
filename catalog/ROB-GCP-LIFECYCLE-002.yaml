@@ -21,5 +21,12 @@ recommendation: |
 verification: |
   Run `terraform plan` and confirm no diff. Manually upload an object
   and run `terraform destroy` — it should fail with "bucket is not empty".
+fix_hcl: |
+  resource "google_storage_bucket" "example" {
+    name          = "example"
+    location      = "US"
+    force_destroy = false
+  }
+fix_disruption: none
 fixtures:
   - missing_prevent_destroy

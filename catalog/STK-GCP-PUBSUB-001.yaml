@@ -38,5 +38,11 @@ recommendation: |
 verification: |
   `gcloud pubsub topics describe <topic> --format='value(kmsKeyName)'`
   must return the full key resource ID.
+fix_hcl: |
+  resource "google_pubsub_topic" "example" {
+    name         = "example"
+    kms_key_name = google_kms_crypto_key.pubsub.id
+  }
+fix_disruption: forces_replacement
 fixtures:
   - gcp_pubsub_no_cmek

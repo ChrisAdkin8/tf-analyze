@@ -1,26 +1,51 @@
 id: SEC-AWS-GUARDDUTY-001
-title: "AWS GuardDuty detector not enabled in this account/region"
+title: "GuardDuty detector not provisioned"
 section: security
 default_urgency: HIGH
-blast_radius: environment
+blast_radius: module
 status: active
+cis:
+  - id: "3.3"
+    title: "Ensure AWS Config is enabled in all regions"
+pci_dss:
+  - "Req-10.6"
+soc2_cc:
+  - "CC7.2"
 patterns:
   - kind: resource_absent
     resource: aws_guardduty_detector
     when_present: aws_vpc
-    scope: repo
+    description: |
+      No `aws_guardduty_detector` is provisioned. GuardDuty uses machine-learning
+      and threat intelligence to detect account compromise, instance compromise,
+      and data exfiltration in real time. Without it, there is no continuous
+      monitoring of CloudTrail, VPC Flow Logs, and DNS logs for malicious activity.
+      GuardDuty is a prerequisite for Security Hub aggregation and many compliance
+      frameworks.
 recommendation: |
-  Enable GuardDuty by adding an `aws_guardduty_detector` resource:
+  Enable GuardDuty in every account and region:
 
       resource "aws_guardduty_detector" "main" {
         enable = true
+
+        datasources {
+          s3_logs { enable = true }
+          kubernetes { audit_logs { enable = true } }
+          malware_protection {
+            scan_ec2_instance_with_findings { ebs_volumes { enable = true } }
+          }
+        }
       }
 
-  GuardDuty is a threat-detection service that continuously monitors for
-  malicious activity using VPC Flow Logs, DNS logs, and CloudTrail events.
-  A single detector per account/region suffices.
+  Use `aws_guardduty_organization_admin_account` to enable GuardDuty
+  org-wide from the management account.
+fix_hcl: |
+  resource "aws_guardduty_detector" "main" {
+    enable = true
+  }
 verification: |
-  Run `aws guardduty list-detectors` and confirm a detector ID is returned.
-  Re-run tf-analyze in mode:verify-fixed.
+  `aws guardduty list-detectors --query 'DetectorIds'`
+  must return at least one detector ID.
+fix_disruption: none
 fixtures:
   - aws_no_guardduty

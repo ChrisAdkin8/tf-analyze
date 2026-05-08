@@ -46,5 +46,18 @@ verification: |
   show at least one default-deny policy in workload namespaces.
 related:
   - STK-GKE-001
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name     = "example"
+    location = "us-central1"
+    network_policy {
+      enabled  = true
+      provider = "CALICO"
+    }
+    addons_config {
+      network_policy_config { disabled = false }
+    }
+  }
+fix_disruption: forces_replacement
 fixtures:
   - gke_no_network_policy

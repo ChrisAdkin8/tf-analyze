@@ -41,5 +41,16 @@ verification: |
 related:
   - SEC-AWS-SSRF-001
   - STK-AWS-EKS-001
+fix_hcl: |
+  resource "aws_launch_template" "example" {
+    name = "example"
+    metadata_options {
+      http_endpoint               = "enabled"
+      http_tokens                 = "required"
+      http_put_response_hop_limit = 1
+      instance_metadata_tags      = "enabled"
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_launch_template_no_imdsv2

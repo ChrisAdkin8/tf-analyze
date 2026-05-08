@@ -1,0 +1,39 @@
+id: OPS-AWS-CWL-001
+title: "CloudWatch log group has no retention policy"
+section: ops
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+soc2_cc:
+  - "CC7.2"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_cloudwatch_log_group
+    arg: retention_in_days
+    description: |
+      `aws_cloudwatch_log_group` has no `retention_in_days`. Log groups default
+      to "Never expire", accumulating data indefinitely. This inflates costs,
+      complicates log search, and may violate GDPR data-minimisation requirements
+      by retaining personal data longer than necessary.
+recommendation: |
+  Set an explicit retention period appropriate to your compliance requirements:
+
+      resource "aws_cloudwatch_log_group" "app" {
+        name              = "/app/prod"
+        retention_in_days = 90   # 30/60/90/120/150/180/365/400/545/731/1096/1827/2192/2557/2922/3288/3653
+      }
+
+  Common values: 30 days for transient app logs, 365 days for audit logs,
+  2557 days (7 years) for financial compliance.
+verification: |
+  `aws logs describe-log-groups \
+    --query 'logGroups[?!retentionInDays].logGroupName'`
+  must return an empty list.
+fix_hcl: |
+  resource "aws_cloudwatch_log_group" "example" {
+    name              = "example"
+    retention_in_days = 90
+  }
+fix_disruption: none
+fixtures:
+  - aws_cwl_no_retention

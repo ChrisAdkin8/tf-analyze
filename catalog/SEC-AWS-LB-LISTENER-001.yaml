@@ -1,0 +1,74 @@
+id: SEC-AWS-LB-LISTENER-001
+title: "ALB listener serves plain HTTP without redirect"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - id: "2.1"
+    title: "Ensure all HTTP traffic is redirected to HTTPS"
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_arg
+    resource: aws_lb_listener
+    arg: protocol
+    regex: '^HTTP$'
+    description: |
+      `aws_lb_listener` has `protocol = "HTTP"`. Serving traffic over plain HTTP
+      exposes session tokens, credentials, and application data to network eavesdroppers.
+      Every HTTP listener should redirect to HTTPS; only the HTTPS listener should
+      serve application traffic.
+recommendation: |
+  Either switch the listener to HTTPS or add a redirect action:
+
+      # Option A — HTTPS listener
+      resource "aws_lb_listener" "https" {
+        load_balancer_arn = aws_lb.main.arn
+        port              = "443"
+        protocol          = "HTTPS"
+        ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+        certificate_arn   = aws_acm_certificate.cert.arn
+        default_action {
+          type             = "forward"
+          target_group_arn = aws_lb_target_group.app.arn
+        }
+      }
+
+      # Option B — HTTP→HTTPS redirect
+      resource "aws_lb_listener" "http_redirect" {
+        load_balancer_arn = aws_lb.main.arn
+        port              = "80"
+        protocol          = "HTTP"
+        default_action {
+          type = "redirect"
+          redirect {
+            port        = "443"
+            protocol    = "HTTPS"
+            status_code = "HTTP_301"
+          }
+        }
+      }
+verification: |
+  `aws elbv2 describe-listeners --load-balancer-arn <arn> \
+    --query 'Listeners[?Protocol==\`HTTP\`].DefaultActions[*].Type'`
+  must return `["redirect"]`, not `["forward"]`.
+fix_hcl: |
+  resource "aws_lb_listener" "http_redirect" {
+    load_balancer_arn = aws_lb.example.arn
+    port              = "80"
+    protocol          = "HTTP"
+    default_action {
+      type = "redirect"
+      redirect {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - aws_lb_listener_http

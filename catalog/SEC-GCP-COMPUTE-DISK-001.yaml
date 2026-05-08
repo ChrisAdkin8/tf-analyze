@@ -1,0 +1,56 @@
+id: SEC-GCP-COMPUTE-DISK-001
+title: "GCP compute disk not encrypted with CSEK/CMEK"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_compute_disk
+    arg: disk_encryption_key
+    description: |
+      `google_compute_disk` has no `disk_encryption_key` block. Without a
+      customer-managed encryption key (CMEK) or customer-supplied encryption
+      key (CSEK), the disk is encrypted with a Google-managed key. This
+      prevents independent key rotation, key revocation for incident response,
+      and satisfying compliance requirements that mandate customer-controlled
+      encryption.
+  - kind: resource_missing_arg
+    resource: google_compute_instance
+    arg: disk_encryption_key
+    nested_path: boot_disk.disk_encryption_key_raw
+    description: |
+      `google_compute_instance` boot disk has no `disk_encryption_key_raw`.
+      The boot disk defaults to Google-managed encryption.
+recommendation: |
+  Specify a KMS key for disk encryption:
+
+      resource "google_compute_disk" "data" {
+        name = "data"
+        type = "pd-ssd"
+        zone = "us-central1-a"
+
+        disk_encryption_key {
+          kms_key_self_link = google_kms_crypto_key.disk.id
+        }
+      }
+verification: |
+  `gcloud compute disks describe <name> --zone <zone> \
+    --format='get(diskEncryptionKey.kmsKeyName)'`
+  must return a KMS key resource path.
+fix_hcl: |
+  resource "google_compute_disk" "example" {
+    name = "example"
+    type = "pd-ssd"
+    zone = "us-central1-a"
+    disk_encryption_key {
+      kms_key_self_link = google_kms_crypto_key.disk.id
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - gcp_compute_disk_no_encryption

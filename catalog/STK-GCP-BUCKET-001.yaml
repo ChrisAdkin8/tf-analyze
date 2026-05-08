@@ -40,5 +40,14 @@ verification: |
 related:
   - SEC-BUCKET-001
   - STK-GCS-LOGGING-001
+fix_hcl: |
+  resource "google_storage_bucket" "example" {
+    name     = "example"
+    location = "US"
+    versioning {
+      enabled = true
+    }
+  }
+fix_disruption: none
 fixtures:
   - bucket_no_versioning

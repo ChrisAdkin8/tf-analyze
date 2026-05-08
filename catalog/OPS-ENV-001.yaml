@@ -20,5 +20,11 @@ recommendation: |
 verification: |
   Run `terraform plan` after the change and confirm only `+` additions
   appear — the resource itself is not modified.
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    identifier        = "example-prod"
+    deletion_protection = true
+  }
+fix_disruption: none
 fixtures:
   - prod_deletion_protection

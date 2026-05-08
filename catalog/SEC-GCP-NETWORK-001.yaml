@@ -51,5 +51,18 @@ related:
   - SEC-NETWORK-002
 pci_dss:
   - "Req-1.2"
+fix_hcl: |
+  resource "google_compute_firewall" "iap_ssh" {
+    name          = "iap-ssh"
+    network       = google_compute_network.vpc.id
+    direction     = "INGRESS"
+    source_ranges = ["35.235.240.0/20"]
+    allow {
+      protocol = "tcp"
+      ports    = ["22"]
+    }
+    target_tags = ["iap-ssh"]
+  }
+fix_disruption: none
 fixtures:
   - firewall_open_ssh

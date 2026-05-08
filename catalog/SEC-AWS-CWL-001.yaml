@@ -1,0 +1,44 @@
+id: SEC-AWS-CWL-001
+title: "CloudWatch log group not encrypted with KMS CMK"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_cloudwatch_log_group
+    arg: kms_key_id
+    description: |
+      `aws_cloudwatch_log_group` has no `kms_key_id`. Without a customer-managed
+      KMS key, log data is encrypted with an AWS-managed key that cannot be
+      independently revoked, audited, or rotated. Logs often contain sensitive
+      application data, credentials in error traces, and PII that requires
+      customer-controlled encryption.
+recommendation: |
+  Encrypt every log group with a CMK:
+
+      resource "aws_cloudwatch_log_group" "app" {
+        name              = "/app/prod"
+        retention_in_days = 90
+        kms_key_id        = aws_kms_key.logs.arn
+      }
+
+  The KMS key policy must grant `logs.<region>.amazonaws.com` permission to
+  call `kms:Encrypt`, `kms:Decrypt`, and `kms:GenerateDataKey`.
+verification: |
+  `aws logs describe-log-groups --log-group-name-prefix /app \
+    --query 'logGroups[*].kmsKeyId'`
+  must return a KMS key ARN for every group.
+fix_hcl: |
+  resource "aws_cloudwatch_log_group" "example" {
+    name              = "example"
+    retention_in_days = 90
+    kms_key_id        = aws_kms_key.logs.arn
+  }
+fix_disruption: none
+fixtures:
+  - aws_cwl_no_kms

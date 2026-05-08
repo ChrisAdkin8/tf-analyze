@@ -19,5 +19,10 @@ recommendation: |
 verification: |
   Run `terraform version` and confirm it satisfies the new constraint.
   CI should pin the same version via `setup-terraform`.
+fix_hcl: |
+  terraform {
+    required_version = ">= 1.5.0, < 2.0.0"
+  }
+fix_disruption: none
 fixtures:
   - old_required_version

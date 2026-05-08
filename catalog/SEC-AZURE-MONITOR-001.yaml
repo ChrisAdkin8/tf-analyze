@@ -41,5 +41,16 @@ recommendation: |
 verification: |
   `az monitor diagnostic-settings subscriptions list` must return at least one
   setting with Log Analytics or storage sink. Re-run tf-analyze mode:verify-fixed.
+fix_hcl: |
+  resource "azurerm_subscription_diagnostic_setting" "activity" {
+    name                       = "activity-to-law"
+    target_resource_id         = "/subscriptions/${var.subscription_id}"
+    log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+    enabled_log { category = "Administrative" }
+    enabled_log { category = "Security" }
+    enabled_log { category = "Alert" }
+    enabled_log { category = "Policy" }
+  }
+fix_disruption: none
 fixtures:
   - azure_no_activity_log

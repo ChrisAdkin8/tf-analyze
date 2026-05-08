@@ -34,5 +34,20 @@ verification: |
   `az aks show --name <cluster> --resource-group <rg> \
     --query 'enablePrivateCluster'`
   must return `true`.
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    dns_prefix          = "example"
+    private_cluster_enabled = true
+    default_node_pool {
+      name       = "default"
+      node_count = 1
+      vm_size    = "Standard_D2_v2"
+    }
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: forces_replacement
 fixtures:
   - azure_aks_not_private

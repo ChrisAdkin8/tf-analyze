@@ -36,5 +36,12 @@ verification: |
   then for each principal ID:
   `az role assignment list --assignee <principal-id> -o table`
   must return at least one row.
+fix_hcl: |
+  resource "azurerm_role_assignment" "example" {
+    scope                = azurerm_storage_account.example.id
+    role_definition_name = "Storage Blob Data Reader"
+    principal_id         = azurerm_user_assigned_identity.example.principal_id
+  }
+fix_disruption: none
 fixtures:
   - azure_uami_orphan

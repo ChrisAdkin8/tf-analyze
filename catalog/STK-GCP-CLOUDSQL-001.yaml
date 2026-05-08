@@ -23,5 +23,22 @@ verification: |
 escalation:
   - condition: "is_production_environment"
     new_urgency: CRITICAL
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    name             = "example"
+    database_version = "POSTGRES_15"
+    settings {
+      tier = "db-f1-micro"
+      backup_configuration {
+        enabled                        = true
+        start_time                     = "02:00"
+        point_in_time_recovery_enabled = true
+        backup_retention_settings {
+          retained_backups = 7
+        }
+      }
+    }
+  }
+fix_disruption: none
 fixtures:
   - cloudsql_no_backup

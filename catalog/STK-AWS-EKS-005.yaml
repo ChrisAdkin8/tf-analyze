@@ -55,5 +55,15 @@ verification: |
     --query 'cluster.logging.clusterLogging[?enabled==`true`].types[]'
   ```
   Output must include `audit` and `authenticator`.
+fix_hcl: |
+  resource "aws_eks_cluster" "example" {
+    name     = "example"
+    role_arn = aws_iam_role.eks.arn
+    enabled_cluster_log_types = [
+      "api", "audit", "authenticator", "controllerManager", "scheduler"
+    ]
+    vpc_config { subnet_ids = var.subnet_ids }
+  }
+fix_disruption: none
 fixtures:
   - aws_eks_partial_logging

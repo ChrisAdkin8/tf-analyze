@@ -37,5 +37,21 @@ verification: |
   and
   `az aks show ... --query 'securityProfile.workloadIdentity.enabled'`
   both must return `true`.
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    dns_prefix          = "example"
+    oidc_issuer_enabled       = true
+    workload_identity_enabled = true
+    default_node_pool {
+      name       = "default"
+      node_count = 1
+      vm_size    = "Standard_D2_v2"
+    }
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: plan_required
 fixtures:
   - azure_aks_no_workload_identity

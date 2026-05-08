@@ -41,5 +41,12 @@ pci_dss:
   - "Req-7.1"
 soc2_cc:
   - "CC6.1"
+fix_hcl: |
+  resource "azurerm_role_assignment" "example" {
+    scope                = azurerm_resource_group.example.id
+    role_definition_name = "Contributor"
+    principal_id         = azurerm_user_assigned_identity.example.principal_id
+  }
+fix_disruption: none
 fixtures:
   - azure_role_assignment_subscription

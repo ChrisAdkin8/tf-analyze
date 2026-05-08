@@ -1,0 +1,56 @@
+id: SEC-AWS-ES-003
+title: "OpenSearch domain missing fine-grained access control"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.1"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_opensearch_domain
+    arg: advanced_security_options
+    nested_path: advanced_security_options.enabled
+    description: |
+      `aws_opensearch_domain` has no `advanced_security_options { enabled = true }`.
+      Without fine-grained access control (FGAC), every request that passes the
+      network-level controls has full read/write access to all indices. FGAC maps
+      IAM principals or HTTP basic auth credentials to document-level or index-level
+      permissions, implementing least-privilege access inside the cluster.
+recommendation: |
+  Enable fine-grained access control with IAM authentication:
+
+      resource "aws_opensearch_domain" "main" {
+        # ...
+        advanced_security_options {
+          enabled                        = true
+          anonymous_auth_enabled         = false
+          internal_user_database_enabled = false
+          master_user_options {
+            master_user_arn = aws_iam_role.opensearch_admin.arn
+          }
+        }
+        access_policies = data.aws_iam_policy_document.opensearch.json
+      }
+verification: |
+  `aws opensearch describe-domain --domain-name <name> \
+    --query 'DomainStatus.AdvancedSecurityOptions.Enabled'`
+  must return `true`.
+fix_hcl: |
+  resource "aws_opensearch_domain" "example" {
+    domain_name    = "example"
+    engine_version = "OpenSearch_2.11"
+    advanced_security_options {
+      enabled                        = true
+      anonymous_auth_enabled         = false
+      internal_user_database_enabled = false
+      master_user_options {
+        master_user_arn = aws_iam_role.opensearch_admin.arn
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_opensearch_no_fgac

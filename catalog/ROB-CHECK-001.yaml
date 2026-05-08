@@ -34,5 +34,16 @@ verification: |
 related:
   - ROB-VALIDATION-001
   - ROB-PRECONDITION-001
+fix_hcl: |
+  check "health_check" {
+    data "http" "example" {
+      url = "https://${aws_lb.example.dns_name}/health"
+    }
+    assert {
+      condition     = data.http.example.status_code == 200
+      error_message = "Health endpoint returned ${data.http.example.status_code}, expected 200"
+    }
+  }
+fix_disruption: none
 fixtures:
   - check_block_no_assert

@@ -29,6 +29,15 @@ recommendation: |
 verification: |
   `aws s3api get-public-access-block --bucket <name>`
   must show all four settings as `true`.
+fix_hcl: |
+  resource "aws_s3_bucket_public_access_block" "example" {
+    bucket                  = aws_s3_bucket.example.id
+    block_public_acls       = true
+    block_public_policy     = true
+    ignore_public_acls      = true
+    restrict_public_buckets = true
+  }
+fix_disruption: none
 fixtures:
   - attack_graph_demo
   - aws_s3_no_public_block

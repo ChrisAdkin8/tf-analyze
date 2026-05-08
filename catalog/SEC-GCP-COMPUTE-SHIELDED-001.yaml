@@ -33,5 +33,21 @@ verification: |
   must show `enableSecureBoot: true`. Re-run tf-analyze in mode:verify-fixed.
 related:
   - STK-GCP-GKE-NODEPOOL-001
+fix_hcl: |
+  resource "google_compute_instance" "example" {
+    name         = "example"
+    machine_type = "e2-medium"
+    zone         = "us-central1-a"
+    boot_disk {
+      initialize_params { image = "debian-cloud/debian-11" }
+    }
+    network_interface { network = "default" }
+    shielded_instance_config {
+      enable_secure_boot          = true
+      enable_vtpm                 = true
+      enable_integrity_monitoring = true
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - gcp_compute_no_shielded

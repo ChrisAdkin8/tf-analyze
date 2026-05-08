@@ -1,0 +1,41 @@
+id: ROB-AWS-REDSHIFT-001
+title: "Redshift cluster has no automated snapshot retention"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+soc2_cc:
+  - "A1.2"
+patterns:
+  - kind: resource_arg
+    resource: aws_redshift_cluster
+    arg: automated_snapshot_retention_period
+    regex: '^0$'
+    fire_if_absent: false
+    description: |
+      `aws_redshift_cluster` has `automated_snapshot_retention_period = 0`.
+      Setting retention to 0 disables automated snapshots entirely. Without
+      snapshots, accidental data deletion or cluster corruption cannot be
+      recovered without a full reload from source systems.
+recommendation: |
+  Set a non-zero retention period:
+
+      resource "aws_redshift_cluster" "main" {
+        # ...
+        automated_snapshot_retention_period = 7
+      }
+
+  Maximum is 35 days. For longer-term retention, copy snapshots to S3 via
+  `aws_redshift_snapshot_copy_grant`.
+verification: |
+  `aws redshift describe-clusters --cluster-identifier <id> \
+    --query 'Clusters[*].AutomatedSnapshotRetentionPeriod'`
+  must return a value greater than 0.
+fix_hcl: |
+  resource "aws_redshift_cluster" "example" {
+    cluster_identifier                  = "example"
+    automated_snapshot_retention_period = 7
+  }
+fix_disruption: none
+fixtures:
+  - aws_redshift_no_snapshots

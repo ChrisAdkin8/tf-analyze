@@ -44,5 +44,23 @@ verification: |
   .gserviceaccount.com`.
 related:
   - SEC-IAM-001
+fix_hcl: |
+  resource "google_service_account" "vm" {
+    account_id = "vm-runtime"
+  }
+  resource "google_compute_instance" "example" {
+    name         = "example"
+    machine_type = "e2-medium"
+    zone         = "us-central1-a"
+    boot_disk {
+      initialize_params { image = "debian-cloud/debian-11" }
+    }
+    network_interface { network = "default" }
+    service_account {
+      email  = google_service_account.vm.email
+      scopes = ["cloud-platform"]
+    }
+  }
+fix_disruption: none
 fixtures:
   - compute_default_sa

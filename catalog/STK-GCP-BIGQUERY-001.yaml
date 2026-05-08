@@ -26,5 +26,14 @@ recommendation: |
 verification: |
   `bq show --format=prettyjson <dataset> | jq '.defaultEncryptionConfiguration'`
   must return a key reference, not `null`.
+fix_hcl: |
+  resource "google_bigquery_dataset" "example" {
+    dataset_id = "example"
+    location   = "US"
+    default_encryption_configuration {
+      kms_key_name = google_kms_crypto_key.bq.id
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - bigquery_no_cmek

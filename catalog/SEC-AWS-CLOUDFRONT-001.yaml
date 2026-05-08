@@ -36,5 +36,19 @@ verification: |
     --query 'Distribution.DistributionConfig.DefaultCacheBehavior.ViewerProtocolPolicy'`
   must return `redirect-to-https` or `https-only`. Repeat for every
   `CacheBehaviors.Items[*].ViewerProtocolPolicy`.
+fix_hcl: |
+  resource "aws_cloudfront_distribution" "example" {
+    default_cache_behavior {
+      viewer_protocol_policy = "redirect-to-https"
+      allowed_methods        = ["GET", "HEAD"]
+      cached_methods         = ["GET", "HEAD"]
+      target_origin_id       = "example"
+      forwarded_values {
+        query_string = false
+        cookies { forward = "none" }
+      }
+    }
+  }
+fix_disruption: none
 fixtures:
   - aws_cloudfront_allow_all

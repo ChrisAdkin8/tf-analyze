@@ -36,5 +36,23 @@ recommendation: |
 verification: |
   `aws ecr describe-lifecycle-policy --repository-name <name>` must return
   a non-empty policy. Re-run tf-analyze in mode:verify-fixed.
+fix_hcl: |
+  resource "aws_ecr_lifecycle_policy" "example" {
+    repository = aws_ecr_repository.example.name
+    policy = jsonencode({
+      rules = [{
+        rulePriority = 1
+        description  = "Expire untagged images after 30 days"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 30
+        }
+        action = { type = "expire" }
+      }]
+    })
+  }
+fix_disruption: none
 fixtures:
   - aws_ecr_no_lifecycle

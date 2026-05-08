@@ -32,5 +32,17 @@ verification: |
   `gcloud container clusters describe <name> \
     --format='value(masterAuthorizedNetworksConfig.cidrBlocks)'`
   must return at least one CIDR entry.
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name     = "example"
+    location = "us-central1"
+    master_authorized_networks_config {
+      cidr_blocks {
+        cidr_block   = "203.0.113.0/24"
+        display_name = "corporate-vpn"
+      }
+    }
+  }
+fix_disruption: none
 fixtures:
   - gke_no_master_auth_networks

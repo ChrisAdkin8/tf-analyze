@@ -42,5 +42,21 @@ verification: |
     --query 'attributes.{Expires:expires,Created:created}'`
   Confirm a rotation policy exists in the Azure Portal:
   Key Vault → Keys → <key> → Rotation policy.
+fix_hcl: |
+  resource "azurerm_key_vault_key" "example" {
+    name         = "example"
+    key_vault_id = azurerm_key_vault.example.id
+    key_type     = "RSA"
+    key_size     = 2048
+    key_opts     = ["decrypt", "encrypt", "sign", "verify"]
+    rotation_policy {
+      automatic {
+        time_before_expiry = "P30D"
+      }
+      expire_after         = "P90D"
+      notify_before_expiry = "P29D"
+    }
+  }
+fix_disruption: none
 fixtures:
   - azure_kv_key_no_rotation

@@ -15,5 +15,15 @@ recommendation: |
 verification: |
   Run `terraform plan -var=<name>=<bad-value>` and confirm Terraform
   rejects the input with the validation error message.
+fix_hcl: |
+  variable "environment" {
+    type        = string
+    description = "Deployment environment"
+    validation {
+      condition     = contains(["dev", "staging", "prod"], var.environment)
+      error_message = "environment must be one of: dev, staging, prod"
+    }
+  }
+fix_disruption: none
 fixtures:
   - no_validation_blocks

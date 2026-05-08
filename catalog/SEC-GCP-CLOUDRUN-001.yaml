@@ -32,5 +32,17 @@ verification: |
   `gcloud run services describe <name> --region <region> \
     --format='value(metadata.annotations[run.googleapis.com/ingress])'`
   must not return `all`.
+fix_hcl: |
+  resource "google_cloud_run_v2_service" "example" {
+    name     = "example"
+    location = "us-central1"
+    ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+    template {
+      containers {
+        image = "gcr.io/example/app:latest"
+      }
+    }
+  }
+fix_disruption: none
 fixtures:
   - cloudrun_public_ingress

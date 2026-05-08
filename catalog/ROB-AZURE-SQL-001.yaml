@@ -30,5 +30,15 @@ verification: |
         --query retentionDays
 
   The value should be >= 14 for non-prod and >= 35 for production.
+fix_hcl: |
+  resource "azurerm_mssql_database" "example" {
+    name      = "example"
+    server_id = azurerm_mssql_server.example.id
+    short_term_retention_policy {
+      retention_days           = 35
+      backup_interval_in_hours = 12
+    }
+  }
+fix_disruption: none
 fixtures:
   - azure_sql_no_backup

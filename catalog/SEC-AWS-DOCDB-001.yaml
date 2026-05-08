@@ -1,0 +1,44 @@
+id: SEC-AWS-DOCDB-001
+title: "DocumentDB cluster storage not encrypted"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_arg
+    resource: aws_docdb_cluster
+    arg: storage_encrypted
+    not_regex: '^true$'
+    fire_if_absent: true
+    description: |
+      `aws_docdb_cluster` has `storage_encrypted = false` or the attribute
+      is absent. DocumentDB defaults to unencrypted storage. Sensitive
+      application data stored in DocumentDB collections is exposed to anyone
+      with access to the underlying EBS volumes.
+recommendation: |
+  Enable storage encryption:
+
+      resource "aws_docdb_cluster" "main" {
+        cluster_identifier      = "main"
+        storage_encrypted       = true
+        kms_key_id              = aws_kms_key.docdb.arn
+      }
+
+  Encryption can only be configured at cluster creation.
+verification: |
+  `aws docdb describe-db-clusters --db-cluster-identifier <id> \
+    --query 'DBClusters[*].StorageEncrypted'`
+  must return `true`.
+fix_hcl: |
+  resource "aws_docdb_cluster" "example" {
+    cluster_identifier = "example"
+    storage_encrypted  = true
+    kms_key_id         = aws_kms_key.docdb.arn
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_docdb_no_encryption

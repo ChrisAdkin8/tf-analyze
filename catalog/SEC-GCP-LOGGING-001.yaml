@@ -23,5 +23,14 @@ pci_dss:
   - "Req-10.2"
 soc2_cc:
   - "CC7.2"
+fix_hcl: |
+  resource "google_project_iam_audit_config" "all_services" {
+    project = var.project_id
+    service = "allServices"
+    audit_log_config { log_type = "ADMIN_READ" }
+    audit_log_config { log_type = "DATA_READ" }
+    audit_log_config { log_type = "DATA_WRITE" }
+  }
+fix_disruption: none
 fixtures:
   - audit_logs_missing

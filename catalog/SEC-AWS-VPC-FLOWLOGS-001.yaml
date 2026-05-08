@@ -28,5 +28,13 @@ verification: |
   In the AWS console, VPC → Your VPCs → select VPC → Flow logs tab.
   At least one active flow log must be present. Or:
   `aws ec2 describe-flow-logs --filter Name=resource-id,Values=<vpc-id>`
+fix_hcl: |
+  resource "aws_flow_log" "example" {
+    vpc_id          = aws_vpc.example.id
+    traffic_type    = "ALL"
+    iam_role_arn    = aws_iam_role.flow_log.arn
+    log_destination = aws_cloudwatch_log_group.flow_log.arn
+  }
+fix_disruption: none
 fixtures:
   - aws_vpc_no_flow_logs

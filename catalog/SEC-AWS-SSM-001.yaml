@@ -1,0 +1,51 @@
+id: SEC-AWS-SSM-001
+title: "SSM Parameter Store parameter not encrypted as SecureString"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - id: "3.10"
+    title: "Ensure that encryption at rest is enabled for SSM parameters"
+pci_dss:
+  - "Req-3.5"
+soc2_cc:
+  - "CC6.1"
+patterns:
+  - kind: resource_arg
+    resource: aws_ssm_parameter
+    arg: type
+    regex: '^(?:String|StringList)$'
+    description: |
+      `aws_ssm_parameter` has `type = "String"` or `type = "StringList"`.
+      Parameters of these types are stored and transmitted in plaintext.
+      Any IAM principal with `ssm:GetParameter` access can retrieve the value
+      without any decryption key, and the value appears in CloudTrail logs.
+      Credentials, API keys, and configuration secrets must use `SecureString`.
+recommendation: |
+  Use `type = "SecureString"` with a customer-managed KMS key for any
+  parameter that contains sensitive data:
+
+      resource "aws_ssm_parameter" "db_password" {
+        name   = "/app/db/password"
+        type   = "SecureString"
+        value  = var.db_password
+        key_id = aws_kms_key.ssm.arn
+      }
+
+  `String` and `StringList` are acceptable only for non-sensitive configuration
+  values (e.g., environment name, region, feature flags).
+verification: |
+  `aws ssm describe-parameters --filters 'Key=Name,Values=<name>' \
+    --query 'Parameters[*].Type'`
+  must return `SecureString`.
+fix_hcl: |
+  resource "aws_ssm_parameter" "example" {
+    name   = "/app/secret"
+    type   = "SecureString"
+    value  = var.secret_value
+    key_id = aws_kms_key.ssm.arn
+  }
+fix_disruption: none
+fixtures:
+  - aws_ssm_parameter_plaintext

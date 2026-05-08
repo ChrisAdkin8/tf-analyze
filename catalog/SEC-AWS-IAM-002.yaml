@@ -37,5 +37,18 @@ pci_dss:
   - "Req-7.1"
 soc2_cc:
   - "CC6.1"
+fix_hcl: |
+  resource "aws_iam_role" "example" {
+    name = "example"
+    assume_role_policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect    = "Allow"
+        Principal = { Service = "lambda.amazonaws.com" }
+        Action    = "sts:AssumeRole"
+      }]
+    })
+  }
+fix_disruption: none
 fixtures:
   - aws_iam_wildcard_principal

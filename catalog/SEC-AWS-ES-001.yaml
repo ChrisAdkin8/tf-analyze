@@ -1,0 +1,61 @@
+id: SEC-AWS-ES-001
+title: "OpenSearch / Elasticsearch domain missing encryption at rest"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - id: "2.7"
+    title: "Ensure that OpenSearch domains have encryption at rest enabled"
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_opensearch_domain
+    arg: encrypt_at_rest
+    nested_path: encrypt_at_rest.enabled
+    description: |
+      `aws_opensearch_domain` has no `encrypt_at_rest { enabled = true }` block.
+      Without encryption at rest, index data, automated snapshots, and slow logs
+      are stored in plaintext on the underlying EBS volumes. Physical or
+      administrative access to the underlying infrastructure bypasses all
+      application-layer access controls.
+  - kind: resource_missing_arg
+    resource: aws_elasticsearch_domain
+    arg: encrypt_at_rest
+    nested_path: encrypt_at_rest.enabled
+    description: |
+      `aws_elasticsearch_domain` (legacy resource) has no `encrypt_at_rest { enabled = true }`.
+recommendation: |
+  Enable encryption at rest with a customer-managed KMS key:
+
+      resource "aws_opensearch_domain" "main" {
+        domain_name    = "main"
+        engine_version = "OpenSearch_2.11"
+
+        encrypt_at_rest {
+          enabled    = true
+          kms_key_id = aws_kms_key.es.arn
+        }
+      }
+
+  Note: changing this setting on an existing domain requires a blue/green
+  deployment — plan accordingly.
+verification: |
+  `aws opensearch describe-domain --domain-name <name> \
+    --query 'DomainStatus.EncryptionAtRestOptions'`
+  must show `Enabled: true`.
+fix_hcl: |
+  resource "aws_opensearch_domain" "example" {
+    domain_name    = "example"
+    engine_version = "OpenSearch_2.11"
+    encrypt_at_rest {
+      enabled    = true
+      kms_key_id = aws_kms_key.es.arn
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_opensearch_no_encrypt_at_rest

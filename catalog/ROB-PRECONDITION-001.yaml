@@ -30,5 +30,17 @@ verification: |
 related:
   - ROB-VALIDATION-001
   - ROB-CHECK-001
+fix_hcl: |
+  resource "aws_instance" "example" {
+    ami           = var.ami_id
+    instance_type = var.instance_type
+    lifecycle {
+      precondition {
+        condition     = can(regex("^ami-", var.ami_id))
+        error_message = "ami_id must start with 'ami-' (got: ${var.ami_id})"
+      }
+    }
+  }
+fix_disruption: none
 fixtures:
   - precondition_no_error_message

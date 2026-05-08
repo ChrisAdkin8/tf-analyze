@@ -22,5 +22,15 @@ recommendation: |
 verification: |
   `gcloud container clusters describe <name> --format='value(databaseEncryption.state)'`
   must return `ENCRYPTED`.
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name     = "example"
+    location = "us-central1"
+    database_encryption {
+      state    = "ENCRYPTED"
+      key_name = google_kms_crypto_key.gke.id
+    }
+  }
+fix_disruption: plan_required
 fixtures:
   - gke_no_secrets_encryption

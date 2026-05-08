@@ -68,5 +68,18 @@ verification: |
     --format="table(name,allowed[].map().firewall_key():label=ALLOW,sourceRanges)"` —
   confirm no row has `0.0.0.0/0` in source ranges and a database port in
   the allow column. Re-run tf-analyze; SEC-GCP-NETWORK-004 must not fire.
+fix_hcl: |
+  resource "google_compute_firewall" "db_internal" {
+    name          = "allow-db-internal"
+    network       = google_compute_network.vpc.id
+    direction     = "INGRESS"
+    source_ranges = [google_compute_subnetwork.app.ip_cidr_range]
+    allow {
+      protocol = "tcp"
+      ports    = ["5432"]
+    }
+    target_tags = ["db"]
+  }
+fix_disruption: none
 fixtures:
   - gcp_firewall_db_port

@@ -1,0 +1,44 @@
+id: SEC-AWS-NEPTUNE-001
+title: "Neptune cluster storage not encrypted"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_arg
+    resource: aws_neptune_cluster
+    arg: storage_encrypted
+    not_regex: '^true$'
+    fire_if_absent: true
+    description: |
+      `aws_neptune_cluster` has `storage_encrypted = false` or the attribute
+      is absent. Neptune defaults to unencrypted storage. Graph data — which
+      frequently models sensitive relationships between entities — is exposed
+      to anyone with access to the underlying storage layer.
+recommendation: |
+  Enable storage encryption at cluster creation:
+
+      resource "aws_neptune_cluster" "main" {
+        cluster_identifier  = "main"
+        storage_encrypted   = true
+        neptune_kms_key_arn = aws_kms_key.neptune.arn
+      }
+
+  Encryption can only be enabled at cluster creation time.
+verification: |
+  `aws neptune describe-db-clusters --db-cluster-identifier <id> \
+    --query 'DBClusters[*].StorageEncrypted'`
+  must return `true`.
+fix_hcl: |
+  resource "aws_neptune_cluster" "example" {
+    cluster_identifier  = "example"
+    storage_encrypted   = true
+    neptune_kms_key_arn = aws_kms_key.neptune.arn
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_neptune_no_encryption

@@ -27,5 +27,14 @@ recommendation: |
 verification: |
   `gcloud dns managed-zones describe <name> --format='value(dnssecConfig.state)'`
   must return `on`.
+fix_hcl: |
+  resource "google_dns_managed_zone" "example" {
+    name     = "example"
+    dns_name = "example.com."
+    dnssec_config {
+      state = "on"
+    }
+  }
+fix_disruption: none
 fixtures:
   - dns_no_dnssec

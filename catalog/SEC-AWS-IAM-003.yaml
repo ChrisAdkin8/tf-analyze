@@ -1,0 +1,65 @@
+id: SEC-AWS-IAM-003
+title: "IAM account password policy is not configured or too weak"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+cis:
+  - id: "1.8"
+    title: "Ensure IAM password policy requires minimum length of 14"
+  - id: "1.9"
+    title: "Ensure IAM password policy prevents password reuse"
+pci_dss:
+  - "Req-8.3"
+soc2_cc:
+  - "CC6.1"
+patterns:
+  - kind: resource_absent
+    resource: aws_iam_account_password_policy
+    when_present: aws_iam_user
+    description: |
+      No `aws_iam_account_password_policy` is defined but IAM users exist.
+      Without an explicit password policy, AWS applies a minimal default: 8-character
+      minimum, no complexity requirement, no reuse prevention. CIS AWS Foundations
+      1.8–1.14 require a 14-character minimum, uppercase/lowercase/number/symbol
+      requirements, 90-day expiry, and 24-password reuse prevention.
+  - kind: resource_arg
+    resource: aws_iam_account_password_policy
+    arg: minimum_password_length
+    not_regex: '^(1[4-9]|[2-9]\d|\d{3,})$'
+    fire_if_absent: true
+    description: |
+      `aws_iam_account_password_policy` has `minimum_password_length` below 14.
+      CIS AWS Foundations 1.8 requires a minimum of 14 characters.
+recommendation: |
+  Define a strong password policy:
+
+      resource "aws_iam_account_password_policy" "strict" {
+        minimum_password_length        = 14
+        require_lowercase_characters   = true
+        require_numbers                = true
+        require_uppercase_characters   = true
+        require_symbols                = true
+        allow_users_to_change_password = true
+        password_reuse_prevention      = 24
+        max_password_age               = 90
+        hard_expiry                    = false
+      }
+verification: |
+  `aws iam get-account-password-policy \
+    --query 'PasswordPolicy.MinimumPasswordLength'`
+  must return 14 or greater.
+fix_hcl: |
+  resource "aws_iam_account_password_policy" "strict" {
+    minimum_password_length        = 14
+    require_lowercase_characters   = true
+    require_numbers                = true
+    require_uppercase_characters   = true
+    require_symbols                = true
+    allow_users_to_change_password = true
+    password_reuse_prevention      = 24
+    max_password_age               = 90
+  }
+fix_disruption: none
+fixtures:
+  - aws_iam_weak_password_policy

@@ -22,5 +22,16 @@ recommendation: |
 verification: |
   Run `terraform plan` after narrowing the ignore list. Any new diff lines
   are real drift that was previously hidden.
+fix_hcl: |
+  resource "aws_autoscaling_group" "example" {
+    name = "example"
+    lifecycle {
+      ignore_changes = [
+        desired_capacity,
+        tag,
+      ]
+    }
+  }
+fix_disruption: none
 fixtures:
   - ignore_changes_all

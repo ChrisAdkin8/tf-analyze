@@ -36,5 +36,18 @@ verification: |
   should return zero rows.
 related:
   - SEC-GCP-NETWORK-001
+fix_hcl: |
+  resource "google_compute_firewall" "iap_rdp" {
+    name          = "iap-rdp"
+    network       = google_compute_network.vpc.id
+    direction     = "INGRESS"
+    source_ranges = ["35.235.240.0/20"]
+    allow {
+      protocol = "tcp"
+      ports    = ["3389"]
+    }
+    target_tags = ["iap-rdp"]
+  }
+fix_disruption: none
 fixtures:
   - firewall_open_rdp

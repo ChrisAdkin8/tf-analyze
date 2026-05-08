@@ -1,0 +1,64 @@
+id: SEC-AWS-MSK-001
+title: "MSK cluster allows unencrypted client-broker traffic"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - id: "3.9"
+    title: "Ensure MSK clusters use TLS for client-broker encryption"
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_arg
+    resource: aws_msk_cluster
+    arg: client_broker
+    regex: '^(PLAINTEXT|TLS_PLAINTEXT)$'
+    nested_path: encryption_info.encryption_in_transit.client_broker
+    description: |
+      `aws_msk_cluster` has `client_broker` set to `PLAINTEXT` or `TLS_PLAINTEXT`.
+      Kafka clients connecting over unencrypted channels expose messages, credentials,
+      and schema data to network eavesdroppers. Set `client_broker = "TLS"` to require
+      TLS for all client-to-broker communication.
+  - kind: resource_missing_arg
+    resource: aws_msk_cluster
+    arg: client_broker
+    nested_path: encryption_info.encryption_in_transit.client_broker
+    description: |
+      `aws_msk_cluster` has no `encryption_in_transit` block. The default
+      `client_broker` value is `TLS_PLAINTEXT`, which allows plaintext connections.
+      Explicitly set `client_broker = "TLS"` to enforce encryption.
+recommendation: |
+  Require TLS for all client-broker connections:
+
+      resource "aws_msk_cluster" "main" {
+        # ...
+        encryption_info {
+          encryption_in_transit {
+            client_broker = "TLS"
+            in_cluster    = true
+          }
+          encryption_at_rest {
+            encryption_at_rest_kms_key_arn = aws_kms_key.msk.arn
+          }
+        }
+      }
+verification: |
+  `aws kafka describe-cluster --cluster-arn <arn> \
+    --query 'ClusterInfo.EncryptionInfo.EncryptionInTransit.ClientBroker'`
+  must return `"TLS"`.
+fix_hcl: |
+  resource "aws_msk_cluster" "example" {
+    cluster_name = "example"
+    encryption_info {
+      encryption_in_transit {
+        client_broker = "TLS"
+        in_cluster    = true
+      }
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - aws_msk_plaintext

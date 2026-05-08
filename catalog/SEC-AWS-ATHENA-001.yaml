@@ -1,0 +1,58 @@
+id: SEC-AWS-ATHENA-001
+title: "Athena workgroup results not encrypted"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_athena_workgroup
+    arg: encryption_option
+    nested_path: configuration.result_configuration.encryption_configuration.encryption_option
+    description: |
+      `aws_athena_workgroup` has no `encryption_configuration` in its
+      `result_configuration` block. Query results written to S3 use
+      SSE-S3 by default but this can be overridden by individual users.
+      Locking encryption at the workgroup level with SSE-KMS ensures
+      results are always encrypted with a customer-controlled key and
+      the setting cannot be bypassed.
+recommendation: |
+  Enforce SSE-KMS encryption at the workgroup level:
+
+      resource "aws_athena_workgroup" "main" {
+        name = "main"
+        configuration {
+          enforce_workgroup_configuration = true
+          result_configuration {
+            output_location = "s3://${aws_s3_bucket.results.bucket}/output/"
+            encryption_configuration {
+              encryption_option = "SSE_KMS"
+              kms_key_arn       = aws_kms_key.athena.arn
+            }
+          }
+        }
+      }
+verification: |
+  `aws athena get-work-group --work-group <name> \
+    --query 'WorkGroup.Configuration.ResultConfiguration.EncryptionConfiguration.EncryptionOption'`
+  must return `"SSE_KMS"`.
+fix_hcl: |
+  resource "aws_athena_workgroup" "example" {
+    name = "example"
+    configuration {
+      enforce_workgroup_configuration = true
+      result_configuration {
+        encryption_configuration {
+          encryption_option = "SSE_KMS"
+          kms_key_arn       = aws_kms_key.athena.arn
+        }
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - aws_athena_no_encryption

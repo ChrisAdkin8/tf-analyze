@@ -48,6 +48,13 @@ verification: |
   `aws s3api get-bucket-logging --bucket <name>` must return a
   `LoggingEnabled` key. After applying, confirm logs appear in the
   target bucket within a few minutes of S3 activity.
+fix_hcl: |
+  resource "aws_s3_bucket_logging" "example" {
+    bucket        = aws_s3_bucket.example.id
+    target_bucket = aws_s3_bucket.logs.id
+    target_prefix = "access-logs/"
+  }
+fix_disruption: none
 fixtures:
   - attack_graph_demo
   - aws_s3_no_logging

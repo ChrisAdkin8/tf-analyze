@@ -40,5 +40,16 @@ verification: |
   `aws eks describe-cluster --name <name> \
     --query 'cluster.encryptionConfig'`
   must return a non-empty list with `resources: ["secrets"]`.
+fix_hcl: |
+  resource "aws_eks_cluster" "example" {
+    name     = "example"
+    role_arn = aws_iam_role.eks.arn
+    encryption_config {
+      provider { key_arn = aws_kms_key.eks.arn }
+      resources = ["secrets"]
+    }
+    vpc_config { subnet_ids = var.subnet_ids }
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_eks_no_secrets_encrypt

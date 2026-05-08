@@ -35,5 +35,22 @@ verification: |
   `az aks show --name <cluster> --resource-group <rg> \
     --query 'apiServerAccessProfile.authorizedIpRanges'`
   must return a non-empty list.
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    dns_prefix          = "example"
+    api_server_access_profile {
+      authorized_ip_ranges = ["203.0.113.0/24"]
+    }
+    default_node_pool {
+      name       = "default"
+      node_count = 1
+      vm_size    = "Standard_D2_v2"
+    }
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: none
 fixtures:
   - azure_aks_no_ip_ranges

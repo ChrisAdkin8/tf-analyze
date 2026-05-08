@@ -1,0 +1,46 @@
+id: SEC-AWS-BACKUP-001
+title: "Backup vault uses AWS-managed key (no CMK)"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_backup_vault
+    arg: kms_key_arn
+    description: |
+      `aws_backup_vault` has no `kms_key_arn`. Backup vaults encrypt recovery
+      points by default using the AWS-managed key (`aws/backup`), which cannot
+      be restricted or rotated on demand. A customer-managed KMS key enables
+      key policy enforcement, access auditing, and independent key lifecycle
+      management. Without a CMK, anyone with `backup:GetRecoveryPointRestoreMetadata`
+      can decrypt backup data using the shared AWS key.
+recommendation: |
+  Specify a customer-managed KMS key for the backup vault:
+
+      resource "aws_backup_vault" "main" {
+        name        = "main"
+        kms_key_arn = aws_kms_key.backup.arn
+      }
+
+      resource "aws_kms_key" "backup" {
+        description             = "CMK for AWS Backup vault"
+        enable_key_rotation     = true
+        deletion_window_in_days = 30
+      }
+verification: |
+  `aws backup describe-backup-vault --backup-vault-name <name> \
+    --query 'EncryptionKeyArn'`
+  must return your CMK ARN, not arn:aws:kms:...:alias/aws/backup.
+fix_hcl: |
+  resource "aws_backup_vault" "example" {
+    name        = "example"
+    kms_key_arn = aws_kms_key.backup.arn
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_backup_vault_no_cmk

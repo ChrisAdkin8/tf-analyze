@@ -28,5 +28,14 @@ verification: |
   `aws rds describe-db-instances --db-instance-identifier <id> \
     --query 'DBInstances[0].EngineVersion'`
   must return a currently supported version string.
+fix_hcl: |
+  resource "aws_db_instance" "example" {
+    engine         = "postgres"
+    engine_version = "16.2"
+    instance_class = "db.t3.medium"
+    username       = "admin"
+    password       = var.db_password
+  }
+fix_disruption: plan_required
 fixtures:
   - aws_rds_eol_version

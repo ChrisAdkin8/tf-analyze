@@ -31,5 +31,12 @@ verification: |
   Run `terraform plan` and confirm the rendered value is identical
   (`diff <(terraform console <<< 'data.template_file.init.rendered')
   <(terraform console <<< 'local.init')`).
+fix_hcl: |
+  locals {
+    user_data = templatefile("${path.module}/user_data.sh.tpl", {
+      environment = var.environment
+    })
+  }
+fix_disruption: none
 fixtures:
   - deprecated_template_file

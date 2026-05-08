@@ -1,0 +1,62 @@
+id: SEC-AWS-ALB-001
+title: "Load balancer access logs disabled"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - id: "2.6"
+    title: "Ensure that S3 buckets are configured with 'Block public access'"
+pci_dss:
+  - "Req-10.2"
+soc2_cc:
+  - "CC7.2"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_lb
+    arg: access_logs
+    nested_path: access_logs.enabled
+    description: |
+      `aws_lb` has no `access_logs` block, or `access_logs.enabled` is absent/false.
+      Without access logs, there is no record of which clients reached the load
+      balancer, what paths they requested, or which backend targets served them.
+      Access logs are essential for incident response, DDoS attribution, and
+      compliance audits.
+  - kind: resource_missing_arg
+    resource: aws_alb
+    arg: access_logs
+    nested_path: access_logs.enabled
+    description: |
+      `aws_alb` (legacy alias) has access logs disabled.
+recommendation: |
+  Enable access logs and point them at an S3 bucket with appropriate retention:
+
+      resource "aws_lb" "main" {
+        # ...
+        access_logs {
+          bucket  = aws_s3_bucket.alb_logs.id
+          prefix  = "main-lb"
+          enabled = true
+        }
+      }
+
+  The S3 bucket must have a bucket policy granting the ELB service account
+  `s3:PutObject` permission.
+verification: |
+  `aws elbv2 describe-load-balancer-attributes \
+    --load-balancer-arn <arn> \
+    --query 'Attributes[?Key==\`access_logs.s3.enabled\`].Value'`
+  must return `"true"`.
+fix_hcl: |
+  resource "aws_lb" "example" {
+    name               = "example"
+    load_balancer_type = "application"
+    access_logs {
+      bucket  = aws_s3_bucket.logs.id
+      prefix  = "alb"
+      enabled = true
+    }
+  }
+fix_disruption: none
+fixtures:
+  - aws_alb_no_access_logs

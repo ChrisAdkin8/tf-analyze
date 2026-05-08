@@ -29,5 +29,17 @@ verification: |
   Run two simultaneous `terraform plan` invocations and confirm the
   second is blocked with "Error acquiring the state lock". Or check the
   DynamoDB table in the AWS console for an active lock entry.
+fix_hcl: |
+  terraform {
+    backend "s3" {
+      bucket         = "my-tf-state"
+      key            = "env/prod/terraform.tfstate"
+      region         = "us-east-1"
+      encrypt        = true
+      dynamodb_table = "terraform-state-lock"
+      kms_key_id     = "alias/terraform-state"
+    }
+  }
+fix_disruption: none
 fixtures:
   - aws_s3_backend_no_lock

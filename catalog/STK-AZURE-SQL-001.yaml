@@ -50,5 +50,16 @@ verification: |
   remain in any Terraform state file. Check the Azure Portal: "Azure Database
   for MySQL — Single Server" and "Azure Database for PostgreSQL — Single
   Server" should show no instances.
+fix_hcl: |
+  resource "azurerm_mysql_flexible_server" "example" {
+    name                   = "example"
+    resource_group_name    = azurerm_resource_group.example.name
+    location               = azurerm_resource_group.example.location
+    administrator_login    = "adminuser"
+    administrator_password = var.db_password
+    sku_name               = "GP_Standard_D2ds_v4"
+    version                = "8.0.21"
+  }
+fix_disruption: forces_replacement
 fixtures:
   - azure_sql_deprecated_server

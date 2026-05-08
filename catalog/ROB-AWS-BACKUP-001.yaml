@@ -1,0 +1,69 @@
+id: ROB-AWS-BACKUP-001
+title: "No AWS Backup plan defined"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+pci_dss:
+  - "Req-9.5"
+soc2_cc:
+  - "A1.2"
+patterns:
+  - kind: resource_absent
+    resource: aws_backup_plan
+    when_present: aws_iam_role
+    description: |
+      No `aws_backup_plan` is defined in this Terraform configuration.
+      Without a backup plan, data on EBS volumes, RDS databases, DynamoDB tables,
+      and EFS file systems is not protected by automated backups. Recovery from
+      accidental deletion or ransomware requires either a manual ad-hoc backup
+      (slow, error-prone) or a prior backup taken outside this plan.
+recommendation: |
+  Define a backup plan with appropriate retention:
+
+      resource "aws_backup_plan" "main" {
+        name = "main"
+
+        rule {
+          rule_name         = "daily_30d"
+          target_vault_name = aws_backup_vault.main.name
+          schedule          = "cron(0 5 ? * * *)"
+
+          lifecycle {
+            delete_after = 30
+          }
+
+          copy_action {
+            destination_vault_arn = aws_backup_vault.dr_region.arn
+            lifecycle { delete_after = 90 }
+          }
+        }
+      }
+
+      resource "aws_backup_selection" "all_tagged" {
+        plan_id      = aws_backup_plan.main.id
+        name         = "all_tagged_resources"
+        iam_role_arn = aws_iam_role.backup.arn
+
+        selection_tag {
+          type  = "STRINGEQUALS"
+          key   = "backup"
+          value = "true"
+        }
+      }
+fix_hcl: |
+  resource "aws_backup_plan" "example" {
+    name = "example"
+    rule {
+      rule_name         = "daily"
+      target_vault_name = aws_backup_vault.example.name
+      schedule          = "cron(0 5 ? * * *)"
+      lifecycle { delete_after = 30 }
+    }
+  }
+verification: |
+  `aws backup list-backup-plans --query 'BackupPlansList[*].BackupPlanName'`
+  must return at least one plan.
+fix_disruption: none
+fixtures:
+  - aws_no_backup_plan

@@ -34,5 +34,13 @@ verification: |
   `gcloud artifacts repositories describe <repo> --location=<region> \
     --format='value(encryptionConfig.kmsKeyName)'`
   must return a non-empty KMS CryptoKey resource name.
+fix_hcl: |
+  resource "google_artifact_registry_repository" "example" {
+    location      = "us-central1"
+    repository_id = "example"
+    format        = "DOCKER"
+    kms_key_name  = google_kms_crypto_key.artifact.id
+  }
+fix_disruption: forces_replacement
 fixtures:
   - gcp_artifact_no_cmek

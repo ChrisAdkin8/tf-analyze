@@ -51,5 +51,13 @@ verification: |
   `az sql server firewall-rule list --server <server> --resource-group <rg>`
   must show no rules with `startIpAddress = 0.0.0.0` or
   `endIpAddress = 255.255.255.255`.
+fix_hcl: |
+  resource "azurerm_mssql_firewall_rule" "example" {
+    name             = "allow-specific-ip"
+    server_id        = azurerm_mssql_server.example.id
+    start_ip_address = "203.0.113.10"
+    end_ip_address   = "203.0.113.10"
+  }
+fix_disruption: none
 fixtures:
   - azure_sql_open_firewall

@@ -26,5 +26,14 @@ recommendation: |
 verification: |
   `gcloud sql instances describe <name> --format='value(databaseVersion)'`
   must return a supported, non-EOL version string.
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    name             = "example"
+    database_version = "POSTGRES_16"
+    settings {
+      tier = "db-f1-micro"
+    }
+  }
+fix_disruption: forces_replacement
 fixtures:
   - cloudsql_eol_version

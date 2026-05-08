@@ -37,5 +37,14 @@ verification: |
   should not fire.
 related:
   - STK-GKE-NODEPOOL-001
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name     = "example"
+    location = "us-central1"
+    workload_identity_config {
+      workload_pool = "${var.project_id}.svc.id.goog"
+    }
+  }
+fix_disruption: none
 fixtures:
   - gke_no_workload_identity

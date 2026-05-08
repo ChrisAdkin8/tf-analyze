@@ -1,0 +1,55 @@
+id: SEC-AZURE-SERVICEBUS-001
+title: "Service Bus namespace does not use CMK encryption"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_servicebus_namespace
+    arg: customer_managed_key
+    description: |
+      `azurerm_servicebus_namespace` has no `customer_managed_key` block.
+      Without a CMK, message data at rest is encrypted with a Microsoft-managed
+      key that cannot be independently revoked or rotated. CMK encryption is
+      available on the Premium tier and required by many compliance frameworks.
+recommendation: |
+  Enable CMK encryption on the Service Bus namespace (Premium tier):
+
+      resource "azurerm_servicebus_namespace" "main" {
+        sku = "Premium"
+
+        identity {
+          type = "SystemAssigned"
+        }
+
+        customer_managed_key {
+          key_vault_key_id                  = azurerm_key_vault_key.sb.id
+          infrastructure_encryption_enabled = true
+        }
+      }
+verification: |
+  `az servicebus namespace show --name <name> --resource-group <rg> \
+    --query 'encryption.keySource'`
+  must return `"Microsoft.KeyVault"`.
+fix_hcl: |
+  resource "azurerm_servicebus_namespace" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    sku                 = "Premium"
+    identity {
+      type = "SystemAssigned"
+    }
+    customer_managed_key {
+      key_vault_key_id = azurerm_key_vault_key.example.id
+      infrastructure_encryption_enabled = true
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_servicebus_no_cmk

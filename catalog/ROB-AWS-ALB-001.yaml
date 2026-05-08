@@ -1,0 +1,50 @@
+id: ROB-AWS-ALB-001
+title: "Load balancer deletion protection disabled"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_lb
+    arg: enable_deletion_protection
+    not_regex: '^true$'
+    fire_if_absent: true
+    description: |
+      `aws_lb` has `enable_deletion_protection = false` or the attribute is absent.
+      Without deletion protection the load balancer can be accidentally destroyed by
+      a `terraform destroy` or a mis-applied plan, taking all dependent services
+      offline immediately.
+  - kind: resource_arg
+    resource: aws_alb
+    arg: enable_deletion_protection
+    not_regex: '^true$'
+    fire_if_absent: true
+    description: |
+      `aws_alb` (legacy alias for `aws_lb`) has deletion protection disabled or absent.
+recommendation: |
+  Set `enable_deletion_protection = true` on every production load balancer:
+
+      resource "aws_lb" "main" {
+        name               = "main"
+        internal           = false
+        load_balancer_type = "application"
+
+        enable_deletion_protection = true
+      }
+
+  To remove the resource you must first set the flag to `false` and apply,
+  then destroy. This prevents accidental teardown.
+verification: |
+  `aws elbv2 describe-load-balancers --names <name> \
+    --query 'LoadBalancers[*].DeletionProtection'`
+  must return `true`.
+fix_hcl: |
+  resource "aws_lb" "example" {
+    name               = "example"
+    load_balancer_type = "application"
+    enable_deletion_protection = true
+  }
+fix_disruption: none
+fixtures:
+  - aws_alb_no_deletion_protection

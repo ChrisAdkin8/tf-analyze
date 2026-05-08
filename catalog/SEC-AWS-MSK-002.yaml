@@ -1,0 +1,46 @@
+id: SEC-AWS-MSK-002
+title: "MSK cluster does not use CMK for encryption at rest"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_msk_cluster
+    arg: encryption_at_rest_kms_key_arn
+    nested_path: encryption_info.encryption_at_rest.encryption_at_rest_kms_key_arn
+    description: |
+      `aws_msk_cluster` has no `encryption_at_rest_kms_key_arn`. Without a
+      customer-managed KMS key (CMK), MSK uses an AWS-managed key that cannot
+      be audited, rotated on a custom schedule, or revoked in incident response.
+recommendation: |
+  Provide a CMK for storage encryption:
+
+      resource "aws_msk_cluster" "main" {
+        # ...
+        encryption_info {
+          encryption_at_rest {
+            encryption_at_rest_kms_key_arn = aws_kms_key.msk.arn
+          }
+        }
+      }
+verification: |
+  `aws kafka describe-cluster --cluster-arn <arn> \
+    --query 'ClusterInfo.EncryptionInfo.EncryptionAtRest.DataVolumeKMSKeyId'`
+  must return a KMS key ARN.
+fix_hcl: |
+  resource "aws_msk_cluster" "example" {
+    cluster_name = "example"
+    encryption_info {
+      encryption_at_rest {
+        encryption_at_rest_kms_key_arn = aws_kms_key.msk.arn
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - aws_msk_no_cmk

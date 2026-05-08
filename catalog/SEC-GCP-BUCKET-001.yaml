@@ -22,5 +22,13 @@ verification: |
   After applying, run `gcloud storage buckets describe gs://<bucket>
   --format='value(iamConfiguration.publicAccessPrevention)'` and
   confirm the value is `enforced`.
+fix_hcl: |
+  resource "google_storage_bucket" "example" {
+    name                        = "example"
+    location                    = "US"
+    public_access_prevention    = "enforced"
+    uniform_bucket_level_access = true
+  }
+fix_disruption: none
 fixtures:
   - public_bucket

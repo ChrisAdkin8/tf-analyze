@@ -29,5 +29,11 @@ recommendation: |
 verification: |
   Run `terraform get -update` and confirm the same version resolves on
   every machine. Commit `.terraform.lock.hcl`.
+fix_hcl: |
+  module "example" {
+    source  = "hashicorp/consul/aws"
+    version = "= 0.11.0"
+  }
+fix_disruption: none
 fixtures:
   - unpinned_module
