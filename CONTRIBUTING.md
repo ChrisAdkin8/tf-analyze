@@ -119,6 +119,33 @@ The graph index is built once per scan via `_build_resource_index(all_files_text
 - **Catalogue YAML `recommendation:`** fields should include a code example where one helps. Aim for ~10-30 lines of recommendation per entry — long enough to be actionable, short enough to read in one sitting.
 - **OWASP framing** in `examples/terragoat/<cloud>/<file>.tf` headers follows the format already established (Cloud, vulnerability summary, real-world impact, expected findings, fix summary). Stay within OWASP 2021 categories — the discipline of "this rule fits A0N because…" forces good thinking.
 
+## VS Code extension version sync
+
+Whenever `vscode-extension/package.json#version` changes, every user-facing doc that quotes a `.vsix` filename must be updated in the same commit. The `.vsix` filename is the install command users copy-paste — leaving it pinned to a stale version sends new users to an artefact that no longer exists on the release page.
+
+Files that hold the live `.vsix` filename (must always match `package.json#version`):
+
+- `vscode-extension/README.md` — the marketplace-facing readme; the install command in **Quickstart**.
+- `docs/vscode-extension.md` — the project-level docs; the install command under **Installation**.
+- `README.md` — the project root readme; the integrations table row for "VS Code extension".
+
+Files that legitimately hold *historical* `.vsix` references (do **not** update these on a version bump):
+
+- `vscode-extension/CHANGELOG.md` — by design, each entry refers to the artefact that shipped at that version.
+- `CHANGELOG.md` (project root) — same.
+- `TODO.md`, `PLAN.md`, archived planning docs — historical, leave as-is.
+
+A version bump is not finished until:
+
+1. `package.json#version` is bumped.
+2. The three live-version docs above quote the new `.vsix` filename.
+3. `vscode-extension/CHANGELOG.md` has a new dated entry for the version (even if the only change is a version sync — say so explicitly so users know it's safe to skip).
+4. `npm test` passes (25 tests at time of writing).
+5. `npm run package` produces a `.vsix` matching the new version, and `code --install-extension <vsix>` succeeds locally.
+6. The new `.vsix` artefact is attached to the GitHub release (or noted as a follow-up if release is gated).
+
+Skipping any of (2)–(4) is a doc bug; skipping (5)–(6) is a release bug. Both are caught at review time.
+
 ## Testing conventions
 
 - **Self-test must pass.** Adding a rule without a fixture is a defect; the CI gate catches it.

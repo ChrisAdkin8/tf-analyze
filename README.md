@@ -310,6 +310,8 @@ The skill files (`SKILL.md`, `catalog/`, `scripts/`, `fixtures/`, `integrations/
 
 Contributions welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow.
 
+> **Versioning note for the VS Code extension:** every reference to a specific `tf-analyze-X.Y.Z.vsix` filename in user-facing documentation (this README's integrations table, `docs/vscode-extension.md`, `vscode-extension/README.md`) must always match the latest `vscode-extension/package.json#version`. Historical references inside changelogs and archived planning docs are exempt — they intentionally pin to the artefact that shipped at that version. Full rules and the version-bump checklist live in [`CONTRIBUTING.md` § VS Code extension version sync](CONTRIBUTING.md#vs-code-extension-version-sync).
+
 Routine maintenance commands:
 
 ```sh
