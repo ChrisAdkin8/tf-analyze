@@ -19,11 +19,11 @@ Catalog directory
 
 ### `--format FORMAT`
 
-**Choices:** `text`, `json`, `sarif`, `html`, `compliance`, `mitre`
+**Choices:** `text`, `json`, `sarif`, `html`, `compliance`, `mitre`, `pr-summary`
 
 **Default:** `text`
 
-Output format. `mitre` groups findings by MITRE ATT&CK technique (using catalogue `mitre:` fields).
+Output format. `mitre` groups findings by MITRE ATT&CK technique (using catalogue `mitre:` fields). `pr-summary` emits a concise GitHub-flavoured Markdown block sized for PR descriptions / PR-bot summary comments: score banner, top-3 findings, top fix, attack-graph node count.
 
 ### `--reports-dir REPORTS_DIR`
 
