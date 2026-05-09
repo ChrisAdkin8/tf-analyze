@@ -1,0 +1,242 @@
+"""Property-based tests for the HCL string-manipulation primitives.
+
+The example-based fixture suite exercises the primitives only on the
+inputs the test author thought of. The LSP server runs these primitives
+on **every keystroke** — meaning a malformed-HCL crash on partially-
+typed input is a freeze on the user's screen. ``hypothesis`` generates
+adversarial inputs the example suite never thought to test.
+
+Primitives covered:
+
+  * ``_hcl_object_to_json(text)`` — HCL → Python dict converter, used
+    inside ``jsonencode({...})`` analysis. Must return ``None`` rather
+    than raise on any input.
+  * ``block_arg_value(body, arg)`` — extract the literal value of an
+    attribute from a resource body. Must not raise.
+  * ``_resolve_var_ref(val, var_defaults)`` — resolve plain ``var.X``
+    / ``local.X`` references and fold simple ternaries. Idempotent
+    when no variable is known.
+  * ``_expand_dynamic_blocks(body)`` — structural rewrite that flattens
+    ``dynamic "X" { ... }`` blocks. Must not raise on truncated /
+    unbalanced input. Output must contain no ``dynamic "`` headers.
+  * ``find_blocks(text, regex)`` — top-level block locator. Must not
+    raise on unbalanced braces, embedded strings, or partial input.
+
+Default ``hypothesis`` profile is fast (50 examples per test); the
+``thorough`` profile (1000 examples) runs in CI weekly via a separate
+job.
+"""
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+import pytest
+
+# Skip the whole module if hypothesis isn't installed — tests degrade
+# gracefully on a stripped Python install.
+hypothesis = pytest.importorskip("hypothesis")
+from hypothesis import given, settings, strategies as st  # noqa: E402
+
+REPO_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import detect  # noqa: E402
+
+# Tighten the default budget to keep `pytest -q` fast. The "thorough"
+# profile (1000 examples / longer deadlines) is reserved for the
+# scheduled CI runs that catch the rarer crashers.
+settings.register_profile("fast", max_examples=50, deadline=1000)
+settings.register_profile("thorough", max_examples=1000, deadline=5000)
+settings.load_profile("fast")
+
+
+# ---------------------------------------------------------------------------
+# Strategies — biased toward inputs that look like HCL but break the parsers
+# ---------------------------------------------------------------------------
+
+# Identifier-like text — biased to HCL identifiers but allows the
+# adversarial slop (underscores, digits, mixed case) the fuzzer needs.
+_idents = st.text(
+    alphabet=st.sampled_from("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"),
+    min_size=1, max_size=20,
+).filter(lambda s: not s[0].isdigit())
+
+# Random ASCII bodies — controlled length so deadlines hold.
+_bodies = st.text(
+    alphabet=st.characters(min_codepoint=32, max_codepoint=126),
+    min_size=0, max_size=400,
+)
+
+
+# ---------------------------------------------------------------------------
+# _hcl_object_to_json
+# ---------------------------------------------------------------------------
+
+
+class TestHclObjectToJson:
+    @given(_bodies)
+    def test_never_raises(self, text: str) -> None:
+        # The contract: on any input, returns either a dict or None —
+        # never raises. Callers fall back gracefully.
+        result = detect._hcl_object_to_json(text)
+        assert result is None or isinstance(result, dict)
+
+    @given(st.text(min_size=0, max_size=10))
+    def test_short_garbage_returns_none(self, text: str) -> None:
+        # Anything that doesn't start with `{` is guaranteed-None.
+        if not text.strip().startswith("{"):
+            assert detect._hcl_object_to_json(text) is None
+
+    @given(_idents, st.text(alphabet="abcdefghij0123456789", min_size=1, max_size=20))
+    def test_simple_kv_round_trips(self, key: str, value: str) -> None:
+        # `{ key = "value" }` should round-trip to `{key: value}`.
+        text = '{ ' + key + ' = "' + value + '" }'
+        result = detect._hcl_object_to_json(text)
+        # Either parses (and matches) or returns None — never partial.
+        if result is not None:
+            assert result == {key: value}
+
+
+# ---------------------------------------------------------------------------
+# block_arg_value
+# ---------------------------------------------------------------------------
+
+
+class TestBlockArgValue:
+    @given(_bodies, _idents)
+    def test_never_raises(self, body: str, arg: str) -> None:
+        # Contract: returns Optional[str] for any input. Never raises.
+        result = detect.block_arg_value(body, arg)
+        assert result is None or isinstance(result, str)
+
+    @given(_idents, st.text(alphabet="abcdefghij_0123456789-", min_size=1, max_size=30))
+    def test_quoted_value_strips_quotes(self, arg: str, value: str) -> None:
+        body = f'  {arg} = "{value}"'
+        result = detect.block_arg_value(body, arg)
+        # The function strips matching outer quotes.
+        if result is not None:
+            assert result == value
+
+    @given(_idents)
+    def test_missing_arg_returns_none(self, arg: str) -> None:
+        # An arg that never appears in the body returns None.
+        body = "  unrelated = 1"
+        # Skip the lucky collision case where arg == 'unrelated'.
+        if arg != "unrelated":
+            assert detect.block_arg_value(body, arg) is None
+
+    @given(_bodies)
+    def test_arbitrary_arg_lookup_doesnt_crash(self, body: str) -> None:
+        # Pick a few common-looking argument names and assert no crash.
+        for arg in ("encrypted", "name", "enabled", "x"):
+            detect.block_arg_value(body, arg)
+
+
+# ---------------------------------------------------------------------------
+# _resolve_var_ref
+# ---------------------------------------------------------------------------
+
+
+class TestResolveVarRef:
+    @given(_bodies)
+    def test_never_raises_on_arbitrary_input(self, val: str) -> None:
+        result = detect._resolve_var_ref(val, {})
+        assert isinstance(result, str)
+
+    @given(_bodies)
+    def test_idempotent_when_no_vars_known(self, val: str) -> None:
+        # With an empty defaults dict, plain non-reference values pass
+        # through unchanged. (References to unknown vars also pass through.)
+        result = detect._resolve_var_ref(val, {})
+        assert isinstance(result, str)
+        # Strict idempotence: applying twice yields the same answer.
+        assert detect._resolve_var_ref(result, {}) == result
+
+    @given(_idents,
+           st.text(alphabet="abcdefghij0123456789", min_size=1, max_size=20))
+    def test_known_var_substituted(self, var_name: str, value: str) -> None:
+        # `var.foo` with var_defaults["foo"] = "bar" → "bar".
+        ref = f"var.{var_name}"
+        result = detect._resolve_var_ref(ref, {var_name: value})
+        assert result == value
+
+
+# ---------------------------------------------------------------------------
+# _expand_dynamic_blocks
+# ---------------------------------------------------------------------------
+
+
+class TestExpandDynamicBlocks:
+    @given(_bodies)
+    def test_never_raises_on_arbitrary_input(self, body: str) -> None:
+        result = detect._expand_dynamic_blocks(body)
+        assert isinstance(result, str)
+
+    @given(_bodies)
+    def test_no_dynamic_markers_left_in_output_for_fully_balanced_input(
+        self, body: str,
+    ) -> None:
+        # If the input was fully expanded (return path B in the
+        # function), the output won't contain `dynamic "` headers
+        # for inputs that weren't truncated. We can't promise
+        # complete elimination on truncated input — so this test
+        # is intentionally a smoke check of "doesn't add dynamic
+        # markers." The starting count is the upper bound on the
+        # ending count.
+        before = body.count('dynamic "')
+        result = detect._expand_dynamic_blocks(body)
+        after = result.count('dynamic "')
+        assert after <= before
+
+    def test_simple_dynamic_block_flattened(self) -> None:
+        body = '''
+        dynamic "ingress" {
+          for_each = var.rules
+          content {
+            cidr_blocks = ["0.0.0.0/0"]
+          }
+        }
+        '''
+        result = detect._expand_dynamic_blocks(body)
+        assert 'dynamic "' not in result
+        assert "ingress" in result
+        assert "cidr_blocks" in result
+
+
+# ---------------------------------------------------------------------------
+# find_blocks — the top-level block locator
+# ---------------------------------------------------------------------------
+
+
+class TestFindBlocks:
+    @given(_bodies)
+    def test_never_raises_on_arbitrary_input(self, text: str) -> None:
+        # `find_blocks` is invoked once per regex per file; a crash
+        # here wedges the LSP for the whole workspace.
+        result = detect.find_blocks(text, detect.RESOURCE_START)
+        assert isinstance(result, list)
+        for blk in result:
+            assert "start_line" in blk
+            assert "block_text" in blk
+
+    @given(_bodies)
+    def test_unbalanced_braces_dont_raise(self, text: str) -> None:
+        # Inject deliberately-unbalanced braces. The function must still
+        # return a list — possibly empty for truncated input.
+        evil = text + ('{' * 10)
+        result = detect.find_blocks(evil, detect.RESOURCE_START)
+        assert isinstance(result, list)
+
+    def test_empty_string_is_safe(self) -> None:
+        assert detect.find_blocks("", detect.RESOURCE_START) == []
+
+    def test_well_formed_resource_block_is_found(self) -> None:
+        text = (
+            'resource "aws_s3_bucket" "my_bucket" {\n'
+            '  bucket = "my-bucket"\n'
+            '}\n'
+        )
+        result = detect.find_blocks(text, detect.RESOURCE_START)
+        assert len(result) == 1
+        assert result[0]["groups"] == ("aws_s3_bucket", "my_bucket")

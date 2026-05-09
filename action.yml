@@ -131,7 +131,15 @@ runs:
           "${{ inputs.image }}" \
           "${BASE_ARGS[@]}" --format html --cache --cache-file /tmp/tf-analyze-cache.json \
           > "${{ github.workspace }}/tf-analyze-report.html" 2>tf-analyze-html-stderr.txt || true
-        for f in tf-analyze-json-stderr.txt tf-analyze-sarif-stderr.txt tf-analyze-html-stderr.txt; do
+        # `pr-summary` is a Markdown shape sized for the GitHub PR
+        # comment body. Generated separately so the github-script step
+        # can use it verbatim — keeps the rendered shape in the engine
+        # rather than duplicating it in JS here.
+        docker run --rm -v "${{ github.workspace }}:/workspace" \
+          "${{ inputs.image }}" \
+          "${BASE_ARGS[@]}" --format pr-summary --cache --cache-file /tmp/tf-analyze-cache.json \
+          > "${{ github.workspace }}/tf-analyze-pr-summary.md" 2>tf-analyze-pr-summary-stderr.txt || true
+        for f in tf-analyze-json-stderr.txt tf-analyze-sarif-stderr.txt tf-analyze-html-stderr.txt tf-analyze-pr-summary-stderr.txt; do
           if [ -s "$f" ]; then
             echo "::group::$f"
             cat "$f"
@@ -276,31 +284,55 @@ runs:
           }
 
           // Summary comment, upserted.
-          const summaryBody = findings.length === 0
-            ? `✅ **tf-analyze**: ${summary.score ?? 100} (${grade}) — no findings above threshold`
-            : [
-                `## tf-analyze: ${summary.score} (${grade})`,
-                '',
-                '| Urgency | Count |',
-                '|---------|------:|',
-                `| 🚨 CRITICAL | ${counts.CRITICAL ?? 0} |`,
-                `| ⚠️ HIGH | ${counts.HIGH ?? 0} |`,
-                `| 💡 MEDIUM | ${counts.MEDIUM ?? 0} |`,
-                `| ℹ️ LOW | ${counts.LOW ?? 0} |`,
-                '',
-                posted > 0
-                  ? `${posted} fix suggestion(s) posted inline — click **Apply suggestion** to fix in one click.`
-                  : '_No inline suggestions available for changed files._',
-                '',
-                `<sub>scoring_version ${summary.scoring_version ?? 1} · ${summary.formula ?? ''}</sub>`,
-              ].join('\n');
+          //
+          // The engine has already rendered a PR-shaped Markdown block
+          // via `--format pr-summary` (score banner + top-3 findings +
+          // top fix + collapsed Mermaid attack graph). We use that as
+          // the spine and append action-specific lines (count of inline
+          // suggestions posted) so the comment surfaces both:
+          //   1. What the scan found  (engine's pr-summary)
+          //   2. What this action just did  (inline-suggestion count)
+          let prSummaryRendered = '';
+          try {
+            prSummaryRendered = require('fs').readFileSync(
+              `${process.env.GITHUB_WORKSPACE}/tf-analyze-pr-summary.md`,
+              'utf-8'
+            ).trim();
+          } catch (e) {
+            core.warning(`Could not read pr-summary.md: ${e.message}`);
+          }
+
+          const actionFooter = posted > 0
+            ? `\n\n${posted} fix suggestion(s) posted inline — click **Apply suggestion** to fix in one click.`
+            : (findings.length > 0
+                ? '\n\n_No inline suggestions available for changed files._'
+                : '');
+
+          const summaryBody = prSummaryRendered
+            ? prSummaryRendered + actionFooter
+            : (findings.length === 0
+                ? `✅ **tf-analyze**: ${summary.score ?? 100} (${grade}) — no findings above threshold`
+                : [
+                    `## tf-analyze: ${summary.score} (${grade})`,
+                    '',
+                    '| Urgency | Count |',
+                    '|---------|------:|',
+                    `| 🚨 CRITICAL | ${counts.CRITICAL ?? 0} |`,
+                    `| ⚠️ HIGH | ${counts.HIGH ?? 0} |`,
+                    `| 💡 MEDIUM | ${counts.MEDIUM ?? 0} |`,
+                    `| ℹ️ LOW | ${counts.LOW ?? 0} |`,
+                    actionFooter,
+                    '',
+                    `<sub>scoring_version ${summary.scoring_version ?? 1} · ${summary.formula ?? ''}</sub>`,
+                  ].join('\n'));
 
           const comments = await github.rest.issues.listComments({
             owner: context.repo.owner, repo: context.repo.repo,
             issue_number: context.payload.pull_request.number,
           });
           const prior = comments.data.find(c =>
-            c.body.startsWith('## tf-analyze:') || c.body.startsWith('✅ **tf-analyze**')
+            c.body.startsWith('## tf-analyze:') ||
+            c.body.startsWith('✅ **tf-analyze**')
           );
           if (prior) {
             await github.rest.issues.updateComment({
