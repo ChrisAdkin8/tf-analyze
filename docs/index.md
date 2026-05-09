@@ -12,11 +12,14 @@ Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE AT
 ## Read
 
 - 📄 [**Project README**](https://github.com/ChrisAdkin8/tf-analyze#readme) — quickstart, feature matrix, the "why another scanner" pitch.
-- 🧩 [**VS Code extension**](vscode-extension.html) — installation, the six surfaces (scan, attack graph, delta, compliance, remediate, baseline), troubleshooting matrix.
-- ⚙️ [**CLI reference**](cli.html) — every flag, every output format, generated from `argparse` so it never drifts.
-- 🛰️ [**LSP server**](lsp.html) — using `detect.py --lsp` from any LSP-aware editor.
-- 🪝 [**Pre-commit hook**](pre-commit.html) — block PRs at commit time.
-- 🏃 [**HCP Terraform Run Task**](run-task.html) — pre-apply gate inside HCP.
+- 📚 [**Rule reference**](rules/) — auto-generated docs page per catalogue rule (209 pages, sortable by section/urgency in the index).
+- 🧩 [**VS Code extension**](vscode-extension.md) — installation, the six surfaces (scan, attack graph, delta, compliance, remediate, baseline), troubleshooting matrix.
+- ⚙️ [**CLI reference**](cli.md) — every flag, every output format, generated from `argparse` so it never drifts.
+- 🛰️ [**LSP server**](lsp.md) — using `detect.py --lsp` from any LSP-aware editor.
+- 🪝 [**Pre-commit hook**](pre-commit.md) — block PRs at commit time.
+- 🏃 [**HCP Terraform Run Task**](run-task.md) — pre-apply gate inside HCP.
+- 🧪 [**Custom rules**](custom-rules.md) — author your own `CUSTOM-*` catalogue entries.
+- ⚖️ [**Severity calibration**](severity-calibration.md) — methodology behind `default_urgency` and the deterministic risk-score formula.
 
 ## Posts
 
