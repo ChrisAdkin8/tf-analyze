@@ -177,7 +177,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | | Path | Doc |
 |---|------|-----|
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks |
-| VS Code extension (v0.1.8) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — inline diagnostics, Quick Fix, status-bar attack-graph shortcut |
+| VS Code extension (v0.1.12) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — inline diagnostics, Quick Fix, status-bar attack-graph shortcut |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |

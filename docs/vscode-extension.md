@@ -119,21 +119,19 @@ the `TfAnalyzeCodeActionProvider` drives Quick Fix.
 
 ### The Attack Graph panel opens but is blank
 
-Fixed in v0.1.8. The webview was reading the graph at the wrong JSON
-key (`data.attack_graph` vs the engine's actual `data.graph`). Upgrade
-to v0.1.8+ — the webview now also surfaces a dedicated error panel
-when something else goes wrong instead of silently rendering an empty
-SVG.
+Multiple distinct failure modes have been collapsed into this symptom
+across releases. Upgrade to v0.1.12+ and the webview will surface a
+dedicated error panel for each class instead of rendering a silent
+empty SVG. The displayed error tells you which case you've hit:
 
-If you see a blank panel on v0.1.8+, the displayed error message tells
-you which class of failure hit:
-
-| Error panel says | What to check |
-|---|---|
-| **detect.py not found** | Set `tf-analyze.scriptPath` in settings to the absolute path of `scripts/detect.py`, or open the tf-analyze repo as part of your workspace. |
-| **detect.py failed (exit > 1)** | The scan crashed. The panel shows stderr — usually a syntax error in your HCL or a missing Python dependency. |
-| **Could not parse detect.py output** | The script printed non-JSON to stdout (often a Python warning leaking through). Run the same command at the terminal and inspect. |
-| **Empty attack graph** | The workspace has no resources the graph engine recognises, or no resource is internet-reachable (no entry point → no path). Try the bundled `examples/terragoat/aws/` corpus to confirm the wiring works. |
+| Error panel says | Fixed in | What to check |
+|---|---|---|
+| **detect.py not found** | 0.1.8 | Set `tf-analyze.scriptPath` to the absolute path of `scripts/detect.py` (the file, not the directory), or open the tf-analyze repo as part of your workspace. v0.1.11+ also walks up parent directories so opening a fixture/submodule as the workspace root works automatically. |
+| **detect.py failed** (exit > 1) | 0.1.8 | The scan crashed. The panel shows stderr — usually a syntax error in your HCL or a missing Python dependency. |
+| **detect.py exited without printing JSON** | 0.1.10 | Python raised an unhandled exception (exit 1, empty stdout). The panel now shows the captured stderr and the exact reproduction command. The most common cause was the script-path setting pointing at the `scripts/` directory, which produced `can't find '__main__' module in '…/scripts'` — fixed in 0.1.11. |
+| **Could not parse detect.py output** | 0.1.8 | The script printed non-JSON to stdout (often a Python warning leaking through). Run the same command at the terminal and inspect. |
+| **Empty attack graph** | 0.1.9 | The workspace has no resources the graph engine recognises, or no resource is internet-reachable (no entry point → no path). Try `fixtures/attack_graph_demo/` from the tf-analyze repo as your workspace — that produces 8 nodes / 5 edges. |
+| Webview shows `Uncaught Error: node not found: undefined` in DevTools | 0.1.12 | The engine emits edges as `{from, to}` but `d3.forceLink` reads `{source, target}`. Earlier builds passed the edges through unmodified, so any workspace with rendered edges crashed inside d3 before drawing. Upgrade. |
 
 ### Critical-path edges aren't red
 
