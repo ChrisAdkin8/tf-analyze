@@ -40,6 +40,7 @@ const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const scriptResolver_1 = require("./scriptResolver");
+const iframeBridge_1 = require("./iframeBridge");
 const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'all'];
 /** Compliance gap report panel. Wraps `detect.py --format html
  * --compliance --compliance-framework <fw>` in a webview with a
@@ -78,6 +79,16 @@ class CompliancePanel {
             else if (msg?.command === 'openExternal') {
                 void this._openInBrowser();
             }
+            else if (msg?.command === 'openLink' && typeof msg.url === 'string') {
+                // Click on a rule-ID anchor (or any external link) inside the
+                // embedded iframe. The webview's iframe sandbox blocks regular
+                // navigation, so the iframe forwards link clicks here and we
+                // open them in the user's default browser.
+                const url = msg.url;
+                if (/^https?:\/\//i.test(url)) {
+                    void vscode.env.openExternal(vscode.Uri.parse(url));
+                }
+            }
         });
         this._panel.webview.html = this._loading();
         this._refresh();
@@ -103,8 +114,11 @@ class CompliancePanel {
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;
             }
+            // Keep _lastHtml as the engine's pristine HTML so "Open in
+            // browser" gets the unmodified report (browsers handle <a>
+            // links natively; the bridge is only needed inside the iframe).
             this._lastHtml = stdout;
-            this._panel.webview.html = this._wrap(stdout);
+            this._panel.webview.html = this._wrap((0, iframeBridge_1.injectLinkInterceptor)(stdout));
         });
     }
     _wrap(reportHtml) {
@@ -139,6 +153,7 @@ class CompliancePanel {
   });
   function reload() { vscode.postMessage({ command: 'setFramework', framework: document.getElementById('fw').value }); }
   function openExternal() { vscode.postMessage({ command: 'openExternal' }); }
+  ${iframeBridge_1.LINK_BRIDGE_PARENT_JS}
 </script>
 </body></html>`;
     }

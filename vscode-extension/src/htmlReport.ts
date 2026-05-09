@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
+import { injectLinkInterceptor, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
 
 /** Webview panel that renders `detect.py --format html` output inline.
  *
@@ -45,9 +46,16 @@ export class HtmlReportPanel {
     // button posts { command: 'openExternal' }. We persist the most
     // recently rendered report HTML on `this` so the handler doesn't
     // have to re-scan to satisfy the click.
-    this._panel.webview.onDidReceiveMessage((msg: { command?: string }) => {
+    this._panel.webview.onDidReceiveMessage((msg: { command?: string; url?: string }) => {
       if (msg?.command === 'openExternal') {
         void this._openInBrowser();
+      } else if (msg?.command === 'openLink' && typeof msg.url === 'string') {
+        // Anchor inside the embedded iframe — webview iframes can't
+        // navigate externally on their own. Forward to the user's
+        // browser via openExternal.
+        if (/^https?:\/\//i.test(msg.url)) {
+          void vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        }
       }
     });
 
@@ -124,8 +132,11 @@ export class HtmlReportPanel {
           return;
         }
 
+        // Keep _lastHtml as pristine engine HTML for "Open in browser"
+        // (browsers handle <a> natively); only the iframe-embedded
+        // copy needs the click-bridge injected.
         this._lastHtml = stdout;
-        this._panel.webview.html = this._wrapReport(stdout);
+        this._panel.webview.html = this._wrapReport(injectLinkInterceptor(stdout));
       }
     );
   }
@@ -165,6 +176,7 @@ export class HtmlReportPanel {
   const vscode = acquireVsCodeApi();
   function reload() { location.reload(); }
   function openExternal() { vscode.postMessage({ command: 'openExternal' }); }
+  ${LINK_BRIDGE_PARENT_JS}
 </script>
 </body>
 </html>`;

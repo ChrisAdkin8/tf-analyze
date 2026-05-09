@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
+import { injectLinkInterceptor, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
 
 const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'all'] as const;
 type Framework = (typeof FRAMEWORKS)[number];
@@ -46,12 +47,21 @@ export class CompliancePanel {
     this._panel.onDidDispose(() => {
       CompliancePanel.currentPanel = undefined;
     });
-    this._panel.webview.onDidReceiveMessage((msg: { command?: string; framework?: string }) => {
+    this._panel.webview.onDidReceiveMessage((msg: { command?: string; framework?: string; url?: string }) => {
       if (msg?.command === 'setFramework' && msg.framework && FRAMEWORKS.includes(msg.framework as Framework)) {
         this._framework = msg.framework as Framework;
         this._refresh();
       } else if (msg?.command === 'openExternal') {
         void this._openInBrowser();
+      } else if (msg?.command === 'openLink' && typeof msg.url === 'string') {
+        // Click on a rule-ID anchor (or any external link) inside the
+        // embedded iframe. The webview's iframe sandbox blocks regular
+        // navigation, so the iframe forwards link clicks here and we
+        // open them in the user's default browser.
+        const url = msg.url;
+        if (/^https?:\/\//i.test(url)) {
+          void vscode.env.openExternal(vscode.Uri.parse(url));
+        }
       }
     });
     this._panel.webview.html = this._loading();
@@ -88,8 +98,11 @@ export class CompliancePanel {
         return;
       }
 
+      // Keep _lastHtml as the engine's pristine HTML so "Open in
+      // browser" gets the unmodified report (browsers handle <a>
+      // links natively; the bridge is only needed inside the iframe).
       this._lastHtml = stdout;
-      this._panel.webview.html = this._wrap(stdout);
+      this._panel.webview.html = this._wrap(injectLinkInterceptor(stdout));
     });
   }
 
@@ -126,6 +139,7 @@ export class CompliancePanel {
   });
   function reload() { vscode.postMessage({ command: 'setFramework', framework: document.getElementById('fw').value }); }
   function openExternal() { vscode.postMessage({ command: 'openExternal' }); }
+  ${LINK_BRIDGE_PARENT_JS}
 </script>
 </body></html>`;
   }

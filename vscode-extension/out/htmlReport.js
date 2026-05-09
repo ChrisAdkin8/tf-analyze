@@ -40,6 +40,7 @@ const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const scriptResolver_1 = require("./scriptResolver");
+const iframeBridge_1 = require("./iframeBridge");
 /** Webview panel that renders `detect.py --format html` output inline.
  *
  * The engine emits a self-contained HTML document with all CSS inlined
@@ -73,6 +74,14 @@ class HtmlReportPanel {
         this._panel.webview.onDidReceiveMessage((msg) => {
             if (msg?.command === 'openExternal') {
                 void this._openInBrowser();
+            }
+            else if (msg?.command === 'openLink' && typeof msg.url === 'string') {
+                // Anchor inside the embedded iframe — webview iframes can't
+                // navigate externally on their own. Forward to the user's
+                // browser via openExternal.
+                if (/^https?:\/\//i.test(msg.url)) {
+                    void vscode.env.openExternal(vscode.Uri.parse(msg.url));
+                }
             }
         });
         this._panel.webview.html = this._getLoadingHtml();
@@ -129,8 +138,11 @@ class HtmlReportPanel {
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;
             }
+            // Keep _lastHtml as pristine engine HTML for "Open in browser"
+            // (browsers handle <a> natively); only the iframe-embedded
+            // copy needs the click-bridge injected.
             this._lastHtml = stdout;
-            this._panel.webview.html = this._wrapReport(stdout);
+            this._panel.webview.html = this._wrapReport((0, iframeBridge_1.injectLinkInterceptor)(stdout));
         });
     }
     /** Wrap the engine's HTML in an outer document that adds a small
@@ -168,6 +180,7 @@ class HtmlReportPanel {
   const vscode = acquireVsCodeApi();
   function reload() { location.reload(); }
   function openExternal() { vscode.postMessage({ command: 'openExternal' }); }
+  ${iframeBridge_1.LINK_BRIDGE_PARENT_JS}
 </script>
 </body>
 </html>`;

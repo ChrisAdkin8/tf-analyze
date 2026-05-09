@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.25] — 2026-05-09
+
+### Fixed
+- **Rule-ID links inside the Compliance and HTML-report panels were silent no-ops.** Both panels embed the engine's HTML output in an `<iframe srcdoc>`. VS Code webview iframes are sandboxed; clicking a regular `<a href="https://…">` does nothing — there's no parent context for `target="_blank"` to resolve to, and the iframe can't open URLs externally on its own. So `<a>` tags rendered fine but clicks went nowhere. (Note: 0.1.24's fix to use pretty URLs was correct — that change made the URLs *valid*; this one makes them *clickable*.)
+
+  Fixed via a three-hop message bridge:
+
+  1. **Iframe side** — a small click-interceptor script appended to the engine HTML before injection. Captures `<a>` clicks, calls `e.preventDefault()`, and forwards `{command: 'openLink', url}` to `window.parent.postMessage`. New helper `src/iframeBridge.ts:injectLinkInterceptor`.
+  2. **Parent webview** — listens for `message` events from the iframe and re-posts them via `vscode.postMessage`. New helper `src/iframeBridge.ts:LINK_BRIDGE_PARENT_JS`.
+  3. **Extension host** — both `compliancePanel.ts` and `htmlReport.ts` `onDidReceiveMessage` handlers gain an `openLink` case that calls `vscode.env.openExternal(vscode.Uri.parse(url))`.
+
+  Same fix shipped in both panels because both have the same iframe-srcdoc pattern. The non-iframe panels (delta, MITRE, recommendation) are unaffected — VS Code's webview chrome handles their `<a>` tags directly via `enableCommandUris`-equivalent default behaviour.
+
+### Added
+- **`src/test/iframeBridge.test.ts`** (5 tests) — locks the contract on the bridge: interceptor injects before `</body>`, idempotent across refreshes, falls back to append when no body tag, parent-side script forwards to `vscode.postMessage`. If the bridge regresses, the silent-no-op behaviour comes back; the tests catch it locally.
+
+---
+
 ## [0.1.24] — 2026-05-09
 
 ### Fixed
