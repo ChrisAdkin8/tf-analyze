@@ -7,7 +7,9 @@ import { HtmlReportPanel } from "./htmlReport";
 import { DeltaPanel } from "./deltaPanel";
 import { CompliancePanel } from "./compliancePanel";
 import { MitrePanel } from "./mitrePanel";
+import { ModuleReusePanel } from "./moduleReusePanel";
 import { RemediationPanel } from "./remediationPanel";
+import { RuleExplainerPanel } from "./ruleExplainer";
 import { ruleDocsUrl, ruleAnchorHtml } from "./urls";
 import { resolveScriptPath as sharedResolve } from "./scriptResolver";
 import { startLspClient, isLspRunning } from "./lspClient";
@@ -403,6 +405,14 @@ export function activate(context: vscode.ExtensionContext): void {
   remediateStatusBar.text = "$(wand) Remediate";
   remediateStatusBar.tooltip = "tf-analyze: preview and bulk-apply fix_hcl patches across the workspace (--apply-fixes)";
 
+  // Sixth: module reuse advisor. Surfaces directories whose resource
+  // cluster matches a popular community module on the Terraform
+  // Registry. INFO-tier (advisory) so it never gates CI. Priority 95.
+  const moduleReuseStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+  moduleReuseStatusBar.command = "tf-analyze.showModuleReuse";
+  moduleReuseStatusBar.text = "$(package) Module Reuse";
+  moduleReuseStatusBar.tooltip = "tf-analyze: surface directories that could be replaced by a public-registry module (AWS VPC, GCP network, Azure AKS, …)";
+
   // Only surface the shortcuts when there's something to scan.
   void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
     if (found.length > 0) {
@@ -410,6 +420,7 @@ export function activate(context: vscode.ExtensionContext): void {
       deltaStatusBar.show();
       complianceStatusBar.show();
       remediateStatusBar.show();
+      moduleReuseStatusBar.show();
     }
   });
 
@@ -428,6 +439,7 @@ export function activate(context: vscode.ExtensionContext): void {
     deltaStatusBar,
     complianceStatusBar,
     remediateStatusBar,
+    moduleReuseStatusBar,
     treeView,
 
     vscode.languages.registerCodeActionsProvider(
@@ -501,6 +513,45 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand("tf-analyze.remediate", () => {
       RemediationPanel.createOrShow(context);
+    }),
+
+    vscode.commands.registerCommand("tf-analyze.showModuleReuse", () => {
+      ModuleReusePanel.createOrShow(context);
+    }),
+
+    // Rule explainer. Two entry points:
+    //   1. `tf-analyze.explainRule` — palette / programmatic, pass a rule
+    //      ID or surface a quick-pick of every catalogue ID.
+    //   2. `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` — clicked from
+    //      the docs site's "Open in VS Code" button (handled below via
+    //      registerUriHandler).
+    vscode.commands.registerCommand("tf-analyze.explainRule", async (ruleId?: string) => {
+      let id = ruleId;
+      if (!id) {
+        id = await vscode.window.showInputBox({
+          prompt: "Catalogue rule ID (e.g. SEC-AWS-IAM-001)",
+          validateInput: v => /^[A-Z][A-Z0-9-]{2,63}$/.test(v) ? null : "Expected uppercase letters, digits, and hyphens",
+        });
+      }
+      if (id) RuleExplainerPanel.createOrShow(context, id);
+    }),
+
+    // The URI handler routes every `vscode://tfanalyze.tf-analyze/...`
+    // click in a browser to this extension. We accept exactly one path
+    // shape — `/rule/<RULE-ID>` — and reject anything else loudly so
+    // a malformed link never silently no-ops.
+    vscode.window.registerUriHandler({
+      handleUri(uri: vscode.Uri) {
+        const m = /^\/rule\/([A-Z][A-Z0-9-]{2,63})$/.exec(uri.path);
+        if (!m) {
+          void vscode.window.showWarningMessage(
+            `tf-analyze: unrecognized URI path "${uri.path}". ` +
+            `Expected /rule/<RULE-ID>.`,
+          );
+          return;
+        }
+        RuleExplainerPanel.createOrShow(context, m[1]);
+      },
     }),
 
     // Baseline / suppression. Right-clicking a finding in the tree

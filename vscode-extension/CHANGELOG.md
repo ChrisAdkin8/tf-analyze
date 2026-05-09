@@ -5,6 +5,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.28] — 2026-05-09
+
+### Added
+- **Walkthrough step 4 — "Try the showcase demos"** points first-run users at two new example corpora in the upstream repo: `examples/module-reuse-demo/` (5 dirs across 3 clouds, exercises the Module Reuse Advisor end-to-end with all three confidence-badge tiers visible) and `examples/attack-graph-demo/` (multi-tier AWS app, 19 nodes / 13 edges / 3 crown jewels, exercises the Attack Graph panel and the d3 graph view).
+
+  Walkthrough completes when either `tf-analyze.showModuleReuse` or `tf-analyze.showAttackGraph` fires — gives users a concrete "click this button, see this output" loop instead of a generic "open a file" prompt.
+
+  No engine or runtime change; this is pure onboarding copy. The demos themselves live in the upstream repo, not bundled into the `.vsix` (would have added ~20 KB of `.tf` content for content most users will look at once).
+
+---
+
+## [0.1.27] — 2026-05-09
+
+### Added
+- **Rule explainer panel + URI handler.** The docs site now ships an "📂 Open in VS Code" button on every rule page that targets the `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` URI scheme. Clicked in a browser, the OS routes to VS Code; the new `vscode.window.registerUriHandler` registration in `extension.ts` parses the path, regex-validates the rule ID against `/^\/rule\/([A-Z][A-Z0-9-]{2,63})$/`, and dispatches to `RuleExplainerPanel.createOrShow`.
+
+  The panel itself (`src/ruleExplainer.ts`, ~120 LOC) shells out to `python3 detect.py --explain <RULE-ID>` against the bundled engine, then renders the plain-text output as a styled webview — `## Section` headings promoted to `<h2>`, the first-line `# RULE-ID — title` to `<h1>`, every cross-referenced rule ID linked to its docs page, and a one-click "Open full rule docs in browser" button that round-trips back to the site.
+
+  Also exposed via the new `tf-analyze.explainRule` palette command — invoking it without an argument shows an `InputBox` with the same regex validator. The argument-passing form (`vscode.commands.executeCommand("tf-analyze.explainRule", "SEC-AWS-IAM-001")`) lets other extensions or tasks trigger the panel programmatically.
+
+- **Security note.** The URI-handler path is the new attack surface most extensions don't think about. Mitigations:
+  1. Strict regex on the URI path before any subprocess work — a malformed URI surfaces a warning, never silently no-ops.
+  2. The rule ID is passed only as `--explain <ID>` argument to `cp.execFile` (not `cp.exec` or a shell pipe) so even if the regex were bypassed there'd be no shell-injection vector.
+  3. The webview disables scripts (`enableScripts: false`) — escaped output only, no DOM access.
+
+---
+
+## [0.1.26] — 2026-05-09
+
+### Added
+- **Module Reuse Advisor panel** — a new entry in the activity-bar speed strip (`$(package) Module Reuse`) that surfaces directories whose resource cluster matches the shape of a popular community module on the Terraform Registry. Currently fingerprints `terraform-aws-modules/vpc/aws`, `terraform-google-modules/network/google`, and `Azure/aks/azurerm`.
+
+  The panel runs `detect.py --show-info --format json`, filters findings to the `module-reuse` section, and groups hits by rule. Each hit shows the matched directory, anchor resource, registry-module link, confidence (low / medium / high — based on how far the cluster overshoots the supporting-types threshold), and a `match details` summary.
+
+  Findings are INFO-tier so they never gate CI and don't affect the risk score (weight 0). Suppress per-rule via inline `# tf-analyze:disable=MOD-REUSE-…-001` or under `ignore_rules:` in `.tf-analyze.yaml`.
+
+  Wired up via `src/moduleReusePanel.ts`, command `tf-analyze.showModuleReuse`, status-bar item priority 95 (sits to the right of Remediate), and a `view/title` toolbar entry on the Findings tree.
+
+---
+
 ## [0.1.25] — 2026-05-09
 
 ### Fixed

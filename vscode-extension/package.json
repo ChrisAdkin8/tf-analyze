@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.25",
+  "version": "0.1.28",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -72,6 +72,16 @@
         "command": "tf-analyze.remediate",
         "title": "tf-analyze: Remediate (preview & apply fixes)",
         "icon": "$(wand)"
+      },
+      {
+        "command": "tf-analyze.showModuleReuse",
+        "title": "tf-analyze: Show Module Reuse Advisor",
+        "icon": "$(package)"
+      },
+      {
+        "command": "tf-analyze.explainRule",
+        "title": "tf-analyze: Explain Rule (by ID)",
+        "icon": "$(book)"
       },
       {
         "command": "tf-analyze.suppressFinding",
@@ -191,6 +201,11 @@
           "group": "navigation"
         },
         {
+          "command": "tf-analyze.showModuleReuse",
+          "when": "view == tfAnalyzeFindings",
+          "group": "navigation"
+        },
+        {
           "command": "tf-analyze.runScan",
           "when": "view == tfAnalyzeFindings",
           "group": "navigation"
@@ -252,6 +267,18 @@
             },
             "completionEvents": [
               "onView:tfAnalyzeFindings"
+            ]
+          },
+          {
+            "id": "tfAnalyze.tryDemoWorkspaces",
+            "title": "Try the showcase demos",
+            "description": "Two example corpora exercise the deeper panels end-to-end. Clone the [tf-analyze repo](https://github.com/ChrisAdkin8/tf-analyze) and open one of:\n- `examples/module-reuse-demo/` — five hand-rolled VPC/network/AKS clusters that match community modules. Click 📦 Module Reuse.\n- `examples/attack-graph-demo/` — multi-tier AWS app with internet → IAM → crown-jewels reachability. Click 🛤 Attack Graph.\n[Show Module Reuse](command:tf-analyze.showModuleReuse)",
+            "media": {
+              "markdown": "media/walkthrough/04-demos.md"
+            },
+            "completionEvents": [
+              "onCommand:tf-analyze.showModuleReuse",
+              "onCommand:tf-analyze.showAttackGraph"
             ]
           }
         ]
