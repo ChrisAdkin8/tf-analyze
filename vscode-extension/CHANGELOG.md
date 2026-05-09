@@ -5,6 +5,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.14] — 2026-05-09
+
+### Added
+- ⚡ **Real-time LSP diagnostics.** New language client connects to `python3 detect.py --lsp` over JSON-RPC stdio, so diagnostics + Quick Fix update as you type instead of only on save. Falls back to the legacy exec-on-save path silently if the LSP server can't start. The exec-based whole-workspace scan is unchanged — it still powers the Findings tree view and runs from the status-bar shield. Adds `vscode-languageclient@^9` as a runtime dependency.
+- 🔀 **Delta panel.** New `tf-analyze: Since Last Scan` command + status-bar item (`$(diff) Delta`, priority 97) opens a webview running `--auto-compare` against the most recent prior JSON report. Surfaces three groups: **New** (in red, click to open the file), **Resolved** (in green, motivational), and **Unchanged** (counter only). Empty-state copy explains how to seed a baseline scan.
+- ✅ **Compliance panel.** New `tf-analyze: Show Compliance Report` command + status-bar item (`$(checklist) Compliance`, priority 96). Toolbar dropdown switches live between **CIS**, **PCI DSS**, **SOC 2**, and **All** without leaving the panel. Same iframe-srcdoc rendering as the regular HTML report, with **Open in browser** for full-fidelity print/export.
+- 🎯 **MITRE ATT&CK view.** New `tf-analyze: Show MITRE ATT&CK View` command opens a webview that runs `--format mitre`, parsing the engine's markdown-style technique grouping into styled headings + urgency-tagged finding rows. Command palette only — the status bar already has five entries.
+- 🚫 **Baseline / suppression UI.** Right-click a finding in the Findings tree → **Suppress finding (add to baseline)**. Writes to `<workspace>/.tf-analyze-baseline.json` (the same shape the engine accepts via `--baseline`). The runScan exec path now auto-detects this file at the workspace root and passes `--baseline` so subsequent scans suppress matching `(id, file, line, resource)` records. **Unsuppress finding** reverses it. **Open Baseline File** opens the JSON in the editor for bulk editing.
+
+### Changed
+- **Engine `--format compliance` bug fixed upstream.** `_ctrl_sort_key` in `scripts/detect.py` was returning a list of mixed `int` / `str` parts; Python's tuple-comparison choked when control IDs like `"AC-2.a"` and `"1.2.3"` met during sort. Wrapped each part in `(0, int)` or `(1, str)` so comparisons are always tuple-vs-tuple between like types. The compliance panel was the trigger to fix this — without it, `--format compliance` and `--format html --compliance` both crashed with `TypeError: '<' not supported between instances of 'str' and 'int'`.
+- **runOnSave coexists with LSP.** When the LSP server is up, the legacy exec-on-save handler is skipped to avoid double-writing diagnostics. Tree refreshes still happen on the manual `tf-analyze: Run Scan` command.
+- **Auto-suppress when baseline file exists.** `runScan` adds `--baseline <path>` whenever `<workspace>/.tf-analyze-baseline.json` is present. Findings in the baseline disappear from the tree until removed via the unsuppress command or by editing the file directly.
+
+---
+
+## [0.1.13] — 2026-05-09
+
+### Added
+- 📄 **HTML report panel.** New `tf-analyze: Show Report` command opens the engine's `--format html` output inline in a webview, with a toolbar offering **Refresh** and **Open in browser** (writes to a temp file and hands off to the OS handler for full-fidelity printing/sharing). The engine's HTML is fully self-contained — inline CSS, no external scripts, no CDN — so it drops into a webview iframe (`srcdoc`) with no CSP rewriting needed.
+- 🛠 **Status-bar shortcut for the report.** A third item joins the existing `🛡 tf-analyze` (scan) and `🛤 Attack Graph` shortcuts: `$(file-text) Report` at priority 98, immediately right of the attack graph. The three read left-to-right as "scan · graph · report" and are gated on the workspace containing at least one `.tf` file.
+- **View-title menu entry.** The Findings tree-view title bar now also exposes the report shortcut alongside the attack-graph icon.
+- **Per-section / extra-args plumbed through.** The HTML report respects the existing `tf-analyze.section` and `tf-analyze.extraArgs` settings, so the rendered report matches whatever filter the rest of the extension is using.
+
+### Changed
+- **Script-path resolution unified.** Both panels (attack graph and HTML report) now share a single `scriptResolver.resolveScriptPath()` helper, so a fix in one surface benefits the other automatically. This was a noted goal from the 0.1.8 release notes — finally factored out now that there are two consumers.
+
+---
+
 ## [0.1.12] — 2026-05-09
 
 ### Fixed

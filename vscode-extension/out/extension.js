@@ -38,8 +38,14 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
-const fs = __importStar(require("fs"));
 const attackGraph_1 = require("./attackGraph");
+const htmlReport_1 = require("./htmlReport");
+const deltaPanel_1 = require("./deltaPanel");
+const compliancePanel_1 = require("./compliancePanel");
+const mitrePanel_1 = require("./mitrePanel");
+const scriptResolver_1 = require("./scriptResolver");
+const lspClient_1 = require("./lspClient");
+const baseline_1 = require("./baseline");
 // ─── Tree view ────────────────────────────────────────────────────────────────
 class FindingItem extends vscode.TreeItem {
     constructor(finding, collapsibleState) {
@@ -197,18 +203,7 @@ function workspacePath() {
 }
 function resolveScriptPath() {
     const cfg = vscode.workspace.getConfiguration("tf-analyze");
-    const configured = cfg.get("scriptPath") ?? "";
-    if (configured && fs.existsSync(configured))
-        return configured;
-    const candidates = [
-        path.join(workspacePath(), "scripts", "detect.py"),
-        path.join(workspacePath(), "detect.py"),
-    ];
-    for (const c of candidates) {
-        if (fs.existsSync(c))
-            return c;
-    }
-    return null;
+    return (0, scriptResolver_1.resolveScriptPath)(cfg, workspacePath());
 }
 function buildArgs(target) {
     const cfg = vscode.workspace.getConfiguration("tf-analyze");
@@ -216,6 +211,12 @@ function buildArgs(target) {
     const section = cfg.get("section") ?? "";
     if (section)
         args.push("--section", section);
+    // Auto-pin a baseline file if one exists at the workspace root.
+    // The engine will then suppress matching findings — this is the
+    // sole consumer surface for the baseline UI's writes.
+    if ((0, baseline_1.baselineExists)(target)) {
+        args.push("--baseline", (0, baseline_1.baselinePath)(target));
+    }
     const extra = cfg.get("extraArgs") ?? [];
     args.push(...extra);
     return args;
@@ -308,10 +309,31 @@ function activate(context) {
     graphStatusBar.command = "tf-analyze.showAttackGraph";
     graphStatusBar.text = "$(type-hierarchy) Attack Graph";
     graphStatusBar.tooltip = "tf-analyze: open the internet → crown-jewels attack graph for this workspace";
-    // Only surface the shortcut when there's something to graph.
+    // Third status-bar item: one-click HTML report. Sits to the right of
+    // the attack graph (priority 98) so the three read left-to-right as
+    // "scan · graph · report". Same .tf-presence gating.
+    const reportStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
+    reportStatusBar.command = "tf-analyze.showHtmlReport";
+    reportStatusBar.text = "$(file-text) Report";
+    reportStatusBar.tooltip = "tf-analyze: open the HTML findings report (urgency-grouped, with score/grade and suggested fixes)";
+    // Fourth: delta. Most "daily loop" valuable surface — what changed
+    // since last scan? Priority 97.
+    const deltaStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+    deltaStatusBar.command = "tf-analyze.showDelta";
+    deltaStatusBar.text = "$(diff) Delta";
+    deltaStatusBar.tooltip = "tf-analyze: show new / resolved / unchanged findings since the most recent prior scan";
+    // Fifth: compliance. Priority 96. Heavily-requested by audit users.
+    const complianceStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+    complianceStatusBar.command = "tf-analyze.showCompliance";
+    complianceStatusBar.text = "$(checklist) Compliance";
+    complianceStatusBar.tooltip = "tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2)";
+    // Only surface the shortcuts when there's something to scan.
     void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
         if (found.length > 0) {
             graphStatusBar.show();
+            reportStatusBar.show();
+            deltaStatusBar.show();
+            complianceStatusBar.show();
         }
     });
     const treeView = vscode.window.createTreeView("tfAnalyzeFindings", {
@@ -319,7 +341,7 @@ function activate(context) {
         showCollapseAll: true,
     });
     const codeActionProvider = new TfAnalyzeCodeActionProvider(findingsMap);
-    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, treeView, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
+    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, reportStatusBar, deltaStatusBar, complianceStatusBar, treeView, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
         diagnosticCollection.clear();
         findingsMap.clear();
         provider.clear();
@@ -343,15 +365,103 @@ function activate(context) {
         }
     }), vscode.commands.registerCommand("tf-analyze.showAttackGraph", () => {
         attackGraph_1.AttackGraphPanel.createOrShow(context);
+    }), vscode.commands.registerCommand("tf-analyze.showHtmlReport", () => {
+        htmlReport_1.HtmlReportPanel.createOrShow(context);
+    }), vscode.commands.registerCommand("tf-analyze.showDelta", () => {
+        deltaPanel_1.DeltaPanel.createOrShow(context);
+    }), vscode.commands.registerCommand("tf-analyze.showCompliance", () => {
+        compliancePanel_1.CompliancePanel.createOrShow(context);
+    }), vscode.commands.registerCommand("tf-analyze.showMitre", () => {
+        mitrePanel_1.MitrePanel.createOrShow(context);
+    }), 
+    // Baseline / suppression. Right-clicking a finding in the tree
+    // (contextValue === "finding") fires this command with the tree
+    // item; we pull (id, file, line, resource) off and write it into
+    // <ws>/.tf-analyze-baseline.json so subsequent scans suppress it.
+    vscode.commands.registerCommand("tf-analyze.suppressFinding", async (item) => {
+        const finding = item?.finding ?? (await pickFindingFromMap(findingsMap));
+        if (!finding)
+            return;
+        const ws = workspacePath();
+        const added = (0, baseline_1.suppress)(ws, {
+            id: finding.id,
+            file: finding.file,
+            line: finding.line,
+            resource: finding.resource,
+        });
+        void vscode.window.showInformationMessage(added
+            ? `tf-analyze: suppressed ${finding.id} at ${path.basename(finding.file)}:${finding.line}. Re-run scan to refresh.`
+            : `tf-analyze: ${finding.id} was already in the baseline.`);
+        // Trigger a fresh scan so the tree refreshes with the suppression applied.
+        void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+    }), vscode.commands.registerCommand("tf-analyze.unsuppressFinding", async (item) => {
+        const finding = item?.finding ?? (await pickFindingFromMap(findingsMap));
+        if (!finding)
+            return;
+        const ws = workspacePath();
+        const removed = (0, baseline_1.unsuppress)(ws, {
+            id: finding.id,
+            file: finding.file,
+            line: finding.line,
+            resource: finding.resource,
+        });
+        void vscode.window.showInformationMessage(removed
+            ? `tf-analyze: removed ${finding.id} from baseline. Re-run scan to refresh.`
+            : `tf-analyze: ${finding.id} was not in the baseline.`);
+        void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+    }), vscode.commands.registerCommand("tf-analyze.openBaseline", async () => {
+        await (0, baseline_1.openBaselineFile)(workspacePath());
     }), vscode.workspace.onDidSaveTextDocument((doc) => {
         const cfg = vscode.workspace.getConfiguration("tf-analyze");
         if (!cfg.get("runOnSave"))
             return;
         if (doc.languageId !== "terraform" && !doc.fileName.endsWith(".tf"))
             return;
+        // The LSP server already publishes diagnostics on didSave for the
+        // file in question. Running the exec-based whole-workspace scan in
+        // parallel would double-write to the diagnostic collection (and
+        // burn a Python startup per save). When LSP is up, we still want
+        // the Findings tree to reflect the wider workspace, so trigger a
+        // scan only if the user explicitly hasn't enabled LSP via the
+        // configured engine — `isLspRunning()` is true exactly when the
+        // server connected.
+        if ((0, lspClient_1.isLspRunning)()) {
+            outputChannel.appendLine(`[tf-analyze] LSP active; skipping exec-on-save for ${doc.fileName}`);
+            return;
+        }
         runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
     }));
+    // Best-effort start the LSP language server. If detect.py isn't
+    // present or the server crashes on init, we silently fall back to
+    // the exec-on-save path that's been live for every release before
+    // 0.1.14 — no user-visible regression.
+    void (0, lspClient_1.startLspClient)(context, outputChannel);
     outputChannel.appendLine("[tf-analyze] Extension activated");
+}
+/** Quick-pick fallback for the suppress / unsuppress commands when
+ * they're invoked from the command palette (no tree-item context).
+ * Surfaces every currently-listed finding so the user can pick one
+ * without having to right-click the tree row. */
+async function pickFindingFromMap(findingsMap) {
+    const all = [];
+    for (const arr of findingsMap.values())
+        all.push(...arr);
+    if (all.length === 0) {
+        void vscode.window.showInformationMessage("tf-analyze: no findings available — run a scan first.");
+        return undefined;
+    }
+    const items = all.map(f => ({
+        label: `[${f.urgency}] ${f.id}`,
+        description: f.title,
+        detail: `${f.file}:${f.line}`,
+        finding: f,
+    }));
+    const picked = await vscode.window.showQuickPick(items, {
+        placeHolder: "Pick a finding to suppress / unsuppress",
+        matchOnDescription: true,
+        matchOnDetail: true,
+    });
+    return picked?.finding;
 }
 function deactivate() { }
 // ─── Webview ──────────────────────────────────────────────────────────────────

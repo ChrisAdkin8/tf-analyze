@@ -3,6 +3,13 @@ import * as cp from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { AttackGraphPanel } from "./attackGraph";
+import { HtmlReportPanel } from "./htmlReport";
+import { DeltaPanel } from "./deltaPanel";
+import { CompliancePanel } from "./compliancePanel";
+import { MitrePanel } from "./mitrePanel";
+import { resolveScriptPath as sharedResolve } from "./scriptResolver";
+import { startLspClient, isLspRunning } from "./lspClient";
+import { baselineExists, baselinePath, openBaselineFile, suppress, unsuppress } from "./baseline";
 
 interface Finding {
   id: string;
@@ -240,17 +247,7 @@ function workspacePath(): string {
 
 function resolveScriptPath(): string | null {
   const cfg = vscode.workspace.getConfiguration("tf-analyze");
-  const configured: string = cfg.get("scriptPath") ?? "";
-  if (configured && fs.existsSync(configured)) return configured;
-
-  const candidates = [
-    path.join(workspacePath(), "scripts", "detect.py"),
-    path.join(workspacePath(), "detect.py"),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return null;
+  return sharedResolve(cfg, workspacePath());
 }
 
 function buildArgs(target: string): string[] {
@@ -258,6 +255,12 @@ function buildArgs(target: string): string[] {
   const args = ["--target", target, "--format", "json"];
   const section: string = cfg.get("section") ?? "";
   if (section) args.push("--section", section);
+  // Auto-pin a baseline file if one exists at the workspace root.
+  // The engine will then suppress matching findings — this is the
+  // sole consumer surface for the baseline UI's writes.
+  if (baselineExists(target)) {
+    args.push("--baseline", baselinePath(target));
+  }
   const extra: string[] = cfg.get("extraArgs") ?? [];
   args.push(...extra);
   return args;
@@ -365,10 +368,35 @@ export function activate(context: vscode.ExtensionContext): void {
   graphStatusBar.command = "tf-analyze.showAttackGraph";
   graphStatusBar.text = "$(type-hierarchy) Attack Graph";
   graphStatusBar.tooltip = "tf-analyze: open the internet → crown-jewels attack graph for this workspace";
-  // Only surface the shortcut when there's something to graph.
+
+  // Third status-bar item: one-click HTML report. Sits to the right of
+  // the attack graph (priority 98) so the three read left-to-right as
+  // "scan · graph · report". Same .tf-presence gating.
+  const reportStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
+  reportStatusBar.command = "tf-analyze.showHtmlReport";
+  reportStatusBar.text = "$(file-text) Report";
+  reportStatusBar.tooltip = "tf-analyze: open the HTML findings report (urgency-grouped, with score/grade and suggested fixes)";
+
+  // Fourth: delta. Most "daily loop" valuable surface — what changed
+  // since last scan? Priority 97.
+  const deltaStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+  deltaStatusBar.command = "tf-analyze.showDelta";
+  deltaStatusBar.text = "$(diff) Delta";
+  deltaStatusBar.tooltip = "tf-analyze: show new / resolved / unchanged findings since the most recent prior scan";
+
+  // Fifth: compliance. Priority 96. Heavily-requested by audit users.
+  const complianceStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+  complianceStatusBar.command = "tf-analyze.showCompliance";
+  complianceStatusBar.text = "$(checklist) Compliance";
+  complianceStatusBar.tooltip = "tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2)";
+
+  // Only surface the shortcuts when there's something to scan.
   void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
     if (found.length > 0) {
       graphStatusBar.show();
+      reportStatusBar.show();
+      deltaStatusBar.show();
+      complianceStatusBar.show();
     }
   });
 
@@ -384,6 +412,9 @@ export function activate(context: vscode.ExtensionContext): void {
     outputChannel,
     statusBar,
     graphStatusBar,
+    reportStatusBar,
+    deltaStatusBar,
+    complianceStatusBar,
     treeView,
 
     vscode.languages.registerCodeActionsProvider(
@@ -439,15 +470,121 @@ export function activate(context: vscode.ExtensionContext): void {
       AttackGraphPanel.createOrShow(context);
     }),
 
+    vscode.commands.registerCommand("tf-analyze.showHtmlReport", () => {
+      HtmlReportPanel.createOrShow(context);
+    }),
+
+    vscode.commands.registerCommand("tf-analyze.showDelta", () => {
+      DeltaPanel.createOrShow(context);
+    }),
+
+    vscode.commands.registerCommand("tf-analyze.showCompliance", () => {
+      CompliancePanel.createOrShow(context);
+    }),
+
+    vscode.commands.registerCommand("tf-analyze.showMitre", () => {
+      MitrePanel.createOrShow(context);
+    }),
+
+    // Baseline / suppression. Right-clicking a finding in the tree
+    // (contextValue === "finding") fires this command with the tree
+    // item; we pull (id, file, line, resource) off and write it into
+    // <ws>/.tf-analyze-baseline.json so subsequent scans suppress it.
+    vscode.commands.registerCommand("tf-analyze.suppressFinding", async (item: FindingItem | undefined) => {
+      const finding = item?.finding ?? (await pickFindingFromMap(findingsMap));
+      if (!finding) return;
+      const ws = workspacePath();
+      const added = suppress(ws, {
+        id: finding.id,
+        file: finding.file,
+        line: finding.line,
+        resource: (finding as Finding & { resource?: string }).resource,
+      });
+      void vscode.window.showInformationMessage(
+        added
+          ? `tf-analyze: suppressed ${finding.id} at ${path.basename(finding.file)}:${finding.line}. Re-run scan to refresh.`
+          : `tf-analyze: ${finding.id} was already in the baseline.`
+      );
+      // Trigger a fresh scan so the tree refreshes with the suppression applied.
+      void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+    }),
+
+    vscode.commands.registerCommand("tf-analyze.unsuppressFinding", async (item: FindingItem | undefined) => {
+      const finding = item?.finding ?? (await pickFindingFromMap(findingsMap));
+      if (!finding) return;
+      const ws = workspacePath();
+      const removed = unsuppress(ws, {
+        id: finding.id,
+        file: finding.file,
+        line: finding.line,
+        resource: (finding as Finding & { resource?: string }).resource,
+      });
+      void vscode.window.showInformationMessage(
+        removed
+          ? `tf-analyze: removed ${finding.id} from baseline. Re-run scan to refresh.`
+          : `tf-analyze: ${finding.id} was not in the baseline.`
+      );
+      void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+    }),
+
+    vscode.commands.registerCommand("tf-analyze.openBaseline", async () => {
+      await openBaselineFile(workspacePath());
+    }),
+
     vscode.workspace.onDidSaveTextDocument((doc) => {
       const cfg = vscode.workspace.getConfiguration("tf-analyze");
       if (!cfg.get<boolean>("runOnSave")) return;
       if (doc.languageId !== "terraform" && !doc.fileName.endsWith(".tf")) return;
+      // The LSP server already publishes diagnostics on didSave for the
+      // file in question. Running the exec-based whole-workspace scan in
+      // parallel would double-write to the diagnostic collection (and
+      // burn a Python startup per save). When LSP is up, we still want
+      // the Findings tree to reflect the wider workspace, so trigger a
+      // scan only if the user explicitly hasn't enabled LSP via the
+      // configured engine — `isLspRunning()` is true exactly when the
+      // server connected.
+      if (isLspRunning()) {
+        outputChannel.appendLine(`[tf-analyze] LSP active; skipping exec-on-save for ${doc.fileName}`);
+        return;
+      }
       runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
     })
   );
 
+  // Best-effort start the LSP language server. If detect.py isn't
+  // present or the server crashes on init, we silently fall back to
+  // the exec-on-save path that's been live for every release before
+  // 0.1.14 — no user-visible regression.
+  void startLspClient(context, outputChannel);
+
   outputChannel.appendLine("[tf-analyze] Extension activated");
+}
+
+/** Quick-pick fallback for the suppress / unsuppress commands when
+ * they're invoked from the command palette (no tree-item context).
+ * Surfaces every currently-listed finding so the user can pick one
+ * without having to right-click the tree row. */
+async function pickFindingFromMap(
+  findingsMap: Map<string, Finding[]>
+): Promise<Finding | undefined> {
+  const all: Finding[] = [];
+  for (const arr of findingsMap.values()) all.push(...arr);
+  if (all.length === 0) {
+    void vscode.window.showInformationMessage("tf-analyze: no findings available — run a scan first.");
+    return undefined;
+  }
+  const items = all.map(f => ({
+    label: `[${f.urgency}] ${f.id}`,
+    description: f.title,
+    detail: `${f.file}:${f.line}`,
+    finding: f,
+  }));
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: "Pick a finding to suppress / unsuppress",
+    matchOnDescription: true,
+    matchOnDetail: true,
+  });
+  return picked?.finding;
 }
 
 export function deactivate(): void {}

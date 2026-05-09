@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.12",
+  "version": "0.1.14",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -48,6 +48,37 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "tf-analyze.showHtmlReport",
+        "title": "tf-analyze: Show Report",
+        "icon": "$(file-text)"
+      },
+      {
+        "command": "tf-analyze.showDelta",
+        "title": "tf-analyze: Since Last Scan (Delta)",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "tf-analyze.showCompliance",
+        "title": "tf-analyze: Show Compliance Report",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "tf-analyze.showMitre",
+        "title": "tf-analyze: Show MITRE ATT&CK View"
+      },
+      {
+        "command": "tf-analyze.suppressFinding",
+        "title": "tf-analyze: Suppress Finding (add to baseline)"
+      },
+      {
+        "command": "tf-analyze.unsuppressFinding",
+        "title": "tf-analyze: Unsuppress Finding (remove from baseline)"
+      },
+      {
+        "command": "tf-analyze.openBaseline",
+        "title": "tf-analyze: Open Baseline File"
+      },
+      {
         "command": "tf-analyze.openFinding",
         "title": "tf-analyze: Open Finding"
       }
@@ -63,7 +94,12 @@
         "tf-analyze.failOn": {
           "type": "string",
           "default": "HIGH",
-          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+          "enum": [
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+          ],
           "description": "Minimum urgency level to mark as an error (vs. warning/info)."
         },
         "tf-analyze.runOnSave": {
@@ -74,12 +110,22 @@
         "tf-analyze.section": {
           "type": "string",
           "default": "",
-          "enum": ["", "security", "robustness", "ops", "module", "stack", "style"],
+          "enum": [
+            "",
+            "security",
+            "robustness",
+            "ops",
+            "module",
+            "stack",
+            "style"
+          ],
           "description": "Restrict findings to a single catalogue section. Empty = all sections."
         },
         "tf-analyze.extraArgs": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Additional CLI flags passed to detect.py (e.g. ['--compliance', '--compliance-framework', 'pci_dss'])."
         }
@@ -118,6 +164,21 @@
           "group": "navigation"
         },
         {
+          "command": "tf-analyze.showHtmlReport",
+          "when": "view == tfAnalyzeFindings",
+          "group": "navigation"
+        },
+        {
+          "command": "tf-analyze.showDelta",
+          "when": "view == tfAnalyzeFindings",
+          "group": "navigation"
+        },
+        {
+          "command": "tf-analyze.showCompliance",
+          "when": "view == tfAnalyzeFindings",
+          "group": "navigation"
+        },
+        {
           "command": "tf-analyze.runScan",
           "when": "view == tfAnalyzeFindings",
           "group": "navigation"
@@ -126,6 +187,18 @@
           "command": "tf-analyze.clearFindings",
           "when": "view == tfAnalyzeFindings",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "tf-analyze.suppressFinding",
+          "when": "view == tfAnalyzeFindings && viewItem == finding",
+          "group": "1_baseline"
+        },
+        {
+          "command": "tf-analyze.unsuppressFinding",
+          "when": "view == tfAnalyzeFindings && viewItem == finding",
+          "group": "1_baseline"
         }
       ]
     },
@@ -140,7 +213,9 @@
             "id": "tfAnalyze.connectEngine",
             "title": "Connect the detection engine",
             "description": "Set `tf-analyze.scriptPath` or open the [tf-analyze project](https://github.com/ChrisAdkin8/tf-analyze) as part of your workspace.\n[Open Settings](command:workbench.action.openSettings?%22tf-analyze%22)",
-            "media": { "markdown": "media/walkthrough/01-engine.md" },
+            "media": {
+              "markdown": "media/walkthrough/01-engine.md"
+            },
             "completionEvents": [
               "onSettingChanged:tf-analyze.scriptPath"
             ]
@@ -149,7 +224,9 @@
             "id": "tfAnalyze.firstScan",
             "title": "Run your first scan",
             "description": "Open any `.tf` file and save it — or run **tf-analyze: Run Scan** from the Command Palette.\n[Run Scan](command:tf-analyze.runScan)",
-            "media": { "markdown": "media/walkthrough/02-scan.md" },
+            "media": {
+              "markdown": "media/walkthrough/02-scan.md"
+            },
             "completionEvents": [
               "onCommand:tf-analyze.runScan"
             ]
@@ -158,7 +235,9 @@
             "id": "tfAnalyze.exploreFindings",
             "title": "Explore findings & fix issues",
             "description": "Click the 🛡 shield on the Activity Bar to open the Findings tree, hover squiggles for details, and use Quick Fix (`⌘.` / `Ctrl+.`) for auto-remediation.\n[Show Attack Graph](command:tf-analyze.showAttackGraph)",
-            "media": { "markdown": "media/walkthrough/03-explore.md" },
+            "media": {
+              "markdown": "media/walkthrough/03-explore.md"
+            },
             "completionEvents": [
               "onView:tfAnalyzeFindings"
             ]
@@ -182,5 +261,8 @@
     "@vscode/test-electron": "^2.3.0",
     "@vscode/vsce": "^2.22.0",
     "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }

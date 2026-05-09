@@ -36,8 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AttackGraphPanel = void 0;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
+const scriptResolver_1 = require("./scriptResolver");
 class AttackGraphPanel {
     static createOrShow(context) {
         const col = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
@@ -61,11 +60,11 @@ class AttackGraphPanel {
     _refresh() {
         const cfg = vscode.workspace.getConfiguration('tf-analyze');
         const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
-        const absScript = AttackGraphPanel._resolveScriptPath(cfg, wsFolder);
+        const absScript = (0, scriptResolver_1.resolveScriptPath)(cfg, wsFolder);
         if (!absScript) {
             this._panel.webview.html = this._getErrorHtml("detect.py not found", "Set <code>tf-analyze.scriptPath</code> in settings to the absolute path of " +
                 "<code>scripts/detect.py</code>, or open the tf-analyze project as part of your " +
-                "workspace.\n\nLooked in: " + this._defaultSearchPaths(wsFolder).map(p => `<li><code>${p}</code></li>`).join(""));
+                "workspace.\n\nLooked in: " + (0, scriptResolver_1.defaultSearchPaths)(wsFolder).map(p => `<li><code>${p}</code></li>`).join(""));
             return;
         }
         cp.exec(`python3 "${absScript}" --target "${wsFolder}" --format json --attack-graph`, { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
@@ -136,75 +135,6 @@ class AttackGraphPanel {
             }
             this._panel.webview.html = this._getHtml(graph);
         });
-    }
-    /** Mirror the resolution strategy used by the main scan path so both
-     * surfaces find the same script. Honour the user's setting first; fall
-     * back to common workspace layouts; finally walk up parents so a
-     * fixture/submodule opened as the workspace still finds the repo's
-     * `scripts/detect.py`. The result must be a regular file — `python3
-     * <dir>` would otherwise fail with "can't find '__main__' module". */
-    static _resolveScriptPath(cfg, wsFolder) {
-        const isFile = (p) => {
-            try {
-                return fs.statSync(p).isFile();
-            }
-            catch {
-                return false;
-            }
-        };
-        const isDir = (p) => {
-            try {
-                return fs.statSync(p).isDirectory();
-            }
-            catch {
-                return false;
-            }
-        };
-        // 1. Honour the configured setting. If it points at a directory
-        //    (a common misconfiguration — users set this to the `scripts/`
-        //    folder rather than the file inside), look for `detect.py` there.
-        const configured = cfg.get('scriptPath', '').trim();
-        if (configured) {
-            const abs = path.isAbsolute(configured) ? configured : path.join(wsFolder, configured);
-            if (isFile(abs))
-                return abs;
-            if (isDir(abs)) {
-                const inDir = path.join(abs, 'detect.py');
-                if (isFile(inDir))
-                    return inDir;
-            }
-        }
-        // 2. Workspace-relative fallbacks.
-        for (const cand of [
-            path.join(wsFolder, 'scripts', 'detect.py'),
-            path.join(wsFolder, 'detect.py'),
-            // tf-analyze repo cloned alongside the user's TF code:
-            path.join(wsFolder, '..', 'tf-analyze', 'scripts', 'detect.py'),
-        ]) {
-            if (isFile(cand))
-                return cand;
-        }
-        // 3. Walk up parents of wsFolder. Catches the case where the
-        //    workspace is a subfolder of the tf-analyze repo (e.g. a fixture
-        //    or submodule) and `scripts/detect.py` lives a few levels above.
-        let dir = wsFolder;
-        for (let i = 0; i < 6; i++) {
-            const parent = path.dirname(dir);
-            if (parent === dir)
-                break;
-            const cand = path.join(parent, 'scripts', 'detect.py');
-            if (isFile(cand))
-                return cand;
-            dir = parent;
-        }
-        return null;
-    }
-    _defaultSearchPaths(wsFolder) {
-        return [
-            path.join(wsFolder, 'scripts', 'detect.py'),
-            path.join(wsFolder, 'detect.py'),
-            path.join(wsFolder, '..', 'tf-analyze', 'scripts', 'detect.py'),
-        ];
     }
     _escape(s) {
         return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

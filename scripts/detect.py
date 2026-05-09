@@ -4056,8 +4056,15 @@ def _compliance_gap_report(
         by_fw.setdefault(item["framework"], []).append(item)
 
     def _ctrl_sort_key(c: dict) -> list:
+        # Compliance control IDs are dotted/hyphenated mixes like "1.2.3",
+        # "AC-2.a", "CC6.1". Splitting yields a mix of numeric and alpha
+        # parts, and Python refuses to compare int with str directly. Wrap
+        # each part as (sort_class, value) so comparisons are always tuple-
+        # vs-tuple between like types: 0=numeric (int-sorted), 1=alpha
+        # (str-sorted). Numeric parts sort before alpha ones at the same
+        # position, which matches how humans read control IDs.
         parts = re.split(r'[.\-]', c["control"])
-        return [int(x) if x.isdigit() else x for x in parts]
+        return [(0, int(x)) if x.isdigit() else (1, x) for x in parts]
 
     for fw in by_fw:
         by_fw[fw].sort(key=_ctrl_sort_key)
