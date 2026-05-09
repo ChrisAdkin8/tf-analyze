@@ -1,5 +1,5 @@
 name: 'tf-analyze'
-description: 'Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE ATT&CK mapping, and one-click PR fix suggestions.'
+description: 'Static + plan-time Terraform security analysis with attack-graph prioritisation, MITRE mapping, and one-click PR fixes.'
 author: 'ChrisAdkin8'
 
 branding:
