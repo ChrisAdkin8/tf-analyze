@@ -4,23 +4,42 @@ The tf-analyze VS Code extension surfaces findings inline as you write
 Terraform — squiggle underlines on affected lines, hover tooltips,
 Quick Fix (⌘.) to insert fix_hcl, and a side-panel findings tree.
 
+## Self-containment guarantee
+
+**The extension is self-contained.** A fresh `code --install-extension
+tf-analyze-X.Y.Z.vsix` works on any workspace out of the box: no
+companion repository to clone, no `tf-analyze.scriptPath` setting to
+configure, no `pip install` to run. The detection engine
+(`scripts/bundle-engine.js` copies `detect.py` into the extension's
+`engine/` directory at build time) ships inside the `.vsix` and
+`scriptResolver.resolveScriptPath()` checks the bundled location
+first, before any workspace fallbacks.
+
+This is a **hard product requirement, not a current convenience.** Any
+future runtime the extension needs — a different engine version, a
+SAT solver, a static-analysis helper — must be bundled the same way.
+The workspace-fallback paths in the resolver are *engine-developer
+escape hatches only* (so contributors can run the extension via F5
+against their working copy of `detect.py`), not user features.
+
 ## Installation
 
-**From source (development):**
+**From the `.vsix` (the only supported user path):**
 ```bash
-cd vscode-extension
-npm install
-npm run compile
-npm test                    # runs the 22-test suite (unit + engine smoke)
-# Open VS Code, press F5 to launch the Extension Development Host
+code --install-extension tf-analyze-0.1.19.vsix
 ```
 
-**From VSIX (production):**
+That's it. Open any Terraform workspace and the status-bar items
+appear immediately.
+
+**From source (engine developers only):**
 ```bash
 cd vscode-extension
 npm install
-npm run package            # produces tf-analyze-0.1.0.vsix
-code --install-extension tf-analyze-0.1.0.vsix
+npm run bundle-engine       # copies ../scripts/detect.py into engine/
+npm run compile
+npm test                    # runs the 24-test suite (unit + engine smoke)
+# Open VS Code, press F5 to launch the Extension Development Host
 ```
 
 **From Marketplace (once published):**
@@ -31,9 +50,8 @@ ext install hashicorp.tf-analyze
 ## Requirements
 
 - VS Code 1.85+
-- Python 3.9+ on `$PATH`
-- `detect.py` in the workspace (`scripts/detect.py`) or configured via
-  `tf-analyze.scriptPath`
+- Python 3.9+ on `$PATH` (the bundled `detect.py` uses Python stdlib only —
+  no `pip install` step required)
 
 ## Features
 
@@ -64,19 +82,20 @@ jump to the source line.
 
 ### Status bar
 
-The extension contributes six status-bar items, anchored bottom-left, reading "scan · graph · report · delta · compliance · remediate" left to right:
+The extension contributes five status-bar items, anchored bottom-left, reading "scan · graph · delta · compliance · remediate" left to right:
 
 1. **🛡 tf-analyze (scan summary)** — current scan state, click to run a fresh scan.
    - `⏳ tf-analyze scanning…` — in progress
    - `✓ tf-analyze: clean` — zero findings
    - `🛡 tf-analyze: 7 (C:1 H:2 M:4)` — summary by urgency
 2. **🛤 Attack Graph** — opens the internet → crown-jewels webview.
-3. **📄 Report** — opens the urgency-grouped HTML report inline (with **Open in browser** for full-fidelity print).
-4. **🔀 Delta** — *Since last scan*. New / resolved / unchanged findings against the most recent prior JSON report.
-5. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / All).
-6. **🪄 Remediate** — Bulk apply-fixes with diff preview. Two-stage flow: dry-run shows the unified diff, **Apply Fixes** rewrites files on disk and saves originals as `<file>.bak`.
+3. **🔀 Delta** — *Since last scan*. New / resolved / unchanged findings against the most recent prior JSON report.
+4. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / All).
+5. **🪄 Remediate** — Bulk apply-fixes with diff preview. Two-stage flow: dry-run shows the unified diff, **Apply Fixes** rewrites files on disk and saves originals as `<file>.bak`.
 
-All six are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
+All five are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
+
+The HTML report (`tf-analyze: Show Report`) intentionally does *not* have a status-bar entry — it overlaps semantically with the Findings tree (same data, different presentation), and toolbar real estate is reserved for surfaces that give net-new information at a glance. The command stays a click away in the Command Palette and the Findings tree-view title bar.
 
 ### Real-time diagnostics (LSP)
 
@@ -132,12 +151,12 @@ This is complementary to Quick Fix: the editor's `⌘.` action targets one findi
 
 ## Architecture
 
-The extension drives `detect.py` through two complementary surfaces:
+The extension drives `detect.py` through two complementary surfaces, both pointing at the **bundled engine** (`<extensionRoot>/engine/detect.py`, copied in by `scripts/bundle-engine.js` at build time):
 
-1. **LSP (per-open-file, real-time).** On activation the extension spawns `python3 detect.py --lsp` as a JSON-RPC language server. Diagnostics and code actions for `.tf` files currently open in an editor flow through `vscode-languageclient` and update on every change/save.
-2. **Exec (whole-workspace, on-demand).** `tf-analyze: Run Scan` shells out to `python3 detect.py --format json --target <ws>` once and uses the JSON to populate the **Findings** tree, the per-file diagnostic collection, and the status-bar summary. The same exec path also drives the Attack Graph, HTML Report, Delta, Compliance, and MITRE panels — each panel runs its own `detect.py` invocation with the right `--format` and prints into a dedicated webview.
+1. **LSP (per-open-file, real-time).** On activation the extension spawns `python3 <bundled detect.py> --lsp` as a JSON-RPC language server. Diagnostics and code actions for `.tf` files currently open in an editor flow through `vscode-languageclient` and update on every change/save.
+2. **Exec (whole-workspace, on-demand).** `tf-analyze: Run Scan` shells out to `python3 <bundled detect.py> --format json --target <ws>` once and uses the JSON to populate the **Findings** tree, the per-file diagnostic collection, and the status-bar summary. The same exec path also drives the Attack Graph, HTML Report, Delta, Compliance, MITRE, and Remediation panels — each panel runs its own engine invocation with the right `--format` and prints into a dedicated webview.
 
-Both paths share `scriptResolver.resolveScriptPath()` so a misconfigured `tf-analyze.scriptPath` (or a workspace nested inside the tf-analyze repo) is handled identically across all surfaces.
+Both paths share `scriptResolver.resolveScriptPath()`, which always tries the bundled engine first. Workspace-relative fallbacks exist only to support the engine-development F5 loop and are *not* documented as a user feature — see the **Self-containment guarantee** section.
 
 The runScan exec path also auto-detects `<workspace>/.tf-analyze-baseline.json` and adds `--baseline <path>` when present, so the baseline UI's writes take effect on the very next scan.
 
@@ -160,7 +179,7 @@ empty SVG. The displayed error tells you which case you've hit:
 
 | Error panel says | Fixed in | What to check |
 |---|---|---|
-| **detect.py not found** | 0.1.8 | Set `tf-analyze.scriptPath` to the absolute path of `scripts/detect.py` (the file, not the directory), or open the tf-analyze repo as part of your workspace. v0.1.11+ also walks up parent directories so opening a fixture/submodule as the workspace root works automatically. |
+| **detect.py not found** | 0.1.8 / 0.1.19 | Should not happen on a properly-built `.vsix` — the engine is bundled inside the extension as of 0.1.19. If you see this, the install is corrupted or the extension was packaged without running `npm run bundle-engine` (check `<extensionRoot>/engine/detect.py` exists). For engine developers running via F5: set `tf-analyze.scriptPath` to your working copy, or rely on the workspace-relative / parent-walk fallbacks. |
 | **detect.py failed** (exit > 1) | 0.1.8 | The scan crashed. The panel shows stderr — usually a syntax error in your HCL or a missing Python dependency. |
 | **detect.py exited without printing JSON** | 0.1.10 | Python raised an unhandled exception (exit 1, empty stdout). The panel now shows the captured stderr and the exact reproduction command. The most common cause was the script-path setting pointing at the `scripts/` directory, which produced `can't find '__main__' module in '…/scripts'` — fixed in 0.1.11. |
 | **Could not parse detect.py output** | 0.1.8 | The script printed non-JSON to stdout (often a Python warning leaking through). Run the same command at the terminal and inspect. |
