@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.17] — 2026-05-09
+
+### Fixed
+- **Status-bar items didn't appear in fresh VS Code windows even when the workspace contained `.tf` files.** `activationEvents` only listed `onLanguage:terraform` (fires when a `.tf` file becomes the active editor) and `onView:tfAnalyzeFindings` (fires when the Findings view is opened). If a user opened a Terraform workspace and didn't immediately open a `.tf` file or the Findings view, the extension stayed dormant — `activate()` never ran, no `createStatusBarItem` calls happened, and the toolbar stayed empty. Added `workspaceContains:**/*.tf` so the extension wakes up the moment VS Code finishes scanning a workspace that contains Terraform code, regardless of which file the user is looking at.
+
+---
+
 ## [0.1.16] — 2026-05-09
 
 ### Fixed
