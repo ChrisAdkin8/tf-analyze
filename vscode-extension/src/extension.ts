@@ -7,9 +7,10 @@ import { HtmlReportPanel } from "./htmlReport";
 import { DeltaPanel } from "./deltaPanel";
 import { CompliancePanel } from "./compliancePanel";
 import { MitrePanel } from "./mitrePanel";
+import { RemediationPanel } from "./remediationPanel";
 import { resolveScriptPath as sharedResolve } from "./scriptResolver";
 import { startLspClient, isLspRunning } from "./lspClient";
-import { baselineExists, baselinePath, openBaselineFile, suppress, unsuppress } from "./baseline";
+import { baselineExists, baselinePath, ensureBaselineFile, suppress, unsuppress } from "./baseline";
 
 interface Finding {
   id: string;
@@ -390,6 +391,13 @@ export function activate(context: vscode.ExtensionContext): void {
   complianceStatusBar.text = "$(checklist) Compliance";
   complianceStatusBar.tooltip = "tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2)";
 
+  // Sixth: remediate. Bulk apply-fixes UX with two-stage preview/apply
+  // flow (writes .bak backups). Priority 95.
+  const remediateStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+  remediateStatusBar.command = "tf-analyze.remediate";
+  remediateStatusBar.text = "$(wand) Remediate";
+  remediateStatusBar.tooltip = "tf-analyze: preview and bulk-apply fix_hcl patches across the workspace (--apply-fixes)";
+
   // Only surface the shortcuts when there's something to scan.
   void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
     if (found.length > 0) {
@@ -397,6 +405,7 @@ export function activate(context: vscode.ExtensionContext): void {
       reportStatusBar.show();
       deltaStatusBar.show();
       complianceStatusBar.show();
+      remediateStatusBar.show();
     }
   });
 
@@ -415,6 +424,7 @@ export function activate(context: vscode.ExtensionContext): void {
     reportStatusBar,
     deltaStatusBar,
     complianceStatusBar,
+    remediateStatusBar,
     treeView,
 
     vscode.languages.registerCodeActionsProvider(
@@ -486,6 +496,10 @@ export function activate(context: vscode.ExtensionContext): void {
       MitrePanel.createOrShow(context);
     }),
 
+    vscode.commands.registerCommand("tf-analyze.remediate", () => {
+      RemediationPanel.createOrShow(context);
+    }),
+
     // Baseline / suppression. Right-clicking a finding in the tree
     // (contextValue === "finding") fires this command with the tree
     // item; we pull (id, file, line, resource) off and write it into
@@ -528,7 +542,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand("tf-analyze.openBaseline", async () => {
-      await openBaselineFile(workspacePath());
+      const file = ensureBaselineFile(workspacePath());
+      const doc = await vscode.workspace.openTextDocument(file);
+      await vscode.window.showTextDocument(doc);
     }),
 
     vscode.workspace.onDidSaveTextDocument((doc) => {

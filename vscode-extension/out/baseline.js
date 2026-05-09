@@ -38,8 +38,7 @@ exports.baselinePath = baselinePath;
 exports.baselineExists = baselineExists;
 exports.suppress = suppress;
 exports.unsuppress = unsuppress;
-exports.openBaselineFile = openBaselineFile;
-const vscode = __importStar(require("vscode"));
+exports.ensureBaselineFile = ensureBaselineFile;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 /** Filename relative to the workspace root. Picked to be discoverable
@@ -112,13 +111,15 @@ function unsuppress(wsFolder, finding) {
     write(wsFolder, data);
     return true;
 }
-/** Open the baseline file in the active editor, creating an empty one
- * first if it doesn't exist. */
-async function openBaselineFile(wsFolder) {
+/** Ensure a baseline file exists on disk. Returns the path. The
+ * VS Code-side caller (extension.ts) opens the document via its own
+ * `vscode.workspace.openTextDocument` call so this module stays free
+ * of the runtime vscode import — which makes it unit-testable from
+ * plain node, without spinning up an Electron host. */
+function ensureBaselineFile(wsFolder) {
     if (!baselineExists(wsFolder)) {
         write(wsFolder, { findings: [] });
     }
-    const doc = await vscode.workspace.openTextDocument(baselinePath(wsFolder));
-    await vscode.window.showTextDocument(doc);
+    return baselinePath(wsFolder);
 }
 //# sourceMappingURL=baseline.js.map

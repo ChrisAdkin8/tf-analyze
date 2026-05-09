@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -65,6 +65,11 @@
       {
         "command": "tf-analyze.showMitre",
         "title": "tf-analyze: Show MITRE ATT&CK View"
+      },
+      {
+        "command": "tf-analyze.remediate",
+        "title": "tf-analyze: Remediate (preview & apply fixes)",
+        "icon": "$(wand)"
       },
       {
         "command": "tf-analyze.suppressFinding",
@@ -179,6 +184,11 @@
           "group": "navigation"
         },
         {
+          "command": "tf-analyze.remediate",
+          "when": "view == tfAnalyzeFindings",
+          "group": "navigation"
+        },
+        {
           "command": "tf-analyze.runScan",
           "when": "view == tfAnalyzeFindings",
           "group": "navigation"
@@ -251,7 +261,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
-    "test": "node ./out/test/runTest.js",
+    "test": "node --test 'out/test/**/*.test.js'",
     "package": "vsce package",
     "publish": "vsce publish"
   },

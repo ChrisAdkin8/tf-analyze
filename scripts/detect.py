@@ -6225,7 +6225,12 @@ def _handle_apply_fixes(
 
     for file_path in sorted(by_file):
         path = Path(file_path)
-        if not path.exists():
+        # is_file() is stricter than exists() — it filters out directories
+        # too. "Absent resource" findings (kind=resource_missing_arg with no
+        # corresponding declaration) carry the *target directory* in
+        # `file`, not a real source file. exists() returned True for those
+        # and we'd fall through to open(), which then raised IsADirectoryError.
+        if not path.is_file():
             continue
 
         with open(path) as fh:

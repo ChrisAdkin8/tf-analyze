@@ -2,9 +2,11 @@
 .vscode-test/**
 .claude/**
 src/**
+out/test/**
 .gitignore
 **/tsconfig.json
 **/.eslintrc.json
 **/*.map
+**/*.test.js
 node_modules/**
 *.vsix

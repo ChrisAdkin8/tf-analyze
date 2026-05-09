@@ -43,6 +43,7 @@ const htmlReport_1 = require("./htmlReport");
 const deltaPanel_1 = require("./deltaPanel");
 const compliancePanel_1 = require("./compliancePanel");
 const mitrePanel_1 = require("./mitrePanel");
+const remediationPanel_1 = require("./remediationPanel");
 const scriptResolver_1 = require("./scriptResolver");
 const lspClient_1 = require("./lspClient");
 const baseline_1 = require("./baseline");
@@ -327,6 +328,12 @@ function activate(context) {
     complianceStatusBar.command = "tf-analyze.showCompliance";
     complianceStatusBar.text = "$(checklist) Compliance";
     complianceStatusBar.tooltip = "tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2)";
+    // Sixth: remediate. Bulk apply-fixes UX with two-stage preview/apply
+    // flow (writes .bak backups). Priority 95.
+    const remediateStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+    remediateStatusBar.command = "tf-analyze.remediate";
+    remediateStatusBar.text = "$(wand) Remediate";
+    remediateStatusBar.tooltip = "tf-analyze: preview and bulk-apply fix_hcl patches across the workspace (--apply-fixes)";
     // Only surface the shortcuts when there's something to scan.
     void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
         if (found.length > 0) {
@@ -334,6 +341,7 @@ function activate(context) {
             reportStatusBar.show();
             deltaStatusBar.show();
             complianceStatusBar.show();
+            remediateStatusBar.show();
         }
     });
     const treeView = vscode.window.createTreeView("tfAnalyzeFindings", {
@@ -341,7 +349,7 @@ function activate(context) {
         showCollapseAll: true,
     });
     const codeActionProvider = new TfAnalyzeCodeActionProvider(findingsMap);
-    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, reportStatusBar, deltaStatusBar, complianceStatusBar, treeView, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
+    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, reportStatusBar, deltaStatusBar, complianceStatusBar, remediateStatusBar, treeView, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
         diagnosticCollection.clear();
         findingsMap.clear();
         provider.clear();
@@ -373,6 +381,8 @@ function activate(context) {
         compliancePanel_1.CompliancePanel.createOrShow(context);
     }), vscode.commands.registerCommand("tf-analyze.showMitre", () => {
         mitrePanel_1.MitrePanel.createOrShow(context);
+    }), vscode.commands.registerCommand("tf-analyze.remediate", () => {
+        remediationPanel_1.RemediationPanel.createOrShow(context);
     }), 
     // Baseline / suppression. Right-clicking a finding in the tree
     // (contextValue === "finding") fires this command with the tree
@@ -410,7 +420,9 @@ function activate(context) {
             : `tf-analyze: ${finding.id} was not in the baseline.`);
         void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
     }), vscode.commands.registerCommand("tf-analyze.openBaseline", async () => {
-        await (0, baseline_1.openBaselineFile)(workspacePath());
+        const file = (0, baseline_1.ensureBaselineFile)(workspacePath());
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
     }), vscode.workspace.onDidSaveTextDocument((doc) => {
         const cfg = vscode.workspace.getConfiguration("tf-analyze");
         if (!cfg.get("runOnSave"))

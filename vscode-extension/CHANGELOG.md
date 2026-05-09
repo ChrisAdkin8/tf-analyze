@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.15] — 2026-05-09
+
+### Added
+- 🪄 **Remediation panel.** New `tf-analyze: Remediate` command + status-bar item (`$(wand) Remediate`, priority 95) opens a webview that runs `detect.py --apply-fixes dry-run` and renders the resulting unified diff with syntax highlighting (file headers gold, hunks grey, additions green, deletions red). Two-stage UX — the **Apply Fixes** button asks for explicit confirmation before re-running with `--apply-fixes apply`, which writes the patched files to disk and saves originals as `<file>.bak` alongside. Empty state explains which fix kinds (`resource_missing_arg`, `resource_arg`, `hcl_attr`) are eligible for bulk patching vs. which need the in-editor Quick Fix flow.
+- 🧪 **Test suite.** New `npm test` runs 22 tests via `node --test` covering baseline (suppress/unsuppress idempotency, corrupted-file recovery, distinct-key handling), scriptResolver (file vs. directory, parent walk, configured-path fallbacks), and four end-to-end engine smoke tests that spawn `python3 detect.py` to confirm the fixes for `--apply-fixes IsADirectoryError` and `--format compliance` `_ctrl_sort_key` don't regress. Tests skip gracefully when `python3` isn't on PATH.
+
+### Changed
+- **`baseline.ts` and `scriptResolver.ts` are now pure node modules.** Removed runtime `vscode` import from `baseline.ts` (`openBaselineFile` moved to extension.ts where the vscode call lives) and converted `scriptResolver.ts`'s vscode import to `import type` only. Both modules can now be exercised by `node --test` without an Electron host.
+
+### Fixed
+- **Engine `--apply-fixes` crashed with `IsADirectoryError` on absent-resource findings.** `_handle_apply_fixes` in `scripts/detect.py:6228` was filtering candidate files with `path.exists()`, but absent-resource findings (kind=`resource_missing_arg` with no source file) carry the **target directory** in their `file` field, not a real path. `exists()` returned True for those entries and the code fell through to `open(<directory>)`. Switched to `path.is_file()` which filters out directories too. End-to-end smoke test (`engineSmoke.test.ts`) covers this regression.
+
+---
+
 ## [0.1.14] — 2026-05-09
 
 ### Added

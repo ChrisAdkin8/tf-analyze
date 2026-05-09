@@ -1,6 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
+// Type-only import — the resolver only needs the
+// WorkspaceConfiguration shape (a `.get<T>(key, default)` getter), so
+// keeping this as `import type` lets the module be unit-tested with a
+// hand-rolled stub config object outside VS Code.
+import type * as vscode from 'vscode';
 
 /** Resolve `scripts/detect.py` from the workspace + user setting.
  *

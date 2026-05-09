@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -90,12 +89,14 @@ export function unsuppress(wsFolder: string, finding: BaselineFinding): boolean 
   return true;
 }
 
-/** Open the baseline file in the active editor, creating an empty one
- * first if it doesn't exist. */
-export async function openBaselineFile(wsFolder: string): Promise<void> {
+/** Ensure a baseline file exists on disk. Returns the path. The
+ * VS Code-side caller (extension.ts) opens the document via its own
+ * `vscode.workspace.openTextDocument` call so this module stays free
+ * of the runtime vscode import — which makes it unit-testable from
+ * plain node, without spinning up an Electron host. */
+export function ensureBaselineFile(wsFolder: string): string {
   if (!baselineExists(wsFolder)) {
     write(wsFolder, { findings: [] });
   }
-  const doc = await vscode.workspace.openTextDocument(baselinePath(wsFolder));
-  await vscode.window.showTextDocument(doc);
+  return baselinePath(wsFolder);
 }
