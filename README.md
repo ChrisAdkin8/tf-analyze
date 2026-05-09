@@ -226,6 +226,9 @@ Additional screenshots: [compliance report](docs/images/compliance-report.png) �
 | Skill prose (LLM-facing instructions) | [`SKILL.md`](SKILL.md) |
 | Roadmap and TODO | [`TODO.md`](TODO.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+| Blog (design notes, debugging tours, retros) | [`docs/blog/`](docs/blog/) |
+
+When this repo is served via GitHub Pages (`Settings → Pages → Deploy from branch: main / docs`), the same content is reachable at `https://chrisadkin8.github.io/tf-analyze/` with the blog at `/blog/`.
 
 ---
 

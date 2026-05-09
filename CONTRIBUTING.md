@@ -119,6 +119,15 @@ The graph index is built once per scan via `_build_resource_index(all_files_text
 - **Catalogue YAML `recommendation:`** fields should include a code example where one helps. Aim for ~10-30 lines of recommendation per entry — long enough to be actionable, short enough to read in one sitting.
 - **OWASP framing** in `examples/terragoat/<cloud>/<file>.tf` headers follows the format already established (Cloud, vulnerability summary, real-world impact, expected findings, fix summary). Stay within OWASP 2021 categories — the discipline of "this rule fits A0N because…" forces good thinking.
 
+## Blog posts
+
+Blog posts live at `docs/blog/YYYY-MM-DD-<slug>.md`. They are versioned alongside the code so a post and the artefact it describes ship in the same commit. When a post quotes a specific version (status-bar layout, rule count, error message, CLI flag), it must:
+
+1. Pin the version in the YAML frontmatter (`extension_version: 0.1.22`, `engine_version: …` as applicable). Future readers can see at a glance whether the post still describes current behaviour.
+2. Use plain anchored links (`[v0.1.18 changelog entry](../../vscode-extension/CHANGELOG.md#0118--2026-05-09)`) rather than tagging "current state" without a date — the post will outlive the state.
+
+If a post becomes outdated by a later release, prefer leaving it as-is with a banner at the top (`> **Note:** documents v0.1.22 behaviour. Status bar reorganised in v0.1.30 — see …`) rather than rewriting in place. Posts are historical record; documentation lives under `docs/*.md`.
+
 ## VS Code extension version sync
 
 Whenever `vscode-extension/package.json#version` changes, every user-facing doc that quotes a `.vsix` filename must be updated in the same commit. The `.vsix` filename is the install command users copy-paste — leaving it pinned to a stale version sends new users to an artefact that no longer exists on the release page.

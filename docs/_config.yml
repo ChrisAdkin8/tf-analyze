@@ -1,0 +1,27 @@
+title: tf-analyze
+description: Static + plan-time Terraform analysis with attack-graph prioritisation and one-click PR fix suggestions.
+baseurl: /tf-analyze
+url: https://chrisadkin8.github.io
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+
+# Treat .md files outside _posts as standalone pages — keeps the existing
+# reference docs (vscode-extension.md, lsp.md, cli.md, …) addressable at
+# their existing paths without any restructuring.
+relative_links:
+  enabled: true
+  collections: true
+
+# Don't try to render the project-level CHANGELOG or planning docs as
+# Jekyll pages — they're internal artefacts, not site content.
+exclude:
+  - launch/                # release planning + crosspost drafts
+  - "*.tmp"
+  - vendor/
+
+# Posts live at /blog/<slug>/ rather than the Jekyll default
+# /<year>/<month>/<day>/<title>/ — the version-numbered URL is more
+# useful when an arc spans a single day.
+permalink: /blog/:slug/
