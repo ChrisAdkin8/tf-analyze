@@ -11,6 +11,7 @@ Quick Fix (⌘.) to insert fix_hcl, and a side-panel findings tree.
 cd vscode-extension
 npm install
 npm run compile
+npm test                    # runs the 22-test suite (unit + engine smoke)
 # Open VS Code, press F5 to launch the Extension Development Host
 ```
 
@@ -63,7 +64,7 @@ jump to the source line.
 
 ### Status bar
 
-The extension contributes five status-bar items, anchored bottom-left, reading "scan · graph · report · delta · compliance" left to right:
+The extension contributes six status-bar items, anchored bottom-left, reading "scan · graph · report · delta · compliance · remediate" left to right:
 
 1. **🛡 tf-analyze (scan summary)** — current scan state, click to run a fresh scan.
    - `⏳ tf-analyze scanning…` — in progress
@@ -73,8 +74,9 @@ The extension contributes five status-bar items, anchored bottom-left, reading "
 3. **📄 Report** — opens the urgency-grouped HTML report inline (with **Open in browser** for full-fidelity print).
 4. **🔀 Delta** — *Since last scan*. New / resolved / unchanged findings against the most recent prior JSON report.
 5. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / All).
+6. **🪄 Remediate** — Bulk apply-fixes with diff preview. Two-stage flow: dry-run shows the unified diff, **Apply Fixes** rewrites files on disk and saves originals as `<file>.bak`.
 
-All five are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
+All six are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
 
 ### Real-time diagnostics (LSP)
 
@@ -89,6 +91,18 @@ Right-click any row in the **Findings** tree → **Suppress finding (add to base
 ### MITRE ATT&CK view
 
 Run `tf-analyze: Show MITRE ATT&CK View` from the Command Palette to see findings grouped by ATT&CK technique (`T1078.004`, `T1530`, …). Useful when prepping a red-team report or correlating Terraform findings with broader detection coverage.
+
+### Bulk remediation
+
+The `🪄 Remediate` status-bar item (or the `tf-analyze: Remediate (preview & apply fixes)` command) opens a panel that:
+
+1. Runs `detect.py --apply-fixes dry-run` to compute every fix the engine would make.
+2. Renders the resulting unified diff with syntax highlighting (file headers gold, hunks grey, additions green, deletions red).
+3. Asks for explicit confirmation before re-running with `--apply-fixes apply`, which writes the patched files to disk.
+
+Originals are saved as `<file>.bak` alongside each patched file. The empty-state copy explains which fix kinds are eligible for bulk patching (`resource_missing_arg`, `resource_arg`, `hcl_attr`) — other patterns stay in the per-finding Quick Fix flow.
+
+This is complementary to Quick Fix: the editor's `⌘.` action targets one finding at a time and inserts the snippet as a comment block; the remediation panel applies *every* fixable finding across the workspace in one shot, with an in-place rewrite.
 
 ## Configuration
 
@@ -114,6 +128,7 @@ Run `tf-analyze: Show MITRE ATT&CK View` from the Command Palette to see finding
 | `tf-analyze: Suppress Finding` | Add the selected finding to the workspace baseline. |
 | `tf-analyze: Unsuppress Finding` | Remove the selected finding from the baseline. |
 | `tf-analyze: Open Baseline File` | Open `<ws>/.tf-analyze-baseline.json` in the editor. |
+| `tf-analyze: Remediate (preview & apply fixes)` | Open the bulk-remediation panel (dry-run preview → apply with `.bak` backups). |
 
 ## Architecture
 
