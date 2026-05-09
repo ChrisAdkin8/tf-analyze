@@ -126,6 +126,21 @@ class TestEngineLinkContract:
             f"RULE_DOCS_URL_BASE doesn't substitute {{id}}: {sample!r}"
         )
 
+    def test_url_uses_pretty_form_not_html_extension(self):
+        # GitHub Pages serves /rules/<id>/ (with trailing slash), not
+        # /rules/<id>.html — the .html form returns 404. Lock the
+        # pretty form so future drift is caught locally rather than
+        # only at runtime.
+        sample = detect.RULE_DOCS_URL_BASE.format(id="SEC-AWS-IAM-001")
+        assert sample.endswith("/SEC-AWS-IAM-001/"), (
+            f"RULE_DOCS_URL_BASE must produce pretty URL ending in /<id>/, "
+            f"got: {sample!r}"
+        )
+        assert not sample.endswith(".html"), (
+            "RULE_DOCS_URL_BASE must not use .html extension — Pages 404s on "
+            "those URLs."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Compliance text + HTML carry the URL.

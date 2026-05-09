@@ -10,9 +10,15 @@
 export const RULE_DOCS_URL_BASE =
   'https://chrisadkin8.github.io/tf-analyze/rules/';
 
-/** Resolve a rule ID to its canonical docs URL. */
+/** Resolve a rule ID to its canonical docs URL.
+ *
+ * GitHub Pages serves Jekyll-rendered pages at pretty-URL paths
+ * (`/rules/<id>/`), not at `/rules/<id>.html` — the .html extension
+ * returns 404. The trailing slash matches what Pages publishes and
+ * matches RULE_DOCS_URL_BASE in scripts/detect.py.
+ */
 export function ruleDocsUrl(ruleId: string): string {
-  return `${RULE_DOCS_URL_BASE}${ruleId}.html`;
+  return `${RULE_DOCS_URL_BASE}${ruleId}/`;
 }
 
 /** Wrap a rule ID for HTML output as an anchor that opens in a new tab. */

@@ -106,4 +106,4 @@ ignore_rules:
 
 Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
 
-[← Index of all rules](./)
+[← Index of all rules](../)

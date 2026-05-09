@@ -3479,7 +3479,12 @@ def _render_graph_html(graph: dict) -> str:
 # rendering of it. RULE_DOCS_URL_BASE is one place; switching the
 # canonical host (e.g. to https://tf-analyze.dev/rules/...) is a single
 # edit that ripples to every output surface.
-RULE_DOCS_URL_BASE = "https://chrisadkin8.github.io/tf-analyze/rules/{id}.html"
+# GitHub Pages serves Jekyll-rendered pages at pretty-URL paths
+# (`/rules/SEC-AWS-IAM-001/`), not at `/rules/SEC-AWS-IAM-001.html` —
+# the .html extension returns 404. Use the pretty form so every link
+# from compliance HTML / SARIF helpUri / Findings panel / VS Code
+# hover lands on the actual published page.
+RULE_DOCS_URL_BASE = "https://chrisadkin8.github.io/tf-analyze/rules/{id}/"
 SARIF_HELP_URI_BASE = RULE_DOCS_URL_BASE
 
 

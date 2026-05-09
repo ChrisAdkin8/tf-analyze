@@ -48,18 +48,20 @@ const urls_1 = require("../urls");
 (0, node_test_1.test)('RULE_DOCS_URL_BASE points at the GitHub Pages site', () => {
     assert.equal(urls_1.RULE_DOCS_URL_BASE, 'https://chrisadkin8.github.io/tf-analyze/rules/', 'URL base drifted from the engine\'s RULE_DOCS_URL_BASE — both must match.');
 });
-(0, node_test_1.test)('ruleDocsUrl appends <id>.html', () => {
-    assert.equal((0, urls_1.ruleDocsUrl)('SEC-AWS-IAM-001'), 'https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-IAM-001.html');
+(0, node_test_1.test)('ruleDocsUrl appends <id>/ (pretty URL, not .html)', () => {
+    // GitHub Pages serves Jekyll pages at pretty-URL paths.
+    // `/<id>.html` returns 404; `/<id>/` is the canonical form.
+    assert.equal((0, urls_1.ruleDocsUrl)('SEC-AWS-IAM-001'), 'https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-IAM-001/');
 });
 (0, node_test_1.test)('ruleDocsUrl handles all known rule prefixes', () => {
     for (const prefix of ['SEC', 'ROB', 'STK', 'OPS', 'MOD', 'COST', 'INT', 'CI', 'STYLE', 'CUSTOM']) {
         const id = `${prefix}-EXAMPLE-001`;
-        assert.match((0, urls_1.ruleDocsUrl)(id), new RegExp(`^https://chrisadkin8\\.github\\.io/tf-analyze/rules/${id}\\.html$`), `bad URL for prefix ${prefix}: ${(0, urls_1.ruleDocsUrl)(id)}`);
+        assert.match((0, urls_1.ruleDocsUrl)(id), new RegExp(`^https://chrisadkin8\\.github\\.io/tf-analyze/rules/${id}/$`), `bad URL for prefix ${prefix}: ${(0, urls_1.ruleDocsUrl)(id)}`);
     }
 });
 (0, node_test_1.test)('ruleAnchorHtml produces a valid anchor with target="_blank"', () => {
     const html = (0, urls_1.ruleAnchorHtml)('SEC-AWS-EBS-001');
-    assert.match(html, /<a href="https:\/\/chrisadkin8\.github\.io\/tf-analyze\/rules\/SEC-AWS-EBS-001\.html"/);
+    assert.match(html, /<a href="https:\/\/chrisadkin8\.github\.io\/tf-analyze\/rules\/SEC-AWS-EBS-001\/"/);
     assert.match(html, /target="_blank"/);
     assert.match(html, /rel="noopener"/);
     assert.match(html, /title="Open rule documentation"/);

@@ -20,10 +20,12 @@ test('RULE_DOCS_URL_BASE points at the GitHub Pages site', () => {
   );
 });
 
-test('ruleDocsUrl appends <id>.html', () => {
+test('ruleDocsUrl appends <id>/ (pretty URL, not .html)', () => {
+  // GitHub Pages serves Jekyll pages at pretty-URL paths.
+  // `/<id>.html` returns 404; `/<id>/` is the canonical form.
   assert.equal(
     ruleDocsUrl('SEC-AWS-IAM-001'),
-    'https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-IAM-001.html'
+    'https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-IAM-001/'
   );
 });
 
@@ -32,7 +34,7 @@ test('ruleDocsUrl handles all known rule prefixes', () => {
     const id = `${prefix}-EXAMPLE-001`;
     assert.match(
       ruleDocsUrl(id),
-      new RegExp(`^https://chrisadkin8\\.github\\.io/tf-analyze/rules/${id}\\.html$`),
+      new RegExp(`^https://chrisadkin8\\.github\\.io/tf-analyze/rules/${id}/$`),
       `bad URL for prefix ${prefix}: ${ruleDocsUrl(id)}`
     );
   }
@@ -40,7 +42,7 @@ test('ruleDocsUrl handles all known rule prefixes', () => {
 
 test('ruleAnchorHtml produces a valid anchor with target="_blank"', () => {
   const html = ruleAnchorHtml('SEC-AWS-EBS-001');
-  assert.match(html, /<a href="https:\/\/chrisadkin8\.github\.io\/tf-analyze\/rules\/SEC-AWS-EBS-001\.html"/);
+  assert.match(html, /<a href="https:\/\/chrisadkin8\.github\.io\/tf-analyze\/rules\/SEC-AWS-EBS-001\/"/);
   assert.match(html, /target="_blank"/);
   assert.match(html, /rel="noopener"/);
   assert.match(html, /title="Open rule documentation"/);

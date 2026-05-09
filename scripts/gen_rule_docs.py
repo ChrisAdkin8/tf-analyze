@@ -273,7 +273,10 @@ def render_rule_md(entry: dict) -> str:
         "```\n\n"
         "Baseline (preserves but doesn't fail CI): scan with `--baseline "
         "prior.json` after a one-time snapshot.\n\n"
-        f"[← Index of all rules](./)\n"
+        # `../` because Pages serves rule pages at /rules/<id>/ — `./`
+        # from there resolves back to the same page. `../` lands on
+        # /rules/, which Jekyll serves as the index.
+        f"[← Index of all rules](../)\n"
     )
 
     return (

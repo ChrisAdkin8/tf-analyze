@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.24] — 2026-05-09
+
+### Fixed
+- **Every per-rule docs link from the extension was 404.** The links shipped in 0.1.23 pointed at `https://chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>.html`, but GitHub Pages serves Jekyll-rendered pages at the pretty-URL form `…/rules/<RULE-ID>/` — the `.html` suffix returns 404. Verified with curl: `/rules/SEC-AWS-IAM-001.html` → 404, `/rules/SEC-AWS-IAM-001/` → 200.
+
+  Affected every rule-ID rendering surface that landed in 0.1.23:
+  - Diagnostic `code` target in the Problems pane and hover tooltip
+  - "📖 Open full rule documentation" button in the recommendation webview
+  - Delta panel rule IDs
+  - MITRE ATT&CK panel rule IDs
+  - Compliance panel (inherits engine HTML — engine constant fixed in lockstep)
+
+  `ruleDocsUrl()` in `src/urls.ts` now returns `${RULE_DOCS_URL_BASE}${ruleId}/` instead of `${ruleId}.html`. The same change shipped in `scripts/detect.py:RULE_DOCS_URL_BASE` so engine output (compliance HTML, SARIF helpUri, Findings panel) matches.
+
+  `src/test/urls.test.ts` updated to lock the pretty-URL form so future drift is caught locally rather than only at runtime against the live site.
+
+---
+
 ## [0.1.23] — 2026-05-09
 
 ### Added
