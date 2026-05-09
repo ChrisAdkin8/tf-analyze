@@ -1,3 +1,7 @@
 node_modules/
 *.vsix
 .vscode-test/
+# engine/detect.py is regenerated at build time by scripts/bundle-engine.js
+# from ../scripts/detect.py. Source-of-truth lives in the parent monorepo;
+# committing the bundled copy would just churn diffs every release.
+engine/

@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.19] — 2026-05-09
+
+### Added
+- 📦 **Self-contained `.vsix` — no repo clone required.** `scripts/bundle-engine.js` copies the engine **and catalog** from the source repo into the extension at build time (wired into `vscode:prepublish`, `prepackage`, and `pretest` so it runs before every relevant npm step). The bundled layout mirrors the source repo —`engine/scripts/detect.py` + `engine/catalog/*.yaml` — so detect.py's default `--catalog` resolution (`Path(__file__).parent.parent / "catalog"`) finds the catalog automatically, no extension-side flag plumbing required. `scriptResolver.resolveScriptPath()` checks the bundled location *first* — before the `tf-analyze.scriptPath` setting and any workspace fallbacks — so a fresh `code --install-extension tf-analyze-X.Y.Z.vsix` works out of the box on any workspace, with no settings to configure and no companion repo to clone. The extension is now ~1MB packaged: 313KB engine + 339KB catalog (210 YAML entries) + 359KB language-client deps.
+
+  **Self-containment is a hard product requirement going forward.** Any new runtime that the extension needs (a future remediation engine, a SAT solver, etc.) MUST be bundled the same way — the user-facing install must never depend on a separate `git clone`, `pip install`, or `apt install` step. The workspace-fallback paths are now considered *engine-developer escape hatches only*, not user features.
+
+### Removed
+- **Report status-bar icon (`📄 Report`).** The HTML report panel and the Findings tree present the same data with different ergonomics, and toolbar real estate should be reserved for surfaces that give the user net-new information at a glance. The `tf-analyze: Show Report` command is still wired up — it appears in the Command Palette and in the Findings tree's view-title bar — just not in the status bar. Status bar now reads "scan · graph · delta · compliance · remediate" left-to-right (five items).
+
+### Changed
+- **Resolver tests use `bundledEnginePath: null` to disable the bundled-engine check** so they exercise the workspace-fallback chain without picking up the real bundled engine the build step just produced. Two new tests cover the bundled path itself: one verifies it points at `<extensionRoot>/engine/detect.py`, the other verifies it wins over a workspace-relative fallback when both exist.
+
+---
+
 ## [0.1.18] — 2026-05-09
 
 ### Fixed

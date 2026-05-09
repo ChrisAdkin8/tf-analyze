@@ -33,32 +33,25 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BUNDLED_ENGINE_PATH = void 0;
 exports.resolveScriptPath = resolveScriptPath;
 exports.defaultSearchPaths = defaultSearchPaths;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-/** Resolve `scripts/detect.py` from the workspace + user setting.
+/** Path to the detect.py shipped inside the .vsix. The extension MUST
+ * be self-contained — this path is the canonical engine location and
+ * is checked first by `resolveScriptPath`, before any workspace
+ * fallbacks or the user's `tf-analyze.scriptPath` setting.
  *
- * Strategy (mirrored across every surface that shells out to the engine
- * so users hit the same lookup whether they invoke runScan, the attack
- * graph, or the HTML report):
+ * `__dirname` resolves to the runtime location of the compiled .js
+ * (typically `<extensionRoot>/out/`). The bundled engine sits at
+ * `<extensionRoot>/engine/detect.py`, populated by
+ * `scripts/bundle-engine.js` at build time.
  *
- *  1. Honour `tf-analyze.scriptPath` if set. A configured *directory*
- *     is treated as "look for detect.py inside" — a common
- *     misconfiguration that used to produce `python3 <dir>` →
- *     `can't find '__main__' module`.
- *  2. Workspace-relative fallbacks: `<ws>/scripts/detect.py`,
- *     `<ws>/detect.py`, and the sibling-clone case
- *     `<ws>/../tf-analyze/scripts/detect.py`.
- *  3. Walk up to six parent directories of the workspace looking for
- *     `scripts/detect.py`. Catches the case where the workspace is a
- *     fixture or submodule nested inside the tf-analyze repo.
- *
- * Returns an absolute file path, or null if no `detect.py` was found.
- * The result is always a regular file — `python3 <dir>` would
- * otherwise fail before emitting JSON.
- */
-function resolveScriptPath(cfg, wsFolder) {
+ * Exported so callers (and tests) can verify the path without
+ * re-deriving it. */
+exports.BUNDLED_ENGINE_PATH = path.resolve(__dirname, '..', 'engine', 'scripts', 'detect.py');
+function resolveScriptPath(cfg, wsFolder, options) {
     const isFile = (p) => {
         try {
             return fs.statSync(p).isFile();
@@ -75,6 +68,16 @@ function resolveScriptPath(cfg, wsFolder) {
             return false;
         }
     };
+    // 1. Bundled engine — checked first so the .vsix is self-contained
+    //    and works on any workspace, regardless of layout. If this is
+    //    missing, the extension was packaged incorrectly (the
+    //    `bundle-engine` npm script didn't run before vsce package).
+    const bundled = options?.bundledEnginePath === undefined
+        ? exports.BUNDLED_ENGINE_PATH
+        : options.bundledEnginePath;
+    if (bundled && isFile(bundled))
+        return bundled;
+    // 2. Engine-developer override.
     const configured = cfg.get('scriptPath', '').trim();
     if (configured) {
         const abs = path.isAbsolute(configured) ? configured : path.join(wsFolder, configured);
@@ -86,6 +89,9 @@ function resolveScriptPath(cfg, wsFolder) {
                 return inDir;
         }
     }
+    // 3. Workspace-relative fallbacks. Mostly historical now that the
+    //    .vsix bundles its own engine, but kept for engine devs who run
+    //    the extension via F5 against a workspace that has its own copy.
     for (const cand of [
         path.join(wsFolder, 'scripts', 'detect.py'),
         path.join(wsFolder, 'detect.py'),
@@ -94,6 +100,7 @@ function resolveScriptPath(cfg, wsFolder) {
         if (isFile(cand))
             return cand;
     }
+    // 4. Parent walk for nested fixtures / submodules.
     let dir = wsFolder;
     for (let i = 0; i < 6; i++) {
         const parent = path.dirname(dir);

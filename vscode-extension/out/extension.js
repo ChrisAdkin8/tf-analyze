@@ -310,27 +310,26 @@ function activate(context) {
     graphStatusBar.command = "tf-analyze.showAttackGraph";
     graphStatusBar.text = "$(type-hierarchy) Attack Graph";
     graphStatusBar.tooltip = "tf-analyze: open the internet → crown-jewels attack graph for this workspace";
-    // Third status-bar item: one-click HTML report. Sits to the right of
-    // the attack graph (priority 98) so the three read left-to-right as
-    // "scan · graph · report". Same .tf-presence gating.
-    const reportStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
-    reportStatusBar.command = "tf-analyze.showHtmlReport";
-    reportStatusBar.text = "$(file-text) Report";
-    reportStatusBar.tooltip = "tf-analyze: open the HTML findings report (urgency-grouped, with score/grade and suggested fixes)";
-    // Fourth: delta. Most "daily loop" valuable surface — what changed
-    // since last scan? Priority 97.
-    const deltaStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+    // The HTML report intentionally has *no* status-bar item — it
+    // overlaps semantically with the Findings tree (same data, different
+    // presentation) and we want the toolbar reserved for surfaces that
+    // give the user net-new information at a glance. The command is
+    // still wired up for the palette and the view/title menu so it stays
+    // a click away.
+    // Third (was fourth): delta. Most "daily loop" valuable surface —
+    // what changed since last scan? Priority 98.
+    const deltaStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
     deltaStatusBar.command = "tf-analyze.showDelta";
     deltaStatusBar.text = "$(diff) Delta";
     deltaStatusBar.tooltip = "tf-analyze: show new / resolved / unchanged findings since the most recent prior scan";
-    // Fifth: compliance. Priority 96. Heavily-requested by audit users.
-    const complianceStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+    // Fourth: compliance. Priority 97. Heavily-requested by audit users.
+    const complianceStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
     complianceStatusBar.command = "tf-analyze.showCompliance";
     complianceStatusBar.text = "$(checklist) Compliance";
     complianceStatusBar.tooltip = "tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2)";
-    // Sixth: remediate. Bulk apply-fixes UX with two-stage preview/apply
-    // flow (writes .bak backups). Priority 95.
-    const remediateStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+    // Fifth: remediate. Bulk apply-fixes UX with two-stage preview/apply
+    // flow (writes .bak backups). Priority 96.
+    const remediateStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
     remediateStatusBar.command = "tf-analyze.remediate";
     remediateStatusBar.text = "$(wand) Remediate";
     remediateStatusBar.tooltip = "tf-analyze: preview and bulk-apply fix_hcl patches across the workspace (--apply-fixes)";
@@ -338,7 +337,6 @@ function activate(context) {
     void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
         if (found.length > 0) {
             graphStatusBar.show();
-            reportStatusBar.show();
             deltaStatusBar.show();
             complianceStatusBar.show();
             remediateStatusBar.show();
@@ -349,7 +347,7 @@ function activate(context) {
         showCollapseAll: true,
     });
     const codeActionProvider = new TfAnalyzeCodeActionProvider(findingsMap);
-    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, reportStatusBar, deltaStatusBar, complianceStatusBar, remediateStatusBar, treeView, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
+    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, deltaStatusBar, complianceStatusBar, remediateStatusBar, treeView, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
         diagnosticCollection.clear();
         findingsMap.clear();
         provider.clear();
