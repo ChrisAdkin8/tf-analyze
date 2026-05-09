@@ -5,6 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.23] — 2026-05-09
+
+### Added
+- **Every rule ID in the extension is now a clickable link to its docs page.** Five surfaces wired through the new `src/urls.ts` shared helper:
+  1. **Diagnostic `code`** — VS Code's Problems pane and hover tooltip render the rule ID as a clickable link. Was a stale `github.com/example/...` placeholder; now points at `https://chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>.html`.
+  2. **Recommendation webview** — the panel that opens via "View recommendation" / `tf-analyze.openFinding` gains a prominent **"📖 Open full rule documentation →"** button styled with the urgency colour.
+  3. **Delta panel** (`tf-analyze: Since Last Scan`) — rule IDs in the delta listing wrap in dotted-underline anchors that highlight on hover.
+  4. **MITRE ATT&CK view** — rule IDs grouped under each technique are now anchors. Regex covers all 10 catalogue prefixes (`SEC`, `ROB`, `STK`, `OPS`, `MOD`, `COST`, `INT`, `CI`, `STYLE`, `CUSTOM`).
+  5. **Compliance panel** — already linked through the engine's HTML output (which started emitting `<a>` anchors in the same release as the per-rule docs site).
+
+- **`src/urls.ts`** — single source of truth: `RULE_DOCS_URL_BASE`, `ruleDocsUrl(id)`, `ruleAnchorHtml(id)`. All surfaces import from here so a future move to a custom domain (e.g. `tf-analyze.dev/rules/...`) is a one-line edit that ripples to every callsite. Mirrors the engine's `RULE_DOCS_URL_BASE` constant in `scripts/detect.py`.
+
+- **`src/test/urls.test.ts`** — locks the URL contract: format string, all 10 prefix variants, anchor HTML structure (`target="_blank"` + `rel="noopener"` + `title="Open rule documentation"`). Drift between the extension's URL and the engine's becomes a test failure.
+
+### Why this matters
+Compliance failures get pasted into Slack threads, JIRA tickets, and runbook wikis. A clickable rule ID means a non-engineer auditor never has to clone the repo to find out what `SEC-AWS-IAM-002` actually means — they get plain English explanation, why it likely fired, and the remediation snippet directly.
+
+---
+
 ## [0.1.22] — 2026-05-09
 
 ### Fixed

@@ -8,6 +8,7 @@ import { DeltaPanel } from "./deltaPanel";
 import { CompliancePanel } from "./compliancePanel";
 import { MitrePanel } from "./mitrePanel";
 import { RemediationPanel } from "./remediationPanel";
+import { ruleDocsUrl, ruleAnchorHtml } from "./urls";
 import { resolveScriptPath as sharedResolve } from "./scriptResolver";
 import { startLspClient, isLspRunning } from "./lspClient";
 import { baselineExists, baselinePath, ensureBaselineFile, suppress, unsuppress } from "./baseline";
@@ -174,7 +175,12 @@ function applyDiagnostics(
       urgencyToDiagnosticSeverity(f.urgency)
     );
     diag.source = "tf-analyze";
-    diag.code = { value: f.id, target: vscode.Uri.parse(`https://github.com/example/tf-analyze`) };
+    // VS Code renders the `code.value` as a clickable link in the
+    // Problems pane and the hover tooltip; `code.target` is what it
+    // navigates to. Point at the per-rule docs page so the user lands
+    // on the explainer + remediation + verification + references
+    // page rather than a generic repo URL.
+    diag.code = { value: f.id, target: vscode.Uri.parse(ruleDocsUrl(f.id)) };
 
     const key = uri.fsPath;
     if (!byFile.has(key)) byFile.set(key, []);
@@ -661,12 +667,17 @@ function buildFindingHtml(finding: Finding): string {
   .mitre code { background: var(--vscode-textCodeBlock-background); padding:2px 6px;
                  border-radius:3px; font-size:0.95em; }
   h3 { font-size:1em; margin-bottom:4px; }
+  .docs-link { display:inline-block; margin:8px 0 16px; padding:6px 12px;
+               background:${color}; color:#fff; text-decoration:none;
+               border-radius:4px; font-size:0.9em; font-weight:600; }
+  .docs-link:hover { opacity:0.9; }
 </style>
 </head>
 <body>
 <h1>${escape(finding.id)}: ${escape(finding.title)}</h1>
 <span class="badge">${escape(finding.urgency)}</span>
 <div class="meta">${escape(finding.file)}:${finding.line} &nbsp;|&nbsp; section: ${escape(finding.section)}</div>
+<a class="docs-link" href="${ruleDocsUrl(finding.id)}" target="_blank" rel="noopener">📖 Open full rule documentation →</a>
 ${mitreHtml}
 ${narrativeHtml}
 ${excerptHtml}

@@ -37,6 +37,7 @@ exports.MitrePanel = void 0;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const scriptResolver_1 = require("./scriptResolver");
+const urls_1 = require("./urls");
 /** MITRE ATT&CK view. Runs `detect.py --format mitre`, which emits a
  * markdown-flavoured plain-text grouping of findings by ATT&CK
  * technique (e.g. "T1078.004 — Valid Accounts: Cloud Accounts").
@@ -104,7 +105,12 @@ class MitrePanel {
         })
             .replace(/^## (.+)$/gm, '<h2>$1</h2>')
             // Urgency tag inside finding bullets
-            .replace(/\[(CRITICAL|HIGH|MEDIUM|LOW|INFO)\]/g, (_m, u) => `<span class="u u-${u}">${u}</span>`);
+            .replace(/\[(CRITICAL|HIGH|MEDIUM|LOW|INFO)\]/g, (_m, u) => `<span class="u u-${u}">${u}</span>`)
+            // Rule IDs in finding bullets: SEC-AWS-IAM-001, ROB-AWS-RDS-002, …
+            // The plain-text output emits them as bare tokens after the
+            // urgency tag; turn each into an anchor that links to the
+            // per-rule docs page.
+            .replace(/\b((?:SEC|ROB|STK|OPS|MOD|COST|INT|CI|STYLE|CUSTOM)-[A-Z0-9-]+)\b/g, (_m, ruleId) => `<a class="rule-id" href="${(0, urls_1.ruleDocsUrl)(ruleId)}" target="_blank" rel="noopener" title="Open rule documentation">${ruleId}</a>`);
         return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
   body { margin: 0; background: #1e1e1e; color: #ccc; font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 24px; line-height: 1.5; }
@@ -119,6 +125,8 @@ class MitrePanel {
   .u-MEDIUM { background: #d4a017; color: #2a1a00; }
   .u-LOW { background: #6BBF84; color: #1a2a1a; }
   .u-INFO { background: #4A90D9; color: #fff; }
+  .rule-id { color: #ccc; text-decoration: none; border-bottom: 1px dotted #555; }
+  .rule-id:hover { color: #4daafc; border-bottom-color: #4daafc; }
   pre { white-space: pre-wrap; margin: 0; }
 </style></head><body>
 <pre>${escaped}</pre>

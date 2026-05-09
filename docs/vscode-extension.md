@@ -65,6 +65,16 @@ Every finding appears as a squiggle on the relevant source line:
 ### Hover tooltip
 
 Hovering over a squiggle shows the finding ID, title, and urgency.
+The rule ID is a **clickable link** that opens the per-rule docs page
+on the project's GitHub Pages site
+(`https://chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>.html`) with
+the full explainer, "why it likely fired", remediation, verification,
+adversarial scenario, and references (CIS / PCI-DSS / SOC 2 / MITRE
+ATT&CK).
+
+The same link appears in the **Problems pane** next to every
+diagnostic and as a prominent **"📖 Open full rule documentation"**
+button at the top of the recommendation webview.
 
 ### Quick Fix (⌘. / Ctrl+.)
 
@@ -72,7 +82,9 @@ When a finding has a `fix_hcl` snippet, a Quick Fix action is available:
 - **"Apply fix for SEC-AWS-EBS-001"** — inserts the canonical fix_hcl below
   the current line as a comment block to review and merge manually.
 - **"View recommendation for SEC-AWS-EBS-001"** — opens a webview panel
-  with the full recommendation, fix_hcl, disruption level, and source excerpt.
+  with the full recommendation, fix_hcl, disruption level, source excerpt,
+  and a "📖 Open full rule documentation" button linking to the per-rule
+  docs page.
 
 ### Findings tree (Explorer panel)
 

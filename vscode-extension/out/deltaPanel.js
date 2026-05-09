@@ -37,6 +37,7 @@ exports.DeltaPanel = void 0;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const scriptResolver_1 = require("./scriptResolver");
+const urls_1 = require("./urls");
 /** "Since last scan" panel. Runs `detect.py --format json --auto-compare`
  * which auto-discovers the most recent prior JSON report in the
  * configured reports-dir and emits a `delta = {new, resolved, unchanged}`
@@ -146,7 +147,9 @@ class DeltaPanel {
   .u-MEDIUM { background: #d4a017; color: #2a1a00; }
   .u-LOW { background: #6BBF84; color: #1a2a1a; }
   .u-INFO { background: #4A90D9; color: #fff; }
-  .id { font-family: ui-monospace, Menlo, monospace; color: #aaa; font-size: 11px; margin-right: 6px; }
+  .id { font-family: ui-monospace, Menlo, monospace; color: #aaa; font-size: 11px; margin-right: 6px;
+        text-decoration: none; }
+  a.id:hover { color: var(--vscode-textLink-activeForeground, #4daafc); text-decoration: underline; }
   .loc { color: #888; font-size: 11px; }
 </style></head><body>
 <h2>Since last scan</h2>
@@ -182,7 +185,7 @@ document.querySelectorAll('li[data-file]').forEach(el => {
         const where = f.resource ? `${f.resource} — ${f.file}:${f.line}` : `${f.file}:${f.line}`;
         return `<li data-file="${this._escape(f.file)}" data-line="${f.line}">
       <span class="urgency u-${this._escape(urg)}">${this._escape(urg)}</span>
-      <span class="id">${this._escape(f.id)}</span>
+      <a class="id" href="${(0, urls_1.ruleDocsUrl)(f.id)}" target="_blank" rel="noopener" title="Open rule documentation">${this._escape(f.id)}</a>
       ${this._escape(f.title ?? '')}
       <div class="loc">${this._escape(where)}</div>
     </li>`;
