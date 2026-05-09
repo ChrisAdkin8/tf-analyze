@@ -35,7 +35,7 @@ keywords: "security, medium, terraform, iac, aws, cis-1.16, mitre-T1078.004"
 
 ![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-IAM-POLICY-006" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-IAM-POLICY-006" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-IAM-POLICY-006" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-IAM-POLICY-006 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **IAM policy uses `not_actions` or `not_resources`.** This rule has `default_urgency: MEDIUM` and operates on a infrastructure wide blast radius. 
 
@@ -103,6 +103,16 @@ or `NotResource`.
 
 **Source**
   - [`catalog/SEC-AWS-IAM-POLICY-006.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-POLICY-006.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `SEC-AWS-IAM-POLICY-*` family:
+
+- [`SEC-AWS-IAM-POLICY-001`](./SEC-AWS-IAM-POLICY-001.md) — IAM policy document grants wildcard `actions = [\"*\"]`
+- [`SEC-AWS-IAM-POLICY-002`](./SEC-AWS-IAM-POLICY-002.md) — IAM policy document grants wildcard `iam:*` actions
+- [`SEC-AWS-IAM-POLICY-003`](./SEC-AWS-IAM-POLICY-003.md) — IAM policy document grants wildcard `resources = [\"*\"]`
+- [`SEC-AWS-IAM-POLICY-004`](./SEC-AWS-IAM-POLICY-004.md) — IAM policy document grants principal `identifiers = [\"*\"]` (public)
+- [`SEC-AWS-IAM-POLICY-005`](./SEC-AWS-IAM-POLICY-005.md) — IAM policy grants both `actions = [\"*\"]` and `resources = [\"*\"]`
 
 ---
 

@@ -151,6 +151,181 @@ class TestSEOAndDeepLinks:
         # giscus client URL only present inside the gated block.
         assert "giscus.app/client.js" in page
 
+    def test_jsonld_passes_schema_org_validator(self, page: str) -> None:
+        """Validate the JSON-LD payload against the structural rules a
+        Schema.org-aware parser (Google Rich Results, schema.org's own
+        validator) enforces. We don't pull a heavy parser in (`pyld` /
+        `jsonschema`) — instead we encode the constraints inline so a
+        regression in the generator is caught without a dependency
+        burden.
+
+        Catches: tampered `@type`, malformed URLs, dropped required
+        fields, wrong nesting on `mainEntityOfPage`, non-string keywords.
+        """
+        import json as _json
+        from urllib.parse import urlparse
+
+        marker = '<script type="application/ld+json">'
+        start = page.index(marker) + len(marker)
+        end = page.index("</script>", start)
+        payload = _json.loads(page[start:end].strip())
+
+        # @context / @type — controlled values per Schema.org TechArticle.
+        assert payload["@context"] == "https://schema.org", (
+            f"@context must be 'https://schema.org', got {payload['@context']!r}"
+        )
+        assert payload["@type"] == "TechArticle", (
+            f"@type must be 'TechArticle', got {payload['@type']!r}"
+        )
+
+        # Required fields per Google TechArticle Rich Results guide.
+        for field in ("headline", "description", "url", "mainEntityOfPage",
+                      "author", "publisher"):
+            assert field in payload, f"missing required field {field!r}"
+            assert payload[field], f"required field {field!r} is empty"
+
+        # URL fields must be absolute https URLs.
+        def _is_https_absolute(url: str) -> bool:
+            p = urlparse(url)
+            return p.scheme == "https" and bool(p.netloc)
+
+        assert _is_https_absolute(payload["url"]), (
+            f"url is not an absolute https URL: {payload['url']!r}"
+        )
+
+        # mainEntityOfPage must be a {@type: WebPage, @id: <url>} object,
+        # not a bare string. Google explicitly demotes the bare-string form.
+        moep = payload["mainEntityOfPage"]
+        assert isinstance(moep, dict), (
+            "mainEntityOfPage must be an object, not a bare URL string"
+        )
+        assert moep.get("@type") == "WebPage", (
+            f"mainEntityOfPage.@type must be 'WebPage', got {moep.get('@type')!r}"
+        )
+        assert "@id" in moep, "mainEntityOfPage missing @id"
+        assert _is_https_absolute(moep["@id"]), (
+            f"mainEntityOfPage.@id is not an absolute https URL: {moep['@id']!r}"
+        )
+
+        # author / publisher must be Organization or Person objects.
+        for actor_key in ("author", "publisher"):
+            actor = payload[actor_key]
+            assert isinstance(actor, dict), f"{actor_key} must be an object"
+            assert actor.get("@type") in ("Organization", "Person"), (
+                f"{actor_key}.@type must be Organization or Person, "
+                f"got {actor.get('@type')!r}"
+            )
+            assert actor.get("name"), f"{actor_key}.name missing or empty"
+
+        # publisher.url, when present, must be absolute https.
+        if "url" in payload["publisher"]:
+            assert _is_https_absolute(payload["publisher"]["url"]), (
+                f"publisher.url not absolute https: {payload['publisher']['url']!r}"
+            )
+
+        # keywords is a comma-separated string per Schema.org (not a list).
+        # Google accepts both, but the generator pins to string for stability.
+        assert isinstance(payload["keywords"], str), (
+            f"keywords must be a comma-separated string, got "
+            f"{type(payload['keywords']).__name__}"
+        )
+
+        # proficiencyLevel — Schema.org defines a free-text string here,
+        # but the controlled vocab is {Beginner, Expert}. We pin to
+        # those values; loosening is a deliberate choice that should
+        # update this test.
+        if "proficiencyLevel" in payload:
+            assert payload["proficiencyLevel"] in ("Beginner", "Expert"), (
+                f"proficiencyLevel outside controlled vocab: "
+                f"{payload['proficiencyLevel']!r}"
+            )
+
+        # isAccessibleForFree must be a boolean (not "true"/"false" strings —
+        # Google's parser silently demotes string booleans).
+        if "isAccessibleForFree" in payload:
+            assert isinstance(payload["isAccessibleForFree"], bool), (
+                "isAccessibleForFree must be a JSON boolean, not a string"
+            )
+
+        # No keys may slip in starting with a leading whitespace or @-fork
+        # other than the recognised JSON-LD keywords.
+        recognised_at_keys = {"@context", "@type", "@id", "@graph"}
+        for k in payload:
+            if k.startswith("@"):
+                assert k in recognised_at_keys, (
+                    f"unrecognised JSON-LD reserved key: {k!r}"
+                )
+
+    def test_jsonld_validates_across_every_rule_page(self) -> None:
+        """The structural validator must pass for ALL rule pages, not
+        just the SAMPLE. A regression in `_json_ld()` could affect a
+        subset (e.g. rules with empty `recommendation` rendering an
+        empty description). Walk the whole tree with a tighter check
+        focused on the failure modes that historically slip past.
+        """
+        import json as _json
+
+        for path in sorted(DOCS_RULES_DIR.glob("*.md")):
+            if path.name == "index.md":
+                continue
+            text = path.read_text(encoding="utf-8")
+            marker = '<script type="application/ld+json">'
+            assert marker in text, f"{path.name}: missing JSON-LD"
+            start = text.index(marker) + len(marker)
+            end = text.index("</script>", start)
+            try:
+                payload = _json.loads(text[start:end].strip())
+            except _json.JSONDecodeError as e:
+                pytest.fail(f"{path.name}: JSON-LD payload invalid JSON: {e}")
+            # Spot-check the failure modes most likely to silently break.
+            assert payload.get("@type") == "TechArticle", path.name
+            assert payload.get("url", "").startswith("https://"), path.name
+            assert payload.get("description"), (
+                f"{path.name}: description empty (would demote rich-result eligibility)"
+            )
+            assert isinstance(payload.get("mainEntityOfPage"), dict), path.name
+
+    def test_family_backlinks_present(self, page: str) -> None:
+        # The Family section turns each leaf rule page into a hub
+        # linking siblings sharing the prefix-up-to-numeric-segment
+        # (e.g. `SEC-AWS-IAM-*`). Multiplies internal-link density
+        # across the rules subtree → meaningful PageRank lift.
+        assert "## Family" in page, "Family backlink section missing"
+        assert "SEC-AWS-IAM-*" in page, "family prefix label missing"
+        # SEC-AWS-IAM-001's siblings (002, 003) must be linked.
+        assert "[`SEC-AWS-IAM-002`](./SEC-AWS-IAM-002.md)" in page
+        assert "[`SEC-AWS-IAM-003`](./SEC-AWS-IAM-003.md)" in page
+        # The current rule must NOT link to itself.
+        assert "[`SEC-AWS-IAM-001`](./SEC-AWS-IAM-001.md)" not in page
+
+    def test_family_section_omitted_for_singleton_rules(self) -> None:
+        # A rule whose family has no other members shouldn't render
+        # an empty "## Family" section. Pick a known singleton (the
+        # generator promises this for any family of size 1).
+        from gen_rule_docs import _build_family_index, _family_prefix
+        entries = []
+        for yml in sorted(CATALOG_DIR.glob("*.yaml")):
+            try:
+                entry = load_yaml(yml.read_text())
+            except Exception:
+                continue
+            if entry.get("status") == "deprecated":
+                continue
+            entries.append(entry)
+        index = _build_family_index(entries)
+        singletons = [
+            e["id"] for e in entries
+            if len(index.get(_family_prefix(e["id"]), [])) == 1
+        ]
+        if not singletons:
+            pytest.skip("no singleton families in current catalogue")
+        sample = singletons[0]
+        text = (DOCS_RULES_DIR / f"{sample}.md").read_text()
+        assert "## Family" not in text, (
+            f"{sample} is a singleton family; the Family section should "
+            f"be omitted (generator returned an empty section block)"
+        )
+
     def test_jsonld_block_present_on_every_rule_page(self) -> None:
         """Doc-test the property holds for ALL rules, not just one."""
         sample_count = 0

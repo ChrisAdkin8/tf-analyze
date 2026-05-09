@@ -35,7 +35,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-8.5.5"
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-GKE-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-GKE-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-GKE-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-GKE-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **GKE cluster missing application-layer secrets encryption.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
 
@@ -93,6 +93,14 @@ must return `ENCRYPTED`.
 
 **Source**
   - [`catalog/STK-GCP-GKE-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-GKE-003.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `STK-GCP-GKE-*` family:
+
+- [`STK-GCP-GKE-001`](./STK-GCP-GKE-001.md) — GKE cluster missing private nodes
+- [`STK-GCP-GKE-002`](./STK-GCP-GKE-002.md) — GKE cluster missing Workload Identity
+- [`STK-GCP-GKE-004`](./STK-GCP-GKE-004.md) — GKE cluster missing master authorized networks
 
 ---
 

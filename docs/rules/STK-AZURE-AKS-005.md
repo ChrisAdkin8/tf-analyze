@@ -35,7 +35,7 @@ keywords: "stack, medium, terraform, iac, azure"
 
 ![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AZURE-AKS-005" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AZURE-AKS-005" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-AZURE-AKS-005" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-AZURE-AKS-005 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **AKS cluster API server missing authorized IP ranges.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. _Conditional: only applies when `azurerm ≥ 3.0`._
 
@@ -115,6 +115,13 @@ must return a non-empty list.
 
 **Source**
   - [`catalog/STK-AZURE-AKS-005.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-AKS-005.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `STK-AZURE-AKS-*` family:
+
+- [`STK-AZURE-AKS-003`](./STK-AZURE-AKS-003.md) — AKS cluster workload identity not enabled
+- [`STK-AZURE-AKS-004`](./STK-AZURE-AKS-004.md) — AKS cluster API server is publicly accessible
 
 ---
 

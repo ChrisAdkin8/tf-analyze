@@ -14,15 +14,15 @@
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/ChrisAdkin8/tf-analyze/pkgs/container/tf-analyze)
 
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 209](https://img.shields.io/badge/rules-209-brightgreen)
+![Rules: 215](https://img.shields.io/badge/rules-215-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 421](https://img.shields.io/badge/tests-421%20passing-brightgreen)
+![Tests: 500](https://img.shields.io/badge/tests-500%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-215%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
 
-`tf-analyze` runs as a Claude Code skill (`/tf-analyze`), as a standalone Python CLI, as a GitHub Action, in a Docker container, as a pre-commit hook, as an LSP server, and as an HCP Terraform Run Task. Same engine, six surfaces.
+`tf-analyze` runs as a Claude Code skill (`/tf-analyze`), as a standalone Python CLI, as a GitHub Action, in a Docker container, as a pre-commit hook, as an LSP server, as a VS Code extension, and as an HCP Terraform Run Task. Same engine, eight surfaces.
 
 ---
 
@@ -187,7 +187,8 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | | Path | Doc |
 |---|------|-----|
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks |
-| VS Code extension (v0.1.28) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + `vscode://` deep-link handler |
+| VS Code extension (v0.1.29) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
+| Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |
@@ -261,7 +262,7 @@ Three corpora that double as engine smoke tests and end-to-end demos for the sur
 
 | Corpus | Purpose |
 |---|---|
-| [`examples/terragoat/`](examples/terragoat/) | Three-cloud intentionally-vulnerable corpus modelled on Bridgecrew's [terragoat](https://github.com/bridgecrewio/terragoat). Triggers ~292 findings across SEC / ROB / STK / OPS / COST domains. Broadest coverage; the right pick for first-time users. |
+| [`examples/terragoat/`](examples/terragoat/) | Three-cloud intentionally-vulnerable corpus modelled on Bridgecrew's [terragoat](https://github.com/bridgecrewio/terragoat). Triggers ~295 findings across SEC / ROB / STK / OPS / COST domains. Broadest coverage; the right pick for first-time users. |
 | [`examples/module-reuse-demo/`](examples/module-reuse-demo/) | Five hand-rolled VPC/network/AKS clusters across AWS / GCP / Azure that match popular community modules + two negative cases. Exercises the **📦 Module Reuse** panel end-to-end with all three confidence-badge tiers visible. |
 | [`examples/attack-graph-demo/`](examples/attack-graph-demo/) | Multi-tier AWS app: ALB → public EC2 → over-broad IAM role → S3 / Secrets / RDS. 19 nodes, 13 edges, 6 internet-reachable, 3 crown jewels. Exercises the **🛤 Attack Graph** panel and the d3 demo. |
 

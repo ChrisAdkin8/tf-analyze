@@ -12,8 +12,8 @@ Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE AT
 ## Read
 
 - 📄 [**Project README**](https://github.com/ChrisAdkin8/tf-analyze#readme) — quickstart, feature matrix, the "why another scanner" pitch.
-- 📚 [**Rule reference**](rules/) — auto-generated docs page per catalogue rule (209 pages, sortable by section/urgency in the index).
-- 🧩 [**VS Code extension**](vscode-extension.md) — installation, the six surfaces (scan, attack graph, delta, compliance, remediate, baseline), troubleshooting matrix.
+- 📚 [**Rule reference**](rules/) — auto-generated docs page per catalogue rule (215 pages, sortable by section/urgency in the index). Each page also lists every sibling in the same family (e.g. `SEC-AWS-IAM-001` links to `-002` and `-003`) and ships "📂 Open in VS Code" + "📝 Suppress in workspace" deep-link buttons.
+- 🧩 [**VS Code extension**](vscode-extension.md) — installation, the six status-bar surfaces (scan with score+grade badge, attack graph, delta, compliance, remediate, module reuse), four-verb `vscode://` URI handler, troubleshooting matrix.
 - ⚙️ [**CLI reference**](cli.md) — every flag, every output format, generated from `argparse` so it never drifts.
 - 🛰️ [**LSP server**](lsp.md) — using `detect.py --lsp` from any LSP-aware editor.
 - 🪝 [**Pre-commit hook**](pre-commit.md) — block PRs at commit time.

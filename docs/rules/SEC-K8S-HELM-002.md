@@ -35,7 +35,7 @@ keywords: "security, critical, terraform, iac, cis-5.2.4, mitre-T1611, mitre-T10
 
 ![CRITICAL](https://img.shields.io/badge/CRITICAL-c0392b?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-HELM-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-HELM-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-K8S-HELM-002" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-K8S-HELM-002 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **helm_release sets `securityContext.privileged=true`.** This rule has `default_urgency: CRITICAL` and operates on a environment blast radius. 
 
@@ -129,6 +129,12 @@ must return empty.
 
 **Source**
   - [`catalog/SEC-K8S-HELM-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-HELM-002.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `SEC-K8S-HELM-*` family:
+
+- [`SEC-K8S-HELM-001`](./SEC-K8S-HELM-001.md) — helm_release sets `service.type=LoadBalancer` (publicly exposed)
 
 ---
 

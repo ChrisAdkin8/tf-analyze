@@ -2859,23 +2859,65 @@ _GRAPH_CHECKS = {
 def _build_module_clusters(all_files_text: dict) -> dict:
     """Group resources by parent directory (= one Terraform module).
 
-    Returns ``dir_path_str -> [{type, name, file, line}, ...]``. The
-    fingerprint matcher operates on these clusters; one positive match
-    becomes one finding anchored at the directory's first required
-    resource.
+    Returns ``dir_path_str -> [{type, name, file, line, end_line, lines}, ...]``.
+    The fingerprint matcher operates on these clusters; one positive
+    match becomes one finding anchored at the directory's first required
+    resource. ``lines`` is the resource block's line span (used by the
+    ROI estimator to quote a "lines saved" number on the finding).
     """
     clusters: dict[str, list[dict]] = {}
     for fp, text in all_files_text.items():
         d = str(Path(fp).parent)
         for blk in find_blocks(text, RESOURCE_START):
             btype, bname = blk["groups"]
+            block_text = blk.get("block_text", "")
+            # `start_line` is the resource header; the block ends at the
+            # closing `}`. Total lines = newlines spanned + 1 (inclusive).
+            line_span = block_text.count("\n") + 1 if block_text else 1
             clusters.setdefault(d, []).append({
                 "type": btype,
                 "name": bname,
                 "file": str(fp),
                 "line": blk["start_line"],
+                "end_line": blk["start_line"] + max(0, line_span - 1),
+                "lines": line_span,
             })
     return clusters
+
+
+# Typical line count for a registry-module call: provider/version pinning
+# + 8-10 input variables + closing brace. The 12-line baseline is the
+# anchor against which a cluster's line count is compared to surface
+# "you'd save N lines" advisor signal. Conservative: real modules often
+# need fewer inputs once registry defaults are accepted.
+_MODULE_CALL_BASELINE_LINES = 12
+
+
+def _module_reuse_roi(resources: list[dict]) -> dict:
+    """Estimate lines-saved from replacing a bespoke cluster with a
+    registry module call.
+
+    The bespoke total is the sum of every resource block's line span in
+    the cluster. The replacement is one module call (~12 lines). The
+    delta is what the user would shave by adopting the registry module.
+
+    Returns a dict {bespoke_lines, replacement_lines, lines_saved,
+    pct_saved, resource_count} suitable for embedding into the finding.
+    """
+    bespoke_lines = sum(r.get("lines", 0) for r in resources)
+    replacement_lines = _MODULE_CALL_BASELINE_LINES
+    lines_saved = max(0, bespoke_lines - replacement_lines)
+    pct_saved = (
+        round(100 * lines_saved / bespoke_lines)
+        if bespoke_lines > 0 else 0
+    )
+    return {
+        "bespoke_lines": bespoke_lines,
+        "replacement_lines": replacement_lines,
+        "lines_saved": lines_saved,
+        "pct_saved": pct_saved,
+        "resource_count": len(resources),
+    }
 
 
 def _check_registry_fingerprint(fp: dict, clusters: dict) -> list[dict]:
@@ -2913,6 +2955,15 @@ def _check_registry_fingerprint(fp: dict, clusters: dict) -> list[dict]:
 
         anchor_type = required[0]["type"]
         anchor = next(r for r in resources if r["type"] == anchor_type)
+        roi = _module_reuse_roi(resources)
+        # Embed an ROI hint in the context so plain-text consumers
+        # (CLI / PR comment) see the savings without needing to look
+        # at structured fields. The structured `roi` dict is preserved
+        # alongside for the VS Code panel to render explicitly.
+        roi_hint = (
+            f"; ~{roi['lines_saved']} lines saved "
+            f"({roi['pct_saved']}% of {roi['bespoke_lines']} bespoke)"
+        ) if roi["lines_saved"] > 0 else ""
         out.append({
             "file": anchor["file"],
             "line": anchor["line"],
@@ -2920,10 +2971,11 @@ def _check_registry_fingerprint(fp: dict, clusters: dict) -> list[dict]:
             "context": (
                 f"directory {d} matches {fp.get('registry_module', '?')} "
                 f"({sup_hits}/{len(sup_types)} supporting types; "
-                f"confidence={confidence})"
+                f"confidence={confidence}{roi_hint})"
             ),
             "confidence": confidence,
             "registry_url": fp.get("registry_url"),
+            "roi": roi,
         })
     return out
 

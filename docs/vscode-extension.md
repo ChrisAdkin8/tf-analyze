@@ -26,7 +26,7 @@ against their working copy of `detect.py`), not user features.
 
 **From the `.vsix` (the only supported user path):**
 ```bash
-code --install-extension tf-analyze-0.1.28.vsix
+code --install-extension tf-analyze-0.1.29.vsix
 ```
 
 That's it. Open any Terraform workspace and the status-bar items
@@ -96,25 +96,36 @@ jump to the source line.
 
 The extension contributes six status-bar items, anchored bottom-left, reading "scan · graph · delta · compliance · remediate · module-reuse" left to right:
 
-1. **🛡 tf-analyze (scan summary)** — current scan state, click to run a fresh scan.
+1. **🛡 tf-analyze (score + scan summary)** — current scan state and the workspace's score+grade. Click to run a fresh scan.
    - `⏳ tf-analyze scanning…` — in progress
-   - `✓ tf-analyze: clean` — zero findings
-   - `🛡 tf-analyze: 7 (C:1 H:2 M:4)` — summary by urgency
+   - `✓ tf-analyze: 100 (A) · clean` — zero findings, perfect score
+   - `🛡 tf-analyze: 82 (B) · 7 findings (C:1 H:2 M:4)` — score, letter grade, total, and per-tier urgency counts
+
+   Badge text is recoloured by grade — `charts.green` for A, `charts.blue` for B, `charts.yellow` for C, `charts.orange` for D, `charts.red` for F — so an F repo visibly reds out without forcing the eye to read the digits. The colour resets on scan-start and on errors so the bar never carries stale visual state. Score and grade are read from the engine's `summary` block in JSON; both are missing on engines older than Round 25, in which case the badge falls back to the historical `tf-analyze: <total> (C:… H:… M:…)` shape.
 2. **🛤 Attack Graph** — opens the internet → crown-jewels webview.
 3. **🔀 Delta** — *Since last scan*. New / resolved / unchanged findings against the most recent prior JSON report.
 4. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / All).
 5. **🪄 Remediate** — Bulk apply-fixes with diff preview. Two-stage flow: dry-run shows the unified diff, **Apply Fixes** rewrites files on disk and saves originals as `<file>.bak`.
-6. **📦 Module Reuse** — opens the Module Reuse Advisor. Surfaces directories whose resource cluster matches a popular community module on the Terraform Registry (today: AWS VPC, GCP network, Azure AKS). Findings are INFO-tier (advisory, never gate CI); confidence is rendered as a low / medium / high badge per row. Behind the scenes the panel runs `detect.py --show-info --format json` and filters to the `module-reuse` section.
+6. **📦 Module Reuse** — opens the Module Reuse Advisor. Surfaces directories whose resource cluster matches a popular community module on the Terraform Registry (today: AWS VPC, GCP network, Azure AKS). Findings are INFO-tier (advisory, never gate CI); confidence is rendered as a low / medium / high badge per row, and each match shows an ROI estimate (`~85 lines saved (87%)`) plus a per-rule banner summarising savings across all matches (`~258 lines saved across 3 matches`). Behind the scenes the panel runs `detect.py --show-info --format json` and filters to the `module-reuse` section; the `roi` field on the finding (`{bespoke_lines, replacement_lines, lines_saved, pct_saved, resource_count}`) is the source of truth.
 
 All six are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
 
 The HTML report (`tf-analyze: Show Report`) intentionally does *not* have a status-bar entry — it overlaps semantically with the Findings tree (same data, different presentation), and toolbar real estate is reserved for surfaces that give net-new information at a glance. The command stays a click away in the Command Palette and the Findings tree-view title bar.
 
-### Rule explainer (URI deep-link)
+### `vscode://` URI handler (4 verbs)
 
-Every rule page on the [docs site](https://chrisadkin8.github.io/tf-analyze/rules/) ships an "📂 Open in VS Code" button. The link target is the `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` URI scheme — clicked in any browser, the OS routes to VS Code, the extension's URI handler validates the path against `^/rule/[A-Z][A-Z0-9-]{2,63}$`, and the matching `RuleExplainerPanel` opens with the full `--explain` output rendered as a styled webview.
+The extension registers a `vscode.window.registerUriHandler` that routes browser-clicked `vscode://tfanalyze.tf-analyze/<verb>` links to the right panel. As of v0.1.29 the verb space is:
 
-The same panel is also reachable from the palette via `tf-analyze: Explain Rule (by ID)`. Programmatic callers (other extensions, tasks) can open it with:
+| Verb | Shape | Behaviour |
+|---|---|---|
+| `/rule/<RULE-ID>` | `vscode://tfanalyze.tf-analyze/rule/SEC-AWS-IAM-001` | Opens `RuleExplainerPanel` with the full `--explain` output. The link target on every rule page's "📂 Open in VS Code" button. |
+| `/scan?target=<absolute path>` | `vscode://tfanalyze.tf-analyze/scan?target=/Users/me/repo` | Kicks off a workspace scan. Refused if the target is outside the active workspace (a hostile link must not be able to scan arbitrary paths). |
+| `/explain?id=<RULE-ID>&file=<path>&line=<n>` | `vscode://tfanalyze.tf-analyze/explain?id=SEC-AWS-IAM-001&file=/Users/me/repo/main.tf&line=42` | Opens the rule explainer **and** navigates the editor to `<path>:<line>`. The id-only form opens the panel without jumping. |
+| `/suppress?id=<RULE-ID>[&file=<path>&line=<n>]` | id+file+line: `…/suppress?id=SEC-AWS-IAM-001&file=/Users/me/repo/main.tf&line=42`<br>id only: `…/suppress?id=SEC-AWS-IAM-001` | Two shapes. With file+line, performs per-finding baseline-add to `.tf-analyze-baseline.json` (the PR-comment flow). With id only, performs workspace-wide rule ignore — writes the rule ID to `.tf-analyze.yaml`'s `ignore_rules:` after a modal confirm. The id-only form powers the docs site's "📝 Suppress in workspace" button. |
+
+Every verb has a strict regex validator. Rule IDs match `^[A-Z][A-Z0-9-]{2,63}$`; path arguments must be absolute POSIX paths and reject `..` traversal, embedded null bytes, and shapes longer than 1024 chars; line numbers are bounded to 1–1,000,000. Invalid input surfaces a `vscode.window.showWarningMessage` rather than silently no-opping. Routing logic lives in `src/uriHandler.ts` (a pure function `dispatchUri(uri, handlers)`) so the validators and dispatch decisions are reachable from `node --test` without spinning up VS Code (24 cases in `src/test/uriHandler.test.ts`).
+
+The rule explainer is also reachable from the palette via `tf-analyze: Explain Rule (by ID)`. Programmatic callers (other extensions, tasks) can open it with:
 
 ```ts
 vscode.commands.executeCommand("tf-analyze.explainRule", "SEC-AWS-IAM-001");

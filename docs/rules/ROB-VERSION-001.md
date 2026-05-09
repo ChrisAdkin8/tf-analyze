@@ -35,7 +35,7 @@ keywords: "robustness, medium, terraform, iac"
 
 ![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-VERSION-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-VERSION-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-VERSION-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-VERSION-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **required_version floor too old for skill assumptions.** This rule has `default_urgency: MEDIUM` and operates on a infrastructure wide blast radius. 
 
@@ -80,6 +80,13 @@ CI should pin the same version via `setup-terraform`.
 
 **Source**
   - [`catalog/ROB-VERSION-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-VERSION-001.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `ROB-VERSION-*` family:
+
+- [`ROB-VERSION-002`](./ROB-VERSION-002.md) — Submodule directory has no required_version
+- [`ROB-VERSION-003`](./ROB-VERSION-003.md) — required_providers entry missing version constraint
 
 ---
 

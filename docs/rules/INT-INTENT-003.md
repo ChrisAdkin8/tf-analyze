@@ -35,7 +35,7 @@ keywords: "security, high, terraform, iac"
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/INT-INTENT-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/INT-INTENT-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=INT-INTENT-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add INT-INTENT-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **Prod-tagged resource has deletion_protection=false.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
 
@@ -82,6 +82,14 @@ Confirm no prod-tagged resource carries `deletion_protection = false`.
 
 **Source**
   - [`catalog/INT-INTENT-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/INT-INTENT-003.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `INT-INTENT-*` family:
+
+- [`INT-INTENT-001`](./INT-INTENT-001.md) — Security-intent variable defaults to false/null/0
+- [`INT-INTENT-002`](./INT-INTENT-002.md) — Variable description says 'must be true' but has no validation block
+- [`INT-INTENT-004`](./INT-INTENT-004.md) — Prod-tagged resource has force_destroy=true
 
 ---
 

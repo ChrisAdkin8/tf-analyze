@@ -35,7 +35,7 @@ keywords: "security, medium, terraform, iac, azure, cis-8.6"
 
 ![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AZURE-KV-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AZURE-KV-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AZURE-KV-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AZURE-KV-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **Azure Key Vault key missing rotation policy.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
@@ -122,6 +122,13 @@ Key Vault → Keys → <key> → Rotation policy.
 
 **Source**
   - [`catalog/SEC-AZURE-KV-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-KV-003.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `SEC-AZURE-KV-*` family:
+
+- [`SEC-AZURE-KV-001`](./SEC-AZURE-KV-001.md) — Azure Key Vault missing purge protection or soft delete
+- [`SEC-AZURE-KV-002`](./SEC-AZURE-KV-002.md) — Key Vault missing network ACL deny-by-default
 
 ---
 

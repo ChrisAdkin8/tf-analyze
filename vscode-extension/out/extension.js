@@ -38,6 +38,7 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
 const attackGraph_1 = require("./attackGraph");
 const htmlReport_1 = require("./htmlReport");
 const deltaPanel_1 = require("./deltaPanel");
@@ -50,6 +51,7 @@ const urls_1 = require("./urls");
 const scriptResolver_1 = require("./scriptResolver");
 const lspClient_1 = require("./lspClient");
 const baseline_1 = require("./baseline");
+const uriHandler_1 = require("./uriHandler");
 // ─── Tree view ────────────────────────────────────────────────────────────────
 class FindingItem extends vscode.TreeItem {
     constructor(finding, collapsibleState) {
@@ -230,6 +232,92 @@ function buildArgs(target) {
     args.push(...extra);
     return args;
 }
+/**
+ * Append a rule ID to the workspace's `.tf-analyze.yaml` `ignore_rules:`
+ * list. Returns true if the rule was added, false if it was already
+ * present (or the file was malformed in a way that prevented writing).
+ *
+ * We hand-edit the YAML rather than parse-and-rewrite to preserve
+ * comments and formatting the user has already authored. The shape we
+ * recognise is the documented one from `docs/custom-rules.md`:
+ *
+ *   ignore_rules:
+ *     - SEC-X-001
+ *     - ...
+ *
+ * If the file doesn't exist, create it with a minimal block. If
+ * `ignore_rules:` is absent, append a new block at the end of the file.
+ */
+function appendIgnoreRule(ws, ruleId, out) {
+    const yamlPath = path.join(ws, ".tf-analyze.yaml");
+    let text = "";
+    if (fs.existsSync(yamlPath)) {
+        text = fs.readFileSync(yamlPath, "utf-8");
+    }
+    // Cheap detection: presence of `<id>` on a list line under
+    // `ignore_rules:`. Not a full parser — but the regex is tight
+    // enough to avoid false positives on commented-out lines.
+    const alreadyPresent = new RegExp(`^\\s*-\\s+${ruleId}\\s*$`, "m").test(text);
+    if (alreadyPresent)
+        return false;
+    const ignoreHeaderRe = /^ignore_rules\s*:\s*$/m;
+    if (ignoreHeaderRe.test(text)) {
+        // Append a list item under the existing block. Find the block
+        // header line, then walk forward until we hit a non-list, non-blank
+        // line at the same indent. Insert before it.
+        const lines = text.split("\n");
+        const headerIdx = lines.findIndex(l => /^ignore_rules\s*:\s*$/.test(l));
+        let insertAt = headerIdx + 1;
+        while (insertAt < lines.length) {
+            const ln = lines[insertAt];
+            if (/^\s*-\s/.test(ln) || ln.trim() === "" || ln.trim().startsWith("#")) {
+                insertAt++;
+            }
+            else {
+                break;
+            }
+        }
+        lines.splice(insertAt, 0, `  - ${ruleId}`);
+        text = lines.join("\n");
+    }
+    else {
+        // No `ignore_rules:` block yet — append one at the end.
+        if (text.length > 0 && !text.endsWith("\n"))
+            text += "\n";
+        if (text.length > 0)
+            text += "\n";
+        text += `ignore_rules:\n  - ${ruleId}\n`;
+    }
+    try {
+        fs.writeFileSync(yamlPath, text, "utf-8");
+        return true;
+    }
+    catch (err) {
+        out.appendLine(`[tf-analyze] failed to write ${yamlPath}: ${err}`);
+        return false;
+    }
+}
+// Maps the engine's letter grade to a status-bar colour. The colour
+// shows up alongside the badge text so a user glancing at the bar
+// sees red for F before reading the score. Uses VS Code's theme
+// tokens so the choice adapts to light vs dark themes.
+function _gradeColor(grade) {
+    if (!grade)
+        return undefined;
+    // First letter only — handles "B-" the same as "B".
+    const head = grade[0];
+    if (head === "A")
+        return new vscode.ThemeColor("charts.green");
+    if (head === "B")
+        return new vscode.ThemeColor("charts.blue");
+    if (head === "C")
+        return new vscode.ThemeColor("charts.yellow");
+    if (head === "D")
+        return new vscode.ThemeColor("charts.orange");
+    if (head === "F")
+        return new vscode.ThemeColor("charts.red");
+    return undefined;
+}
 async function runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel) {
     const scriptPath = resolveScriptPath();
     if (!scriptPath) {
@@ -240,6 +328,7 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, o
     const args = buildArgs(target);
     provider.setScanRunning(true);
     statusBar.text = "$(sync~spin) tf-analyze scanning…";
+    statusBar.color = undefined;
     statusBar.show();
     outputChannel.appendLine(`[tf-analyze] Running: python3 ${scriptPath} ${args.join(" ")}`);
     try {
@@ -283,16 +372,30 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, o
         provider.setFindings(findings);
         const counts = parsed.summary?.counts ?? { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
         const total = findings.length;
+        const score = parsed.summary?.score;
+        const grade = parsed.summary?.grade;
+        // Score+grade is the inherently shareable artefact — the same
+        // shape that lands in PR comments and the per-rule docs site.
+        // Showing it here means screenshots posted from VS Code carry
+        // the same vocabulary as everything else.
+        const scorePrefix = (typeof score === "number" && grade)
+            ? `${score} (${grade}) · `
+            : "";
         const label = total === 0
-            ? "$(check) tf-analyze: clean"
-            : `$(shield) tf-analyze: ${total} (C:${counts.CRITICAL} H:${counts.HIGH} M:${counts.MEDIUM})`;
+            ? `$(check) tf-analyze: ${scorePrefix}clean`
+            : `$(shield) tf-analyze: ${scorePrefix}${total} finding${total !== 1 ? "s" : ""} (C:${counts.CRITICAL} H:${counts.HIGH} M:${counts.MEDIUM})`;
         statusBar.text = label;
+        // Colour the badge by grade so the worst-of-the-worst stands
+        // out without forcing the eye to read the digits. Uses VS Code
+        // theme colours so it adapts to light/dark themes automatically.
+        statusBar.color = _gradeColor(grade);
         outputChannel.appendLine(`[tf-analyze] Scan complete: ${total} finding(s)`);
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`tf-analyze: ${msg}`);
         statusBar.text = "$(error) tf-analyze: scan failed";
+        statusBar.color = undefined;
         outputChannel.appendLine(`[tf-analyze] Error: ${msg}`);
     }
     finally {
@@ -418,18 +521,61 @@ function activate(context) {
             ruleExplainer_1.RuleExplainerPanel.createOrShow(context, id);
     }), 
     // The URI handler routes every `vscode://tfanalyze.tf-analyze/...`
-    // click in a browser to this extension. We accept exactly one path
-    // shape — `/rule/<RULE-ID>` — and reject anything else loudly so
-    // a malformed link never silently no-ops.
+    // click in a browser to this extension. Verbs:
+    //
+    //   /rule/<RULE-ID>                  → open RuleExplainerPanel
+    //   /scan?target=<absolute path>     → run a workspace scan
+    //   /explain?id=<ID>&file=<p>&line=N → explain at a location
+    //   /suppress?id=<ID>&file=<p>&line=N → add to workspace baseline
+    //
+    // Every verb has a strict regex validator. If the URI fails to
+    // parse for the matched verb, surface a warning rather than silently
+    // no-op (the v0.1.27 security pattern).
     vscode.window.registerUriHandler({
         handleUri(uri) {
-            const m = /^\/rule\/([A-Z][A-Z0-9-]{2,63})$/.exec(uri.path);
-            if (!m) {
-                void vscode.window.showWarningMessage(`tf-analyze: unrecognized URI path "${uri.path}". ` +
-                    `Expected /rule/<RULE-ID>.`);
-                return;
-            }
-            ruleExplainer_1.RuleExplainerPanel.createOrShow(context, m[1]);
+            (0, uriHandler_1.dispatchUri)({ path: uri.path, query: uri.query, toString: () => uri.toString() }, {
+                openRule: (ruleId) => ruleExplainer_1.RuleExplainerPanel.createOrShow(context, ruleId),
+                runScan: () => {
+                    void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+                },
+                openLocation: (file, line) => {
+                    void vscode.workspace.openTextDocument(file).then(doc => vscode.window.showTextDocument(doc, {
+                        selection: new vscode.Range(line - 1, 0, line - 1, 0),
+                    }), err => {
+                        outputChannel.appendLine(`[tf-analyze] /explain could not open ${file}: ${err}`);
+                    });
+                },
+                suppressFinding: (ruleId, file, line) => {
+                    const ws = workspacePath();
+                    const added = (0, baseline_1.suppress)(ws, { id: ruleId, file, line });
+                    void vscode.window.showInformationMessage(added
+                        ? `tf-analyze: suppressed ${ruleId} at ${path.basename(file)}:${line}. Re-run scan to refresh.`
+                        : `tf-analyze: ${ruleId} was already in the baseline.`);
+                    if (added) {
+                        void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+                    }
+                },
+                suppressRuleWorkspaceWide: (ruleId) => {
+                    const ws = workspacePath();
+                    // Confirm before writing — workspace-wide suppression
+                    // kills every future occurrence and is broader than
+                    // per-finding baseline-add.
+                    void vscode.window.showWarningMessage(`tf-analyze: ignore ${ruleId} workspace-wide?`, { modal: true }, "Add to .tf-analyze.yaml").then(choice => {
+                        if (choice !== "Add to .tf-analyze.yaml")
+                            return;
+                        const added = appendIgnoreRule(ws, ruleId, outputChannel);
+                        void vscode.window.showInformationMessage(added
+                            ? `tf-analyze: added ${ruleId} to .tf-analyze.yaml's ignore_rules. Re-run scan to refresh.`
+                            : `tf-analyze: ${ruleId} was already in ignore_rules.`);
+                        if (added) {
+                            void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+                        }
+                    });
+                },
+                workspacePath,
+                warn: (msg) => { void vscode.window.showWarningMessage(msg); },
+                log: (msg) => outputChannel.appendLine(`[tf-analyze] ${msg}`),
+            });
         },
     }), 
     // Baseline / suppression. Right-clicking a finding in the tree
