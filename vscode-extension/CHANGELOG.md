@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.21] — 2026-05-09
+
+### Fixed
+- **`The tf-analyze (LSP) server crashed 5 times in the last 3 minutes. The server will not be restarted.`** The LSP server's main message loop in `scripts/detect.py:_run_lsp_server` had no exception handler around individual message processing — any uncaught Python exception in `_scan_uri`, `detect_in_file`, or any of the per-method branches propagated out and killed the entire server. VS Code restarted it; the same trigger killed it again; after five crashes vscode-languageclient gave up entirely until the user reloaded the window. Wrapped each message handler in `try/except`: tracebacks now go to stderr (visible in the extension's `tf-analyze` Output channel), the loop continues, and requests that crashed get a JSON-RPC `Internal error` response so the client doesn't hang waiting for a reply that'll never arrive.
+- **`textDocumentSync` capability shape was non-spec-compliant.** The server returned `{"openClose": true, "save": true}`, but the LSP spec requires `change` to be an integer (None=0, Full=1, Incremental=2) and `save` to be a `SaveOptions` object. Strict clients can refuse the capability and silently disable diagnostics. Now returns `{"openClose": true, "change": 1, "save": {"includeText": false}}` — Full-sync because we re-scan the whole file on every update anyway.
+- **Added handler for `textDocument/didChange`** (re-using the same scan-and-publish path as `didOpen`/`didSave`). With `change: 1` advertised, clients send `didChange` on every keystroke; without a handler, the previous else-branch sent a `MethodNotFound` reply for what's actually a notification, polluting the protocol stream.
+
+---
+
 ## [0.1.20] — 2026-05-09
 
 ### Changed

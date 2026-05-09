@@ -6390,73 +6390,108 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
         method = msg.get("method", "")
         mid = msg.get("id")
 
-        if method == "initialize":
-            _send({
-                "jsonrpc": "2.0", "id": mid,
-                "result": {
-                    "capabilities": {
-                        "textDocumentSync": {"openClose": True, "save": True},
-                        "codeActionProvider": True,
-                    },
-                    "serverInfo": {"name": "tf-analyze", "version": "0.1.0"},
-                }
-            })
-
-        elif method == "initialized":
-            pass
-
-        elif method in ("textDocument/didOpen", "textDocument/didSave"):
-            uri = msg["params"]["textDocument"]["uri"]
-            findings = _scan_uri(uri)
-            _diagnostics[uri] = findings
-            _notify("textDocument/publishDiagnostics", {
-                "uri": uri,
-                "diagnostics": _findings_to_diagnostics(findings),
-            })
-
-        elif method == "textDocument/didClose":
-            uri = msg["params"]["textDocument"]["uri"]
-            _diagnostics.pop(uri, None)
-            _notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": []})
-
-        elif method == "textDocument/codeAction":
-            uri = msg["params"]["textDocument"]["uri"]
-            req_line = msg["params"]["range"]["start"]["line"] + 1
-            findings = _diagnostics.get(uri, [])
-            actions = []
-            for f in findings:
-                if abs(f["line"] - req_line) > 2:
-                    continue
-                entry = id_map.get(f["id"], {})
-                fix_hcl = entry.get("fix_hcl")
-                if not fix_hcl:
-                    continue
-                actions.append({
-                    "title": f"tf-analyze fix: {f['id']}",
-                    "kind": "quickfix",
-                    "edit": {
-                        "changes": {
-                            uri: [{
-                                "range": {
-                                    "start": {"line": f["line"] - 1, "character": 0},
-                                    "end":   {"line": f["line"] - 1, "character": 0},
-                                },
-                                "newText": f"\n# tf-analyze fix for {f['id']}:\n{fix_hcl}\n",
-                            }]
-                        }
+        # Wrap every message handler in a try/except so a single bad
+        # file or malformed payload can't take the whole server down.
+        # vscode-languageclient gives up after five crashes in three
+        # minutes ("The server will not be restarted"), so any handler
+        # that throws on real-world input loses the LSP entirely until
+        # the user reloads. Log the traceback to stderr (visible in
+        # the extension's Output channel) and keep the loop alive.
+        try:
+            if method == "initialize":
+                _send({
+                    "jsonrpc": "2.0", "id": mid,
+                    "result": {
+                        "capabilities": {
+                            # Spec-compliant shape: openClose + change=Full
+                            # (we re-scan the whole file on every update,
+                            # so incremental sync would be wasted) + save
+                            # as an object so older clients don't reject it.
+                            "textDocumentSync": {
+                                "openClose": True,
+                                "change": 1,
+                                "save": {"includeText": False},
+                            },
+                            "codeActionProvider": True,
+                        },
+                        "serverInfo": {"name": "tf-analyze", "version": "0.1.0"},
                     }
                 })
-            _send({"jsonrpc": "2.0", "id": mid, "result": actions})
 
-        elif method == "shutdown":
-            _send({"jsonrpc": "2.0", "id": mid, "result": None})
+            elif method == "initialized":
+                pass
 
-        elif method == "exit":
-            sys.exit(0)
+            elif method in ("textDocument/didOpen", "textDocument/didSave", "textDocument/didChange"):
+                uri = msg["params"]["textDocument"]["uri"]
+                findings = _scan_uri(uri)
+                _diagnostics[uri] = findings
+                _notify("textDocument/publishDiagnostics", {
+                    "uri": uri,
+                    "diagnostics": _findings_to_diagnostics(findings),
+                })
 
-        elif mid is not None:
-            _send({"jsonrpc": "2.0", "id": mid,
-                   "error": {"code": -32601, "message": f"Method not found: {method}"}})
+            elif method == "textDocument/didClose":
+                uri = msg["params"]["textDocument"]["uri"]
+                _diagnostics.pop(uri, None)
+                _notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": []})
+
+            elif method == "textDocument/codeAction":
+                uri = msg["params"]["textDocument"]["uri"]
+                req_line = msg["params"]["range"]["start"]["line"] + 1
+                findings = _diagnostics.get(uri, [])
+                actions = []
+                for f in findings:
+                    if abs(f["line"] - req_line) > 2:
+                        continue
+                    entry = id_map.get(f["id"], {})
+                    fix_hcl = entry.get("fix_hcl")
+                    if not fix_hcl:
+                        continue
+                    actions.append({
+                        "title": f"tf-analyze fix: {f['id']}",
+                        "kind": "quickfix",
+                        "edit": {
+                            "changes": {
+                                uri: [{
+                                    "range": {
+                                        "start": {"line": f["line"] - 1, "character": 0},
+                                        "end":   {"line": f["line"] - 1, "character": 0},
+                                    },
+                                    "newText": f"\n# tf-analyze fix for {f['id']}:\n{fix_hcl}\n",
+                                }]
+                            }
+                        }
+                    })
+                _send({"jsonrpc": "2.0", "id": mid, "result": actions})
+
+            elif method == "shutdown":
+                _send({"jsonrpc": "2.0", "id": mid, "result": None})
+
+            elif method == "exit":
+                sys.exit(0)
+
+            elif mid is not None:
+                # Unknown request — return MethodNotFound. Notifications
+                # (mid is None) for unhandled methods are silently dropped
+                # per LSP spec.
+                _send({"jsonrpc": "2.0", "id": mid,
+                       "error": {"code": -32601, "message": f"Method not found: {method}"}})
+        except SystemExit:
+            # `exit` notification calls sys.exit(0) — let that propagate.
+            raise
+        except Exception as _exc:
+            import traceback as _tb
+            _tb.print_exc(file=sys.stderr)
+            print(f"[tf-analyze LSP] handler for {method!r} crashed; continuing. {_exc!r}", file=sys.stderr)
+            # If this was a request (has an id), return an error so the
+            # client doesn't hang waiting for a response that'll never
+            # arrive. Notifications get no response either way.
+            if mid is not None:
+                try:
+                    _send({"jsonrpc": "2.0", "id": mid,
+                           "error": {"code": -32603, "message": f"Internal error in {method}: {_exc}"}})
+                except Exception:
+                    pass
 
 
 def main():
