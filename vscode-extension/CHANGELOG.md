@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.20] — 2026-05-09
+
+### Changed
+- **Version sync release.** No code changes. Bumps the published `.vsix` filename in every doc that quotes it (`vscode-extension/README.md`, `docs/vscode-extension.md`, project root `README.md` integrations table) so that anyone copy-pasting the install command lands on the artefact that's actually attached to the latest release. This synchronisation is now a hard rule — see the new "VS Code extension version sync" section in `CONTRIBUTING.md`: every `.vsix` filename quoted in user-facing docs must match `vscode-extension/package.json#version`, and any version bump in `package.json` is incomplete until those references are updated and the `vsce package` step re-runs.
+
+---
+
 ## [0.1.19] — 2026-05-09
 
 ### Added

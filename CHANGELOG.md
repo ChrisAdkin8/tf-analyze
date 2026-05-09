@@ -5,6 +5,43 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## v0.1.0 — 2026-05-09
+
+**First public release.** Cuts a stable tag against everything
+shipped through Round 26 + VS Code extension v0.1.19. Triggers the
+Docker workflow to publish `ghcr.io/chrisadkin8/tf-analyze:v0.1.0`
+(multi-arch `linux/amd64` + `linux/arm64`) and the new release
+workflow to attach the bundled `.vsix` to the GitHub Release page.
+
+`action.yml` now lives at repo root, so the GitHub Release page
+gains a "Publish to Marketplace" toggle. Single-line CI install
+becomes:
+
+```yaml
+- uses: ChrisAdkin8/tf-analyze@v0.1.0
+  with:
+    fail-on: HIGH
+    post-pr-comment: true
+```
+
+Highlights of what's in this release (full detail in the round
+sections below):
+
+- **209 rules**, 100% with `fix_hcl`, MITRE ATT&CK on 48
+- Attack-path graph + adversarial scenario narratives
+- IAM analysis covers both `data "aws_iam_policy_document"` AND inline `policy = jsonencode({...})`
+- Kubernetes (PSA / NetworkPolicy / cluster-admin RBAC) and Helm (LoadBalancer / privileged) coverage
+- Deterministic risk score (0–100, A/B/B-/C/D/F) emitted in JSON / text / HTML
+- Baseline ratcheting (`--baseline prior.json`) for legacy-repo adoption
+- VS Code extension v0.1.19 with bundled engine, real-time LSP diagnostics, status-bar shortcuts (scan / graph / delta / compliance / remediate), bulk remediation panel, baseline UI
+- Composite GitHub Action with inline PR `suggestion` blocks + SARIF upload + HTML artefact + score/grade/counts as workflow outputs
+- Multi-arch Docker image with `python-hcl2` bundled
+
+411 tests passing. See `docs/launch/release-notes.md` for the
+launch-day version of these notes.
+
+---
+
 ## VS Code extension v0.1.8 — 2026-05-09
 
 **Hotfix: attack-graph webview rendered an empty panel.**

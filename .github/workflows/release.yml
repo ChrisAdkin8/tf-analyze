@@ -1,0 +1,77 @@
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write   # create release + upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: ver
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version-bare=${VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build VS Code extension VSIX
+        id: build-vsix
+        continue-on-error: true
+        run: |
+          cd vscode-extension
+          if [ -f package.json ]; then
+            npm ci
+            # Bump the extension's package.json version to match the tag
+            # so the VSIX filename embeds the right version.
+            npm version "${{ steps.ver.outputs.version-bare }}" --no-git-tag-version --allow-same-version
+            npm run bundle-engine
+            npm run compile
+            npx vsce package --skip-license --out "../tf-analyze-${{ steps.ver.outputs.version-bare }}.vsix"
+            echo "vsix=tf-analyze-${{ steps.ver.outputs.version-bare }}.vsix" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          # Pull the section between this version's heading and the next `---` divider.
+          # CHANGELOG.md uses `## VS Code extension v...` and `## Round NN — DATE`
+          # headings; tag-driven releases pin to a Round heading or a top section
+          # that mentions the tag explicitly.
+          python3 - <<PY > release-notes.md
+          import re, sys
+          tag = "$VERSION"
+          text = open("CHANGELOG.md").read()
+          # Look for a heading that includes the tag (e.g. "v0.1.0") OR
+          # fall back to the first '## ' section.
+          m = re.search(rf"(^## .*{re.escape(tag.lstrip('v'))}.*?\n)(.*?)(?=^## |\Z)",
+                        text, re.MULTILINE | re.DOTALL)
+          if not m:
+              m = re.search(r"^## (.+?)\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+          if m:
+              header = m.group(1).rstrip()
+              body = m.group(2).strip()
+              print(f"# {header}\n\n{body}\n")
+          else:
+              print(f"# {tag}\n\nSee [CHANGELOG.md](CHANGELOG.md) for details.\n")
+          PY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: tf-analyze ${{ steps.ver.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
+          files: |
+            tf-analyze-*.vsix
+          generate_release_notes: false

@@ -1,0 +1,295 @@
+name: 'tf-analyze'
+description: 'Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE ATT&CK mapping, and one-click PR fix suggestions.'
+author: 'ChrisAdkin8'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  target:
+    description: 'Path to scan, relative to the workspace.'
+    default: '.'
+  fail-on:
+    description: 'Minimum urgency level that fails the action (CRITICAL, HIGH, MEDIUM, LOW, INFO).'
+    default: 'HIGH'
+  mode:
+    description: 'Execution mode (static, diff, plan, fleet, trend, pr-review). Auto-selects "diff" on pull_request events when set to "auto".'
+    default: 'auto'
+  section:
+    description: 'Restrict to a single catalogue section (security, robustness, ops, …). Empty = all sections.'
+    default: ''
+  attack-graph:
+    description: 'Build the internet → crown-jewels attack graph and promote critical-path findings one urgency tier.'
+    default: 'true'
+  baseline:
+    description: 'Path to a prior JSON report. Findings present in the baseline are suppressed; only NEW findings affect the exit code.'
+    default: ''
+  post-pr-comment:
+    description: 'Post inline `suggestion` blocks for fixable findings on pull_request events. Requires permissions.pull-requests: write.'
+    default: 'true'
+  upload-sarif:
+    description: 'Upload SARIF to GitHub Code Scanning. Requires permissions.security-events: write.'
+    default: 'true'
+  upload-html-artifact:
+    description: 'Upload the HTML report as a workflow artifact (retention 30 days).'
+    default: 'true'
+  image:
+    description: 'Docker image to run. Override to pin a specific engine version (e.g. ghcr.io/chrisadkin8/tf-analyze:v0.1.0).'
+    default: 'ghcr.io/chrisadkin8/tf-analyze:latest'
+  extra-args:
+    description: 'Additional CLI flags appended verbatim to detect.py (e.g. "--check-registry --compliance").'
+    default: ''
+
+outputs:
+  score:
+    description: 'Risk score (0–100). Always populated.'
+    value: ${{ steps.scan.outputs.score }}
+  grade:
+    description: 'Letter grade (A / B / B- / C / D / F).'
+    value: ${{ steps.scan.outputs.grade }}
+  total-findings:
+    description: 'Total findings count.'
+    value: ${{ steps.scan.outputs.total }}
+  critical-count:
+    description: 'CRITICAL findings.'
+    value: ${{ steps.scan.outputs.critical }}
+  high-count:
+    description: 'HIGH findings.'
+    value: ${{ steps.scan.outputs.high }}
+  json-report-path:
+    description: 'Path to tf-analyze-findings.json.'
+    value: ${{ steps.scan.outputs.json-report-path }}
+  html-report-path:
+    description: 'Path to tf-analyze-report.html.'
+    value: ${{ steps.scan.outputs.html-report-path }}
+  sarif-report-path:
+    description: 'Path to tf-analyze.sarif.'
+    value: ${{ steps.scan.outputs.sarif-report-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve mode
+      id: mode
+      shell: bash
+      run: |
+        MODE="${{ inputs.mode }}"
+        if [ "$MODE" = "auto" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            MODE="diff"
+          else
+            MODE="static"
+          fi
+        fi
+        echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+    - name: Build detect.py args
+      id: args
+      shell: bash
+      run: |
+        ARGS=(--target "/workspace/${{ inputs.target }}" --mode "${{ steps.mode.outputs.mode }}")
+        if [ -n "${{ inputs.section }}" ]; then
+          ARGS+=(--section "${{ inputs.section }}")
+        fi
+        if [ "${{ inputs.attack-graph }}" = "true" ]; then
+          ARGS+=(--attack-graph)
+        fi
+        if [ -n "${{ inputs.baseline }}" ]; then
+          ARGS+=(--baseline "/workspace/${{ inputs.baseline }}")
+        fi
+        if [ -n "${{ inputs.extra-args }}" ]; then
+          # shellcheck disable=SC2206
+          EXTRA=(${{ inputs.extra-args }})
+          ARGS+=("${EXTRA[@]}")
+        fi
+        printf '%s\n' "${ARGS[@]}" > /tmp/tf-analyze-base-args
+        echo "fail-on=${{ inputs.fail-on }}" >> "$GITHUB_OUTPUT"
+
+    - name: Pull tf-analyze image
+      shell: bash
+      run: docker pull "${{ inputs.image }}"
+
+    - name: Run tf-analyze (JSON)
+      id: scan
+      shell: bash
+      run: |
+        BASE_ARGS=()
+        while IFS= read -r line; do BASE_ARGS+=("$line"); done < /tmp/tf-analyze-base-args
+        # Run detect.py three times — JSON / SARIF / HTML — so all three
+        # are available as workflow outputs without re-scanning. The
+        # cache flag means subsequent runs are near-instant.
+        docker run --rm -v "${{ github.workspace }}:/workspace" \
+          "${{ inputs.image }}" \
+          "${BASE_ARGS[@]}" --format json --cache --cache-file /workspace/.tf-analyze-cache.json \
+          > "${{ github.workspace }}/tf-analyze-findings.json" 2>tf-analyze-stderr.txt || true
+        docker run --rm -v "${{ github.workspace }}:/workspace" \
+          "${{ inputs.image }}" \
+          "${BASE_ARGS[@]}" --format sarif --cache --cache-file /workspace/.tf-analyze-cache.json \
+          > "${{ github.workspace }}/tf-analyze.sarif" 2>/dev/null || true
+        docker run --rm -v "${{ github.workspace }}:/workspace" \
+          "${{ inputs.image }}" \
+          "${BASE_ARGS[@]}" --format html --cache --cache-file /workspace/.tf-analyze-cache.json \
+          > "${{ github.workspace }}/tf-analyze-report.html" 2>/dev/null || true
+
+        # Surface the score + counts as outputs.
+        python3 - <<'PY' >> "$GITHUB_OUTPUT"
+        import json, os
+        with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")) as f:
+            d = json.load(f)
+        s = d.get("summary", {})
+        c = s.get("counts", {})
+        f = d.get("findings", [])
+        print(f"score={s.get('score', 0)}")
+        print(f"grade={s.get('grade', '?')}")
+        print(f"total={len(f)}")
+        print(f"critical={c.get('CRITICAL', 0)}")
+        print(f"high={c.get('HIGH', 0)}")
+        print(f"json-report-path={os.path.join(os.environ['GITHUB_WORKSPACE'], 'tf-analyze-findings.json')}")
+        print(f"html-report-path={os.path.join(os.environ['GITHUB_WORKSPACE'], 'tf-analyze-report.html')}")
+        print(f"sarif-report-path={os.path.join(os.environ['GITHUB_WORKSPACE'], 'tf-analyze.sarif')}")
+        PY
+
+    - name: Upload SARIF to Code Scanning
+      if: always() && inputs.upload-sarif == 'true'
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ github.workspace }}/tf-analyze.sarif
+        category: tf-analyze
+
+    - name: Upload HTML artifact
+      if: always() && inputs.upload-html-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: tf-analyze-report
+        path: ${{ github.workspace }}/tf-analyze-report.html
+        retention-days: 30
+
+    - name: Post PR review comments + summary
+      if: >
+        always() &&
+        inputs.post-pr-comment == 'true' &&
+        github.event_name == 'pull_request'
+      continue-on-error: true
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          let data = {};
+          try {
+            data = JSON.parse(fs.readFileSync(
+              path.join(process.env.GITHUB_WORKSPACE, 'tf-analyze-findings.json'),
+              'utf8'
+            ));
+          } catch (e) {
+            core.warning('Could not read tf-analyze-findings.json: ' + e.message);
+            return;
+          }
+          const findings = data.findings || [];
+          const summary = data.summary || {};
+          const counts = summary.counts || {};
+
+          // Score banner — shown even on a clean repo.
+          const grade = summary.grade || '?';
+          const gradeBg = { A: '#1e7e34', B: '#5d8e2d', 'B-': '#7a8a2d',
+                           C: '#b07d00', D: '#a53f0d', F: '#a02020' }[grade] || '#444';
+
+          // Inline `suggestion` blocks per finding (one per file:line, highest urgency wins).
+          const changed = await github.rest.pulls.listFiles({
+            owner: context.repo.owner, repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number,
+          });
+          const changedPaths = new Set(changed.data.map(f => f.filename));
+          const rank = u => ({ CRITICAL:4, HIGH:3, MEDIUM:2, LOW:1, INFO:0 }[u] ?? 0);
+          const URGENCY_EMOJI = { CRITICAL:'🚨', HIGH:'⚠️', MEDIUM:'💡', LOW:'ℹ️' };
+
+          const byLoc = new Map();
+          for (const f of findings) {
+            if (!f.fix_hcl) continue;
+            const key = `${f.file}:${f.line}`;
+            const existing = byLoc.get(key);
+            if (!existing || rank(f.urgency) > rank(existing.urgency)) byLoc.set(key, f);
+          }
+
+          let posted = 0;
+          for (const [, f] of byLoc) {
+            const rel = f.file.replace(process.env.GITHUB_WORKSPACE + '/', '');
+            if (!changedPaths.has(rel)) continue;
+            const emoji = URGENCY_EMOJI[f.urgency] ?? '•';
+            const body = [
+              `${emoji} **[${f.id}]** — ${f.title}`,
+              '',
+              `> Urgency: \`${f.urgency}\`` + (f.fix_disruption ? ` · Disruption: \`${f.fix_disruption}\`` : ''),
+              f.narrative ? `\n> *Adversarial scenario:* ${f.narrative}\n` : '',
+              '```suggestion',
+              f.fix_hcl.trimEnd(),
+              '```',
+            ].join('\n');
+            try {
+              await github.rest.pulls.createReviewComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                body, path: rel, line: f.line, side: 'RIGHT',
+              });
+              posted++;
+            } catch (e) {
+              core.warning(`Could not post suggestion for ${f.id} at ${rel}:${f.line}: ${e.message}`);
+            }
+          }
+
+          // Summary comment, upserted.
+          const summaryBody = findings.length === 0
+            ? `✅ **tf-analyze**: ${summary.score ?? 100} (${grade}) — no findings above threshold`
+            : [
+                `## tf-analyze: ${summary.score} (${grade})`,
+                '',
+                '| Urgency | Count |',
+                '|---------|------:|',
+                `| 🚨 CRITICAL | ${counts.CRITICAL ?? 0} |`,
+                `| ⚠️ HIGH | ${counts.HIGH ?? 0} |`,
+                `| 💡 MEDIUM | ${counts.MEDIUM ?? 0} |`,
+                `| ℹ️ LOW | ${counts.LOW ?? 0} |`,
+                '',
+                posted > 0
+                  ? `${posted} fix suggestion(s) posted inline — click **Apply suggestion** to fix in one click.`
+                  : '_No inline suggestions available for changed files._',
+                '',
+                `<sub>scoring_version ${summary.scoring_version ?? 1} · ${summary.formula ?? ''}</sub>`,
+              ].join('\n');
+
+          const comments = await github.rest.issues.listComments({
+            owner: context.repo.owner, repo: context.repo.repo,
+            issue_number: context.payload.pull_request.number,
+          });
+          const prior = comments.data.find(c =>
+            c.body.startsWith('## tf-analyze:') || c.body.startsWith('✅ **tf-analyze**')
+          );
+          if (prior) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              comment_id: prior.id, body: summaryBody,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number, body: summaryBody,
+            });
+          }
+
+    - name: Apply fail-on threshold
+      if: always()
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        import json, sys, os
+        with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")) as f:
+            d = json.load(f)
+        rank = {"CRITICAL":4,"HIGH":3,"MEDIUM":2,"LOW":1,"INFO":0}
+        threshold = rank.get("${{ inputs.fail-on }}", 3)
+        breach = [f for f in d.get("findings", []) if rank.get(f.get("urgency",""), 0) >= threshold]
+        if breach:
+            print(f"::error::tf-analyze: {len(breach)} finding(s) at or above ${{ inputs.fail-on }} — failing the workflow", file=sys.stderr)
+            sys.exit(1)
+        PY
