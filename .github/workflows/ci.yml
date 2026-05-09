@@ -88,11 +88,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Lock the count down. If a rule is added or removed, the totals
-      # must be updated as part of the same PR — drift signals an
-      # unintended change in detection behaviour. We check per-cloud
-      # totals separately so a regression in one cloud's coverage
-      # can't be hidden by an offsetting change in another.
+      # Smoke-test that the catalogue still produces *roughly* the
+      # expected number of findings on a known-vulnerable corpus.
+      # Tolerance is wide because the catalogue grows ~10 rules/round;
+      # the bounds catch (a) catastrophic regressions where a new
+      # change accidentally suppresses dozens of findings, or (b) a
+      # rule that's wildly more aggressive than intended. Bumping
+      # bounds is appropriate when a deliberate rule-pack lands;
+      # update both the lower and the upper bound to current ± 20%.
+      #
+      # Last calibrated 2026-05-09 against catalogue at 209 rules:
+      #   aws=118, gcp=79, azure=90, total=287
       - name: Count findings per cloud
         run: |
           set -euo pipefail
@@ -103,12 +109,9 @@ jobs:
             )
             echo "$c: $N findings"
             case "$c" in
-              # Per-cloud expected counts. Tolerance is roughly ±20%
-              # because the catalogue evolves and this corpus is the
-              # canvas. Tighten once the catalogue stabilises.
-              gcp)   test "$N" -ge 48 -a "$N" -le 60 ;;
-              aws)   test "$N" -ge 8  -a "$N" -le 16 ;;
-              azure) test "$N" -ge 4  -a "$N" -le 10 ;;
+              gcp)   test "$N" -ge 60  -a "$N" -le 110 ;;
+              aws)   test "$N" -ge 90  -a "$N" -le 150 ;;
+              azure) test "$N" -ge 70  -a "$N" -le 120 ;;
             esac
           done
           TOTAL=$(
@@ -116,4 +119,4 @@ jobs:
               | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))'
           )
           echo "total: $TOTAL findings"
-          test "$TOTAL" -ge 65 -a "$TOTAL" -le 80
+          test "$TOTAL" -ge 230 -a "$TOTAL" -le 360

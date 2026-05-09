@@ -19,9 +19,11 @@ Catalog directory
 
 ### `--format FORMAT`
 
-**Choices:** `text`, `json`, `sarif`, `html`, `compliance`
+**Choices:** `text`, `json`, `sarif`, `html`, `compliance`, `mitre`
 
 **Default:** `text`
+
+Output format. `mitre` groups findings by MITRE ATT&CK technique (using catalogue `mitre:` fields).
 
 ### `--reports-dir REPORTS_DIR`
 
@@ -109,7 +111,7 @@ Comma-separated list of exploratory IDs to scaffold as stubs. Used by the judgem
 
 ### `--use-hcl2`
 
-Enable optional python-hcl2 fast-path for heredoc-aware attribute extraction. Requires `pip install python-hcl2` — if the dependency is missing this flag is a no-op and the regex path is used. Off by default to honor the stdlib-only promise; can also be enabled via TF_ANALYZE_USE_HCL2=1.
+[deprecated, default-on since v0.2] Enable python-hcl2 fast-path. Kept for backwards compat; behaviour is now controlled by --no-hcl2.
 
 
 ## Meta-commands
@@ -181,6 +183,14 @@ Write report output to PATH instead of stdout. The file is created or overwritte
 
 Days of git history to analyse in --mode trend (default: 30).
 
+### `--baseline`
+
+Path to a baseline JSON report. Findings present in the baseline are suppressed (counted under `suppressed_by_baseline` in JSON output) so only NEW findings affect the exit code. Match key: (id, file, line, resource). Use to ratchet a legacy repo: snapshot today's findings, then enforce no regressions going forward.
+
+### `--no-hcl2`
+
+Disable the python-hcl2 fast-path and use the regex parser exclusively. Useful for benchmarking or when running in a constrained environment without the optional dependency.
+
 ### `--apply-fixes`
 
 Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying.
@@ -192,4 +202,36 @@ Enable incremental scan caching. Stores findings keyed on a hash of all .tf file
 ### `--cache-file`
 
 Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).
+
+### `--config`
+
+Path to .tf-analyze.yaml project config file. Default: auto-discover in target directory.
+
+### `--init`
+
+Create .tf-analyze.yaml and .tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml in the target directory, then exit.
+
+### `--lsp`
+
+Run as a JSON-RPC 2.0 LSP server on stdin/stdout. Provides real-time diagnostics and code actions for .tf files.
+
+### `--stdio`
+
+==SUPPRESS==
+
+### `--node-ipc`
+
+==SUPPRESS==
+
+### `--socket`
+
+==SUPPRESS==
+
+### `--port`
+
+==SUPPRESS==
+
+### `--clientProcessId`
+
+==SUPPRESS==
 
