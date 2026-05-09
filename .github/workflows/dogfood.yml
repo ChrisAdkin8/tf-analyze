@@ -31,3 +31,8 @@ jobs:
           # itself doesn't fail; we want to observe the PR comment, not block.
           fail-on: CRITICAL
           attack-graph: 'true'
+          # Pin to static: mode=auto resolves to "diff" on PR events, but the
+          # bundled image doesn't ship `git`, so diff mode currently errors
+          # with FileNotFoundError. Tracked as a separate bug (Dockerfile
+          # needs `apt-get install -y git`).
+          mode: static
