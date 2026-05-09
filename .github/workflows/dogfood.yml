@@ -1,0 +1,33 @@
+name: dogfood
+
+# Run tf-analyze against its own example fixtures on every PR + push to main.
+# This is the action's only end-to-end test in CI — pytest covers detect.py,
+# but the action's bash + embedded JS/Python is otherwise unexercised.
+
+on:
+  pull_request:
+    paths:
+      - 'action.yml'
+      - 'examples/**'
+      - '.github/workflows/dogfood.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  attack-graph-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tf-analyze on attack-graph-demo
+        uses: ./
+        with:
+          target: examples/attack-graph-demo
+          # Demo has 0 CRITICAL by design — set threshold so the workflow
+          # itself doesn't fail; we want to observe the PR comment, not block.
+          fail-on: CRITICAL
+          attack-graph: 'true'
