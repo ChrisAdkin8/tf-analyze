@@ -162,6 +162,30 @@ class TestComputeSummary:
             (0,  "F"),
         ]
 
+    def test_module_reuse_urgency_pinned_to_info(self):
+        # Module Reuse Advisor findings are advisory ("you'd save N
+        # lines"), not security defects. Their default_urgency is
+        # INFO (weight 0). A future change accidentally bumping any
+        # MOD-REUSE-* rule to MEDIUM would tank every score by
+        # 3pts/finding — invisible at the per-rule level but
+        # catastrophic in aggregate. Pin per-rule, not just by
+        # category, so a single off-by-one rule edit can't slip past.
+        from pathlib import Path as _Path
+        import yaml as _yaml
+        catalog_dir = _Path(__file__).parent.parent / "catalog"
+        offenders: list[tuple[str, str]] = []
+        for yml in sorted(catalog_dir.glob("MOD-REUSE-*.yaml")):
+            entry = _yaml.safe_load(yml.read_text())
+            urgency = entry.get("default_urgency")
+            if urgency != "INFO":
+                offenders.append((entry.get("id", yml.stem), urgency))
+        assert not offenders, (
+            "MOD-REUSE-* rules MUST be INFO (weight 0); the advisor "
+            "is pure ROI signal, not a security defect. Bumping urgency "
+            "tanks every score by 3pts/finding. Offenders: "
+            f"{offenders}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # CLI integration: summary appears in JSON and text output

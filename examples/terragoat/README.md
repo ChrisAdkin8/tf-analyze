@@ -2,7 +2,7 @@
 
 A multi-cloud, OWASP-Top-10-organised corpus of intentionally insecure Terraform. It serves three jobs:
 
-1. **Smoke test for the `tf-analyze` engine.** Running `python3 scripts/detect.py --target examples/terragoat` produces **274 findings** across 30 files. Drift in this count is a regression signal — the CI workflow gates on it.
+1. **Smoke test for the `tf-analyze` engine.** Running `python3 scripts/detect.py --target examples/terragoat` produces **295 findings** across 30 files. Drift in this count is a regression signal — the CI workflow gates on it.
 2. **Calibration target for new rules.** When you write a new detector, drop a triggering snippet into the cloud + OWASP slot it belongs in. Re-run the corpus scan; your new rule ID appears alongside the existing ones with no spurious cross-talk.
 3. **Live demo for first-time users.** Reports against the corpus are realistic-shaped (multi-cloud, multi-resource, OWASP-narrative-aware) rather than the isolated single-rule fixtures under `fixtures/`.
 
@@ -46,7 +46,7 @@ Each file:
 | **AWS** | 44 | 98 | Full coverage of EKS (incl. partial log-type detection), RDS/Aurora, EC2, S3 (incl. access logging), CloudTrail, KMS, SQS/SNS, ECR, GuardDuty, launch template IMDSv2, CloudFront, Cognito, API Gateway, Lambda, ECS. |
 | **Azure** | 30 | 83 | Full coverage of AKS, Key Vault, Storage, SQL, App Service, RBAC, NSG, ACR, Azure Monitor, and Linux VM password authentication. |
 | **Corpus-level** | 14 | 14 | `resource_absent` rules that fire once per scan: GuardDuty, ECR lifecycle, VPC flow logs, S3 public-access block, S3 access logging, EKS IRSA, Route53 DNSSEC, Azure Monitor, Azure SQL AAD, NSG flow logs, SQL TDE, GCP Audit Logs, Secrets Manager rotation. |
-| **Total** | **127 unique IDs** | **274** | Drift > ±5 should be investigated. The canonical count is `python3 scripts/detect.py --target examples/terragoat --format json \| python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["findings"]))'`. |
+| **Total** | **127 unique IDs** | **295** | Last recalibrated 2026-05-09 against catalogue at 215 rules. Per-cloud + per-file counts above are calibrated to the same date — drift > ±5 on the total should be investigated; per-cloud / per-file rows may need refreshing in lockstep. The canonical command is `python3 scripts/detect.py --target examples/terragoat --format json \| python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["findings"]))'`. |
 
 ## Per-file finding counts
 
@@ -90,7 +90,7 @@ Each file:
 ## Running the corpus
 
 ```sh
-# Whole corpus — should print 274
+# Whole corpus — should print 295
 python3 scripts/detect.py --target examples/terragoat --format json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["findings"]))'
 

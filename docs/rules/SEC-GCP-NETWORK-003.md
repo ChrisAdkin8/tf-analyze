@@ -35,7 +35,7 @@ keywords: "security, high, terraform, iac, gcp, cis-3.8"
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-GCP-NETWORK-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-GCP-NETWORK-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-GCP-NETWORK-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-GCP-NETWORK-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **VPC subnet missing flow logs.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
 
@@ -99,6 +99,14 @@ must show `True` for all subnets in scope.
 
 **Source**
   - [`catalog/SEC-GCP-NETWORK-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-NETWORK-003.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `SEC-GCP-NETWORK-*` family:
+
+- [`SEC-GCP-NETWORK-001`](./SEC-GCP-NETWORK-001.md) — SSH (tcp:22) exposed to 0.0.0.0/0
+- [`SEC-GCP-NETWORK-002`](./SEC-GCP-NETWORK-002.md) — RDP (tcp:3389) exposed to 0.0.0.0/0
+- [`SEC-GCP-NETWORK-004`](./SEC-GCP-NETWORK-004.md) — GCP firewall rule exposes database or cache port to 0.0.0.0/0
 
 ---
 

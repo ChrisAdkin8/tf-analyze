@@ -5,6 +5,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.29] — 2026-05-09
+
+### Added
+
+- **Status-bar score+grade badge.** The shield item in the bottom-left now reads `🛡 tf-analyze: 82 (B) · 7 findings (C:1 H:2 M:4)` — the score+grade pair the engine emits in JSON, surfaced as the inherently shareable artefact. Badge text is recoloured by grade (`charts.green` for A, `charts.blue` for B, `charts.yellow` for C, `charts.orange` for D, `charts.red` for F) so an F repo visibly reds out without forcing the eye to read the digits. Colour resets on scan-start/error to avoid stale visual state.
+
+- **`vscode://` URI handler — 4 verbs (was 1).** The single existing `/rule/<RULE-ID>` verb is joined by:
+
+  - `/scan?target=<absolute path>` — kicks off a workspace scan; refused if the target is outside the active workspace.
+  - `/explain?id=<RULE-ID>&file=<path>&line=<n>` — opens the rule explainer panel and (when file+line validate) navigates the editor to the offending location.
+  - `/suppress?id=<RULE-ID>[&file=<path>&line=<n>]` — accepts both shapes. With file+line, performs per-finding baseline-add (PR-comment flow). With id only, performs workspace-wide rule ignore (writes to `.tf-analyze.yaml`'s `ignore_rules:` after a modal confirm). Powers the docs site's "📝 Suppress in workspace" button next to "📂 Open in VS Code".
+
+  Every verb has a strict regex validator and refuses path-traversal / null-byte / outside-workspace inputs, surfacing a warning rather than silently no-opping (the v0.1.27 security pattern). Routing extracted into a pure dispatcher (`src/uriHandler.ts`) testable under `node --test` without spinning up VS Code.
+
+- **Module Reuse panel — ROI rendering.** Each match row now includes a "Lines saved" column (`~85 lines (87%)`) and each rule section is preceded by a banner summarising savings across all matches (`~258 lines saved across 3 matches by adopting this module.`). Engine-side `roi` field on the finding is the source of truth; the panel only formats.
+
+### Tests
+
+- New `src/test/uriHandler.test.ts` — 24 `node:test` cases cover validators (`RULE_ID_RE`, `safePath`, `safeLine`), every verb's happy path, path-traversal/null-byte/outside-workspace rejection, both shapes of `/suppress`, and the unknown-path branch. Brings the extension's `node --test` suite from 35 → 59 cases.
+
+### Internal
+
+- Extracted URI dispatch into `src/uriHandler.ts`. The closure inside `vscode.window.registerUriHandler` now delegates to `dispatchUri(uri, handlers)`, with `handlers` injecting the side-effect surface (panel open, scan, suppress, warn, log). The pre-extraction shape was untestable under `node --test` because it directly touched `vscode.*`.
+- New `appendIgnoreRule(ws, ruleId, out)` helper writes to `.tf-analyze.yaml`'s `ignore_rules:` block. Hand-edits the YAML rather than parse-and-rewriting so user comments and formatting survive; falls back to creating the block when absent.
+
+---
+
 ## [0.1.28] — 2026-05-09
 
 ### Added

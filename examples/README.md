@@ -4,7 +4,7 @@ Three corpora that serve as both engine smoke tests and end-to-end demos for the
 
 | Directory | Purpose | What it exercises |
 |---|---|---|
-| [`terragoat/`](./terragoat/) | Comprehensive vulnerability corpus | OWASP-Top-10-organised; 30 files; multi-cloud (AWS / GCP / Azure). Engine smoke test (gated on **274** findings) and the broadest demo for first-time users. |
+| [`terragoat/`](./terragoat/) | Comprehensive vulnerability corpus | OWASP-Top-10-organised; 30 files; multi-cloud (AWS / GCP / Azure). Engine smoke test (~**295** findings as of catalogue 2026-05-09; CI tolerates 230–360) and the broadest demo for first-time users. |
 | [`module-reuse-demo/`](./module-reuse-demo/) | Module Reuse Advisor showcase | 5 dirs hand-rolled across 3 clouds + 2 negative cases. Exercises the [`📦 Module Reuse`](../docs/vscode-extension.md) panel end-to-end with all three confidence-badge tiers visible. |
 | [`attack-graph-demo/`](./attack-graph-demo/) | Attack Graph showcase | Multi-tier AWS app: ALB → EC2 → IAM → S3 / Secrets / RDS. 19 nodes, 13 edges, 6 internet-reachable, 3 crown jewels. Exercises the [`🛤 Attack Graph`](../docs/vscode-extension.md) panel and the d3 demo. |
 

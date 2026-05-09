@@ -35,7 +35,7 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004"
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-IAM-JSON-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-IAM-JSON-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-IAM-JSON-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-IAM-JSON-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **Inline IAM policy JSON grants wildcard `Action: \"*\"`.** This rule has `default_urgency: HIGH` and operates on a infrastructure wide blast radius. 
 
@@ -114,6 +114,14 @@ must return finite lists, never `"*"`.
 
 **Source**
   - [`catalog/SEC-AWS-IAM-JSON-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-JSON-001.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `SEC-AWS-IAM-JSON-*` family:
+
+- [`SEC-AWS-IAM-JSON-002`](./SEC-AWS-IAM-JSON-002.md) — Inline IAM policy JSON grants wildcard `iam:*` action
+- [`SEC-AWS-IAM-JSON-003`](./SEC-AWS-IAM-JSON-003.md) — Inline IAM policy JSON grants `Action: \"*\"` AND `Resource: \"*\"`
+- [`SEC-AWS-IAM-JSON-004`](./SEC-AWS-IAM-JSON-004.md) — Inline IAM policy JSON has public principal (`Principal: \"*\"`)
 
 ---
 

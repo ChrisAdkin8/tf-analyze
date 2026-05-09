@@ -55,6 +55,49 @@ python3 ~/.tf-analyze/scripts/detect.py \
 
 This parses the prior report, re-probes each finding's location, and writes a new markdown report showing: `FIXED`, `STILL PRESENT`, or `MOVED`. Useful for audit trails and for asserting fixes landed before deleting the follow-up ticket.
 
+## Score badge service
+
+A small FastAPI app under [`badge-service/`](badge-service/) that returns embeddable SVG badges of a repo's most recent `tf-analyze` score. Each rendered badge is an ad — score + grade are inherently shareable, and the badge is a thin renderer on top of stored scan results.
+
+**Endpoints:**
+
+| Route | What it returns |
+|---|---|
+| `GET /score/<owner>/<repo>.svg` | Badge for the `main` branch — `tf-analyze: 82 (B)` shields.io-shape SVG, coloured by grade. |
+| `GET /score/<owner>/<repo>/<branch>.svg` | Branch-specific badge. Branches with `/` in the name (`release/v1.0`, `feat/foo`) round-trip cleanly. |
+| `GET /health` | Liveness check for Fly.io. |
+| `POST /ingest` | Upload a scan result. HMAC-SHA256-signed body authenticated against `TFA_BADGE_INGEST_SECRET`. Body is `{owner, repo, branch, scan: <detect.py --format json output>}`. |
+
+**Embed in any README:**
+
+```md
+![tf-analyze](https://tf-analyze-badge.fly.dev/score/owner/repo.svg)
+```
+
+**Wire into CI** with the bundled `scripts/upload-score.sh` — POSTs the engine's JSON output to `/ingest` after every push to main:
+
+```sh
+TFA_BADGE_INGEST_SECRET=$BADGE_SECRET \
+TFA_BADGE_URL=https://tf-analyze-badge.fly.dev \
+  ./integrations/badge-service/scripts/upload-score.sh \
+  ChrisAdkin8 tf-analyze main scan.json
+```
+
+**Deploy** to Fly.io (operator step — engineering only ships the code):
+
+```sh
+cd integrations/badge-service
+flyctl launch --copy-config --no-deploy
+flyctl secrets set TFA_BADGE_INGEST_SECRET=$(openssl rand -hex 32)
+flyctl deploy
+```
+
+The default backend is an in-memory store; persistence on redeploy requires swapping `InMemoryStore` for a Redis-backed implementation (the hook is in place; production deployment would supply it).
+
+## HCP Terraform Run Task
+
+Pre-apply gate that scans Terraform Cloud / HCP Terraform plans before they run. See [`run-task/`](run-task/) for the FastAPI server, `Dockerfile`, and the deployment notes in [`docs/run-task.md`](../docs/run-task.md). HMAC-SHA512 signature verification on every callback; rejects bodies whose signature doesn't match the registered secret.
+
 ## Other CI systems
 
 The core invocation is just a single `python3` call with stdlib-only dependencies, so adapting to GitLab CI, CircleCI, Buildkite, etc. is trivial:

@@ -5,6 +5,64 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 27 — ROI signal, 4-verb URI handler, badge service — 2026-05-09
+
+**P0 sweep across the [`PLAN.md`](PLAN.md) backlog: every `P0` item in `a)` (skill improvements), `b)` (test coverage), and `c)` (virality engineering) shipped, except the operator-only items in the appendix.**
+
+### Engine
+
+- **Module Reuse Advisor — ROI signal.** Every `MOD-REUSE-*` finding now carries a structured `roi` field: `{bespoke_lines, replacement_lines, lines_saved, pct_saved, resource_count}`. Computed by `_module_reuse_roi()` in `scripts/detect.py` against the cluster's actual line spans (captured by extending `_build_module_clusters` to record per-resource `lines`/`end_line`). The plain-text `context` string also surfaces the ROI hint (`~N lines saved`) so JSON-only and PR-comment consumers see the same signal.
+- **`_MODULE_CALL_BASELINE_LINES = 12`** — the constant against which bespoke clusters are compared, locked by a tripwire test so silent inflation of "lines saved" figures across the install base is caught at CI time.
+
+### VS Code extension
+
+- **`vscode://` URI handler — 4 verbs (was 1).** The single existing `/rule/<RULE-ID>` verb is joined by `/scan?target=<absolute path>`, `/explain?id=<RULE-ID>&file=<path>&line=<n>`, and `/suppress?id=<RULE-ID>[&file=<path>&line=<n>]`. `/suppress` accepts both shapes — id+file+line is per-finding baseline-add (PR-comment flow); id-only is workspace-wide rule ignore that writes to `.tf-analyze.yaml`'s `ignore_rules:` after a modal confirm. Every verb has a strict regex validator and refuses path-traversal / null-byte / outside-workspace inputs, surfacing a warning rather than silently no-opping (the v0.1.27 security pattern). Routing extracted into a pure dispatcher (`vscode-extension/src/uriHandler.ts`) for unit-test reach.
+- **Status-bar score+grade badge.** `tf-analyze: 82 (B) · 7 findings (C:1 H:2 M:4)` instead of just `tf-analyze: 7 (C:1 H:2 M:4)`. Badge text is grade-coloured via `vscode.ThemeColor("charts.green/blue/yellow/orange/red")` so an F repo visibly reds out without forcing the eye to read the digits. Colour resets on scan-start/error to avoid stale visual state.
+- **Module Reuse panel — ROI rendering.** Adds a per-rule "Lines saved across N matches" summary banner and a "Lines saved" column on every match row (e.g. `~85 lines (87%)`). Engine-side `roi` field is the structural source; the panel only formats.
+
+### Per-rule docs site
+
+- **"📝 Suppress in workspace" button** next to "📂 Open in VS Code" on every rule page. Click → `vscode://tfanalyze.tf-analyze/suppress?id=<RULE-ID>` → modal confirm → workspace-wide ignore_rules write.
+- **Family backlinks** section on every page: lists every other rule sharing the prefix-up-to-numeric-segment (e.g. `SEC-AWS-IAM-001` → `SEC-AWS-IAM-002` / `SEC-AWS-IAM-003`). Multiplies internal-link density across the rules subtree → meaningful PageRank lift. Singleton families render no section (one-line guard avoids empty `## Family` blocks).
+
+### Badge service
+
+- **`integrations/badge-service/`** — engineering-complete Fly.io app. `server.py` (FastAPI) renders shields.io-shape SVG badges keyed by grade colour; `GET /score/<owner>/<repo>.svg` and `GET /score/<owner>/<repo>/<branch:path>.svg` (handles `release/v1.0`-style branches). `POST /ingest` accepts the engine's JSON output authenticated via HMAC-SHA256 over the request body (`X-TFA-Signature: sha256=<hex>`). `Dockerfile`, `fly.toml`, and `scripts/upload-score.sh` ship in the same directory. Operator step remaining: `flyctl deploy`.
+- Embeddable in any README:
+  ```md
+  ![tf-analyze](https://tf-analyze-badge.fly.dev/score/owner/repo.svg)
+  ```
+
+### Tests: 469 → 500 (+31 pytest) + 24 new `node:test` cases
+
+| Test file | Cases | Locks |
+|---|---|---|
+| `tests/test_module_reuse.py` (NEW) | 7 | ROI estimator + the PLAN.md acceptance: a 200-line VPC reports ≥ 150 lines saved |
+| `tests/test_badge_service.py` (NEW; auto-skips if FastAPI missing) | 19 | SVG render across every grade · path-traversal rejection · HMAC auth (missing/wrong/correct/secret-unset) · ingest→render round-trip · branch-specific badges don't leak `main` data |
+| `tests/test_output_formats.py::test_module_reuse_urgency_pinned_to_info` | 1 | INFO tripwire — every `MOD-REUSE-*` rule walked, urgency must equal `INFO` (matches the `_RISK_WEIGHTS` tripwire shape) |
+| `tests/test_rule_docs.py::test_family_backlinks_present` | 1 | Family section on `SEC-AWS-IAM-001` lists `-002`/`-003`, omits self-link |
+| `tests/test_rule_docs.py::test_family_section_omitted_for_singleton_rules` | 1 | Singleton families render no `## Family` block |
+| `tests/test_rule_docs.py::test_jsonld_passes_schema_org_validator` | 1 | `@type`/`@context`, URL well-formedness, `mainEntityOfPage.@type`, controlled-vocab `proficiencyLevel`, JSON-boolean `isAccessibleForFree` |
+| `tests/test_rule_docs.py::test_jsonld_validates_across_every_rule_page` | 1 | Cross-page sweep — every page has a parseable JSON-LD block with non-empty description |
+| `vscode-extension/src/test/uriHandler.test.ts` (NEW; `node --test`) | 24 | Validators (`RULE_ID_RE`, `safePath`, `safeLine`) · every verb's happy path · path-traversal/null-byte/outside-workspace rejection · `/suppress` both shapes (per-finding, workspace-wide) · unknown-path rejection |
+
+### Files of note
+
+- `scripts/detect.py` — `_module_reuse_roi`, `_MODULE_CALL_BASELINE_LINES`, line-span tracking on cluster resources
+- `scripts/gen_rule_docs.py` — `_family_prefix`, `_build_family_index`, `_family_section`, two-button row in `_open_in_vscode_button`
+- `vscode-extension/src/uriHandler.ts` — pure dispatcher (NEW)
+- `vscode-extension/src/extension.ts` — score+grade badge, `_gradeColor`, `appendIgnoreRule` (writes to `.tf-analyze.yaml`)
+- `vscode-extension/src/moduleReusePanel.ts` — match-summary banner + per-row "Lines saved"
+- `integrations/badge-service/{server.py,Dockerfile,fly.toml,requirements.txt,scripts/upload-score.sh}`
+
+### Operator follow-ups
+
+- [ ] `flyctl deploy` the badge service; `flyctl secrets set TFA_BADGE_INGEST_SECRET=<32+ random bytes>`
+- [ ] Wire `scripts/upload-score.sh` into the post-merge GitHub Actions step so the README badge stays fresh
+- [ ] Bump `vscode-extension/package.json` to v0.1.29 and `vsce publish` once the URI verbs are walked through manually
+
+---
+
 ## Showcase demos for Module Reuse + Attack Graph — 2026-05-09
 
 **Two corpora under `examples/` that exercise the deeper engine panels end-to-end with realistic-shaped Terraform.**

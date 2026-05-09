@@ -15,7 +15,7 @@
 
 ## ✨ What it does
 
-Brings the **`tf-analyze`** detection engine (209 catalogue rules across AWS, GCP, and Azure) into VS Code. The `.vsix` is **self-contained** — it bundles its own copy of the engine and rule catalogue, so installing the extension is the only step. No companion repo to clone, no `tf-analyze.scriptPath` setting to configure, no `pip install` to run.
+Brings the **`tf-analyze`** detection engine (215 catalogue rules across AWS, GCP, and Azure) into VS Code. The `.vsix` is **self-contained** — it bundles its own copy of the engine and rule catalogue, so installing the extension is the only step. No companion repo to clone, no `tf-analyze.scriptPath` setting to configure, no `pip install` to run.
 
 | | |
 |---|---|
@@ -27,6 +27,9 @@ Brings the **`tf-analyze`** detection engine (209 catalogue rules across AWS, GC
 | ✅ **Compliance reports** | Built-in compliance gap report against CIS, PCI DSS, SOC 2 (or all combined), with a framework picker dropdown. |
 | 🔀 **Since-last-scan delta** | New / resolved / unchanged findings against the most recent prior scan — turns each save into visible progress. |
 | 🎯 **MITRE ATT&CK view** | Findings grouped by ATT&CK technique for red-team reports and threat-modeling reviews. |
+| 📦 **Module Reuse Advisor** | Surfaces directories whose resource cluster matches a popular Terraform Registry module (AWS VPC, GCP network, Azure AKS, …) — INFO-tier, never gates CI. Each match shows an ROI estimate (`~85 lines saved (87%)`) so the suggestion is actionable. |
+| 🏷️ **Status-bar score badge** | The shield item shows `tf-analyze: 82 (B) · 7 findings (C:1 H:2 M:4)` — the same score+grade the engine emits in JSON, recoloured red/orange/amber/blue/green by grade so an F repo visibly reds out without forcing the eye to read the digits. |
+| 🔗 **`vscode://` deep links** | Four-verb URI handler routes `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>`, `…/scan?target=<path>`, `…/explain?id=<RULE-ID>&file=<path>&line=<n>`, and `…/suppress?id=<RULE-ID>[&file=<path>&line=<n>]`. Strict regex validators on every verb refuse path-traversal / null-byte / outside-workspace inputs. Powers the docs site's "📂 Open in VS Code" + "📝 Suppress in workspace" buttons and one-click baseline-add from PR comments. |
 
 ---
 
@@ -35,7 +38,7 @@ Brings the **`tf-analyze`** detection engine (209 catalogue rules across AWS, GC
 ### 1. Install
 
 ```bash
-code --install-extension tf-analyze-0.1.28.vsix
+code --install-extension tf-analyze-0.1.29.vsix
 ```
 
 That's it. The extension ships with everything it needs.
@@ -45,10 +48,10 @@ That's it. The extension ships with everything it needs.
 You'll immediately see six status-bar shortcuts in the bottom-left:
 
 ```
-🛡 tf-analyze   🛤 Attack Graph   🔀 Delta   ✅ Compliance   🪄 Remediate   📦 Module Reuse
+🛡 tf-analyze: 82 (B) · 7 findings   🛤 Attack Graph   🔀 Delta   ✅ Compliance   🪄 Remediate   📦 Module Reuse
 ```
 
-Open any `.tf` file and squiggles appear on offending lines as you type. Click the shield to open the **Findings** tree, or any other status-bar item to jump straight into that surface.
+The shield item shows the workspace's score and letter grade, recoloured by grade (green for A, blue for B, amber for C, orange for D, red for F). Open any `.tf` file and squiggles appear on offending lines as you type. Click the shield to open the **Findings** tree, or any other status-bar item to jump straight into that surface.
 
 ---
 
@@ -67,7 +70,7 @@ All commands are available via the Command Palette (`⌘⇧P` / `Ctrl+Shift+P`):
 | `tf-analyze: Show MITRE ATT&CK View` | Findings grouped by ATT&CK technique. |
 | `tf-analyze: Remediate (preview & apply fixes)` | Bulk apply-fixes panel — dry-run preview, then apply with `.bak` backups. |
 | `tf-analyze: Show Module Reuse Advisor` | Surface directories whose resource cluster matches a community module on the Terraform Registry. INFO-tier — never gates CI. |
-| `tf-analyze: Explain Rule (by ID)` | Open the rule explainer panel for a catalogue ID. Same panel opens automatically when a `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` link is clicked from the docs site. |
+| `tf-analyze: Explain Rule (by ID)` | Open the rule explainer panel for a catalogue ID. Same panel opens automatically when a `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` link is clicked from the docs site, or when an `.../explain?id=<RULE-ID>&file=<path>&line=<n>` link is followed (the latter also navigates the editor to the offending location). |
 | `tf-analyze: Suppress Finding` | Right-click a tree row to add it to the workspace baseline. |
 | `tf-analyze: Unsuppress Finding` | Reverse a suppression. |
 | `tf-analyze: Open Baseline File` | Open `<workspace>/.tf-analyze-baseline.json` for bulk edits. |
@@ -105,7 +108,7 @@ Configure under **Settings → Extensions → tf-analyze**, or in `settings.json
 - **VS Code** `1.85.0` or later
 - **Python** `3.9+` on `$PATH` — used to run the bundled engine. Stdlib only; **no `pip install` step required.**
 
-The detection engine itself (`detect.py`) and the 209-entry rule catalogue ship inside the `.vsix`. You do **not** need to clone the [tf-analyze repo](https://github.com/ChrisAdkin8/tf-analyze) or install anything from PyPI.
+The detection engine itself (`detect.py`) and the 215-entry rule catalogue ship inside the `.vsix`. You do **not** need to clone the [tf-analyze repo](https://github.com/ChrisAdkin8/tf-analyze) or install anything from PyPI.
 
 ---
 
@@ -127,7 +130,7 @@ The detection engine itself (`detect.py`) and the 209-entry rule catalogue ship 
 <details>
 <summary><b>Status-bar items aren't visible.</b></summary>
 
-The five status-bar items (scan, graph, delta, compliance, remediate) only appear in workspaces that contain at least one `.tf` file. The extension activates on `workspaceContains:**/*.tf`, `onLanguage:terraform`, or `onView:tfAnalyzeFindings`.
+The six status-bar items (scan, graph, delta, compliance, remediate, module-reuse) only appear in workspaces that contain at least one `.tf` file. The extension activates on `workspaceContains:**/*.tf`, `onLanguage:terraform`, or `onView:tfAnalyzeFindings`.
 </details>
 
 <details>
@@ -171,4 +174,4 @@ This is an engine-developer scenario only. Set `tf-analyze.scriptPath` to your c
 
 ---
 
-<sub>Self-contained `.vsix`. 209 rules · AWS · GCP · Azure · stdlib-only Python. Built with the `tf-analyze` Claude Code skill.</sub>
+<sub>Self-contained `.vsix`. 215 rules · AWS · GCP · Azure · stdlib-only Python. Built with the `tf-analyze` Claude Code skill.</sub>

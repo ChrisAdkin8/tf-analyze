@@ -41,6 +41,12 @@ RULE_PAGE_URL = SITE_ROOT + "/rules/{id}/"
 # extension is installed; otherwise the click is a no-op (no error
 # page, no broken redirect).
 VSCODE_URI = "vscode://tfanalyze.tf-analyze/rule/{id}"
+# Workspace-wide suppression URI handled by the extension's URI verb
+# space (extension.ts → registerUriHandler → /suppress). Clicking
+# it on a rule page is a one-click "tell me to ignore this rule
+# project-wide" — the extension still requires the active workspace
+# to match the file path before writing baseline.
+VSCODE_SUPPRESS_URI = "vscode://tfanalyze.tf-analyze/suppress?id={id}"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from detect import load_yaml  # type: ignore  # noqa: E402
@@ -252,22 +258,42 @@ def _json_ld(entry: dict) -> str:
 
 
 def _open_in_vscode_button(rule_id: str) -> str:
-    """Render an HTML link styled as a button. The href uses the
+    """Render two HTML links styled as buttons. Both use the
     `vscode://` URI scheme — clicked in a browser, the OS routes to
     VS Code, which dispatches via registerUriHandler. If VS Code
     isn't installed (or the tf-analyze extension isn't), the click
     is a no-op (no broken-link error page).
+
+    Buttons:
+      * 📂 Open in VS Code — opens the rule explainer panel.
+      * 📝 Suppress in workspace — opens a confirmation prompt then
+        adds the rule to the workspace's `.tf-analyze.yaml`
+        `ignore_rules:` list (workspace-wide rule suppression).
     """
-    uri = VSCODE_URI.format(id=rule_id)
-    # Inline style so the button renders without theme support.
-    # Uses the cayman colour palette (#157878 = primary green).
-    return (
-        f'<p><a href="{uri}" '
+    open_uri = VSCODE_URI.format(id=rule_id)
+    suppress_uri = VSCODE_SUPPRESS_URI.format(id=rule_id)
+    # Inline style so the buttons render without theme support.
+    # Uses the cayman colour palette (#157878 = primary green;
+    # #c27a00 = secondary amber for the destructive-ish action).
+    primary_btn = (
+        f'<a href="{open_uri}" '
         'style="display:inline-block;padding:6px 12px;'
         'background:#157878;color:#fff;text-decoration:none;'
         'border-radius:4px;font-weight:600;font-size:14px;'
         'margin-top:6px">'
-        f'📂 Open in VS Code</a> '
+        f'📂 Open in VS Code</a>'
+    )
+    suppress_btn = (
+        f'<a href="{suppress_uri}" '
+        'style="display:inline-block;padding:6px 12px;'
+        'background:#fff;color:#c27a00;text-decoration:none;'
+        'border:1px solid #c27a00;border-radius:4px;font-weight:600;'
+        'font-size:14px;margin-top:6px;margin-left:6px" '
+        f'title="Add {rule_id} to .tf-analyze.yaml\'s ignore_rules in your workspace">'
+        f'📝 Suppress in workspace</a>'
+    )
+    return (
+        f'<p>{primary_btn}{suppress_btn} '
         '<span style="color:#666;font-size:12px;margin-left:4px">'
         '(requires the '
         '<a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" '
@@ -307,7 +333,63 @@ def _giscus_block() -> str:
     )
 
 
-def render_rule_md(entry: dict) -> str:
+def _family_prefix(rule_id: str) -> str:
+    """Family = the rule ID minus its trailing numeric segment.
+
+    `SEC-AWS-IAM-001` → `SEC-AWS-IAM`
+    `SEC-AWS-IAM-POLICY-002` → `SEC-AWS-IAM-POLICY` (distinct family from
+    `SEC-AWS-IAM-*` — the `POLICY` mid-segment is meaningful)
+    `OPS-ENV-001` → `OPS-ENV`
+
+    A rule whose final segment is non-numeric (no trailing `NNN`) returns
+    its full ID — it has no family peers. This matches the catalogue
+    convention where every rule ends in a numeric counter.
+    """
+    parts = rule_id.split("-")
+    if len(parts) >= 2 and parts[-1].isdigit():
+        return "-".join(parts[:-1])
+    return rule_id
+
+
+def _build_family_index(entries: list[dict]) -> dict[str, list[dict]]:
+    """Group active rules by their family prefix.
+
+    Returns `{family_prefix: [entry, ...]}`. Members are sorted by ID
+    so the rendered "Family" section is deterministic.
+    """
+    families: dict[str, list[dict]] = {}
+    for e in entries:
+        if e.get("status") in ("deprecated",):
+            continue
+        rid = e.get("id")
+        if not rid:
+            continue
+        families.setdefault(_family_prefix(rid), []).append(e)
+    for fam in families.values():
+        fam.sort(key=lambda e: e["id"])
+    return families
+
+
+def _family_section(rule_id: str, family_index: dict[str, list[dict]]) -> str:
+    """Render "Family" backlinks for every other rule in the same family.
+
+    SEO win: a leaf rule page becomes a hub linking to N siblings,
+    multiplying internal-link density across the rules subtree. Grouping
+    on the prefix-up-to-the-numeric-segment also matches how readers
+    reason about rule IDs ("show me everything in `SEC-AWS-IAM-*`").
+    """
+    family = _family_prefix(rule_id)
+    siblings = [e for e in family_index.get(family, []) if e["id"] != rule_id]
+    if not siblings:
+        return ""
+    lines = [f"See also rules in the `{family}-*` family:", ""]
+    for e in siblings:
+        title = (e.get("title") or "").replace("|", "\\|").strip()
+        lines.append(f"- [`{e['id']}`](./{e['id']}.md) — {title}")
+    return _section("Family", "\n".join(lines))
+
+
+def render_rule_md(entry: dict, family_index: dict[str, list[dict]] | None = None) -> str:
     rule_id = entry["id"]
     title = entry.get("title", rule_id)
     urgency = entry.get("default_urgency", "MEDIUM")
@@ -420,6 +502,13 @@ def render_rule_md(entry: dict) -> str:
     refs = _references(entry, rule_id)
     refs_section = _section("References", refs)
 
+    # Family backlinks — every other rule sharing this rule's
+    # prefix-up-to-numeric-segment. Multiplies internal-link density on
+    # the rules subtree (SEO).
+    family_section = (
+        _family_section(rule_id, family_index) if family_index else ""
+    )
+
     # Footer — link back to index + how to run / suppress
     footer = (
         "---\n\n"
@@ -448,7 +537,7 @@ def render_rule_md(entry: dict) -> str:
         header + summary
         + what_section + why_section + narrative_section
         + rec_section + fix_section + verify_section
-        + refs_section + footer
+        + refs_section + family_section + footer
     )
     return (
         _front_matter(entry)
@@ -521,11 +610,13 @@ def main() -> int:
             continue
         entries.append(entry)
 
+    family_index = _build_family_index(entries)
+
     drift_count = 0
     for entry in entries:
         rule_id = entry["id"]
         target = DOCS_RULES_DIR / f"{rule_id}.md"
-        rendered = render_rule_md(entry)
+        rendered = render_rule_md(entry, family_index=family_index)
         if args.check:
             current = target.read_text() if target.exists() else ""
             if current != rendered:

@@ -10,7 +10,7 @@ question can be answered in 30 seconds without reading prose.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State at last sync (2026-05-09): 215 rules · 469 tests · ext v0.1.28 · `action.yml` shipped · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor · `vscode://` URI handler.
+State at last sync (2026-05-09): 215 rules · 500 tests · ext v0.1.28 · `action.yml` shipped · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service (`integrations/badge-service/`).
 
 ---
 
@@ -20,9 +20,9 @@ State at last sync (2026-05-09): 215 rules · 469 tests · ext v0.1.28 · `actio
 
 #### a.1 Tier 1 — high-leverage, ready now
 
-- [ ] **P0 · M** Module Reuse Advisor: ROI signal (lines saved per match) → `PLAN.md§a.1`
-- [ ] **P0 · L** `vscode://` URI handler: `/scan`, `/explain`, `/suppress` verbs → `PLAN.md§a.1`
-- [ ] **P0 · S** SEO: family backlinks on per-rule pages (autogen "See also: `SEC-AWS-IAM-*`") → `PLAN.md§a.1`
+- [x] **P0 · M** Module Reuse Advisor: ROI signal (lines saved per match) → `PLAN.md§a.1` *(Round 27)*
+- [x] **P0 · L** `vscode://` URI handler: `/scan`, `/explain`, `/suppress` verbs → `PLAN.md§a.1` *(Round 27)*
+- [x] **P0 · S** SEO: family backlinks on per-rule pages (autogen "See also: `SEC-AWS-IAM-*`") → `PLAN.md§a.1` *(Round 27)*
 - [ ] **P1 · S** JSON output `metadata` block (engine SHA, scan timestamp, target path) → `PLAN.md§a.1`
 - [ ] **P1 · S** `--explain-score` flag (top-5 score-driving findings) → `PLAN.md§a.1`
 - [ ] **P1 · M** `fix_hcl_minimal:` catalogue field for machine-applicable patches → `PLAN.md§a.1`
@@ -51,10 +51,10 @@ State at last sync (2026-05-09): 215 rules · 469 tests · ext v0.1.28 · `actio
 
 #### b.1 Tier 1 — risk-driven gaps
 
-- [ ] **P0 · S** Module Reuse isolated fixtures (3 `MOD-REUSE-*` rules, 0 fixtures) → `PLAN.md§b.1`
-- [ ] **P0 · M** URI handler integration tests (`@vscode/test-electron`) → `PLAN.md§b.1`
-- [ ] **P0 · S** JSON-LD validation against Schema.org spec → `PLAN.md§b.1`
-- [ ] **P0 · S** Urgency-tier per-rule pinning (Module Reuse INFO tripwire) → `PLAN.md§b.1`
+- [x] **P0 · S** Module Reuse isolated fixtures (3 `MOD-REUSE-*` rules, 0 fixtures) → `PLAN.md§b.1` *(already shipped: `mod_reuse_*` + `MOD-REUSE-*_clean` wired into both `tests/test_fixtures.py` and `tests/test_clean_fixtures.py`)*
+- [x] **P0 · M** URI handler integration tests (`@vscode/test-electron`) → `PLAN.md§b.1` *(Round 27 — `vscode-extension/src/test/uriHandler.test.ts`, 24 `node:test` cases via pure-dispatcher refactor)*
+- [x] **P0 · S** JSON-LD validation against Schema.org spec → `PLAN.md§b.1` *(Round 27)*
+- [x] **P0 · S** Urgency-tier per-rule pinning (Module Reuse INFO tripwire) → `PLAN.md§b.1` *(Round 27)*
 - [ ] **P1 · M** LSP server JSON-RPC tests (200 LoC, 0 tests today) → `PLAN.md§b.1`
 - [ ] **P1 · M** HCP Run Task server tests (HMAC-SHA512 path untested) → `PLAN.md§b.1`
 - [ ] **P1 · M** `--mode plan` / `--plan-json` tests → `PLAN.md§b.1`
@@ -77,8 +77,8 @@ State at last sync (2026-05-09): 215 rules · 469 tests · ext v0.1.28 · `actio
 
 #### c.1 Tier 1
 
-- [ ] **P0 · S** Status-bar score badge with grade colour (`82 (B)` shareable artefact) → `PLAN.md§c.1`
-- [ ] **P0 · M** Live "security score" SVG badge service (`integrations/badge-service/`) → `PLAN.md§c.1`
+- [x] **P0 · S** Status-bar score badge with grade colour (`82 (B)` shareable artefact) → `PLAN.md§c.1` *(Round 27)*
+- [x] **P0 · M** Live "security score" SVG badge service (`integrations/badge-service/`) → `PLAN.md§c.1` *(Round 27 — FastAPI app + Dockerfile + fly.toml + HMAC-signed `/ingest`; 19 tests)*
 - [ ] **P1 · M** Trend output as a graph image (`--format svg` for trend) → `PLAN.md§c.1`
 
 #### c.2 Tier 2

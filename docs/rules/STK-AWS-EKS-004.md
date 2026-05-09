@@ -35,7 +35,7 @@ keywords: "stack, medium, terraform, iac, aws"
 
 ![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AWS-EKS-004" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AWS-EKS-004" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-AWS-EKS-004" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-AWS-EKS-004 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **EKS cluster missing OIDC provider for IRSA.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
@@ -120,6 +120,15 @@ must show `eks.amazonaws.com/role-arn` annotation.
 
 **Source**
   - [`catalog/STK-AWS-EKS-004.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AWS-EKS-004.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `STK-AWS-EKS-*` family:
+
+- [`STK-AWS-EKS-001`](./STK-AWS-EKS-001.md) — EKS cluster API endpoint private access not enabled
+- [`STK-AWS-EKS-002`](./STK-AWS-EKS-002.md) — EKS cluster control plane logging not enabled
+- [`STK-AWS-EKS-003`](./STK-AWS-EKS-003.md) — EKS cluster Kubernetes Secrets not encrypted with KMS
+- [`STK-AWS-EKS-005`](./STK-AWS-EKS-005.md) — EKS cluster missing audit log type in enabled_cluster_log_types
 
 ---
 

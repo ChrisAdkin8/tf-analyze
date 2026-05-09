@@ -11,7 +11,7 @@ set -euo pipefail
 
 REPO="${1:-ChrisAdkin8/tf-analyze}"
 
-DESCRIPTION="Static + plan-time Terraform security analysis with attack-graph prioritisation, MITRE ATT&CK mapping, and one-click PR fix suggestions. 209 rules, 100% fix_hcl coverage."
+DESCRIPTION="Static + plan-time Terraform security analysis with attack-graph prioritisation, MITRE ATT&CK mapping, and one-click PR fix suggestions. 215 rules, 100% fix_hcl coverage."
 HOMEPAGE="https://github.com/${REPO}"
 
 TOPICS=(

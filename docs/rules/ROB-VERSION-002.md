@@ -35,7 +35,7 @@ keywords: "robustness, low, terraform, iac"
 
 ![LOW](https://img.shields.io/badge/LOW-95a5a6?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
 
-<p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-VERSION-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
+<p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-VERSION-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-VERSION-002" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-VERSION-002 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **Submodule directory has no required_version.** This rule has `default_urgency: LOW` and operates on a module blast radius. 
 
@@ -88,6 +88,13 @@ in isolation) — it should enforce the new constraint.
 
 **Source**
   - [`catalog/ROB-VERSION-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-VERSION-002.yaml) — canonical YAML
+
+## Family
+
+See also rules in the `ROB-VERSION-*` family:
+
+- [`ROB-VERSION-001`](./ROB-VERSION-001.md) — required_version floor too old for skill assumptions
+- [`ROB-VERSION-003`](./ROB-VERSION-003.md) — required_providers entry missing version constraint
 
 ---
 

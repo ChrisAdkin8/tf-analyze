@@ -117,13 +117,22 @@ class ModuleReusePanel {
             const rows = hits.map(h => {
                 const conf = (h.confidence ?? 'medium').toLowerCase();
                 const fileShort = h.file.split('/').slice(-2).join('/');
+                const roiCell = h.roi && h.roi.lines_saved > 0
+                    ? `<span class="roi" title="${h.roi.bespoke_lines} bespoke lines vs. ~${h.roi.replacement_lines} for a module call">~${h.roi.lines_saved} lines (${h.roi.pct_saved}%)</span>`
+                    : '<span class="roi-none">—</span>';
                 return `<tr>
           <td><span class="conf conf-${conf}">${conf}</span></td>
           <td><code>${this._escape(fileShort)}:${h.line}</code></td>
           <td><code>${this._escape(h.resource ?? '')}</code></td>
+          <td class="roi-cell">${roiCell}</td>
           <td class="ctx">${this._escape(h.context ?? '')}</td>
         </tr>`;
             }).join('');
+            // Aggregate ROI summary across all hits for this module.
+            const totalSaved = hits.reduce((s, h) => s + (h.roi?.lines_saved ?? 0), 0);
+            const matchSummary = totalSaved > 0
+                ? `<p class="match-summary">~${totalSaved} lines saved across ${hits.length} match${hits.length !== 1 ? 'es' : ''} by adopting this module.</p>`
+                : '';
             sections.push(`<section>
         <h2>
           <a class="rule-id" href="${docsUrl}" target="_blank" rel="noopener" title="Open rule docs">${ruleId}</a>
@@ -131,8 +140,9 @@ class ModuleReusePanel {
           <span class="badge u-info">INFO</span>
         </h2>
         ${registryUrl ? `<p class="registry">📦 <a href="${registryUrl}" target="_blank" rel="noopener"><code>${this._escape(this._extractModuleName(registryUrl))}</code></a></p>` : ''}
+        ${matchSummary}
         <table>
-          <thead><tr><th>Confidence</th><th>Location</th><th>Anchor</th><th>Match details</th></tr></thead>
+          <thead><tr><th>Confidence</th><th>Location</th><th>Anchor</th><th>Lines saved</th><th>Match details</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </section>`);
@@ -163,6 +173,10 @@ class ModuleReusePanel {
   .conf-high { background: #2d6a3a; color: #d4f4d8; }
   .conf-medium { background: #c27a00; color: #ffe6b3; }
   .conf-low { background: #555; color: #ccc; }
+  .match-summary { margin: 6px 0 12px; padding: 8px 12px; background: #2a3340; border-left: 3px solid #4daafc; border-radius: 0 3px 3px 0; color: #cfe6ff; font-size: 12px; }
+  td.roi-cell { white-space: nowrap; }
+  .roi { color: #7fd99c; font-weight: 600; }
+  .roi-none { color: #555; }
 </style></head><body>
 <h1>Module Reuse Advisor</h1>
 <p class="lede">Directories whose resource cluster matches the shape of a popular community module on the Terraform Registry. Findings are advisory (INFO tier) — bespoke implementations are sometimes deliberate.</p>
