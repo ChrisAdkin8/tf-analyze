@@ -224,12 +224,34 @@ runs:
             if (!existing || rank(f.urgency) > rank(existing.urgency)) byLoc.set(key, f);
           }
 
+          // Build a per-file set of line numbers that appear on the RIGHT side
+          // of this PR's diff. createReviewComment 422s if `line` isn't in a
+          // diff hunk, so pre-filtering avoids ~75% of the noise warnings on
+          // a typical PR (rules fire all over the file; only a few lines change).
+          const rightSideLines = new Map();
+          for (const file of changed.data) {
+            if (!file.patch) continue;
+            const lines = new Set();
+            let cur = 0;
+            for (const ln of file.patch.split('\n')) {
+              const hdr = ln.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+              if (hdr) { cur = parseInt(hdr[1], 10); continue; }
+              if (ln.startsWith('+') && !ln.startsWith('+++')) { lines.add(cur); cur++; }
+              else if (ln.startsWith(' ')) { lines.add(cur); cur++; }
+              // '-' lines don't advance the new-side counter.
+            }
+            rightSideLines.set(file.filename, lines);
+          }
+
+          const headSha = context.payload.pull_request.head.sha;
           let posted = 0;
           for (const [, f] of byLoc) {
             // Strip the in-container mount prefix; the runner-side GITHUB_WORKSPACE
             // is a different path entirely, so don't use it here.
             const rel = f.file.replace(/^\/workspace\//, '');
             if (!changedPaths.has(rel)) continue;
+            const inDiff = rightSideLines.get(rel);
+            if (!inDiff || !inDiff.has(f.line)) continue;
             const emoji = URGENCY_EMOJI[f.urgency] ?? '•';
             const body = [
               `${emoji} **[${f.id}]** — ${f.title}`,
@@ -244,6 +266,7 @@ runs:
               await github.rest.pulls.createReviewComment({
                 owner: context.repo.owner, repo: context.repo.repo,
                 pull_number: context.payload.pull_request.number,
+                commit_id: headSha,
                 body, path: rel, line: f.line, side: 'RIGHT',
               });
               posted++;
