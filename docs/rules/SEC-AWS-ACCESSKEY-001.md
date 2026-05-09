@@ -1,0 +1,102 @@
+# ⚠️ SEC-AWS-ACCESSKEY-001 — Long-lived IAM access key created for a user
+
+![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+
+> **Long-lived IAM access key created for a user.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+
+## What this checks
+
+1. **`resource_present`** on `aws_iam_access_key` — _this resource type exists in the corpus and is itself a finding._
+  Long-lived IAM access key resource present in Terraform configuration
+
+## Why it likely fired
+
+Long-lived IAM access key resource present in Terraform configuration
+
+## Adversarial scenario
+
+HIGH and CRITICAL findings carry a 3–4 sentence adversarial narrative grounded in real incidents (Capital One, Accenture, SolarWinds). Run `python3 scripts/detect.py --explain SEC-AWS-ACCESSKEY-001` or hover the squiggle in the VS Code extension to see the rendered narrative for this rule.
+
+Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/scripts/detect.py)) under `_ATTACK_NARRATIVES` and emitted into the JSON output as the `narrative` field on every finding for this rule.
+
+## Remediation
+
+Avoid long-lived IAM access keys entirely. Use IAM roles with temporary
+credentials instead:
+- EC2 workloads: EC2 instance profiles
+- Lambda: Lambda execution roles
+- CI/CD: OIDC federation (GitHub Actions, GitLab CI, CircleCI, etc.)
+- Cross-account: `sts:AssumeRole`
+
+If a long-lived key is truly unavoidable (a legacy system that cannot
+use OIDC), enforce these mitigations:
+1. Rotate every 90 days via automation.
+2. Store the secret in AWS Secrets Manager or HashiCorp Vault — never
+   in `terraform.tfvars` or CI/CD environment variables in plaintext.
+3. Attach a policy that restricts the key to the minimum required actions
+   and resources.
+4. Enable CloudTrail and alert on unusual usage patterns.
+
+## Suggested fix (`fix_hcl`)
+
+![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
+
+```hcl
+# Replace long-lived access key with an IAM instance profile (EC2 example)
+resource "aws_iam_role" "app" {
+  name = "app"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "app" {
+  name = "app"
+  role = aws_iam_role.app.name
+}
+# Remove the aws_iam_access_key resource entirely
+```
+
+## Verification
+
+Run `aws iam list-access-keys --user-name <name>` and confirm no keys
+exist, or that existing keys were created within the last 90 days.
+Search the codebase for `aws_iam_access_key` resources and ensure
+removal is tracked in a migration plan.
+
+## References
+
+**CIS Benchmark**
+  - `CIS 1.14`
+
+**Source**
+  - [`catalog/SEC-AWS-ACCESSKEY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ACCESSKEY-001.yaml) — canonical YAML
+
+---
+
+## Run this check
+
+```sh
+python3 scripts/detect.py --explain SEC-AWS-ACCESSKEY-001    # full catalogue entry
+python3 scripts/detect.py --target . --only-fixture <fixture>
+```
+
+## Suppress
+
+Inline (single occurrence): `# tf-analyze:ignore SEC-AWS-ACCESSKEY-001` on or above the offending line.
+
+Project-wide: add to `.tf-analyze.yaml`:
+
+```yaml
+ignore_rules:
+  - SEC-AWS-ACCESSKEY-001
+```
+
+Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
+
+[← Index of all rules](./)

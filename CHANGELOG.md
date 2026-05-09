@@ -5,6 +5,61 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Per-rule docs site — 2026-05-09
+
+**Every rule ID emitted by the engine is now a hyperlink.**
+
+The compliance HTML panel, the compliance text output, the SARIF
+`helpUri`, and the Findings panel rule headers all link to a per-rule
+documentation page on the project's GitHub Pages site at
+`https://chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>.html`.
+
+- **209 doc pages auto-generated** by `scripts/gen_rule_docs.py`
+  from the catalogue YAML. Each renders: title + urgency badge, what
+  the rule checks, why it likely fired, the adversarial scenario
+  (when applicable), the remediation snippet with disruption
+  classification, verification commands, and references (CIS /
+  PCI-DSS / SOC 2 / MITRE ATT&CK with `attack.mitre.org` links /
+  related rules).
+- **`docs/rules/index.md`** — sortable table of every rule grouped by
+  section.
+- **Single source of truth**: catalogue YAML. The generator is
+  deterministic; `gen_rule_docs.py --check` exits non-zero on drift.
+- **Engine constant `RULE_DOCS_URL_BASE`** in `scripts/detect.py`
+  is the single string that decides where rule links land. Switching
+  to a custom domain (`tf-analyze.dev/rules/...`) is a one-line edit.
+- **`SARIF_HELP_URI_BASE`** now points at the docs site instead of
+  the raw catalogue YAML — every SARIF consumer (GitHub Code Scanning,
+  Azure DevOps, …) gets reader-friendly docs instead of raw YAML.
+
+### Why this matters for adoption
+
+Compliance failures get pasted into Slack, JIRA, and runbook wikis.
+A URL like `https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-IAM-002.html`
+lands cleanly in any of those — same-document anchors don't survive
+copy-paste. Once the Pages site is live, the project becomes the
+canonical search-engine answer for queries like *"AWS IAM iam:* privilege
+escalation terraform"*.
+
+### Tests: 411 → 421 (+10) — `tests/test_rule_docs.py`
+
+- Every active rule has a corresponding doc page
+- Every doc page corresponds to an active rule
+- `gen_rule_docs.py --check` passes (deterministic round-trip)
+- `RULE_DOCS_URL_BASE` and `SARIF_HELP_URI_BASE` stay in sync
+- Compliance text output emits the per-rule URL header
+- Compliance HTML wraps rule IDs in `<a>` anchors
+- Findings panel rule headers link to docs
+
+### CI changes
+
+- New `rule-docs` job in `.github/workflows/ci.yml` runs
+  `gen_rule_docs.py --check`. Fails the build on drift.
+- `release.yml` runs the same check at tag time, so a release
+  never publishes a half-broken docs site.
+
+---
+
 ## v0.1.0 — 2026-05-09
 
 **First public release.** Cuts a stable tag against everything

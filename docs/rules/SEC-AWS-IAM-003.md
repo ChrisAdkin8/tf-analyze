@@ -1,0 +1,118 @@
+# 💡 SEC-AWS-IAM-003 — IAM account password policy is not configured or too weak
+
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+
+> **IAM account password policy is not configured or too weak.** This rule has `default_urgency: MEDIUM` and operates on a module blast radius. 
+
+## What this checks
+
+1. **`resource_absent`** on `aws_iam_account_password_policy` — _the corpus is missing a resource type we expected to find given other resources present._
+  No `aws_iam_account_password_policy` is defined but IAM users exist.
+Without an explicit password policy, AWS applies a minimal default: 8-character
+minimum, no complexity requirement, no reuse prevention. CIS AWS Foundations
+1.8–1.14 require a 14-character minimum, uppercase/lowercase/number/symbol
+requirements, 90-day expiry, and 24-password reuse prevention.
+2. **`resource_arg`** on `aws_iam_account_password_policy` (`minimum_password_length`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_iam_account_password_policy` has `minimum_password_length` below 14.
+CIS AWS Foundations 1.8 requires a minimum of 14 characters.
+
+## Why it likely fired
+
+No `aws_iam_account_password_policy` is defined but IAM users exist.
+Without an explicit password policy, AWS applies a minimal default: 8-character
+minimum, no complexity requirement, no reuse prevention. CIS AWS Foundations
+1.8–1.14 require a 14-character minimum, uppercase/lowercase/number/symbol
+requirements, 90-day expiry, and 24-password reuse prevention.
+
+`aws_iam_account_password_policy` has `minimum_password_length` below 14.
+CIS AWS Foundations 1.8 requires a minimum of 14 characters.
+
+## Adversarial scenario
+
+HIGH and CRITICAL findings carry a 3–4 sentence adversarial narrative grounded in real incidents (Capital One, Accenture, SolarWinds). Run `python3 scripts/detect.py --explain SEC-AWS-IAM-003` or hover the squiggle in the VS Code extension to see the rendered narrative for this rule.
+
+Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/scripts/detect.py)) under `_ATTACK_NARRATIVES` and emitted into the JSON output as the `narrative` field on every finding for this rule.
+
+## Remediation
+
+Define a strong password policy:
+
+    resource "aws_iam_account_password_policy" "strict" {
+      minimum_password_length        = 14
+      require_lowercase_characters   = true
+      require_numbers                = true
+      require_uppercase_characters   = true
+      require_symbols                = true
+      allow_users_to_change_password = true
+      password_reuse_prevention      = 24
+      max_password_age               = 90
+      hard_expiry                    = false
+    }
+
+## Suggested fix (`fix_hcl`)
+
+![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
+
+```hcl
+resource "aws_iam_account_password_policy" "strict" {
+  minimum_password_length        = 14
+  require_lowercase_characters   = true
+  require_numbers                = true
+  require_uppercase_characters   = true
+  require_symbols                = true
+  allow_users_to_change_password = true
+  password_reuse_prevention      = 24
+  max_password_age               = 90
+}
+```
+
+## Verification
+
+```sh
+`aws iam get-account-password-policy \
+  --query 'PasswordPolicy.MinimumPasswordLength'`
+must return 14 or greater.
+```
+
+## References
+
+**CIS Benchmark**
+  - `CIS 1.8` — Ensure IAM password policy requires minimum length of 14
+  - `CIS 1.9` — Ensure IAM password policy prevents password reuse
+
+**PCI-DSS**
+  - `Req-8.3`
+
+**SOC 2 Trust Services Criteria**
+  - `CC6.1`
+
+**MITRE ATT&CK**
+  - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**Source**
+  - [`catalog/SEC-AWS-IAM-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-003.yaml) — canonical YAML
+
+---
+
+## Run this check
+
+```sh
+python3 scripts/detect.py --explain SEC-AWS-IAM-003    # full catalogue entry
+python3 scripts/detect.py --target . --only-fixture <fixture>
+```
+
+## Suppress
+
+Inline (single occurrence): `# tf-analyze:ignore SEC-AWS-IAM-003` on or above the offending line.
+
+Project-wide: add to `.tf-analyze.yaml`:
+
+```yaml
+ignore_rules:
+  - SEC-AWS-IAM-003
+```
+
+Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
+
+[← Index of all rules](./)

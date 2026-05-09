@@ -50,6 +50,21 @@ jobs:
           python-version: "3.12"
       - run: python3 scripts/gen-cli-docs.py --check
 
+  rule-docs:
+    name: docs/rules/ is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The per-rule docs site (https://chrisadkin8.github.io/tf-analyze/rules/)
+      # is generated from catalog/*.yaml. Drift is a public contract bug —
+      # SARIF helpUri, compliance panel links, IDE hover all 404 if the
+      # site is missing a page. Fail the build when the docs are stale
+      # so the catalogue PR also touches the docs.
+      - run: python3 scripts/gen_rule_docs.py --check
+
   stubs:
     name: no stubs older than 180 days
     runs-on: ubuntu-latest

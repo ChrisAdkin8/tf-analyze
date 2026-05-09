@@ -1,0 +1,89 @@
+# 💡 SEC-DATASOURCE-001 — External or HTTP data source executes at plan time
+
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+
+> **External or HTTP data source executes at plan time.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
+
+## What this checks
+
+1. **`grep`** matching `/data\s+"external"\s+"[\w-]+"\s*\{/` — _a textual regex matched somewhere in the file._
+  data.external runs arbitrary shell scripts at plan time
+2. **`grep`** matching `/data\s+"http"\s+"[\w-]+"\s*\{/` — _a textual regex matched somewhere in the file._
+  data.http fetches from URLs at plan time
+
+## Why it likely fired
+
+data.external runs arbitrary shell scripts at plan time
+
+data.http fetches from URLs at plan time
+
+## Adversarial scenario
+
+HIGH and CRITICAL findings carry a 3–4 sentence adversarial narrative grounded in real incidents (Capital One, Accenture, SolarWinds). Run `python3 scripts/detect.py --explain SEC-DATASOURCE-001` or hover the squiggle in the VS Code extension to see the rendered narrative for this rule.
+
+Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/scripts/detect.py)) under `_ATTACK_NARRATIVES` and emitted into the JSON output as the `narrative` field on every finding for this rule.
+
+## Remediation
+
+`data.external` runs an arbitrary program and trusts its JSON stdout.
+`data.http` fetches a URL at plan time, which may leak plan context
+or introduce non-determinism. Review each usage:
+- Can the external script be replaced with a provider data source?
+- Is the HTTP endpoint authenticated and pinned to a known host?
+- Are results used in security-sensitive contexts (IAM, secrets)?
+If the usage is intentional and reviewed, suppress with
+`# tf-analyze:ignore SEC-DATASOURCE-001`.
+
+## Suggested fix (`fix_hcl`)
+
+![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
+
+```hcl
+# Replace data.external with a native provider data source where possible
+data "aws_ssm_parameter" "config" {
+  name = "/app/config"
+}
+
+# If data.http is required, document intent and pin with a suppression comment
+# # tf-analyze:ignore SEC-DATASOURCE-001 — internal metadata endpoint, reviewed 2025-01
+# data "http" "metadata" {
+#   url = "http://169.254.169.254/latest/meta-data/instance-id"
+# }
+```
+
+## Verification
+
+Grep for `data "external"` and `data "http"` blocks. Confirm each is
+documented with a justification or replaced with a native alternative.
+
+## References
+
+**MITRE ATT&CK**
+  - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**Source**
+  - [`catalog/SEC-DATASOURCE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-DATASOURCE-001.yaml) — canonical YAML
+
+---
+
+## Run this check
+
+```sh
+python3 scripts/detect.py --explain SEC-DATASOURCE-001    # full catalogue entry
+python3 scripts/detect.py --target . --only-fixture <fixture>
+```
+
+## Suppress
+
+Inline (single occurrence): `# tf-analyze:ignore SEC-DATASOURCE-001` on or above the offending line.
+
+Project-wide: add to `.tf-analyze.yaml`:
+
+```yaml
+ignore_rules:
+  - SEC-DATASOURCE-001
+```
+
+Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
+
+[← Index of all rules](./)

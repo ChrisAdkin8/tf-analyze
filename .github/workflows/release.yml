@@ -15,12 +15,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Set version
         id: ver
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version-bare=${VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify per-rule docs are in sync with catalogue
+        # Tag-time gate: if the catalogue and docs/rules/ have drifted,
+        # fail the release rather than publish a half-broken docs site.
+        run: python3 scripts/gen_rule_docs.py --check
 
       - name: Build VS Code extension VSIX
         id: build-vsix

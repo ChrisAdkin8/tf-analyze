@@ -3468,10 +3468,19 @@ def _render_graph_html(graph: dict) -> str:
 
 # ---- SARIF output --------------------------------------------------------
 
-SARIF_HELP_URI_BASE = (
-    "https://github.com/ChrisAdkin8/tf-analyze/blob/main/"
-    "catalog/{id}.yaml"
-)
+# Per-rule documentation lives at GitHub Pages (auto-generated from the
+# catalogue YAML by `scripts/gen_rule_docs.py`). Used by:
+#   - SARIF helpUri (every consumer that supports it)
+#   - the HTML compliance panel
+#   - the text compliance output
+#   - the Findings panel rule headers
+#   - the VS Code extension hover panel
+# The catalogue YAML stays the source of truth; the docs site is a
+# rendering of it. RULE_DOCS_URL_BASE is one place; switching the
+# canonical host (e.g. to https://tf-analyze.dev/rules/...) is a single
+# edit that ripples to every output surface.
+RULE_DOCS_URL_BASE = "https://chrisadkin8.github.io/tf-analyze/rules/{id}.html"
+SARIF_HELP_URI_BASE = RULE_DOCS_URL_BASE
 
 
 def _sarif_fingerprint(finding: dict) -> dict:
@@ -4118,7 +4127,13 @@ def _render_mitre(findings: list[dict], entries: list[dict]) -> str:
 
 
 def _render_compliance_text(by_fw: dict) -> str:
-    lines: list[str] = ["## Compliance Gap Report", ""]
+    lines: list[str] = [
+        "## Compliance Gap Report",
+        "",
+        f"Per-rule docs: {RULE_DOCS_URL_BASE.format(id='<RULE-ID>')}",
+        "(every rule ID below is a URL slug — append `.html` for the page)",
+        "",
+    ]
     for fw in sorted(by_fw):
         controls = by_fw[fw]
         total = len(controls)
@@ -4136,6 +4151,12 @@ def _render_compliance_text(by_fw: dict) -> str:
                 if ctrl["failed_rules"] else ""
             )
             lines.append(f"{ctrl['control']:<14}{ctrl['status']:<10}{rules_str}{fail_str}")
+            # For each failed rule, print the docs URL on its own line.
+            # Terminals auto-link these; users can click to read the
+            # explanation, why-it-fired, and fix without leaving the
+            # CI log.
+            for r in ctrl["failed_rules"]:
+                lines.append(f"{'':<24}↳ {RULE_DOCS_URL_BASE.format(id=r)}")
         lines.append("")
     return "\n".join(lines)
 
@@ -4158,12 +4179,18 @@ def _render_compliance_html(by_fw: dict) -> str:
                 "<span style='background:#b02a2a;color:#fff;padding:1px 8px;"
                 "border-radius:3px;font-size:11px;font-weight:600'>FAIL</span>"
             )
-            rules_html = ", ".join(f"<code>{r}</code>" for r in ctrl["rules"])
+            def _rule_link(r: str) -> str:
+                url = RULE_DOCS_URL_BASE.format(id=r)
+                return (
+                    f'<a href="{url}" target="_blank" rel="noopener" '
+                    f'title="Open rule documentation"><code>{r}</code></a>'
+                )
+            rules_html = ", ".join(_rule_link(r) for r in ctrl["rules"])
             fail_html = ""
             if ctrl["failed_rules"]:
                 fail_html = (
                     " <span style='color:#b02a2a'>("
-                    + ", ".join(f"<code>{r}</code>" for r in ctrl["failed_rules"])
+                    + ", ".join(_rule_link(r) for r in ctrl["failed_rules"])
                     + " fired)</span>"
                 )
             rows.append(
@@ -4357,9 +4384,11 @@ def to_html(
         display_urgency = max(eff_urgencies, key=lambda u: {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}.get(u, 2)) if eff_urgencies else urgency
         title = entry.get("title", eid)
         detail_rows = _make_detail_rows(eid, display_urgency, fs)
+        docs_url = RULE_DOCS_URL_BASE.format(id=eid)
         rows.append(
             f"<details><summary><span class='u u-{display_urgency.lower()}'>{display_urgency}</span> "
-            f"<b>{eid}</b> — {title} ({len(fs)})</summary>"
+            f"<a href='{docs_url}' target='_blank' rel='noopener' "
+            f"title='Open rule documentation'><b>{eid}</b></a> — {title} ({len(fs)})</summary>"
             f"<table class='locs'><thead><tr><th>Location</th><th>Resource</th></tr></thead>"
             f"<tbody>{detail_rows}</tbody></table></details>"
         )

@@ -1,0 +1,104 @@
+# ⚠️ STK-GCP-KMS-LOCATION-001 — CMEK consumer location mismatches KMS key ring location
+
+![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+
+> **CMEK consumer location mismatches KMS key ring location.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+
+## What this checks
+
+1. **`graph_check`** — _a corpus-wide graph check fired (cross-resource invariant)._
+  A resource (bucket, SQL instance, BigQuery dataset, etc.) references
+a `google_kms_crypto_key` whose key ring `location` does not match
+the consuming resource's `location` / `region`. KMS keys inherit
+location from the key ring; cross-region encrypt/decrypt breaks
+regional durability guarantees and silently increases cost.
+
+## Why it likely fired
+
+A resource (bucket, SQL instance, BigQuery dataset, etc.) references
+a `google_kms_crypto_key` whose key ring `location` does not match
+the consuming resource's `location` / `region`. KMS keys inherit
+location from the key ring; cross-region encrypt/decrypt breaks
+regional durability guarantees and silently increases cost.
+
+## Adversarial scenario
+
+HIGH and CRITICAL findings carry a 3–4 sentence adversarial narrative grounded in real incidents (Capital One, Accenture, SolarWinds). Run `python3 scripts/detect.py --explain STK-GCP-KMS-LOCATION-001` or hover the squiggle in the VS Code extension to see the rendered narrative for this rule.
+
+Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/scripts/detect.py)) under `_ATTACK_NARRATIVES` and emitted into the JSON output as the `narrative` field on every finding for this rule.
+
+## Remediation
+
+Either:
+
+1. Co-locate the key ring with the consuming resource — in most
+   deployments this is the right answer. Move the key ring (create new,
+   re-encrypt, destroy old) so its location matches.
+2. Use a multi-region key ring (`location = "us"`, `"eu"`, `"asia"`)
+   when the consuming resource is itself multi-region.
+
+Avoid the third option (cross-region usage) unless you have a specific
+data-residency requirement that forces it; document in code if so.
+
+## Suggested fix (`fix_hcl`)
+
+![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
+
+```hcl
+# Co-locate key ring and consumer resource in the same region
+resource "google_kms_key_ring" "app" {
+  name     = "app"
+  location = "us-central1"
+}
+
+resource "google_kms_crypto_key" "app" {
+  name     = "app"
+  key_ring = google_kms_key_ring.app.id
+}
+
+resource "google_storage_bucket" "app" {
+  name     = "app-data"
+  location = "us-central1"   # must match key ring location
+
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.app.id
+  }
+}
+```
+
+## Verification
+
+After applying, both `location` fields should match. Re-run tf-analyze
+to confirm STK-KMS-LOCATION-001 stays silent.
+
+## References
+
+**Related rules**
+  - [`SEC-BUCKET-001`](./SEC-BUCKET-001.md)
+
+**Source**
+  - [`catalog/STK-GCP-KMS-LOCATION-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-KMS-LOCATION-001.yaml) — canonical YAML
+
+---
+
+## Run this check
+
+```sh
+python3 scripts/detect.py --explain STK-GCP-KMS-LOCATION-001    # full catalogue entry
+python3 scripts/detect.py --target . --only-fixture <fixture>
+```
+
+## Suppress
+
+Inline (single occurrence): `# tf-analyze:ignore STK-GCP-KMS-LOCATION-001` on or above the offending line.
+
+Project-wide: add to `.tf-analyze.yaml`:
+
+```yaml
+ignore_rules:
+  - STK-GCP-KMS-LOCATION-001
+```
+
+Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
+
+[← Index of all rules](./)
