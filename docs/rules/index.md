@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**209 rules** across 8 sections. Click any rule ID for the full description, remediation, and verification.
+**215 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -22,7 +22,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 |------|---------|-------|
 | [`MOD-STALE-001`](./MOD-STALE-001.md) | LOW | Registry module is significantly behind latest version |
 
-## module (4)
+## module (5)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -30,6 +30,15 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`MOD-SUPPLY-001`](./MOD-SUPPLY-001.md) | HIGH | Module pinned to mutable git ref (main or master) |
 | [`MOD-SUPPLY-003`](./MOD-SUPPLY-003.md) | HIGH | Registry module missing version constraint |
 | [`MOD-SUPPLY-002`](./MOD-SUPPLY-002.md) | LOW | Module uses raw git source instead of registry |
+| [`MOD-UNUSED-001`](./MOD-UNUSED-001.md) | LOW | Local module directory is not called from any scenario |
+
+## module-reuse (3)
+
+| Rule | Urgency | Title |
+|------|---------|-------|
+| [`MOD-REUSE-AWS-VPC-001`](./MOD-REUSE-AWS-VPC-001.md) | INFO | Hand-rolled VPC scaffolding could be replaced by terraform-aws-modules/vpc/aws |
+| [`MOD-REUSE-AZURE-AKS-001`](./MOD-REUSE-AZURE-AKS-001.md) | INFO | Hand-rolled AKS cluster could be replaced by Azure/aks/azurerm |
+| [`MOD-REUSE-GCP-NETWORK-001`](./MOD-REUSE-GCP-NETWORK-001.md) | INFO | Hand-rolled VPC + subnets could be replaced by terraform-google-modules/network/google |
 
 ## ops (7)
 
@@ -43,7 +52,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`OPS-GCP-LABELS-001`](./OPS-GCP-LABELS-001.md) | MEDIUM | GCP resource missing labels block |
 | [`OPS-AWS-CWL-001`](./OPS-AWS-CWL-001.md) | LOW | CloudWatch log group has no retention policy |
 
-## robustness (40)
+## robustness (42)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -57,6 +66,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-AZURE-LIFECYCLE-001`](./ROB-AZURE-LIFECYCLE-001.md) | HIGH | Stateful Azure resource missing lifecycle.prevent_destroy |
 | [`ROB-COUNTREF-002`](./ROB-COUNTREF-002.md) | HIGH | Unguarded indexed reference to count = length(...) resource |
 | [`ROB-DRIFT-001`](./ROB-DRIFT-001.md) | HIGH | Resource uses ignore_changes = all |
+| [`ROB-FOREACH-002`](./ROB-FOREACH-002.md) | HIGH | for_each keyset is derived from another resource's attributes (apply-flicker) |
 | [`ROB-GCP-LIFECYCLE-001`](./ROB-GCP-LIFECYCLE-001.md) | HIGH | Stateful resource missing lifecycle.prevent_destroy |
 | [`ROB-GCP-LIFECYCLE-002`](./ROB-GCP-LIFECYCLE-002.md) | HIGH | Stateful resource has force_destroy=true |
 | [`ROB-PROVIDER-ALIAS-001`](./ROB-PROVIDER-ALIAS-001.md) | HIGH | Module references provider alias that is not declared |
@@ -72,6 +82,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-BACKEND-001`](./ROB-BACKEND-001.md) | MEDIUM | Inconsistent backend configuration across root modules |
 | [`ROB-CHECK-001`](./ROB-CHECK-001.md) | MEDIUM | TF 1.5+ check block missing assert |
 | [`ROB-COUNTREF-001`](./ROB-COUNTREF-001.md) | MEDIUM | Unguarded reference to count-conditional resource |
+| [`ROB-DRIFT-002`](./ROB-DRIFT-002.md) | MEDIUM | ignore_changes hides too much (wildcard, or tags-wide on a tagged resource) |
 | [`ROB-FOREACH-001`](./ROB-FOREACH-001.md) | MEDIUM | for_each over list instead of map/set |
 | [`ROB-PRECONDITION-001`](./ROB-PRECONDITION-001.md) | MEDIUM | Precondition or postcondition missing error_message |
 | [`ROB-REMOTESTATE-001`](./ROB-REMOTESTATE-001.md) | MEDIUM | terraform_remote_state data source couples modules implicitly |

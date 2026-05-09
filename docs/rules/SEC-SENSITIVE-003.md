@@ -1,6 +1,41 @@
+---
+title: "SEC-SENSITIVE-003 — Sensitive variable passed to templatefile()"
+description: "tf-analyze rule SEC-SENSITIVE-003 (HIGH · security): Sensitive variable passed to templatefile()"
+keywords: "security, high, terraform, iac, mitre-T1552.001"
+---
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "SEC-SENSITIVE-003 \u2014 Sensitive variable passed to templatefile()",
+  "description": "Avoid passing sensitive variables through `templatefile()`. The\nrendered output is a plain string that Terraform does NOT mark as\nsensitive, so it appears in plans, state, and logs.",
+  "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-SENSITIVE-003/",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-SENSITIVE-003/"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "tf-analyze"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "tf-analyze",
+    "url": "https://chrisadkin8.github.io/tf-analyze"
+  },
+  "keywords": "security, high, terraform, MITRE T1552.001",
+  "proficiencyLevel": "Expert",
+  "articleSection": "security",
+  "isAccessibleForFree": true
+}
+</script>
+
 # ⚠️ SEC-SENSITIVE-003 — Sensitive variable passed to templatefile()
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+
+<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-SENSITIVE-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **Sensitive variable passed to templatefile().** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
 
@@ -87,3 +122,25 @@ ignore_rules:
 Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
 
 [← Index of all rules](../)
+{% if site.giscus.enabled %}
+---
+
+## Discussion
+
+<script src="https://giscus.app/client.js"
+        data-repo="{{ site.giscus.repo }}"
+        data-repo-id="{{ site.giscus.repo_id }}"
+        data-category="{{ site.giscus.category }}"
+        data-category-id="{{ site.giscus.category_id }}"
+        data-mapping="{{ site.giscus.mapping }}"
+        data-strict="0"
+        data-reactions-enabled="{{ site.giscus.reactions }}"
+        data-emit-metadata="{{ site.giscus.emit_metadata }}"
+        data-input-position="{{ site.giscus.input_position }}"
+        data-theme="{{ site.giscus.theme }}"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+{% endif %}

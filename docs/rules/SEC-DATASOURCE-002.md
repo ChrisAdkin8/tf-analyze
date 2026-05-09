@@ -1,6 +1,41 @@
+---
+title: "SEC-DATASOURCE-002 — data.external program takes user-controlled input"
+description: "tf-analyze rule SEC-DATASOURCE-002 (HIGH · security): data.external program takes user-controlled input"
+keywords: "security, high, terraform, iac"
+---
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "SEC-DATASOURCE-002 \u2014 data.external program takes user-controlled input",
+  "description": "`data.external` runs its `program` at plan time with the full privileges\nof the Terraform runner. Passing variable- or local-derived arguments\nmeans a Terraform variable can become a shell argument \u2014 a supply-chain\ngap for operators and CI.",
+  "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-DATASOURCE-002/",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-DATASOURCE-002/"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "tf-analyze"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "tf-analyze",
+    "url": "https://chrisadkin8.github.io/tf-analyze"
+  },
+  "keywords": "security, high, terraform",
+  "proficiencyLevel": "Expert",
+  "articleSection": "security",
+  "isAccessibleForFree": true
+}
+</script>
+
 # ⚠️ SEC-DATASOURCE-002 — data.external program takes user-controlled input
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
+
+<p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-DATASOURCE-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **data.external program takes user-controlled input.** This rule has `default_urgency: HIGH` and operates on a infrastructure wide blast radius. 
 
@@ -83,3 +118,25 @@ ignore_rules:
 Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
 
 [← Index of all rules](../)
+{% if site.giscus.enabled %}
+---
+
+## Discussion
+
+<script src="https://giscus.app/client.js"
+        data-repo="{{ site.giscus.repo }}"
+        data-repo-id="{{ site.giscus.repo_id }}"
+        data-category="{{ site.giscus.category }}"
+        data-category-id="{{ site.giscus.category_id }}"
+        data-mapping="{{ site.giscus.mapping }}"
+        data-strict="0"
+        data-reactions-enabled="{{ site.giscus.reactions }}"
+        data-emit-metadata="{{ site.giscus.emit_metadata }}"
+        data-input-position="{{ site.giscus.input_position }}"
+        data-theme="{{ site.giscus.theme }}"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+{% endif %}

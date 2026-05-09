@@ -1,6 +1,41 @@
+---
+title: "ROB-UNUSED-002 — Declared output is never consumed by any caller"
+description: "tf-analyze rule ROB-UNUSED-002 (LOW · robustness): Declared output is never consumed by any caller"
+keywords: "robustness, low, terraform, iac"
+---
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "ROB-UNUSED-002 \u2014 Declared output is never consumed by any caller",
+  "description": "Remove the unused output if no external consumer (CI scripts, other repos)\ndepends on it. Unused outputs clutter `terraform output` and may expose\nsensitive values unnecessarily.",
+  "url": "https://chrisadkin8.github.io/tf-analyze/rules/ROB-UNUSED-002/",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://chrisadkin8.github.io/tf-analyze/rules/ROB-UNUSED-002/"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "tf-analyze"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "tf-analyze",
+    "url": "https://chrisadkin8.github.io/tf-analyze"
+  },
+  "keywords": "robustness, low, terraform",
+  "proficiencyLevel": "Expert",
+  "articleSection": "robustness",
+  "isAccessibleForFree": true
+}
+</script>
+
 # ℹ️ ROB-UNUSED-002 — Declared output is never consumed by any caller
 
 ![LOW](https://img.shields.io/badge/LOW-95a5a6?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+
+<p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-UNUSED-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
 > **Declared output is never consumed by any caller.** This rule has `default_urgency: LOW` and operates on a module blast radius. 
 
@@ -72,3 +107,25 @@ ignore_rules:
 Baseline (preserves but doesn't fail CI): scan with `--baseline prior.json` after a one-time snapshot.
 
 [← Index of all rules](../)
+{% if site.giscus.enabled %}
+---
+
+## Discussion
+
+<script src="https://giscus.app/client.js"
+        data-repo="{{ site.giscus.repo }}"
+        data-repo-id="{{ site.giscus.repo_id }}"
+        data-category="{{ site.giscus.category }}"
+        data-category-id="{{ site.giscus.category_id }}"
+        data-mapping="{{ site.giscus.mapping }}"
+        data-strict="0"
+        data-reactions-enabled="{{ site.giscus.reactions }}"
+        data-emit-metadata="{{ site.giscus.emit_metadata }}"
+        data-input-position="{{ site.giscus.input_position }}"
+        data-theme="{{ site.giscus.theme }}"
+        data-lang="en"
+        crossorigin="anonymous"
+        async>
+</script>
+
+{% endif %}

@@ -31,6 +31,16 @@ CATALOG_DIR = REPO_ROOT / "catalog"
 DOCS_RULES_DIR = REPO_ROOT / "docs" / "rules"
 SOURCE_URL_BASE = "https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/{id}.yaml"
 MITRE_URL_BASE = "https://attack.mitre.org/techniques/{tid_with_slash}/"
+# Canonical site root for Open Graph / canonical URLs / JSON-LD.
+# Mirrored in scripts/detect.py:RULE_DOCS_URL_BASE — keep in lock-step.
+SITE_ROOT = "https://chrisadkin8.github.io/tf-analyze"
+RULE_PAGE_URL = SITE_ROOT + "/rules/{id}/"
+# Custom URI scheme handled by the VS Code extension (see
+# vscode-extension/src/extension.ts → registerUriHandler). Browsers
+# pass the URL straight to the OS, which routes it to VS Code if the
+# extension is installed; otherwise the click is a no-op (no error
+# page, no broken redirect).
+VSCODE_URI = "vscode://tfanalyze.tf-analyze/rule/{id}"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from detect import load_yaml  # type: ignore  # noqa: E402
@@ -147,6 +157,156 @@ def _references(entry: dict, rule_id: str) -> str:
     return "\n\n".join(parts)
 
 
+def _front_matter(entry: dict) -> str:
+    """YAML front matter consumed by jekyll-seo-tag.
+
+    Sets `title`, `description`, and `keywords` so search engines and
+    social-share previews render a useful summary instead of the
+    first paragraph of the page body.
+    """
+    rule_id = entry["id"]
+    title = (entry.get("title") or rule_id).replace('"', '\\"')
+    full_title = f'{rule_id} — {title}'
+    # Description is reused as <meta name="description"> and og:description.
+    # Keep it ≤160 chars per Google's truncation point. Build from the
+    # rule title plus a tier hint so the summary is always informative.
+    urgency = entry.get("default_urgency", "MEDIUM")
+    section = entry.get("section", "general")
+    description = (
+        f"tf-analyze rule {rule_id} ({urgency} · {section}): "
+        f"{entry.get('title', '').replace(chr(10), ' ')[:120]}"
+    ).replace('"', "'").replace("\n", " ").strip()
+    if len(description) > 158:
+        description = description[:155] + "…"
+
+    # Keywords combine cloud, section, urgency, CIS, MITRE, fixtures
+    # — all the angles a security engineer might google.
+    keywords: list[str] = [section, urgency.lower(), "terraform", "iac"]
+    rid_lower = rule_id.lower()
+    for cloud in ("aws", "gcp", "azure"):
+        if f"-{cloud}-" in rid_lower:
+            keywords.append(cloud)
+    for c in entry.get("cis") or []:
+        keywords.append(f"cis-{c}")
+    for t in entry.get("mitre") or []:
+        keywords.append(f"mitre-{t}")
+    keywords_csv = ", ".join(keywords)
+
+    return (
+        "---\n"
+        f'title: "{full_title}"\n'
+        f'description: "{description}"\n'
+        f'keywords: "{keywords_csv}"\n'
+        "---\n\n"
+    )
+
+
+def _json_ld(entry: dict) -> str:
+    """Schema.org TechArticle JSON-LD block.
+
+    Google's Rich Results parser accepts JSON-LD anywhere in the
+    document — body is fine. This is the highest-leverage SEO win on
+    the per-rule pages: a parsed TechArticle eligible for technical-
+    documentation enrichments in search results.
+    """
+    import json as _json
+    rule_id = entry["id"]
+    title = entry.get("title", rule_id)
+    section = entry.get("section", "general")
+    urgency = entry.get("default_urgency", "MEDIUM")
+    description_raw = (entry.get("recommendation") or title).strip()
+    description = description_raw.split("\n\n")[0][:240]
+    keywords = [section, urgency.lower(), "terraform"]
+    for c in entry.get("cis") or []:
+        keywords.append(f"CIS {c}")
+    for t in entry.get("mitre") or []:
+        keywords.append(f"MITRE {t}")
+
+    payload = {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": f"{rule_id} — {title}",
+        "description": description,
+        "url": RULE_PAGE_URL.format(id=rule_id),
+        "mainEntityOfPage": {
+            "@type": "WebPage",
+            "@id": RULE_PAGE_URL.format(id=rule_id),
+        },
+        "author": {"@type": "Organization", "name": "tf-analyze"},
+        "publisher": {
+            "@type": "Organization",
+            "name": "tf-analyze",
+            "url": SITE_ROOT,
+        },
+        "keywords": ", ".join(keywords),
+        "proficiencyLevel": "Expert",
+        "articleSection": section,
+        "isAccessibleForFree": True,
+    }
+    rendered = _json.dumps(payload, indent=2)
+    return (
+        '<script type="application/ld+json">\n'
+        + rendered
+        + "\n</script>\n\n"
+    )
+
+
+def _open_in_vscode_button(rule_id: str) -> str:
+    """Render an HTML link styled as a button. The href uses the
+    `vscode://` URI scheme — clicked in a browser, the OS routes to
+    VS Code, which dispatches via registerUriHandler. If VS Code
+    isn't installed (or the tf-analyze extension isn't), the click
+    is a no-op (no broken-link error page).
+    """
+    uri = VSCODE_URI.format(id=rule_id)
+    # Inline style so the button renders without theme support.
+    # Uses the cayman colour palette (#157878 = primary green).
+    return (
+        f'<p><a href="{uri}" '
+        'style="display:inline-block;padding:6px 12px;'
+        'background:#157878;color:#fff;text-decoration:none;'
+        'border-radius:4px;font-weight:600;font-size:14px;'
+        'margin-top:6px">'
+        f'📂 Open in VS Code</a> '
+        '<span style="color:#666;font-size:12px;margin-left:4px">'
+        '(requires the '
+        '<a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" '
+        'style="color:#157878">tf-analyze extension</a>)'
+        '</span></p>\n\n'
+    )
+
+
+def _giscus_block() -> str:
+    """Append a Liquid-gated giscus comments block.
+
+    The Liquid `{% if site.giscus.enabled %}` lets the site owner
+    flip comments on without regenerating every rule page — only
+    `_config.yml` changes. When disabled, Liquid renders the block
+    as the empty string so no `<script>` tag escapes to HTML.
+    """
+    return (
+        "{% if site.giscus.enabled %}\n"
+        "---\n\n"
+        "## Discussion\n\n"
+        '<script src="https://giscus.app/client.js"\n'
+        '        data-repo="{{ site.giscus.repo }}"\n'
+        '        data-repo-id="{{ site.giscus.repo_id }}"\n'
+        '        data-category="{{ site.giscus.category }}"\n'
+        '        data-category-id="{{ site.giscus.category_id }}"\n'
+        '        data-mapping="{{ site.giscus.mapping }}"\n'
+        '        data-strict="0"\n'
+        '        data-reactions-enabled="{{ site.giscus.reactions }}"\n'
+        '        data-emit-metadata="{{ site.giscus.emit_metadata }}"\n'
+        '        data-input-position="{{ site.giscus.input_position }}"\n'
+        '        data-theme="{{ site.giscus.theme }}"\n'
+        '        data-lang="en"\n'
+        '        crossorigin="anonymous"\n'
+        '        async>\n'
+        '</script>\n\n'
+        "{% endif %}\n"
+    )
+
+
 def render_rule_md(entry: dict) -> str:
     rule_id = entry["id"]
     title = entry.get("title", rule_id)
@@ -166,6 +326,11 @@ def render_rule_md(entry: dict) -> str:
     if status != "active":
         header += f" ![Status: {status}](https://img.shields.io/badge/status-{status}-grey?style=flat-square)"
     header += "\n\n"
+
+    # "Open in VS Code" deep link — sits immediately after the
+    # badges so it's visible without scrolling. Click → vscode://
+    # URI → extension's URI handler → rule explainer panel.
+    header += _open_in_vscode_button(rule_id)
 
     # Summary derived from the title (the YAML's `title` is the
     # one-liner shape the catalog already uses).
@@ -279,11 +444,17 @@ def render_rule_md(entry: dict) -> str:
         f"[← Index of all rules](../)\n"
     )
 
-    return (
+    body = (
         header + summary
         + what_section + why_section + narrative_section
         + rec_section + fix_section + verify_section
         + refs_section + footer
+    )
+    return (
+        _front_matter(entry)
+        + _json_ld(entry)
+        + body
+        + _giscus_block()
     )
 
 

@@ -86,6 +86,89 @@ class TestRuleDocCoverage:
 # ---------------------------------------------------------------------------
 
 
+class TestSEOAndDeepLinks:
+    """Lock the C6 SEO + deep-link enrichments shipped on the per-rule
+    docs pages: front matter, Schema.org JSON-LD, the Open-in-VS-Code
+    button, and the (config-gated) giscus block. Without these tests
+    a future generator regression could silently strip Rich-Results
+    eligibility — the kind of bug that's invisible until a search-
+    console alert fires weeks later."""
+
+    SAMPLE = "SEC-AWS-IAM-001"
+
+    @pytest.fixture(scope="class")
+    def page(self) -> str:
+        return (DOCS_RULES_DIR / f"{self.SAMPLE}.md").read_text()
+
+    def test_front_matter_present(self, page: str) -> None:
+        # jekyll-seo-tag reads `title:` and `description:` from front matter.
+        assert page.startswith("---\n")
+        head = page.split("---\n", 2)[1]
+        assert "title:" in head
+        assert "description:" in head
+        assert "keywords:" in head
+
+    def test_front_matter_description_within_seo_length(self, page: str) -> None:
+        # Google truncates the snippet around 160 chars. The generator
+        # caps at 158 + ellipsis; this guards against accidental drift.
+        head = page.split("---\n", 2)[1]
+        for line in head.splitlines():
+            if line.startswith("description:"):
+                desc = line.split(":", 1)[1].strip().strip('"')
+                assert len(desc) <= 160, (
+                    f"description is {len(desc)} chars (>160): {desc[:80]}…"
+                )
+                break
+
+    def test_jsonld_techarticle_present(self, page: str) -> None:
+        import json as _json
+        marker = '<script type="application/ld+json">'
+        assert marker in page, "JSON-LD <script> block missing"
+        # Extract and parse the JSON payload.
+        start = page.index(marker) + len(marker)
+        end = page.index("</script>", start)
+        payload = _json.loads(page[start:end].strip())
+        assert payload["@type"] == "TechArticle"
+        assert payload["@context"] == "https://schema.org"
+        # Required fields for Google's TechArticle Rich Results.
+        for required in ("headline", "description", "url",
+                         "mainEntityOfPage", "author", "publisher"):
+            assert required in payload, f"JSON-LD missing required field {required!r}"
+        assert self.SAMPLE in payload["headline"]
+        assert payload["url"].startswith("https://chrisadkin8.github.io/tf-analyze/rules/")
+
+    def test_open_in_vscode_button_present(self, page: str) -> None:
+        # The `vscode://` URI is the click target the extension's
+        # registerUriHandler routes back to RuleExplainerPanel.
+        assert f"vscode://tfanalyze.tf-analyze/rule/{self.SAMPLE}" in page
+        assert "Open in VS Code" in page
+
+    def test_giscus_block_is_liquid_gated(self, page: str) -> None:
+        # The block must be wrapped in `{% if site.giscus.enabled %}`
+        # so the script tag never escapes when comments are off.
+        assert "{% if site.giscus.enabled %}" in page
+        assert "{% endif %}" in page
+        # giscus client URL only present inside the gated block.
+        assert "giscus.app/client.js" in page
+
+    def test_jsonld_block_present_on_every_rule_page(self) -> None:
+        """Doc-test the property holds for ALL rules, not just one."""
+        sample_count = 0
+        for path in sorted(DOCS_RULES_DIR.glob("*.md")):
+            if path.name == "index.md":
+                continue
+            text = path.read_text(encoding="utf-8")
+            assert '<script type="application/ld+json">' in text, (
+                f"{path.name} is missing JSON-LD"
+            )
+            assert "vscode://tfanalyze.tf-analyze/rule/" in text, (
+                f"{path.name} is missing the Open-in-VS-Code link"
+            )
+            sample_count += 1
+        # Sanity: assert we actually checked something.
+        assert sample_count >= 200, f"only checked {sample_count} pages"
+
+
 class TestGeneratorDeterminism:
     def test_check_mode_passes_on_current_catalogue(self):
         # `--check` exits 1 if any doc is stale relative to the catalogue.
