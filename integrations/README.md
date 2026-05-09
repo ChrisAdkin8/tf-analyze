@@ -94,6 +94,69 @@ flyctl deploy
 
 The default backend is an in-memory store; persistence on redeploy requires swapping `InMemoryStore` for a Redis-backed implementation (the hook is in place; production deployment would supply it).
 
+## MCP server (Model Context Protocol)
+
+Wrapper at [`mcp-server/`](mcp-server/) that exposes the engine over MCP — the standard tool-protocol used by Claude Desktop, Cursor, Continue.dev, Cline, the JetBrains AI Assistant, and the wave of MCP-aware shells.
+
+**Tools exposed:**
+
+| Tool | Description |
+|---|---|
+| `scan_workspace(path, mode, show_info, attack_graph)` | Run a tf-analyze scan; returns the engine's `summary` + `findings`. |
+| `explain_rule(rule_id)` | Catalogue entry for one rule. ID validated against `^[A-Z][A-Z0-9-]{2,63}$` before the engine sees it. |
+| `apply_fixes(path, dry_run=True)` | Preview or apply `--apply-fixes`. Default dry-run so the agent must opt in to writes. |
+| `attack_graph(path)` | Build the graph; returns JSON shape + a Mermaid string. |
+
+The catalogue index is also exposed as the resource `tfanalyze://catalogue`.
+
+**Wire into Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "tf-analyze": {
+      "command": "python3",
+      "args": ["/path/to/tf-analyze/integrations/mcp-server/server.py"]
+    }
+  }
+}
+```
+
+Cursor (`~/.cursor/mcp.json`) and Continue.dev share the same shape. **Health check:** `python3 server.py --health` confirms the engine wiring.
+
+**Why MCP:** the `/tf-analyze` Claude Code skill is Claude-specific. MCP standardises the tool-shape so the engine becomes addressable from every other AI agent surface — without per-host adapters.
+
+## Terraform provider
+
+Native Terraform provider under [`../terraform-provider/`](../terraform-provider/) (Go, `terraform-plugin-framework`). The headline use case: gate `terraform apply` on a clean tf-analyze scan **without external CI infrastructure** by running the engine at plan time.
+
+```hcl
+data "tfanalyze_scan" "this" {
+  target       = path.module
+  attack_graph = true
+}
+
+resource "null_resource" "gate" {
+  lifecycle {
+    precondition {
+      condition     = data.tfanalyze_scan.this.high_count == 0
+      error_message = "tf-analyze: HIGH findings — fix before applying."
+    }
+  }
+}
+```
+
+Computed outputs: `score`, `grade`, `scoring_version`, per-tier `*_count`, `findings_json`, `json_report`. v1 is data-source-only; `tfanalyze_gate` and `tfanalyze_apply_fixes` resource shapes are on the roadmap.
+
+**Build from source:**
+
+```sh
+cd terraform-provider
+go build -o terraform-provider-tfanalyze
+```
+
+See [`terraform-provider/README.md`](../terraform-provider/README.md) for the full configuration reference, `dev_overrides` setup, and roadmap.
+
 ## HCP Terraform Run Task
 
 Pre-apply gate that scans Terraform Cloud / HCP Terraform plans before they run. See [`run-task/`](run-task/) for the FastAPI server, `Dockerfile`, and the deployment notes in [`docs/run-task.md`](../docs/run-task.md). HMAC-SHA512 signature verification on every callback; rejects bodies whose signature doesn't match the registered secret.

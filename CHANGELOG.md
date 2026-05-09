@@ -5,6 +5,82 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 28 — `--format pr-summary`, MCP server, Terraform provider, +69 tests — 2026-05-09
+
+**The Top-5 sprint from the deep-analysis recommendations: every item that compounds *with* publication rather than against it.**
+
+### Engine + GitHub Action
+
+- **`--format pr-summary`** — concise GitHub-flavoured Markdown shape sized for PR descriptions and PR-bot summary comments. Layout: score banner with grade emoji (`## tf-analyze: 82 (B) 🔵`), one-line counts, top-3 findings table (sorted by urgency × centrality, rule IDs linked to canonical docs), top-fix `fix_hcl` snippet (truncated to 12 lines), `<details>`-collapsed Mermaid attack graph (when `--attack-graph` is set), tf-analyze footer link. Distinct from the verbose CLI text format and the machine JSON format. `scripts/detect.py:_render_pr_summary()`.
+- **GitHub Action posts the PR-summary block as the PR comment.** `action.yml` runs the engine four times (json/sarif/html/pr-summary) and uses the engine's pre-rendered Markdown directly — single source of truth for the rendered shape, JS-side renderer eliminated. Inline-suggestion-count footer is appended after the engine output so the comment surfaces both "what the scan found" and "what this action just did."
+
+### MCP server (`integrations/mcp-server/`) — engineering complete
+
+A FastMCP-shaped wrapper around the engine, exposing four tools to any [Model Context Protocol](https://modelcontextprotocol.io)-aware agent (Claude Desktop, Cursor, Continue.dev, Cline, JetBrains AI Assistant, …):
+
+| Tool | Description |
+|---|---|
+| `scan_workspace(path, mode, show_info, attack_graph)` | Scan a workspace; returns summary + findings. |
+| `explain_rule(rule_id)` | Catalogue entry for one rule. Validated against `^[A-Z][A-Z0-9-]{2,63}$`. |
+| `apply_fixes(path, dry_run=True)` | Preview or apply `--apply-fixes`. Default dry-run. |
+| `attack_graph(path)` | Build the graph; returns JSON + Mermaid string. |
+
+The catalogue index is also exposed as the MCP resource `tfanalyze://catalogue`. Path arguments are validated for null bytes / non-existent paths / file-vs-directory shape at the tool boundary so the engine never sees a half-validated input. Ships with `Dockerfile` (bundles engine + catalogue) and a `--health` subcommand for wiring debugging.
+
+**Why MCP:** the `/tf-analyze` Claude Code skill is Claude-specific. MCP standardises the tool-shape so the engine becomes addressable from every other AI agent surface — without per-host adapters.
+
+### Terraform provider (`terraform-provider/`) — engineering complete
+
+A native Terraform provider written in Go (`terraform-plugin-framework`). v1 is data-source-only:
+
+```hcl
+data "tfanalyze_scan" "this" {
+  target       = path.module
+  attack_graph = true
+}
+
+resource "null_resource" "gate" {
+  lifecycle {
+    precondition {
+      condition     = data.tfanalyze_scan.this.high_count == 0
+      error_message = "tf-analyze: HIGH findings — fix before applying."
+    }
+  }
+}
+```
+
+The data source runs the engine at plan time and surfaces `score`, `grade`, `scoring_version`, per-tier `*_count`, plus `findings_json` and `json_report`. Plans / applies can be gated via `precondition` blocks **without external CI** — the `terraform plan` output itself tells you whether the workspace is ready to ship. The `tfanalyze_gate` and `tfanalyze_apply_fixes` resource shapes are on the roadmap but not in v1.
+
+Ships with `go.mod`, `main.go`, `internal/provider/{provider.go,scan_data_source.go,scan_data_source_test.go}`, an `examples/data-sources/tfanalyze_scan/` worked example, and `README.md` with build + `dev_overrides` instructions. Built locally with `go build`; binary responds to `-help` (sanity check the plugin-protocol entry point boots).
+
+### Test coverage — 500 → 565 pytest (+65) + 24 `node:test` cases
+
+| New test file | Cases | Locks |
+|---|---|---|
+| `tests/test_pr_summary.py` (NEW) | 14 | Renderer unit tests + CLI integration: clean banner, grade emoji per tier, top-3 truncation, CRITICAL outranks HIGH, top-fix presence/absence, attack-graph block, rule-ID docs links, footer-as-ad |
+| `tests/test_hcl_primitives.py` (NEW; `hypothesis`) | 17 | Property-based against `_hcl_object_to_json`, `block_arg_value`, `_resolve_var_ref`, `_expand_dynamic_blocks`, `find_blocks`. Each must NEVER raise on arbitrary input — the LSP server runs these on every keystroke |
+| `tests/test_lsp_server.py` (NEW) | 11 | Subprocess JSON-RPC: `initialize` response shape, diagnostics on `didOpen`, `didClose` clears, `codeAction` returns `WorkspaceEdit` with `fix_hcl`, unknown method → `-32601`, handler crash doesn't kill the loop, `shutdown`/`exit` lifecycle |
+| `tests/test_mcp_server.py` (NEW) | 14 | Path validation rejects null-byte / traversal / non-existent / file paths · tool-level shape (`scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph`) · `--health` exits 0 with valid engine. Auto-skips if `mcp` SDK absent |
+| `tests/test_terraform_provider.py` (NEW) | 9 | Repo-shape contract (`go.mod`, `main.go`, `internal/provider/*.go`, examples, README) · `go build` succeeds · `go test ./...` passes · binary advertises `-debug` flag |
+| Provider's own `internal/provider/scan_data_source_test.go` | 4 | `truncate` helper · data source constructor doesn't panic |
+
+### Files of note
+
+- `scripts/detect.py` — `_render_pr_summary`, `_append_attack_graph_block`, `_PR_SUMMARY_GRADE_EMOJI`; argparse `pr-summary` choice
+- `action.yml` — fourth scan invocation for `pr-summary`; github-script step reads pre-rendered Markdown
+- `integrations/mcp-server/{server.py,Dockerfile,requirements.txt,README.md}`
+- `terraform-provider/{go.mod,main.go,internal/provider/*.go,examples/...,README.md}`
+- `pyproject.toml` — `hypothesis>=6.0` added to `dev` extras
+
+### Operator follow-ups
+
+- [ ] Submit `terraform-provider-tfanalyze` to the Terraform Registry (`registry.terraform.io`) so `source = "ChrisAdkin8/tfanalyze"` resolves without `dev_overrides`
+- [ ] Publish the MCP-server Docker image to GHCR for one-line install (`docker pull ghcr.io/chrisadkin8/tf-analyze-mcp`)
+- [ ] Add the MCP server to the [official MCP server directory](https://github.com/modelcontextprotocol/servers)
+- [ ] Bump `vscode-extension/package.json` to v0.1.30 if any extension changes ride along (none in this round)
+
+---
+
 ## Round 27 — ROI signal, 4-verb URI handler, badge service — 2026-05-09
 
 **P0 sweep across the [`PLAN.md`](PLAN.md) backlog: every `P0` item in `a)` (skill improvements), `b)` (test coverage), and `c)` (virality engineering) shipped, except the operator-only items in the appendix.**

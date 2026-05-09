@@ -16,13 +16,13 @@
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 215](https://img.shields.io/badge/rules-215-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 500](https://img.shields.io/badge/tests-500%20passing-brightgreen)
+![Tests: 565](https://img.shields.io/badge/tests-565%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-215%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
 
-`tf-analyze` runs as a Claude Code skill (`/tf-analyze`), as a standalone Python CLI, as a GitHub Action, in a Docker container, as a pre-commit hook, as an LSP server, as a VS Code extension, and as an HCP Terraform Run Task. Same engine, eight surfaces.
+`tf-analyze` runs as a Claude Code skill (`/tf-analyze`), as a standalone Python CLI, as a GitHub Action, in a Docker container, as a pre-commit hook, as an LSP server, as a VS Code extension, as an HCP Terraform Run Task, as an [MCP server](integrations/mcp-server/) for any AI agent (Cursor, Claude Desktop, Continue.dev, …), and as a [native Terraform provider](terraform-provider/) (`data "tfanalyze_scan"`). Same engine, ten surfaces.
 
 ---
 
@@ -145,6 +145,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | `html` | Self-contained report with score banner, urgency badges, attack-graph SVG |
 | `compliance` | CIS / PCI-DSS / SOC 2 PASS/FAIL per control (`--oscal PATH` for OSCAL JSON) |
 | `mitre` | Findings grouped by MITRE ATT&CK technique |
+| `pr-summary` | GitHub-flavoured Markdown shape sized for PR descriptions / PR-bot comments — score banner, top-3 findings table (linked to docs site), top fix, collapsed Mermaid attack graph |
 
 ### Risk score
 
@@ -196,6 +197,8 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |
 | Pre-commit hook | [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) | [`docs/pre-commit.md`](docs/pre-commit.md) |
 | HCP Terraform Run Task | [`integrations/run-task/`](integrations/run-task/) | [`docs/run-task.md`](docs/run-task.md) |
+| MCP server (Cursor / Claude Desktop / Continue / …) | [`integrations/mcp-server/`](integrations/mcp-server/) | FastMCP wrapper — `scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph` tools + `tfanalyze://catalogue` resource. stdio transport. |
+| Terraform provider | [`terraform-provider/`](terraform-provider/) | `data "tfanalyze_scan"` data source — gates `terraform plan`/`apply` on a clean scan via `precondition` blocks, no external CI required. |
 
 ---
 

@@ -19,23 +19,23 @@ the subject of this plan.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State of the world at time of writing (2026-05-09): 215 rules · 500 pytest cases + 24 `node:test` cases · extension v0.1.29 · `action.yml` shipped · `v0.1.0` tagged · per-rule docs site live with JSON-LD + family backlinks + 4-verb `vscode://` URI handler (`/rule`, `/scan`, `/explain`, `/suppress`) · Module Reuse Advisor with ROI signal · status-bar grade badge · `integrations/badge-service/` (engineering-complete, awaiting `flyctl deploy`).
+State of the world at time of writing (2026-05-09): 215 rules · 565 pytest cases + 24 `node:test` cases · extension v0.1.29 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live with JSON-LD + family backlinks + 4-verb `vscode://` URI handler · Module Reuse Advisor with ROI signal · status-bar grade badge · **ten surfaces** — adds MCP server (`integrations/mcp-server/`) and native Terraform provider (`terraform-provider/`).
 
 ---
 
-## Round 28 — Top-5 sprint (2026-05-09 deep analysis)
+## Round 28 — Top-5 sprint (2026-05-09 deep analysis) — ✅ shipped
 
-The five recommendations from the deep analysis that compound *with* publication rather than against it. Each is a working v1; polish lands incrementally.
+All five items closed in a single sprint. Acceptance verified by the test deltas in the table.
 
-| # | Item | Why | Files |
-|---|------|-----|-------|
-| **R28.1** | **`--format pr-summary` + Mermaid attack-graph snippet on the PR comment.** | Every PR comment becomes a screenshot-worthy ad. Score + top-3 findings + top fix + node count, with the Mermaid graph collapsed under `<details>`. Half a day. | `scripts/detect.py:_render_pr_summary()`, `action.yml` (append mermaid in github-script step), `tests/test_pr_summary.py` (NEW). |
-| **R28.2** | **Property-based HCL primitive tests** (`hypothesis`). | The LSP server runs primitives on every keystroke. Example tests can't generate the malformed inputs that crash users — `hypothesis` does. 1 day. | `tests/test_hcl_primitives.py` (NEW). Covers `block_arg_value`, `_resolve_var_ref`, `_expand_dynamic_blocks`, `_hcl_object_to_json`. |
-| **R28.3** | **LSP server JSON-RPC tests.** | 200 LoC of `_run_lsp_server` × per-keystroke usage = highest-impact untested surface. Subprocess tests mirror what the extension actually does. 1 day. | `tests/test_lsp_server.py` (NEW). `initialize` → `textDocument/didOpen` → diagnostic → `textDocument/codeAction` → `WorkspaceEdit`. |
-| **R28.4** | **MCP server adapter** (`integrations/mcp-server/`). | Multiplies addressable AI-tool surface (Cursor, Continue.dev, Copilot Chat, any MCP-aware agent) by 5×. The skill is Claude-specific; MCP isn't. 2 days. | New `integrations/mcp-server/{server.py,Dockerfile,requirements.txt}`. Tools: `scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph`. |
-| **R28.5** | **Terraform provider** (`terraform-provider-tfanalyze`). | Unique-position differentiator — nobody else ships scanner-as-a-data-source. `data "tfanalyze_scan"` lets people gate `terraform plan`/`apply` on a clean scan without external CI. 1 week for v1. | New `terraform-provider/`. Go module, `terraform-plugin-framework`. v1: data source returning `score`, `grade`, `counts`, `findings`. |
+| # | Item | Status | Acceptance |
+|---|------|--------|------------|
+| **R28.1** | `--format pr-summary` + Mermaid attack-graph in the PR comment | ✅ | `scripts/detect.py:_render_pr_summary()` + `action.yml` runs the engine in `pr-summary` mode and uses the pre-rendered Markdown directly. 14 tests in `tests/test_pr_summary.py`. |
+| **R28.2** | Property-based HCL primitive tests (`hypothesis`) | ✅ | `tests/test_hcl_primitives.py` — 17 cases covering `_hcl_object_to_json`, `block_arg_value`, `_resolve_var_ref`, `_expand_dynamic_blocks`, `find_blocks`. Each must NEVER raise on arbitrary input. `hypothesis>=6.0` added to `pyproject.toml` dev extras. |
+| **R28.3** | LSP server JSON-RPC tests | ✅ | `tests/test_lsp_server.py` — 11 cases via subprocess JSON-RPC: lifecycle, diagnostics, code actions, robustness, unknown-method handling. The 200-LoC `_run_lsp_server` is no longer untested. |
+| **R28.4** | MCP server adapter | ✅ | `integrations/mcp-server/{server.py,Dockerfile,requirements.txt,README.md}` + 14 tests in `tests/test_mcp_server.py`. Four tools (`scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph`) + `tfanalyze://catalogue` resource. `--health` subcommand. Wire-up docs for Claude Desktop / Cursor / Continue.dev. |
+| **R28.5** | Terraform provider (v1 data source) | ✅ | `terraform-provider/` Go module — `data "tfanalyze_scan"` returning score/grade/counts/findings_json/json_report. Builds clean with `go build`; `go test ./...` passes. 9 cross-validation tests in `tests/test_terraform_provider.py` (repo shape + Go build + binary boots). Worked example with `precondition`-gated `null_resource`. |
 
-State after Round 28 ships (target): 215 rules · ~540+ pytest tests · MCP server + Terraform provider as 9th and 10th surfaces · PR-comment ROI surface complete.
+State after Round 28 ships: 215 rules · 565 pytest + 24 `node:test` (was 500+24) · **ten surfaces** (Claude skill, CLI, GitHub Action, Docker, pre-commit, LSP, VS Code extension, HCP Run Task, MCP server, Terraform provider) · PR-comment surface complete · LSP + HCL primitives no longer untested.
 
 ---
 
