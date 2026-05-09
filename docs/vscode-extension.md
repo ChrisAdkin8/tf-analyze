@@ -38,7 +38,7 @@ cd vscode-extension
 npm install
 npm run bundle-engine       # copies ../scripts/detect.py into engine/
 npm run compile
-npm test                    # runs the 24-test suite (unit + engine smoke)
+npm test                    # runs the 25-test suite (unit + engine smoke)
 # Open VS Code, press F5 to launch the Extension Development Host
 ```
 

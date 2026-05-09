@@ -5,7 +5,7 @@
 # tf-analyze for VS Code
 
 > **Terraform security & stack analysis — directly in your editor.**
-> Inline findings, one-click Quick Fixes, and an interactive attack-graph view.
+> Real-time inline findings, one-click bulk remediation, attack graph, compliance reports, and more — all from a single self-contained extension.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-007ACC.svg?logo=visualstudiocode)](https://code.visualstudio.com/)
@@ -15,48 +15,40 @@
 
 ## ✨ What it does
 
-Brings the **`tf-analyze`** detection engine (192 catalogue rules across AWS, GCP, and Azure) into VS Code, so you see security and stack issues the moment you save a `.tf` file — no CLI runs, no context switching.
+Brings the **`tf-analyze`** detection engine (209 catalogue rules across AWS, GCP, and Azure) into VS Code. The `.vsix` is **self-contained** — it bundles its own copy of the engine and rule catalogue, so installing the extension is the only step. No companion repo to clone, no `tf-analyze.scriptPath` setting to configure, no `pip install` to run.
 
 | | |
 |---|---|
-| 🔴 **Inline diagnostics** | Findings appear as red/yellow squiggles on the exact line that triggered the rule. Hover for the full explanation, severity, and CIS mapping. |
-| ⚡ **Quick Fix actions** | When a rule has an auto-fix, hit `⌘.` / `Ctrl+.` to apply it without leaving the editor. |
-| 🌳 **Findings tree** | A dedicated Activity Bar panel groups every finding by file → severity, with one click to jump to the source. |
+| ⚡ **Real-time diagnostics** | An LSP server runs in the background and updates squiggles as you type. Hover for the full explanation, severity, and CIS mapping. |
+| 🔧 **Quick Fix actions** | When a rule has an auto-fix, hit `⌘.` / `Ctrl+.` to apply it without leaving the editor. |
+| 🪄 **Bulk remediation** | One-click status-bar shortcut previews every fix the engine would make as a syntax-highlighted unified diff. Apply once confirmed; originals saved as `<file>.bak`. |
+| 🌳 **Findings tree** | A dedicated Activity Bar panel groups every finding by section, with one click to jump to the source. Right-click a finding to suppress it (writes to a workspace baseline). |
 | 🕸️ **Attack-graph view** | Visualise IAM, network, and KMS reachability between resources in an interactive webview — spot lateral-movement paths at a glance. |
-| 💾 **Run-on-save** | Re-scans automatically every time you save. Toggle off if you'd rather drive it manually. |
+| ✅ **Compliance reports** | Built-in compliance gap report against CIS, PCI DSS, SOC 2 (or all combined), with a framework picker dropdown. |
+| 🔀 **Since-last-scan delta** | New / resolved / unchanged findings against the most recent prior scan — turns each save into visible progress. |
+| 🎯 **MITRE ATT&CK view** | Findings grouped by ATT&CK technique for red-team reports and threat-modeling reviews. |
 
 ---
 
 ## 🚀 Quickstart
 
-### 1. Install the extension
-
-From the `.vsix` file:
+### 1. Install
 
 ```bash
-code --install-extension tf-analyze-0.1.4.vsix
+code --install-extension tf-analyze-0.1.19.vsix
 ```
 
-Or search **`tf-analyze`** in the VS Code Marketplace.
+That's it. The extension ships with everything it needs.
 
-### 2. Make sure `detect.py` is reachable
+### 2. Open a Terraform workspace
 
-The extension is a **frontend** — it shells out to the [`tf-analyze`](https://github.com/ChrisAdkin8/tf-analyze) detection engine. You need either:
+You'll immediately see five status-bar shortcuts in the bottom-left:
 
-- The `tf-analyze` repo cloned somewhere on your machine (the extension auto-discovers `scripts/detect.py` in the open workspace), **or**
-- Set `tf-analyze.scriptPath` to an absolute path to `detect.py`, **or**
-- Have `detect.py` on `PATH`.
+```
+🛡 tf-analyze   🛤 Attack Graph   🔀 Delta   ✅ Compliance   🪄 Remediate
+```
 
-> 🐍 **Python 3.10+** is required. `python-hcl2` is optional but recommended for heredoc-aware parsing.
-
-### 3. Open a Terraform file
-
-Open any `.tf` file. You'll see:
-
-- 🛡️ A **shield icon** on the left Activity Bar — click it to open the **Findings** tree.
-- 🔴 Squiggles on offending lines.
-- 📊 The status bar shows the scan summary, e.g. `🛡 tf-analyze: 6 (C:1 H:4 M:1)`. Click it to re-run the scan.
-- 🛤️ Right next to it, an **Attack Graph** status-bar shortcut. One click opens the interactive internet → crown-jewels webview without leaving the editor — `tf-analyze`'s most distinctive feature is now one click away.
+Open any `.tf` file and squiggles appear on offending lines as you type. Click the shield to open the **Findings** tree, or any other status-bar item to jump straight into that surface.
 
 ---
 
@@ -66,12 +58,19 @@ All commands are available via the Command Palette (`⌘⇧P` / `Ctrl+Shift+P`):
 
 | Command | What it does |
 |---|---|
-| `tf-analyze: Run Scan` | Force a fresh scan of the workspace. |
+| `tf-analyze: Run Scan` | Force a fresh whole-workspace scan. |
 | `tf-analyze: Clear Findings` | Wipe diagnostics and the Findings tree. |
 | `tf-analyze: Show Attack Graph` | Open the interactive resource-graph webview. |
-| `tf-analyze: Open Finding` | Jump to the file/line of a Findings-tree entry. |
+| `tf-analyze: Show Report` | Open the urgency-grouped HTML findings report. |
+| `tf-analyze: Since Last Scan (Delta)` | Show new / resolved / unchanged findings vs. last scan. |
+| `tf-analyze: Show Compliance Report` | Compliance gap report with CIS / PCI DSS / SOC 2 / All picker. |
+| `tf-analyze: Show MITRE ATT&CK View` | Findings grouped by ATT&CK technique. |
+| `tf-analyze: Remediate (preview & apply fixes)` | Bulk apply-fixes panel — dry-run preview, then apply with `.bak` backups. |
+| `tf-analyze: Suppress Finding` | Right-click a tree row to add it to the workspace baseline. |
+| `tf-analyze: Unsuppress Finding` | Reverse a suppression. |
+| `tf-analyze: Open Baseline File` | Open `<workspace>/.tf-analyze-baseline.json` for bulk edits. |
 
-The 🛡️ scan and 🕸️ graph commands also appear as title-bar buttons on the Findings view, and as status-bar shortcuts at the bottom-left.
+The scan, attack-graph, delta, compliance, and remediate commands also appear as status-bar shortcuts at the bottom-left and as title-bar buttons on the Findings view.
 
 ---
 
@@ -81,11 +80,11 @@ Configure under **Settings → Extensions → tf-analyze**, or in `settings.json
 
 | Setting | Type | Default | Purpose |
 |---|---|---|---|
-| `tf-analyze.scriptPath` | `string` | `""` | Absolute path to `detect.py`. Leave empty for auto-detect. |
+| `tf-analyze.scriptPath` | `string` | `""` | **Engine-developer escape hatch only.** Path to a custom `detect.py` to run instead of the bundled engine. End users should leave this empty. |
 | `tf-analyze.failOn` | `enum` | `HIGH` | Minimum urgency to surface as an editor **error** (vs. warning/info). One of `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`. |
-| `tf-analyze.runOnSave` | `boolean` | `true` | Re-scan automatically when a `.tf` file is saved. |
+| `tf-analyze.runOnSave` | `boolean` | `true` | Re-scan automatically when a `.tf` file is saved. (LSP coexists — when active, the on-save exec is skipped to avoid double-writing diagnostics.) |
 | `tf-analyze.section` | `enum` | `""` | Restrict to one catalogue section: `security`, `robustness`, `ops`, `module`, `stack`, `style`. Empty = all. |
-| `tf-analyze.extraArgs` | `string[]` | `[]` | Extra flags forwarded to `detect.py` (e.g. `["--compliance", "--compliance-framework", "pci_dss"]`). |
+| `tf-analyze.extraArgs` | `string[]` | `[]` | Extra flags forwarded to `detect.py` (e.g. `["--compliance-framework", "pci_dss"]`). |
 
 ### Example: scope to security findings only, fail at `MEDIUM`
 
@@ -102,8 +101,9 @@ Configure under **Settings → Extensions → tf-analyze**, or in `settings.json
 ## 📋 Requirements
 
 - **VS Code** `1.85.0` or later
-- **Python** `3.10+` on `PATH`
-- **`tf-analyze`** detection engine — see [the project repo](https://github.com/ChrisAdkin8/tf-analyze) for install instructions
+- **Python** `3.9+` on `$PATH` — used to run the bundled engine. Stdlib only; **no `pip install` step required.**
+
+The detection engine itself (`detect.py`) and the 209-entry rule catalogue ship inside the `.vsix`. You do **not** need to clone the [tf-analyze repo](https://github.com/ChrisAdkin8/tf-analyze) or install anything from PyPI.
 
 ---
 
@@ -112,33 +112,34 @@ Configure under **Settings → Extensions → tf-analyze**, or in `settings.json
 <details>
 <summary><b>The extension activates but I see no findings.</b></summary>
 
-- Check the **Output** panel → **tf-analyze** channel. It logs the resolved `detect.py` path and the exact CLI invocation.
-- If you see `detect.py not found`, set `tf-analyze.scriptPath` to an absolute path.
-- Confirm the file you're editing is actually picked up by `detect.py` standalone:
+- Check the **Output** panel → **tf-analyze** channel. It logs the resolved `detect.py` path (should be inside the extension's bundled `engine/scripts/`) and the exact CLI invocation.
+- If the channel reports an LSP startup failure, the extension falls back to exec-on-save — saves should still produce findings.
+- Confirm the bundled engine works standalone:
 
   ```bash
-  python3 /path/to/detect.py --root /path/to/your/terraform
+  python3 ~/.vscode/extensions/tfanalyze.tf-analyze-*/engine/scripts/detect.py \
+    --target /path/to/your/terraform --format text
   ```
 </details>
 
 <details>
-<summary><b>I don't see the shield icon on the Activity Bar.</b></summary>
+<summary><b>Status-bar items aren't visible.</b></summary>
 
-The extension activates on `onLanguage:terraform` or when the Findings view is opened. If you've just installed and have no `.tf` file open, click the shield icon on the left rail — opening it triggers activation.
+The five status-bar items (scan, graph, delta, compliance, remediate) only appear in workspaces that contain at least one `.tf` file. The extension activates on `workspaceContains:**/*.tf`, `onLanguage:terraform`, or `onView:tfAnalyzeFindings`.
 </details>
 
 <details>
 <summary><b>Quick Fix isn't offered for a finding.</b></summary>
 
-Not every rule has an auto-fix. Rules with `fix_hcl` support get Quick Fix; others link to the catalogue entry with a manual remediation note. The full list of fix-capable rules is in [`SKILL.md`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/SKILL.md).
+Not every rule has an auto-fix. Rules with `fix_hcl` support get Quick Fix; others link to the catalogue entry with a manual remediation note. For bulk patching across the workspace, use the **🪄 Remediate** status-bar item — its preview/apply flow covers every `resource_missing_arg`, `resource_arg`, and `hcl_attr` pattern in the catalogue.
 </details>
 
 <details>
 <summary><b>The attack-graph view is empty.</b></summary>
 
-The graph runs against the **first workspace folder** — `vscode.workspace.workspaceFolders[0]`. The most common cause of an empty graph is that your `.tf` files live in a subfolder, not at the workspace root.
+The graph runs against the **first workspace folder**. The most common cause of an empty graph is that your `.tf` files live in a subfolder, not at the workspace root.
 
-The empty-graph panel now prints the exact path it scanned. If that path doesn't contain `resource` blocks, either:
+The empty-graph panel prints the exact path it scanned. If that path doesn't contain `resource` blocks, either:
 
 - Open the subfolder containing your Terraform as the workspace root, **or**
 - Add it as an additional folder via **File → Add Folder to Workspace…**
@@ -147,9 +148,14 @@ Other causes:
 
 - **No internet entry point.** The graph starts from public LBs, public S3, security groups with `0.0.0.0/0`, etc., and walks to crown jewels (RDS, KMS, Secrets). With no entry point, there's no path to draw.
 - **Only modules/providers/data sources at the root.** The engine builds nodes from `resource` blocks; `module` calls don't expand. Open the module's own folder.
-- **Heavy `for_each` or computed module outputs** that the static analyser can't resolve. Run `detect.py --target <path> --attack-graph --verbose` in a terminal to see what was discovered.
 
-Quick demo: open the [`fixtures/attack_graph_demo/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/fixtures/attack_graph_demo) folder from the tf-analyze repo as your workspace — it produces 8 nodes and 5 edges.
+Quick demo: clone [tf-analyze](https://github.com/ChrisAdkin8/tf-analyze) and open `fixtures/attack_graph_demo/` as your workspace — it produces 8 nodes and 5 edges.
+</details>
+
+<details>
+<summary><b>I want to point the extension at a custom engine version.</b></summary>
+
+This is an engine-developer scenario only. Set `tf-analyze.scriptPath` to your custom `detect.py`. End users should leave the setting blank — the bundled engine is intentionally the default and the `.vsix` ships with everything it needs.
 </details>
 
 ---
@@ -159,7 +165,8 @@ Quick demo: open the [`fixtures/attack_graph_demo/`](https://github.com/ChrisAdk
 - 📖 **Source**: [github.com/ChrisAdkin8/tf-analyze](https://github.com/ChrisAdkin8/tf-analyze)
 - 🐞 **Issues**: [GitHub Issues](https://github.com/ChrisAdkin8/tf-analyze/issues)
 - 📜 **License**: Apache 2.0 — see [`LICENSE`](./LICENSE)
+- 📄 **Full release notes**: [CHANGELOG.md](./CHANGELOG.md)
 
 ---
 
-<sub>Built with the `tf-analyze` Claude Code skill. 192 rules · AWS · GCP · Azure · zero pip dependencies.</sub>
+<sub>Self-contained `.vsix`. 209 rules · AWS · GCP · Azure · stdlib-only Python. Built with the `tf-analyze` Claude Code skill.</sub>
