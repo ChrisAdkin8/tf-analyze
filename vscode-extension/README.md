@@ -35,17 +35,17 @@ Brings the **`tf-analyze`** detection engine (209 catalogue rules across AWS, GC
 ### 1. Install
 
 ```bash
-code --install-extension tf-analyze-0.1.22.vsix
+code --install-extension tf-analyze-0.1.28.vsix
 ```
 
 That's it. The extension ships with everything it needs.
 
 ### 2. Open a Terraform workspace
 
-You'll immediately see five status-bar shortcuts in the bottom-left:
+You'll immediately see six status-bar shortcuts in the bottom-left:
 
 ```
-🛡 tf-analyze   🛤 Attack Graph   🔀 Delta   ✅ Compliance   🪄 Remediate
+🛡 tf-analyze   🛤 Attack Graph   🔀 Delta   ✅ Compliance   🪄 Remediate   📦 Module Reuse
 ```
 
 Open any `.tf` file and squiggles appear on offending lines as you type. Click the shield to open the **Findings** tree, or any other status-bar item to jump straight into that surface.
@@ -66,11 +66,13 @@ All commands are available via the Command Palette (`⌘⇧P` / `Ctrl+Shift+P`):
 | `tf-analyze: Show Compliance Report` | Compliance gap report with CIS / PCI DSS / SOC 2 / All picker. |
 | `tf-analyze: Show MITRE ATT&CK View` | Findings grouped by ATT&CK technique. |
 | `tf-analyze: Remediate (preview & apply fixes)` | Bulk apply-fixes panel — dry-run preview, then apply with `.bak` backups. |
+| `tf-analyze: Show Module Reuse Advisor` | Surface directories whose resource cluster matches a community module on the Terraform Registry. INFO-tier — never gates CI. |
+| `tf-analyze: Explain Rule (by ID)` | Open the rule explainer panel for a catalogue ID. Same panel opens automatically when a `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` link is clicked from the docs site. |
 | `tf-analyze: Suppress Finding` | Right-click a tree row to add it to the workspace baseline. |
 | `tf-analyze: Unsuppress Finding` | Reverse a suppression. |
 | `tf-analyze: Open Baseline File` | Open `<workspace>/.tf-analyze-baseline.json` for bulk edits. |
 
-The scan, attack-graph, delta, compliance, and remediate commands also appear as status-bar shortcuts at the bottom-left and as title-bar buttons on the Findings view.
+The scan, attack-graph, delta, compliance, remediate, and module-reuse commands also appear as status-bar shortcuts at the bottom-left and as title-bar buttons on the Findings view.
 
 ---
 

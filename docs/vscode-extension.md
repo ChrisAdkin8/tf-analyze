@@ -26,7 +26,7 @@ against their working copy of `detect.py`), not user features.
 
 **From the `.vsix` (the only supported user path):**
 ```bash
-code --install-extension tf-analyze-0.1.22.vsix
+code --install-extension tf-analyze-0.1.28.vsix
 ```
 
 That's it. Open any Terraform workspace and the status-bar items
@@ -94,7 +94,7 @@ jump to the source line.
 
 ### Status bar
 
-The extension contributes five status-bar items, anchored bottom-left, reading "scan · graph · delta · compliance · remediate" left to right:
+The extension contributes six status-bar items, anchored bottom-left, reading "scan · graph · delta · compliance · remediate · module-reuse" left to right:
 
 1. **🛡 tf-analyze (scan summary)** — current scan state, click to run a fresh scan.
    - `⏳ tf-analyze scanning…` — in progress
@@ -104,10 +104,34 @@ The extension contributes five status-bar items, anchored bottom-left, reading "
 3. **🔀 Delta** — *Since last scan*. New / resolved / unchanged findings against the most recent prior JSON report.
 4. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / All).
 5. **🪄 Remediate** — Bulk apply-fixes with diff preview. Two-stage flow: dry-run shows the unified diff, **Apply Fixes** rewrites files on disk and saves originals as `<file>.bak`.
+6. **📦 Module Reuse** — opens the Module Reuse Advisor. Surfaces directories whose resource cluster matches a popular community module on the Terraform Registry (today: AWS VPC, GCP network, Azure AKS). Findings are INFO-tier (advisory, never gate CI); confidence is rendered as a low / medium / high badge per row. Behind the scenes the panel runs `detect.py --show-info --format json` and filters to the `module-reuse` section.
 
-All five are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
+All six are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
 
 The HTML report (`tf-analyze: Show Report`) intentionally does *not* have a status-bar entry — it overlaps semantically with the Findings tree (same data, different presentation), and toolbar real estate is reserved for surfaces that give net-new information at a glance. The command stays a click away in the Command Palette and the Findings tree-view title bar.
+
+### Rule explainer (URI deep-link)
+
+Every rule page on the [docs site](https://chrisadkin8.github.io/tf-analyze/rules/) ships an "📂 Open in VS Code" button. The link target is the `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` URI scheme — clicked in any browser, the OS routes to VS Code, the extension's URI handler validates the path against `^/rule/[A-Z][A-Z0-9-]{2,63}$`, and the matching `RuleExplainerPanel` opens with the full `--explain` output rendered as a styled webview.
+
+The same panel is also reachable from the palette via `tf-analyze: Explain Rule (by ID)`. Programmatic callers (other extensions, tasks) can open it with:
+
+```ts
+vscode.commands.executeCommand("tf-analyze.explainRule", "SEC-AWS-IAM-001");
+```
+
+The argument is regex-validated before any subprocess work — invalid IDs surface a warning instead of a silent no-op or a shell-injection vector.
+
+### Showcase demos
+
+Two corpora in the upstream repo exercise the deeper panels end-to-end with realistic-shaped Terraform — open one as a workspace to see the panel render against richer input than single-rule fixtures provide.
+
+| Corpus | Panel | Shape |
+|---|---|---|
+| [`examples/module-reuse-demo/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/examples/module-reuse-demo) | 📦 Module Reuse | 5 hand-rolled clusters across 3 clouds + 2 negative cases. Renders all three confidence tiers. |
+| [`examples/attack-graph-demo/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/examples/attack-graph-demo) | 🛤 Attack Graph | Multi-tier AWS app, 19 nodes / 13 edges / 3 crown jewels. The d3 view renders the canonical internet → IAM → crown-jewels reachability chain. |
+
+The walkthrough's final step ("Try the showcase demos") links to both. Drift gates in `tests/test_examples_demos.py` keep the documented finding counts in sync with what the engine actually produces.
 
 ### Real-time diagnostics (LSP)
 
@@ -160,6 +184,8 @@ This is complementary to Quick Fix: the editor's `⌘.` action targets one findi
 | `tf-analyze: Unsuppress Finding` | Remove the selected finding from the baseline. |
 | `tf-analyze: Open Baseline File` | Open `<ws>/.tf-analyze-baseline.json` in the editor. |
 | `tf-analyze: Remediate (preview & apply fixes)` | Open the bulk-remediation panel (dry-run preview → apply with `.bak` backups). |
+| `tf-analyze: Show Module Reuse Advisor` | Surface directories whose resource cluster matches a community module on the Terraform Registry (INFO-tier; never gates CI). |
+| `tf-analyze: Explain Rule (by ID)` | Open the rule explainer panel for a given catalogue ID. Same panel is opened automatically when a `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` link is clicked from the docs site. |
 
 ## Architecture
 
@@ -195,7 +221,7 @@ empty SVG. The displayed error tells you which case you've hit:
 | **detect.py failed** (exit > 1) | 0.1.8 | The scan crashed. The panel shows stderr — usually a syntax error in your HCL or a missing Python dependency. |
 | **detect.py exited without printing JSON** | 0.1.10 | Python raised an unhandled exception (exit 1, empty stdout). The panel now shows the captured stderr and the exact reproduction command. The most common cause was the script-path setting pointing at the `scripts/` directory, which produced `can't find '__main__' module in '…/scripts'` — fixed in 0.1.11. |
 | **Could not parse detect.py output** | 0.1.8 | The script printed non-JSON to stdout (often a Python warning leaking through). Run the same command at the terminal and inspect. |
-| **Empty attack graph** | 0.1.9 | The workspace has no resources the graph engine recognises, or no resource is internet-reachable (no entry point → no path). Try `fixtures/attack_graph_demo/` from the tf-analyze repo as your workspace — that produces 8 nodes / 5 edges. |
+| **Empty attack graph** | 0.1.9 | The workspace has no resources the graph engine recognises, or no resource is internet-reachable (no entry point → no path). Try [`examples/attack-graph-demo/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/examples/attack-graph-demo) as your workspace — that produces 19 nodes / 13 edges / 3 crown jewels. The minimal `fixtures/attack_graph_demo/` (8 nodes / 5 edges) is also still around for the absolute simplest case. |
 | Webview shows `Uncaught Error: node not found: undefined` in DevTools | 0.1.12 | The engine emits edges as `{from, to}` but `d3.forceLink` reads `{source, target}`. Earlier builds passed the edges through unmodified, so any workspace with rendered edges crashed inside d3 before drawing. Upgrade. |
 
 ### Critical-path edges aren't red

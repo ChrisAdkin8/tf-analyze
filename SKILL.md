@@ -109,16 +109,17 @@ The skill has five execution modes. Pick the right one before starting — they 
 
 The skill is **GCP-first**. Catalogue entries, CIS mappings, the IAM compatibility matrix (Appendix A), and stack-specific Step 10 checks are exhaustive for Google Cloud. AWS and Azure are **secondary**: the skill will surface obvious findings (public S3 buckets, hardcoded credentials, missing tags) but does NOT claim CIS coverage or full provider parity for those clouds. If the codebase is AWS- or Azure-dominant, expect lower recall and treat the report as a starting point rather than an audit.
 
-**Approximate per-cloud rule counts (as of the current catalogue):**
+**Per-cloud rule counts (regenerate via `python3 scripts/detect.py --list-rules | wc -l`):**
 
 | Cloud | Cloud-specific rules | Notes |
 |---|---|---|
-| **GCP** | 41 | IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, GCS, networking (SSH/RDP/database port world-open), Shielded VM, Audit Logs, service account key creation, Cloud Memorystore Redis auth/TLS, Artifact Registry CMEK. Full CIS GCP Foundations Benchmark v4.0 coverage for documented controls. |
-| **AWS** | 47 | IAM wildcard, S3 (public access block/server access logging), RDS/Aurora (encryption/deletion-protection/backup retention/EOL engine), KMS, CloudTrail, SQS, SNS, ElastiCache, ECR (scan-on-push/lifecycle), VPC flow logs, EKS (private endpoint/logging/secrets/IRSA/partial log-type detection), launch template IMDSv2, GuardDuty, Route53 DNSSEC, CloudWatch cost controls, SG world-open ports, CloudFront (allow-all HTTP policy/missing logging), Cognito user pool MFA, Secrets Manager missing rotation, API Gateway stage missing access logs, Lambda missing DLQ/X-Ray tracing, ECS container insights |
-| **Azure** | 30 | RBAC, storage (versioning/HTTPS), Key Vault (network ACL/key rotation), AKS (Workload Identity/private/authorized IPs/network policy), SQL (firewall/TDE/deprecated single-server/SSL), App Service HTTPS, NSG flow logs, UAMI, ACR admin, subscription activity log, Linux VM password authentication |
-| **Multi-cloud** | 36 | Secrets in HCL/tfvars, provisioner usage, module pinning, `required_providers` version pinning, lifecycle controls, count/for_each patterns, variable validation, sensitive outputs, provider aliases, backends, Vault data sources |
+| **AWS** | 86 | IAM wildcard / `iam_json_policy_analysis` / role privesc, S3 (public access block / server access logging / SSE / versioning), RDS & Aurora (encryption / deletion-protection / backup retention / EOL engine / PITR), KMS, CloudTrail, SQS / SNS / ElastiCache / Redshift / DynamoDB, ECR (scan-on-push / lifecycle), VPC flow logs, EKS (private endpoint / logging / secrets / IRSA), launch-template IMDSv2, GuardDuty, Route53 DNSSEC, SG world-open ports, CloudFront (allow-all / missing logging), Cognito MFA, Secrets Manager rotation, API Gateway access logs, Lambda DLQ / X-Ray, ECS container insights, Module Reuse Advisor (`MOD-REUSE-AWS-VPC-001`). |
+| **GCP** | 43 | IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, GCS, networking (SSH/RDP/database port world-open), Shielded VM, Audit Logs, service-account key creation, Cloud Memorystore Redis auth/TLS, Artifact Registry CMEK, Module Reuse Advisor (`MOD-REUSE-GCP-NETWORK-001`). Full CIS GCP Foundations Benchmark v4.0 coverage for documented controls. |
+| **Azure** | 34 | RBAC, storage (versioning/HTTPS), Key Vault (network ACL/key rotation), AKS (Workload Identity / private / authorized IPs / network policy), SQL (firewall/TDE/deprecated single-server/SSL), App Service HTTPS, NSG flow logs, UAMI, ACR admin, subscription activity log, Linux VM password authentication, Module Reuse Advisor (`MOD-REUSE-AZURE-AKS-001`). |
+| **Kubernetes / Helm** | 5 | Helm release `set { }` overrides (`SEC-K8S-HELM-001`, `-002`); `kubernetes_*` resource hardening. |
+| **Multi-cloud** | 47 | Secrets in HCL/tfvars, provisioner usage, module pinning / supply-chain refs / staleness, `required_providers` version pinning, lifecycle controls (`ROB-DRIFT-001`, `-002`), `count`/`for_each` anti-patterns including `ROB-FOREACH-002` keyset stability, orphan modules (`MOD-UNUSED-001`), variable validation, sensitive outputs, provider aliases, backends, Vault data sources, `applies_when` provider-version gating. |
 
-Multi-cloud rules fire on any cloud stack; the 36 cloud-specific counts exclude them. Total: **154 active rules** (`python3 scripts/detect.py --list-rules` for the full enumeration).
+Cloud-specific counts exclude multi-cloud rules. **Total: 215 active rules.** Re-run `python3 scripts/detect.py --list-rules` for the full live enumeration.
 
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.
 
@@ -251,6 +252,7 @@ The detection pass supports CI gating via exit codes and multiple output formats
 - **`--baseline PATH`** *(new in Round 24)* — load a prior JSON report and suppress findings whose `(id, file, line, resource)` tuple is already present. Only retained findings affect the `--fail-on` exit code; suppressed-by-baseline findings are surfaced under the JSON `suppressed_by_baseline` key. Use to ratchet on legacy repos: snapshot once, gate on no-regressions thereafter.
 - **`--format mitre`** *(new in Round 24)* — group findings by MITRE ATT&CK technique using catalogue `mitre:` fields. Findings without a mapping are placed under `(unmapped)`. SARIF output additionally tags every finding with `mitre:Tnnnn` for downstream CI consumers.
 - **`--no-hcl2`** *(new in Round 24)* — disable the python-hcl2 fast-path (which is now ON by default when the dependency is installed). Use for benchmarking or in stdlib-only environments. Equivalent env var: `TF_ANALYZE_NO_HCL2=1`. The legacy `--use-hcl2` flag still works but is now a no-op.
+- **`--show-info`** *(new with module-reuse advisor)* — render INFO-tier findings (advisory; e.g. module-reuse suggestions). Default off — INFO findings are still counted in `summary.counts.INFO` but are filtered out of the rendered output so they don't drown the signal. INFO carries weight 0 in the score formula, so this flag only affects display, not gating.
 
 Ready-to-use configs for pre-commit and GitHub Actions live under `integrations/`. The GitHub Actions workflow (`integrations/github-action.yml`) now includes a PR comment fallback that posts findings as a collapsible comment on every pull request — works on free-tier repos that don't have Code Scanning enabled.
 
@@ -602,7 +604,7 @@ Flag `data "external"` and `data "http"` blocks as **MEDIUM**. `data.external` r
 - Flat root modules that should be decomposed into child modules
 - Modules that do too many things (>15 resources) and should be split
 - Resources that are candidates for shared modules but exist as one-offs
-- Modules that re-implement what a well-maintained registry module already provides
+- Modules that re-implement what a well-maintained registry module already provides — **automated via the `module-reuse` rule section.** The engine fingerprints each directory's resource cluster against popular community modules (`MOD-REUSE-AWS-VPC-001`, `MOD-REUSE-GCP-NETWORK-001`, `MOD-REUSE-AZURE-AKS-001` today). Findings are INFO tier, so they don't gate CI; render with `detect.py --show-info` or open the **Module Reuse Advisor** panel in the VS Code extension. New community modules are added by dropping a catalogue YAML with `kind: registry_fingerprint` plus a `fingerprint:` block (required types + supporting types + threshold + exclusions).
 - Orphaned modules — defined in `tf/modules/` but never called from any scenario
 
 ### 3c. Variable and output patterns
@@ -707,13 +709,13 @@ Assign **MEDIUM** to all deprecated usage — they work today but will break on 
 - **Unused variables** (`ROB-UNUSED-001`): variables declared in a module directory but never referenced as `var.X` in any `.tf` file in that same directory. Note: references inside comments and strings are counted (conservative), so the detection may miss some truly unused variables.
 - **Unused outputs** (`ROB-UNUSED-002`): outputs declared in a child module but never consumed via `module.X.output_name` by any caller in the repo. Root module outputs are excluded (they may be consumed externally). Only fires for modules called via local `source = "./"` paths — external module outputs are not tracked.
 
-### 5d. Drift and ignore_changes audit → ROB-DRIFT-001
-- The detection pass automatically flags `ignore_changes = all` via `ROB-DRIFT-001`. The judgement pass should additionally:
+### 5d. Drift and ignore_changes audit → ROB-DRIFT-001 / ROB-DRIFT-002
+- The detection pass automatically flags `ignore_changes = all` via `ROB-DRIFT-001` and `ignore_changes = ["*"]` / `ignore_changes = [tags]` via `ROB-DRIFT-002`. The judgement pass should additionally:
 - Catalogue EVERY `ignore_changes` block in the codebase. For each one, assess:
   - Is it justified? (Reference CLAUDE.md / project docs read in Step 0e)
   - Does it mask real drift that should be managed?
-  - Is it `ignore_changes = all`? (Flagged as HIGH by catalogue — the nuclear option that masks all drift)
-  - Is it ignoring fields that Terraform should manage (e.g., `labels`, `tags`, `annotations`)?
+  - Is it `ignore_changes = all` or the array form `["*"]`? (Flagged as HIGH/MEDIUM by catalogue — the nuclear option that masks all drift)
+  - Is it ignoring fields that Terraform should manage (e.g., `labels`, `tags`, `annotations`)? Per-key suppression `tags["LastModifiedBy"]` is the recommended pattern; whole-`tags` suppression silently drops cost-allocation tags, compliance scope tags, and `default_tags` propagation.
 - Resources managed by BOTH Terraform AND external tools (e.g., Taskfile runs `vault write` directly, Helm values updated outside Terraform). Flag the dual-management pattern.
 - `terraform_data` / `null_resource` with triggers that may not fire reliably
 

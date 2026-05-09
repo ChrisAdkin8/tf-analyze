@@ -5,6 +5,186 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Showcase demos for Module Reuse + Attack Graph — 2026-05-09
+
+**Two corpora under `examples/` that exercise the deeper engine panels end-to-end with realistic-shaped Terraform.**
+
+### What's new
+
+- **`examples/module-reuse-demo/`** — 5 hand-rolled VPC / network / AKS clusters across AWS / GCP / Azure + 2 negative cases (`aws/admin-net/` below threshold; `gcp/shared-vpc-host/` excluded by resource type). Tuned so the panel renders all three confidence-badge tiers (high / medium / low). Five `MOD-REUSE-*` findings; 44 findings total across all rules.
+
+- **`examples/attack-graph-demo/`** — Multi-tier AWS app (ALB → public EC2 → over-broad IAM role → S3 / Secrets Manager / RDS), split across `providers.tf` / `network.tf` / `compute.tf` / `iam.tf` / `data.tf`. Builds an attack graph with 19 nodes, 13 edges, 6 internet-reachable nodes, 3 crown jewels; produces 27 findings.
+
+- **`examples/README.md`** — chooser table for the three corpora (`terragoat`, `module-reuse-demo`, `attack-graph-demo`) with guidance on which to open for which pitch.
+
+### Drift gates — `tests/test_examples_demos.py` (+7 tests)
+
+| Test | Locks |
+|---|---|
+| `test_exactly_five_module_reuse_findings` | Exact count from the README |
+| `test_admin_net_does_not_fire` | Below-threshold negative case |
+| `test_shared_vpc_host_does_not_fire` | Exclusion-type negative case |
+| `test_confidence_levels_span_all_three_tiers` | All three badge colours visible |
+| `test_graph_shape_matches_readme` | 19 / 13 / 6 / 3 graph numbers |
+| `test_internet_node_present` | Synthetic INTERNET node always exists |
+| `test_three_crown_jewels_match_readme` | Exact crown-jewel set documented |
+
+A catalogue change that shifts any of those counts now fails the local pytest run — keeping the demo READMEs (which are user-visible documentation, screenshotted in launch material) in sync with what the engine actually produces.
+
+### VS Code extension v0.1.28
+
+New walkthrough step ("Try the showcase demos") points first-run users at both corpora with click-to-run command links. Walkthrough completes when either `tf-analyze.showModuleReuse` or `tf-analyze.showAttackGraph` fires — a concrete "click this button, see this output" loop instead of the generic "open a file" prompt the previous step ended with. Pure onboarding copy; no engine or runtime change.
+
+### Tests: 462 → 469 (+7)
+
+---
+
+## C6 — per-rule docs SEO + Open-in-VS-Code deep links — 2026-05-09
+
+**Activates 215 rule pages as a long-tail discovery channel.**
+
+The per-rule docs site (`chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>/`) was already canonical — every engine surface points at it (compliance HTML/text, SARIF `helpUri`, Findings panel, VS Code diagnostic `code.target`). C6 turns those URLs into pages that search engines can rank, social platforms can preview, and VS Code can deep-link into.
+
+### What's new
+
+- **Schema.org `TechArticle` JSON-LD** on every rule page. `headline`, `description`, `keywords` (cloud + section + CIS + MITRE), `url`, `mainEntityOfPage`, `author`, `publisher`, `proficiencyLevel: Expert`, `articleSection` — every required field for Google Rich Results' technical-documentation enrichment. Inline `<script type="application/ld+json">` block in the body; works without theme support.
+- **`jekyll-seo-tag` plugin** added to `_config.yml`. Each generated rule page now carries front-matter `title`, `description` (capped at 158 chars per Google's truncation point), and `keywords`. The plugin emits `<meta name="description">`, canonical `<link>`, Open Graph, and Twitter Card markup automatically.
+- **`jekyll-sitemap` plugin** added — `/sitemap.xml` is auto-generated from every page. Submit once to Google Search Console and all 215 rule URLs get discovered without external backlinks.
+- **"📂 Open in VS Code" button** on every rule page, immediately after the urgency badges. Targets the `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` URI scheme. Clicked in a browser → OS routes to VS Code → extension's URI handler dispatches to `RuleExplainerPanel` → user sees the rule's full `--explain` output without leaving their editor.
+- **giscus comments** scaffolding — every rule page emits a giscus thread block, gated by `{% if site.giscus.enabled %}` Liquid in `_config.yml`. Off by default (avoids 404s on placeholder repo IDs); flip on after running giscus.app once. When enabled, every rule has its own GitHub Discussion thread keyed on the rule's URL pathname.
+
+### VS Code extension v0.1.27
+
+- New `RuleExplainerPanel` (`src/ruleExplainer.ts`) — opens a webview that shells out to `detect.py --explain <RULE-ID>` and renders the output with `<h1>`/`<h2>` promotion, cross-links between rule IDs, and a one-click "Open full docs in browser" button.
+- New URI handler — `vscode.window.registerUriHandler` accepts URIs of the form `vscode://tfanalyze.tf-analyze/rule/<RULE-ID>` and routes to `RuleExplainerPanel.createOrShow`. The path is regex-validated (`/^\/rule\/([A-Z][A-Z0-9-]{2,63})$/`) so a malformed URI surfaces a warning instead of a silent no-op or shell-injection vector.
+- New palette command `tf-analyze.explainRule` — same panel, palette-driven entry point. Prompts for a rule ID with the same regex validation when invoked without an argument.
+
+### Tests: 456 → 462 (+6) — `tests/test_rule_docs.py::TestSEOAndDeepLinks`
+
+| Test | Locks |
+|---|---|
+| `test_front_matter_present` | YAML front matter exists with `title`, `description`, `keywords` |
+| `test_front_matter_description_within_seo_length` | description ≤ 160 chars (Google truncation point) |
+| `test_jsonld_techarticle_present` | JSON-LD block parses; required Schema.org fields all present |
+| `test_open_in_vscode_button_present` | `vscode://tfanalyze.tf-analyze/rule/<id>` link emitted |
+| `test_giscus_block_is_liquid_gated` | Liquid `{% if site.giscus.enabled %}` wraps the block |
+| `test_jsonld_block_present_on_every_rule_page` | Property holds across all 215 pages, not just the sampled one |
+
+Without these tests a future generator regression could silently strip Rich-Results eligibility — the kind of bug that's invisible until a Search Console alert fires weeks later.
+
+### Distribution checklist (now unblocked)
+
+- [ ] Submit `https://chrisadkin8.github.io/tf-analyze/sitemap.xml` to Google Search Console
+- [ ] Run giscus.app against `ChrisAdkin8/tf-analyze` and fill in `repo_id` / `category_id` in `_config.yml`, set `enabled: true`
+- [ ] Optional: drop a 1200×630 `og-default.png` at `docs/images/og-default.png` and add `image: /tf-analyze/images/og-default.png` under the `defaults:` block in `_config.yml`
+- [ ] Optional: validate one page against [Google's Rich Results Test](https://search.google.com/test/rich-results) before deploying broadly
+
+---
+
+## A1 detection improvements — 2026-05-09
+
+**Three new rules + a bug fix surfaced by the work + an adoption sweep on a dormant gating system.**
+
+### What's new
+
+- **`ROB-DRIFT-002`** — flags `ignore_changes = ["*"]` (array form of the wildcard) and `ignore_changes = [tags]` (the whole-`tags` map drift mask). Extends `ROB-DRIFT-001`, which only caught the `= all` keyword form. Per-key form `tags["LastModifiedBy"]` is the recommended pattern and does not fire.
+- **`ROB-FOREACH-002`** — new pattern kind `foreach_keyset_unstable`. Catches `for_each` whose keyset is derived from another managed resource's attribute (splat `aws_subnet.x[*].id` or comprehension `[for s in aws_subnet.x : s.id]`). When the upstream resource set mutates, every existing instance is re-keyed and forced to destroy/create — classic apply-flicker. The leading identifier is checked against a deny-list of safe scopes (`var`, `local`, `data`, `module`, `each`, `count`, `self`, `path`, `terraform`) so input-driven keysets don't fire.
+- **`MOD-UNUSED-001`** — new corpus kind `module_unused`. A directory that declares `variable {}` and/or `output {}` blocks (the reusability contract) but is not referenced by any `module { source = "<relpath>" }` block in the scan corpus. Conservative by design: false positives here would tell users to delete code, so the rule errs toward silence on ambiguous cases.
+
+### `applies_when:` adoption sweep — 3/212 → 8/212
+
+The provider/Terraform-version gating system has been wired into dispatch since Round 24 (entry filter at `_entry_applies_to_providers`). Adoption was 3 rules. This round adopted 5 more where the catalogue argument has an unambiguous minimum provider version:
+
+| Rule | Gate | Reason |
+|---|---|---|
+| `SEC-AZURE-AKS-001` | `azurerm: 3.0` | `role_based_access_control_enabled` and the standalone `azure_active_directory_role_based_access_control` block were introduced in 3.0; pre-3.0 used the nested-block form this rule does not match |
+| `STK-AWS-EKS-003` | `aws: 3.0` | `encryption_config` block on `aws_eks_cluster` added in 3.0 |
+| `STK-AZURE-AKS-005` | `azurerm: 3.0` | `api_server_access_profile.authorized_ip_ranges` was renamed from a top-level field in 3.0 |
+| `STK-AZURE-SQL-TDE-001` | `azurerm: 3.0` | `azurerm_mssql_database_transparent_data_encryption` resource type added in 3.0 |
+| `STK-AZURE-AKS-003` | `azurerm: 3.40` | `workload_identity_enabled` argument added in 3.40 |
+
+### Bug fix surfaced by the sweep
+
+**`_provider_constraint_allows` was wrong on `~>` clauses whose lower bound was above `min_v`.** `('~> 3.50', '3.0')` returned `False` — contradicting the function's own docstring example `('~> 5.40', '5.0') -> True`. The OR condition `if a_lo < b_lo or a_hi >= b_hi: return False` incorrectly treated "constraint's lower bound is above min_v" as an exclusion. It isn't: a constraint of `[3.50, 4.0)` against a `min_v = 3.0` floor still allows versions ≥ `min_v`. Fix dropped the `a_lo < b_lo` half of the OR.
+
+The full 8-case docstring truth table plus 3 regression cases is now locked in `tests/test_a1_improvements.py::test_provider_constraint_allows_truth_table`. Without that test the bug could have stayed silent — `~>` is the most common Terraform version pin and the dominant gating clause shape.
+
+### A1 items deferred (with reasons)
+
+| Item | Why deferred |
+|---|---|
+| Locals + complex var resolution | L (multi-day design pass). Existing `_resolve_var_ref` + ternary folding cover the common case; `merge()`, `format()`, nested `local.X.Y` need their own scoping pass. |
+| Module-call output flow tracking | L. Needs a module-graph data structure plus finding propagation across module boundaries. |
+| Sentinel/OPA import | L. Deserves separate scoping; converting Sentinel rule logic to catalogue YAML is a project, not a feature. |
+| Cross-cloud parity (Azure rules) | Ongoing volume work, not one-shot implementation. |
+
+### Tests: 437 → 456 (+19) — `tests/test_a1_improvements.py`
+
+| Test | Locks |
+|---|---|
+| `test_drift_002_fires_on_wildcard_form` | Both wildcard variants fire |
+| `test_drift_002_does_not_fire_on_per_key_tag_form` | `tags["X"]` is recommended pattern |
+| `test_foreach_002_fires_on_splat_keyset` | Splat reference triggers |
+| `test_foreach_002_fires_on_comprehension_keyset` | List comprehension triggers |
+| `test_foreach_002_does_not_fire_on_input_driven_keyset` | `var.X` / `local.X` keysets are stable |
+| `test_foreach_002_emits_context_naming_the_unstable_source` | Context message explains the upstream cause |
+| `test_mod_unused_001_fires_on_orphan_module` | Orphan module fires |
+| `test_mod_unused_001_does_not_fire_on_referenced_module` | Referenced module does not |
+| `test_mod_unused_001_clean_fixture_no_orphans` | Clean repo silent |
+| `test_applies_when_gates_rule_when_provider_too_old` | azurerm 2.x repo skips SEC-AZURE-AKS-001 |
+| `test_applies_when_permits_rule_when_provider_meets_minimum` | azurerm 3.50 fires the rule |
+| `test_provider_constraint_allows_truth_table` | 10-case truth table for the function (8 docstring + 2 regression) |
+| `test_applies_when_adoption_count` | Adoption ≥ 8 — guards against accidental removal |
+
+### Rules: 212 → 215 active
+
+`docs/rules/` regenerated.
+
+---
+
+## Module Reuse Advisor + INFO tier — 2026-05-09
+
+**A new detector class that surfaces hand-rolled scaffolding which could be replaced by a community module from the Terraform Registry.**
+
+### What's new
+
+- **New rule kind: `registry_fingerprint`.** A detector matches every directory's resource cluster against a fingerprint (required types + supporting types + threshold + exclusions) declared on the catalogue YAML. Cleanly added next to `graph_check` in `detect_corpus`; the dispatcher caches a single module-cluster index per scan. See `_check_registry_fingerprint` and `_build_module_clusters` in `scripts/detect.py`.
+
+- **New section `module-reuse`** (added to `_VALID_SECTIONS`) and three rules at INFO tier:
+  - `MOD-REUSE-AWS-VPC-001` → `terraform-aws-modules/vpc/aws ~> 5.0`
+  - `MOD-REUSE-GCP-NETWORK-001` → `terraform-google-modules/network/google ~> 9.0`
+  - `MOD-REUSE-AZURE-AKS-001` → `Azure/aks/azurerm ~> 9.0`
+
+- **New CLI flag `--show-info`.** INFO findings (advisory) are filtered out of all rendered output by default; they remain in `summary.counts.INFO` so the count is visible. Pass `--show-info` to render them.
+
+- **Findings carry `confidence` (low / medium / high) and `registry_url`.** Confidence scales with how far the cluster overshoots the supporting-types threshold so reviewers can prioritise.
+
+- **VS Code extension v0.1.26** ships a Module Reuse Advisor panel pinned to the activity-bar speed strip (`$(package) Module Reuse`). Groups hits by registry module; each row links to the rule docs page and the registry module page.
+
+### Why INFO is its own tier
+
+INFO findings carry weight 0 in the risk-score formula (`max(0, 100 - sum(weight * count))`). They never move the score or the letter grade, so they can't accidentally cause a CI gate to fail. Reusing `LOW` would have contaminated scoring with stylistic suggestions; cleaner to spend the one-time cost of threading a new tier through `_VALID_URGENCIES`, SARIF level/severity maps, and the HTML colour palette.
+
+### Tests: 428 → 437 (+9) — `tests/test_registry_fingerprint.py`
+
+| Test | Locks |
+|---|---|
+| `test_aws_vpc_fingerprint_fires_on_positive_fixture` | Positive fixture matches |
+| `test_aws_vpc_fingerprint_does_not_fire_on_clean_fixture` | Sub-threshold cluster does not |
+| `test_gcp_network_fingerprint_fires_on_positive_fixture` | GCP positive |
+| `test_azure_aks_fingerprint_fires_on_positive_fixture` | Azure positive |
+| `test_info_findings_hidden_without_show_info` | Default filter |
+| `test_info_findings_visible_with_show_info` | Opt-in flag |
+| `test_info_tier_does_not_move_risk_score` | INFO=0 weight contract |
+| `test_check_registry_fingerprint_supporting_threshold` | Below-threshold no-match |
+| `test_check_registry_fingerprint_exclusion_suppresses` | Exclusion type vetoes match |
+
+### Rules: 209 → 212 active
+
+`docs/rules/` regenerated by `scripts/gen_rule_docs.py` — the new rules ship with full per-rule docs pages.
+
+---
+
 ## Per-rule docs site — 2026-05-09
 
 **Every rule ID emitted by the engine is now a hyperlink.**

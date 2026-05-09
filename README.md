@@ -17,7 +17,7 @@
 ![Rules: 209](https://img.shields.io/badge/rules-209-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
 ![Tests: 421](https://img.shields.io/badge/tests-421%20passing-brightgreen)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-209%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-215%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
@@ -109,7 +109,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-209 rules across five families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+215 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -118,6 +118,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Stack | `STK-*` | GKE/EKS/AKS hardening, RDS/CloudSQL config, Lambda DLQ/tracing, KMS rotation |
 | Ops & Governance | `OPS-*`, `MOD-*`, `COST-*` | Tags/labels, unpinned modules, supply-chain refs, cost controls |
 | Cross-resource | `INT-*`, `graph_check` | Intent–implementation gaps, KMS location parity, IAM breadth |
+| Module reuse (advisory) | `MOD-REUSE-*` | Hand-rolled scaffolding that mirrors a popular Terraform Registry module — INFO tier, never gates CI. Pass `--show-info` to render |
 
 **Per-cloud breakdown:** AWS 81 · GCP 42 · Azure 33 · Kubernetes/Helm 5 · cross-cloud 48.
 
@@ -177,6 +178,7 @@ Suppressed and baseline-suppressed findings count at half weight (acknowledged, 
 | `--cache` | Incremental scan cache keyed on file + catalogue hash |
 | `--diff-base REF` | Limit to `.tf` files changed since `REF` |
 | `--no-hcl2` | Disable the python-hcl2 fast-path (env: `TF_ANALYZE_NO_HCL2=1`) |
+| `--show-info` | Render INFO-tier findings (e.g. `MOD-REUSE-*` module-reuse advisories). Default off — INFO is counted in `summary.counts.INFO` but not displayed |
 
 Full CLI reference: [`docs/cli.md`](docs/cli.md).
 
@@ -185,7 +187,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | | Path | Doc |
 |---|------|-----|
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks |
-| VS Code extension (v0.1.22) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar attack-graph / delta / compliance / remediate shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view |
+| VS Code extension (v0.1.28) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + `vscode://` deep-link handler |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |
@@ -253,17 +255,21 @@ Catalogue schema: [`catalog/README.md`](catalog/README.md). Custom-rule walkthro
 
 ---
 
-## Demo corpus — `examples/terragoat/`
+## Demo corpora — `examples/`
 
-A three-cloud intentionally-vulnerable Terraform corpus modelled on Bridgecrew's [terragoat](https://github.com/bridgecrewio/terragoat). Currently triggers **292 findings** against the live rule set across SEC / ROB / STK / OPS / COST domains.
+Three corpora that double as engine smoke tests and end-to-end demos for the surfaces that do graph reasoning across multiple resources. See [`examples/README.md`](examples/README.md) for the chooser.
+
+| Corpus | Purpose |
+|---|---|
+| [`examples/terragoat/`](examples/terragoat/) | Three-cloud intentionally-vulnerable corpus modelled on Bridgecrew's [terragoat](https://github.com/bridgecrewio/terragoat). Triggers ~292 findings across SEC / ROB / STK / OPS / COST domains. Broadest coverage; the right pick for first-time users. |
+| [`examples/module-reuse-demo/`](examples/module-reuse-demo/) | Five hand-rolled VPC/network/AKS clusters across AWS / GCP / Azure that match popular community modules + two negative cases. Exercises the **📦 Module Reuse** panel end-to-end with all three confidence-badge tiers visible. |
+| [`examples/attack-graph-demo/`](examples/attack-graph-demo/) | Multi-tier AWS app: ALB → public EC2 → over-broad IAM role → S3 / Secrets / RDS. 19 nodes, 13 edges, 6 internet-reachable, 3 crown jewels. Exercises the **🛤 Attack Graph** panel and the d3 demo. |
 
 ```sh
 python3 scripts/detect.py --target examples/terragoat --format html > demo.html
 ```
 
-The corpus serves three jobs: smoke-test for the engine, calibration target for new rules, and live demo for first-time users. Per-rule breakdown in [`examples/terragoat/README.md`](examples/terragoat/README.md).
-
-The single-rule fixtures under [`fixtures/`](fixtures/) (199 positive + 131 clean) complement terragoat — they isolate one rule each so a self-test failure points at exactly which detector broke.
+The single-rule fixtures under [`fixtures/`](fixtures/) (218 positive + 140 clean) complement these corpora — they isolate one rule each so a self-test failure points at exactly which detector broke. Drift on the demo corpora is gated by [`tests/test_examples_demos.py`](tests/test_examples_demos.py) so a catalogue change that shifts the documented finding counts fails the local pytest run instead of silently breaking the README screenshots.
 
 ---
 
@@ -282,12 +288,15 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (199 positive + 131 clea
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration
 ├── .github/workflows/          # CI (ci.yml, docker.yml)
-├── catalog/                    # 200 rule definitions (one YAML per rule)
+├── catalog/                    # 215 rule definitions (one YAML per rule)
 │   └── README.md               # Schema reference
-├── fixtures/                   # 199 positive + 131 clean (negative) fixtures
-├── examples/terragoat/         # Multi-file deliberately-vulnerable demo corpus
+├── fixtures/                   # 218 positive + 140 clean (negative) fixtures
+├── examples/                   # Showcase corpora
+│   ├── terragoat/              #   • Multi-cloud deliberately-vulnerable corpus
+│   ├── module-reuse-demo/      #   • Module Reuse Advisor showcase (3 clouds)
+│   └── attack-graph-demo/      #   • Multi-tier AWS app for the Attack Graph
 ├── scripts/
-│   ├── detect.py               # Detection engine (~7,100 LoC; optional python-hcl2)
+│   ├── detect.py               # Detection engine (~7,800 LoC; optional python-hcl2)
 │   ├── self_test.py            # Walks fixtures/ vs catalog/, asserts expected IDs
 │   ├── test_schema.py          # Catalogue schema regression tests
 │   ├── stub-status.py          # Reports stale `status: stub` entries
@@ -333,7 +342,7 @@ CI gate (`.github/workflows/ci.yml`) runs the pytest suite, the schema validator
 
 ## Provenance
 
-Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design and runs across AWS (81 rules), GCP (42 rules), and Azure (33 rules) with full CIS Foundations Benchmark coverage on GCP and growing parity on the other two clouds.
+Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design and runs across AWS (86 rules), GCP (43 rules), Azure (34 rules), Kubernetes/Helm (5), and 47 cross-cloud rules — total 215 active. Full CIS Foundations Benchmark coverage on GCP; growing parity on AWS and Azure.
 
 ---
 
