@@ -81,6 +81,8 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Static HCL analysis | ✅ | ✅ | ✅ | ❌ (live) |
 | Plan-time (`terraform show -json`) analysis | ✅ | ⚠️ partial | ✅ | ❌ |
 | Built-in attack-path graph | ✅ | ❌ | ❌ | ❌ |
+| Module Reuse Advisor with lines-saved ROI | ✅ | ❌ | ❌ | ❌ |
+| Aggregate risk score + letter grade (A–F) | ✅ | ❌ | ❌ | ❌ |
 | `fix_hcl` snippet on **every** rule | ✅ (100%) | ⚠️ partial | ⚠️ partial | n/a |
 | Inline GitHub PR `suggestion` blocks | ✅ | ❌ | ❌ | n/a |
 | MITRE ATT&CK mapping in output | ✅ | ❌ | ⚠️ partial | ⚠️ via plugin |
@@ -93,7 +95,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 > Comparison reflects features documented as of 2026-05; corrections welcome via issue.
 
-### The five things that justify another scanner
+### What makes tf-analyze different
 
 1. **Attack-path graph + fix centrality** — BFS from internet-reachable resources to crown jewels. Findings on the critical path are promoted one urgency tier; fixes are ranked by how many crown jewels each one unblocks.
 2. **`fix_hcl` on every rule, with disruption classification** — every finding ships an HCL snippet plus a `Non-disruptive` / `Plan required` / `Forces replacement` badge, so reviewers see operational impact before applying.
