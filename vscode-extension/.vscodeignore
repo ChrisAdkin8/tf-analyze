@@ -8,5 +8,11 @@ out/test/**
 **/.eslintrc.json
 **/*.map
 **/*.test.js
-node_modules/**
+# DO NOT exclude node_modules/** — vsce relies on this directory to
+# ship the extension's runtime dependencies (vscode-languageclient and
+# its transitive deps). Excluding it produced 0.1.14–0.1.17 .vsix
+# bundles where `require('vscode-languageclient/node')` failed at
+# load time, taking activate() down with it and producing the
+# "command 'tf-analyze.showAttackGraph' not found" symptom because no
+# command ever got registered.
 *.vsix

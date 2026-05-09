@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.18] — 2026-05-09
+
+### Fixed
+- **Every command in 0.1.14–0.1.17 was unreachable from a fresh install.** Symptom: `command 'tf-analyze.showAttackGraph' not found` (and the same for every other command, the status-bar items never appearing, etc.). Root cause: `.vscodeignore` excluded `node_modules/**`, but `vscode-languageclient` was added as a runtime dependency in 0.1.14. The packaged `.vsix` therefore shipped without the module on disk; at extension load time `require('vscode-languageclient/node')` (transitively, via `lspClient.ts`) raised `MODULE_NOT_FOUND`, the entire `extension.js` module failed to load, `activate()` never ran, and no commands or status-bar items ever got registered. The "Missing property icon" report (0.1.16) and the "speed bar icons not displaying" report (0.1.17) were both downstream symptoms of the same packaging bug — VS Code happened to surface different parts of the failure depending on which contribution it was inspecting at the time. Removed the `node_modules/**` ignore rule so `vsce` ships runtime deps as it's meant to. The published .vsix is now 734KB / 338 files instead of 280KB / 24 files — the extra weight is the `vscode-languageclient` tree (and its `vscode-jsonrpc` / `vscode-languageserver-protocol` / `vscode-languageserver-types` transitive deps), all of which is required at runtime.
+
+---
+
 ## [0.1.17] — 2026-05-09
 
 ### Fixed
