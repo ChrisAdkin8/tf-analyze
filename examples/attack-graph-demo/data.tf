@@ -25,8 +25,6 @@ resource "aws_secretsmanager_secret" "db_password" {
 
 # RDS instance in the data subnet — also internal-only by SG, but
 # reachable via the web SG ingress rule. Public-access disabled.
-# (touched intentionally so this PR's diff includes line 28, which has
-#  the highest stack of findings — exercises BUG 2's fix end-to-end.)
 resource "aws_db_instance" "appdb" {
   identifier             = "${var.app_name}-db"
   engine                 = "postgres"
