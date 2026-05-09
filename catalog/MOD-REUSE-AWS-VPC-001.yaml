@@ -1,0 +1,80 @@
+id: MOD-REUSE-AWS-VPC-001
+title: "Hand-rolled VPC scaffolding could be replaced by terraform-aws-modules/vpc/aws"
+section: module-reuse
+default_urgency: INFO
+blast_radius: module
+status: active
+patterns:
+  - kind: registry_fingerprint
+    fingerprint: aws_vpc_module
+    description: |
+      Resource cluster in this directory matches the shape of the
+      terraform-aws-modules/vpc/aws community module: a VPC plus subnets
+      and the usual gateway/routing scaffolding. The community module
+      has been battle-tested across thousands of installations and
+      tracks AWS feature deltas (NAT-gateway HA, IPv6, flow logs,
+      VPC endpoints) so consumers don't have to.
+fingerprint:
+  registry_module: "terraform-aws-modules/vpc/aws"
+  registry_url:    "https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest"
+  min_version:     "~> 5.0"
+  required:
+    - type: aws_vpc
+      min: 1
+    - type: aws_subnet
+      min: 2
+  supporting:
+    threshold: 3
+    types:
+      - aws_internet_gateway
+      - aws_nat_gateway
+      - aws_eip
+      - aws_route_table
+      - aws_route_table_association
+      - aws_route
+      - aws_default_route_table
+      - aws_default_security_group
+      - aws_default_network_acl
+  exclusions:
+    - aws_vpc_ipam_pool
+    - aws_networkmanager_vpc_attachment
+recommendation: |
+  Consider replacing this hand-rolled VPC stack with the community module:
+
+      module "vpc" {
+        source  = "terraform-aws-modules/vpc/aws"
+        version = "~> 5.0"
+
+        name = "my-vpc"
+        cidr = "10.0.0.0/16"
+
+        azs             = ["us-east-1a", "us-east-1b"]
+        private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
+        public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
+
+        enable_nat_gateway     = true
+        single_nat_gateway     = false
+        one_nat_gateway_per_az = true
+
+        tags = local.tags
+      }
+
+  This is informational — bespoke VPCs are sometimes deliberate
+  (compliance, IPAM, custom routing). Suppress with an inline
+  `# tf-analyze:disable=MOD-REUSE-AWS-VPC-001` comment if intentional,
+  or list the rule under `ignore_rules:` in `.tf-analyze.yaml`.
+verification: |
+  After migrating, run `terraform plan` to confirm the topology is
+  equivalent. Use `moved` blocks to map old `aws_vpc.<x>` /
+  `aws_subnet.<y>` addresses to their new `module.vpc.aws_vpc.this[0]`
+  counterparts so no real network is destroyed and recreated.
+related:
+  - MOD-PIN-001
+  - MOD-SUPPLY-001
+fix_disruption: plan_required
+fix_disruption_note: |
+  Migration is non-destructive only when paired with `moved` blocks
+  for every resource the module would otherwise import. Without them,
+  Terraform will plan-destroy the old resources and create new ones.
+fixtures:
+  - mod_reuse_aws_vpc

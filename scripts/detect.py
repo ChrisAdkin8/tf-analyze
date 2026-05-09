@@ -203,13 +203,18 @@ def _provider_constraint_allows(constraint: str, min_version: str) -> bool:
         elif op == "~>":
             if len(v) < 2:
                 continue
+            # `~> X.Y` allows [X.Y, X+1.0). The constraint can reach
+            # `min_v` iff the upper bound is strictly above `min_v` —
+            # if `min_v >= upper`, every allowed version is below
+            # `min_v` and the rule must skip. The lower bound `v`
+            # being above `min_v` is irrelevant: `min_v` is a floor
+            # for "rule applies", not a required lower edge.
             upper = list(v)
             upper[-1] = 0
             upper[-2] = upper[-2] + 1
             upper_t = tuple(upper)
-            a_lo, b_lo = _pad(min_v, v)
             a_hi, b_hi = _pad(min_v, upper_t)
-            if a_lo < b_lo or a_hi >= b_hi:
+            if a_hi >= b_hi:
                 return False
         elif op == "=":
             if a != b:
@@ -1891,6 +1896,58 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                                 "resource": f"<module:{dir_path.name}>",
                             }
                         )
+            elif kind == "module_unused":
+                # Fire once per local-module directory that nobody references
+                # via `module { source = "<relpath>" }`. A directory counts as
+                # a "module-like" dir only if it declares at least one
+                # variable {} or output {} block (the reusability contract);
+                # raw resource collections without inputs aren't modules.
+                #
+                # The check is deliberately conservative: false positives here
+                # would be loud (telling someone to delete code), so we err
+                # toward silence on ambiguous cases.
+                referenced_dirs: set[str] = set()
+                module_like_dirs: dict[str, str] = {}  # dirkey -> first_tf
+                _VAR_OR_OUT = re.compile(
+                    r'(?m)^\s*(?:variable|output)\s+"[\w-]+"\s*\{'
+                )
+                # Pass 1 — discover module-like dirs and collect every
+                # caller's source = "<relpath>" reference.
+                for fp, text in all_files_text.items():
+                    caller_dir = Path(fp).parent
+                    dirkey = str(caller_dir)
+                    if _VAR_OR_OUT.search(text):
+                        module_like_dirs.setdefault(dirkey, str(fp))
+                    for mblk in find_blocks(text, MODULE_START):
+                        src = block_arg_value(mblk["body"], "source")
+                        if not src or not src.startswith((".", "/")):
+                            continue
+                        try:
+                            target_dir = str((caller_dir / src).resolve())
+                        except (OSError, ValueError):
+                            continue
+                        referenced_dirs.add(target_dir)
+                # Pass 2 — every module-like dir not in `referenced_dirs`
+                # is an orphan. Skip the scan target itself (the root
+                # module is supposed to have variables/outputs without
+                # being module-called).
+                target_root = str(target.resolve()) if isinstance(target, Path) else ""
+                for dirkey, first_tf in module_like_dirs.items():
+                    if dirkey == target_root:
+                        continue
+                    if dirkey in referenced_dirs:
+                        continue
+                    findings.append({
+                        "id": eid,
+                        "file": first_tf,
+                        "line": 1,
+                        "resource": f"<module:{Path(dirkey).name}>",
+                        "context": (
+                            f"module dir {dirkey} declares variables/outputs "
+                            f"but is not referenced by any `module {{ source = ... }}` "
+                            f"in the scan corpus"
+                        ),
+                    })
             elif kind == "backend_inconsistency":
                 # Collect all backend blocks across root modules
                 backend_re = re.compile(
@@ -2069,6 +2126,55 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                                     "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
                                 }
                             )
+            elif kind == "foreach_keyset_unstable":
+                # Detects `for_each` whose keyset is derived from another
+                # resource's attribute. Each plan that mutates the upstream
+                # resource set re-keys this resource, forcing destroy/create
+                # on every existing instance — classic apply-flicker bug.
+                #
+                # Forms caught:
+                #   for_each = aws_subnet.this[*].id
+                #   for_each = toset(aws_subnet.this[*].id)
+                #   for_each = toset([for s in aws_subnet.this : s.id])
+                #   for_each = { for k, v in aws_subnet.this : k => v }
+                #
+                # The leading identifier is checked against a deny-list of
+                # safe scopes (var, local, data, module, each, count) so
+                # references to those don't fire — only direct references
+                # to managed resources do.
+                _SAFE_SCOPES = {"var", "local", "data", "module", "each", "count", "self", "path", "terraform"}
+                splat_re = re.compile(
+                    r'(?m)^\s*for_each\s*=\s*(?:toset\s*\(\s*)?([\w-]+)\.([\w-]+)\[\*\]'
+                )
+                comprehension_re = re.compile(
+                    r'(?m)^\s*for_each\s*='
+                    r'\s*(?:toset\s*\(|tolist\s*\(|setunion\s*\()?'
+                    r'\s*\{?\s*\[?\s*for\s+[\w,\s]+\s+in\s+([\w-]+)\.([\w-]+)'
+                )
+                for fp, text in all_files_text.items():
+                    for blk in find_blocks(text, RESOURCE_START):
+                        body = blk["body"]
+                        leading_ident: str | None = None
+                        m = splat_re.search(body)
+                        if m:
+                            leading_ident = m.group(1)
+                        else:
+                            m2 = comprehension_re.search(body)
+                            if m2:
+                                leading_ident = m2.group(1)
+                        if not leading_ident or leading_ident in _SAFE_SCOPES:
+                            continue
+                        findings.append({
+                            "id": eid,
+                            "file": str(fp),
+                            "line": blk["start_line"],
+                            "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
+                            "context": (
+                                f"for_each keyset derived from "
+                                f"{leading_ident}.* — re-keys on upstream "
+                                f"resource-set change"
+                            ),
+                        })
             elif kind == "count_length_unguarded":
                 # Resources with count = length(X); flag any [N]/[count.index]
                 # reference that isn't guarded by length()/try()/ternary.
@@ -2363,6 +2469,19 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                 if "_resource_index_cache" not in locals():
                     _resource_index_cache = _build_resource_index(all_files_text)
                 for finding in fn(_resource_index_cache, all_files_text):
+                    finding["id"] = eid
+                    findings.append(finding)
+            elif kind == "registry_fingerprint":
+                # Module-reuse detector: a directory whose resource cluster
+                # matches the shape of a public-registry module. Fingerprint
+                # comes from the catalogue entry's top-level `fingerprint`
+                # block (one fingerprint per rule).
+                fp = entry.get("fingerprint") or {}
+                if not fp:
+                    continue
+                if "_module_clusters_cache" not in locals():
+                    _module_clusters_cache = _build_module_clusters(all_files_text)
+                for finding in _check_registry_fingerprint(fp, _module_clusters_cache):
                     finding["id"] = eid
                     findings.append(finding)
     return findings
@@ -2714,6 +2833,99 @@ _GRAPH_CHECKS = {
     "dynamodb_pitr": _graph_dynamodb_pitr,
     "dynamodb_sse": _graph_dynamodb_sse,
 }
+
+
+# ---- Registry-module fingerprint detector --------------------------------
+#
+# Detects directories whose resource cluster matches the shape of a popular
+# public-registry module (e.g. `terraform-aws-modules/vpc/aws`). Findings
+# are advisory (INFO tier) — bespoke implementations are sometimes
+# deliberate, so the rule never gates CI by default.
+#
+# A fingerprint is declared in the catalogue YAML as:
+#
+#   fingerprint:
+#     registry_module: "<namespace>/<module>/<provider>"
+#     registry_url:    "<https://...>"
+#     min_version:     "~> X.Y"
+#     required:                           # all must meet their min count
+#       - { type: aws_vpc,    min: 1 }
+#     supporting:                         # need ≥ threshold of these types
+#       threshold: 3
+#       types: [aws_internet_gateway, aws_nat_gateway, ...]
+#     exclusions:                         # signal that bespoke is intentional
+#       - aws_vpc_ipam_pool
+
+def _build_module_clusters(all_files_text: dict) -> dict:
+    """Group resources by parent directory (= one Terraform module).
+
+    Returns ``dir_path_str -> [{type, name, file, line}, ...]``. The
+    fingerprint matcher operates on these clusters; one positive match
+    becomes one finding anchored at the directory's first required
+    resource.
+    """
+    clusters: dict[str, list[dict]] = {}
+    for fp, text in all_files_text.items():
+        d = str(Path(fp).parent)
+        for blk in find_blocks(text, RESOURCE_START):
+            btype, bname = blk["groups"]
+            clusters.setdefault(d, []).append({
+                "type": btype,
+                "name": bname,
+                "file": str(fp),
+                "line": blk["start_line"],
+            })
+    return clusters
+
+
+def _check_registry_fingerprint(fp: dict, clusters: dict) -> list[dict]:
+    """Match every module-cluster against one fingerprint."""
+    out: list[dict] = []
+    required = fp.get("required") or []
+    if not required:
+        return out
+    supporting = fp.get("supporting") or {}
+    sup_types = set(supporting.get("types") or [])
+    sup_thresh = int(supporting.get("threshold") or 0)
+    excludes = set(fp.get("exclusions") or [])
+
+    for d, resources in clusters.items():
+        types_seen = [r["type"] for r in resources]
+        type_set = set(types_seen)
+        if type_set & excludes:
+            continue
+        if not all(
+            types_seen.count(req["type"]) >= int(req.get("min", 1))
+            for req in required
+        ):
+            continue
+        sup_hits = len(type_set & sup_types)
+        if sup_hits < sup_thresh:
+            continue
+        # Confidence scales with overshoot of the supporting threshold so
+        # operators can filter or down-weight low-confidence advisories.
+        if sup_hits >= sup_thresh + 2:
+            confidence = "high"
+        elif sup_hits >= sup_thresh + 1:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        anchor_type = required[0]["type"]
+        anchor = next(r for r in resources if r["type"] == anchor_type)
+        out.append({
+            "file": anchor["file"],
+            "line": anchor["line"],
+            "resource": f"{anchor['type']}.{anchor['name']}",
+            "context": (
+                f"directory {d} matches {fp.get('registry_module', '?')} "
+                f"({sup_hits}/{len(sup_types)} supporting types; "
+                f"confidence={confidence})"
+            ),
+            "confidence": confidence,
+            "registry_url": fp.get("registry_url"),
+        })
+    return out
 
 
 # ---- attack graph --------------------------------------------------------
@@ -3897,7 +4109,7 @@ def _render_executive_view(
         for f in stage_findings:
             entry = entry_map.get(f["id"], {})
             urgency = _effective_urgency(f, entry)
-            urg_colour = {"CRITICAL": "#7b0000", "HIGH": "#b02a2a", "MEDIUM": "#b07800", "LOW": "#5a7a00"}.get(urgency, "#555")
+            urg_colour = {"CRITICAL": "#7b0000", "HIGH": "#b02a2a", "MEDIUM": "#b07800", "LOW": "#5a7a00", "INFO": "#4a6a8a"}.get(urgency, "#555")
             rows.append(
                 f"<li style='margin:.3em 0;font-size:13px'>"
                 f"<span style='background:{urg_colour};color:#fff;padding:1px 7px;border-radius:3px;"
@@ -4997,7 +5209,7 @@ def compare_reports(current: list[dict], prior_path: Path) -> dict:
 
 _VALID_SECTIONS = {
     "security", "robustness", "dry", "style", "simplicity",
-    "ops", "cicd", "module", "stack", "verification",
+    "ops", "cicd", "module", "module-reuse", "stack", "verification",
 }
 _URGENCY_TIERS: list[str] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 _VALID_URGENCIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
@@ -5170,6 +5382,24 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
         errs.append(
             f"{source}: id '{fid}' does not match filename stem '{fname}'"
         )
+    fingerprint = data.get("fingerprint")
+    if fingerprint is not None:
+        if not isinstance(fingerprint, dict):
+            errs.append(f"{source}: 'fingerprint' must be a mapping if present")
+        else:
+            req = fingerprint.get("required")
+            if not isinstance(req, list) or not req:
+                errs.append(f"{source}: fingerprint.required must be a non-empty list")
+            else:
+                for i, r in enumerate(req):
+                    if not isinstance(r, dict) or not r.get("type"):
+                        errs.append(f"{source}: fingerprint.required[{i}] needs 'type'")
+            sup = fingerprint.get("supporting")
+            if sup is not None:
+                if not isinstance(sup, dict):
+                    errs.append(f"{source}: fingerprint.supporting must be a mapping")
+                elif sup.get("types") is not None and not isinstance(sup.get("types"), list):
+                    errs.append(f"{source}: fingerprint.supporting.types must be a list")
     return errs
 
 
@@ -6734,6 +6964,15 @@ def main():
         help="Exit with code 1 if any finding at this urgency or above exists",
     )
     ap.add_argument(
+        "--show-info",
+        action="store_true",
+        help=(
+            "Include INFO-tier findings (advisory; e.g. module-reuse "
+            "suggestions) in output. Default off — INFO findings are "
+            "counted in the summary but not rendered."
+        ),
+    )
+    ap.add_argument(
         "--compare",
         default=None,
         help="Path to a prior JSON report to compare against (outputs delta)",
@@ -7404,6 +7643,27 @@ def main():
     # the single source of truth and the LLM-driven markdown report should
     # cite this same number.
     summary = _compute_summary(findings, suppressed_findings, suppressed_by_baseline)
+
+    # INFO-tier findings (e.g. module-reuse suggestions) are advisory and
+    # noisy by default. They stay in `summary["counts"]["INFO"]` for
+    # context but only appear in rendered output when --show-info is set.
+    # Weight is 0 so the score is unaffected by this filter.
+    if not getattr(args, "show_info", False):
+        entry_map_for_info = {e["id"]: e for e in entries}
+        _info_filtered = [
+            f for f in findings
+            if _effective_urgency(f, entry_map_for_info.get(f["id"], {})) == "INFO"
+        ]
+        if _info_filtered:
+            findings = [
+                f for f in findings
+                if _effective_urgency(f, entry_map_for_info.get(f["id"], {})) != "INFO"
+            ]
+            print(
+                f"# {len(_info_filtered)} INFO finding(s) hidden "
+                f"(use --show-info to display)",
+                file=sys.stderr,
+            )
 
     # Auto-compare: resolve most recent JSON report as the prior when set.
     compare_target = args.compare

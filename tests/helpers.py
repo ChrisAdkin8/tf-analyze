@@ -15,7 +15,11 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 
 def run_detect(target: Path, *, all_rules: bool = False, fixture_name: str = "") -> list[dict]:
-    args = [sys.executable, str(DETECT_PY), "--target", str(target), "--format", "json"]
+    # Always include INFO-tier findings in test runs so the assertion
+    # surface matches the catalogue's `fixtures:` declarations regardless
+    # of the rule's tier. The filter that --show-info disables is a
+    # display concern, not a correctness one.
+    args = [sys.executable, str(DETECT_PY), "--target", str(target), "--format", "json", "--show-info"]
     if not all_rules and fixture_name:
         args += ["--only-fixture", fixture_name]
     result = subprocess.run(args, capture_output=True, text=True)

@@ -4,6 +4,13 @@ section: stack
 default_urgency: HIGH
 blast_radius: environment
 status: active
+applies_when:
+  # `workload_identity_enabled` was added on azurerm_kubernetes_cluster
+  # in azurerm 3.40. Pre-3.40 providers don't expose this argument so
+  # the rule cannot be evaluated and would emit false positives on
+  # legacy infrastructure that legitimately can't enable the feature.
+  min_provider:
+    azurerm: "3.40"
 patterns:
   - kind: resource_missing_arg
     resource: azurerm_kubernetes_cluster

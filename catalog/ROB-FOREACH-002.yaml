@@ -1,0 +1,62 @@
+id: ROB-FOREACH-002
+title: "for_each keyset is derived from another resource's attributes (apply-flicker)"
+section: robustness
+default_urgency: HIGH
+blast_radius: module
+status: active
+patterns:
+  - kind: foreach_keyset_unstable
+    description: |
+      A resource's `for_each` keyset is computed from another managed
+      resource's attribute. Every plan that mutates the upstream
+      resource set (add, remove, replace) re-keys this resource and
+      forces destroy/create on every existing instance — classic
+      apply-flicker. The fix is usually to key on a stable input
+      variable instead of a runtime attribute.
+recommendation: |
+  Replace the runtime-attribute keyset with a stable input keyset.
+
+  ```hcl
+  # ❌ Anti-pattern: keys depend on aws_subnet IDs that AWS allocates
+  resource "aws_route_table_association" "rta" {
+    for_each       = toset(aws_subnet.private[*].id)
+    subnet_id      = each.key
+    route_table_id = aws_route_table.private.id
+  }
+
+  # ✅ Fix: key on the same input that drives subnet creation
+  resource "aws_route_table_association" "rta" {
+    for_each       = toset(var.private_subnet_cidrs)
+    subnet_id      = aws_subnet.private[each.key].id
+    route_table_id = aws_route_table.private.id
+  }
+  ```
+
+  When the keyset is genuinely runtime (e.g., looked up via a `data`
+  source you don't control), wrap the consumers in a `null_resource`
+  with `triggers` so churn is at least observable, and document the
+  trade-off near the `for_each` line.
+verification: |
+  After the fix, run `terraform plan` against an unchanged config —
+  diff should be zero. Then add an item to the input variable and
+  re-plan: only the new instance should appear, not destroy/create
+  on every prior instance.
+related:
+  - ROB-FOREACH-001
+  - ROB-COUNTREF-001
+  - ROB-COUNTREF-002
+fix_hcl: |
+  resource "aws_route_table_association" "rta" {
+    for_each       = toset(var.private_subnet_cidrs)
+    subnet_id      = aws_subnet.private[each.key].id
+    route_table_id = aws_route_table.private.id
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: |
+  Migrating an existing for_each from runtime keys to input keys is a
+  destroy/create unless paired with `moved` blocks for every instance.
+  Plan carefully on stateful resources; for stateless associations
+  (route-table associations, IAM attachments), the churn is usually
+  acceptable.
+fixtures:
+  - foreach_keyset_unstable

@@ -1,0 +1,46 @@
+id: MOD-UNUSED-001
+title: "Local module directory is not called from any scenario"
+section: module
+default_urgency: LOW
+blast_radius: module
+status: active
+patterns:
+  - kind: module_unused
+    description: |
+      A directory in this repository declares Terraform variables and
+      outputs (the reusability contract that defines a module), but no
+      `module { source = "<relpath>" }` block in the scanned corpus
+      references it. Either the module is dead code that should be
+      deleted, or it's intentionally consumed from outside the scan
+      target — in which case the suppression should be documented.
+recommendation: |
+  Three options, in order of preference:
+
+  1. **Delete it** if the module is genuinely dead. Branches and tags
+     preserve the history; keeping orphan modules around just costs
+     reviewers' time.
+  2. **Add a caller** in a scenario directory if the module is
+     supposed to be wired up but isn't yet — common after a refactor
+     that lifted code into a module without finishing the swap.
+  3. **Document the external consumer** with a top-of-file comment
+     and suppress the rule via `.tf-analyze.yaml`'s `ignore_rules:`
+     when the module is published as a public registry artefact or
+     consumed from a sibling repo not in the scan target.
+
+  This rule fires conservatively: it only flags directories that
+  declare both `variable {}` and/or `output {}` blocks. Raw resource
+  collections without an input/output contract aren't classified as
+  modules and won't fire here.
+verification: |
+  Confirm with `grep -r 'source\s*=\s*"\(\\./\|\\.\\./\)' .` whether
+  any `.tf` file outside the orphan directory's parent references it.
+  If the grep is silent, the rule is right and the module is orphaned.
+related:
+  - ROB-UNUSED-001
+  - ROB-UNUSED-002
+fix_disruption: none
+fix_disruption_note: |
+  Removing an orphan module is non-disruptive by definition — nothing
+  in the scanned corpus references it, so no plan or apply is affected.
+fixtures:
+  - module_orphaned

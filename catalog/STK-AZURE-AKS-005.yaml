@@ -4,6 +4,12 @@ section: stack
 default_urgency: MEDIUM
 blast_radius: environment
 status: active
+applies_when:
+  # `api_server_access_profile.authorized_ip_ranges` was renamed from
+  # the top-level `api_server_authorized_ip_ranges` in azurerm 3.0.
+  # Pre-3.0 the nested-path target this rule checks does not exist.
+  min_provider:
+    azurerm: "3.0"
 patterns:
   - kind: resource_missing_arg
     resource: azurerm_kubernetes_cluster

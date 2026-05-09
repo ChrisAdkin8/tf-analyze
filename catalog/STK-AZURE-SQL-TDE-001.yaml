@@ -6,6 +6,14 @@ blast_radius: single-resource
 cis:
   - "4.1.1"
 status: active
+applies_when:
+  # The `azurerm_mssql_database_transparent_data_encryption` resource
+  # type was added in azurerm 3.0. On pre-3.0 providers TDE was
+  # configured via the `azurerm_mssql_server_extended_auditing_policy`
+  # nested form which this rule does NOT cover; gate to avoid asking
+  # users to add a resource type their provider can't create.
+  min_provider:
+    azurerm: "3.0"
 patterns:
   - kind: resource_absent
     resource: azurerm_mssql_database_transparent_data_encryption

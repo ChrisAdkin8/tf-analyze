@@ -6,6 +6,14 @@ blast_radius: module
 cis:
   - "5.2"
 status: active
+applies_when:
+  # `role_based_access_control_enabled` and the standalone
+  # `azure_active_directory_role_based_access_control` block were
+  # introduced in azurerm 3.0. Pre-3.0 used the nested
+  # `role_based_access_control { enabled = ... }` form which this
+  # rule does NOT match — gating prevents false positives.
+  min_provider:
+    azurerm: "3.0"
 patterns:
   - kind: resource_arg
     resource: azurerm_kubernetes_cluster

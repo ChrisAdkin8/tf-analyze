@@ -53,6 +53,10 @@ def run_detect(fixture_dir: Path, fixture_name: str, all_rules: bool = False) ->
         str(fixture_dir),
         "--format",
         "json",
+        # Include INFO-tier findings (e.g. module-reuse advisories) so the
+        # self-test surface matches the catalogue's `fixtures:` declarations
+        # regardless of rule tier.
+        "--show-info",
     ]
     if not all_rules:
         args.extend(["--only-fixture", fixture_name])

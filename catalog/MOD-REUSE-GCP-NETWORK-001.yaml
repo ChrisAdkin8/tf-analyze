@@ -1,0 +1,73 @@
+id: MOD-REUSE-GCP-NETWORK-001
+title: "Hand-rolled VPC + subnets could be replaced by terraform-google-modules/network/google"
+section: module-reuse
+default_urgency: INFO
+blast_radius: module
+status: active
+patterns:
+  - kind: registry_fingerprint
+    fingerprint: gcp_network_module
+    description: |
+      Resource cluster in this directory matches the shape of the
+      terraform-google-modules/network/google community module: a
+      google_compute_network plus subnetworks, and typically firewall
+      / Cloud-Router / NAT scaffolding.
+fingerprint:
+  registry_module: "terraform-google-modules/network/google"
+  registry_url:    "https://registry.terraform.io/modules/terraform-google-modules/network/google/latest"
+  min_version:     "~> 9.0"
+  required:
+    - type: google_compute_network
+      min: 1
+    - type: google_compute_subnetwork
+      min: 2
+  supporting:
+    threshold: 2
+    types:
+      - google_compute_firewall
+      - google_compute_router
+      - google_compute_router_nat
+      - google_compute_route
+      - google_compute_address
+      - google_compute_global_address
+  exclusions:
+    - google_compute_shared_vpc_host_project
+    - google_compute_shared_vpc_service_project
+recommendation: |
+  Consider replacing this hand-rolled network with the community module:
+
+      module "vpc" {
+        source  = "terraform-google-modules/network/google"
+        version = "~> 9.0"
+
+        project_id   = var.project_id
+        network_name = "my-vpc"
+
+        subnets = [
+          {
+            subnet_name   = "subnet-a"
+            subnet_ip     = "10.10.10.0/24"
+            subnet_region = "us-central1"
+          },
+        ]
+      }
+
+  Bespoke networks are sometimes deliberate (Shared VPC, hierarchical
+  firewall policies, custom peering). Suppress with an inline
+  `# tf-analyze:disable=MOD-REUSE-GCP-NETWORK-001` comment if
+  intentional, or via `.tf-analyze.yaml` `ignore_rules`.
+verification: |
+  After migrating, run `terraform plan`. Pair every direct resource
+  with a `moved` block pointing at the equivalent
+  `module.vpc.google_compute_network.network[0]` address so the plan
+  is a pure no-op rather than a destroy/create.
+related:
+  - MOD-PIN-001
+  - MOD-SUPPLY-001
+fix_disruption: plan_required
+fix_disruption_note: |
+  Without `moved` blocks the migration will destroy the network and
+  every resource attached to it (instances, GKE clusters, Cloud SQL
+  via private IP). Always migrate via `moved`.
+fixtures:
+  - mod_reuse_gcp_network

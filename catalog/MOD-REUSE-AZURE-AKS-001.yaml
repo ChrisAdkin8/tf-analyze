@@ -1,0 +1,74 @@
+id: MOD-REUSE-AZURE-AKS-001
+title: "Hand-rolled AKS cluster could be replaced by Azure/aks/azurerm"
+section: module-reuse
+default_urgency: INFO
+blast_radius: module
+status: active
+patterns:
+  - kind: registry_fingerprint
+    fingerprint: azure_aks_module
+    description: |
+      Resource cluster in this directory matches the shape of the
+      Azure/aks/azurerm community module: an AKS cluster plus
+      additional node pools and the usual identity / Log Analytics
+      scaffolding.
+fingerprint:
+  registry_module: "Azure/aks/azurerm"
+  registry_url:    "https://registry.terraform.io/modules/Azure/aks/azurerm/latest"
+  min_version:     "~> 9.0"
+  required:
+    - type: azurerm_kubernetes_cluster
+      min: 1
+  supporting:
+    threshold: 2
+    types:
+      - azurerm_kubernetes_cluster_node_pool
+      - azurerm_user_assigned_identity
+      - azurerm_role_assignment
+      - azurerm_log_analytics_workspace
+      - azurerm_log_analytics_solution
+      - azurerm_monitor_diagnostic_setting
+      - azurerm_container_registry
+      - azurerm_private_dns_zone
+recommendation: |
+  Consider replacing this hand-rolled cluster with the community module:
+
+      module "aks" {
+        source  = "Azure/aks/azurerm"
+        version = "~> 9.0"
+
+        resource_group_name = azurerm_resource_group.this.name
+        prefix              = "myaks"
+
+        rbac_aad                          = true
+        rbac_aad_managed                  = true
+        log_analytics_workspace_enabled   = true
+        node_pools = {
+          workload = {
+            vm_size  = "Standard_D2s_v5"
+            os_type  = "Linux"
+            max_count = 5
+            min_count = 1
+          }
+        }
+      }
+
+  Bespoke AKS is sometimes deliberate (private-cluster topologies,
+  custom CNI, regulated-industry pinning). Suppress with an inline
+  `# tf-analyze:disable=MOD-REUSE-AZURE-AKS-001` comment if
+  intentional, or list the rule under `ignore_rules:` in
+  `.tf-analyze.yaml`.
+verification: |
+  After migrating, run `terraform plan` and confirm zero changes.
+  Use `moved` blocks for every cluster, node pool, identity, and
+  diagnostic setting so AKS is not destroyed and recreated.
+related:
+  - MOD-PIN-001
+  - MOD-SUPPLY-001
+fix_disruption: plan_required
+fix_disruption_note: |
+  Recreating an AKS cluster destroys every workload running on it.
+  Migration is only safe with `moved` blocks paired to each resource
+  the module would otherwise need to import.
+fixtures:
+  - mod_reuse_azure_aks

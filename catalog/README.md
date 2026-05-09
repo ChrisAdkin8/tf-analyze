@@ -35,7 +35,7 @@ interpretable.
 ```yaml
 id: SEC-GCP-IAM-001              # required, must match filename (without .yaml)
 title: "Short human title"   # required, ≤80 chars
-section: security            # required, one of: security|robustness|dry|style|simplicity|ops|cicd|module|stack|verification
+section: security            # required, one of: security|robustness|dry|style|simplicity|ops|cicd|module|module-reuse|stack|verification
 default_urgency: HIGH        # required, one of: CRITICAL|HIGH|MEDIUM|LOW|INFO
 blast_radius: module         # required, one of: single-resource|module|environment|infrastructure-wide
 status: active               # optional, default active. one of: active|deprecated|experimental
@@ -60,7 +60,22 @@ escalation:                  # optional, conditions that bump urgency
     new_urgency: HIGH
 fixtures:                    # optional, list of fixture directories that exercise this finding
   - iam_too_broad
+applies_when:                # optional, gate the rule on provider/Terraform version
+  min_provider:              # rule fires only when required_providers allows the listed minimum
+    aws: "5.0"
+  min_terraform: "1.10"      # rule fires only when terraform.required_version allows ≥ 1.10
 ```
+
+### `applies_when` semantics
+
+Use `applies_when` when the catalogue argument the rule checks **does not exist** on older providers (or older Terraform versions). Behaviour is permissive by design:
+
+- An empty / missing constraint always passes — rules without `applies_when` always run.
+- An unparseable constraint clause is skipped (the rule still runs).
+- The minimum-provider check uses `_provider_constraint_allows`, which accepts every Terraform constraint clause shape (`>=`, `<=`, `<`, `>`, `~>`, `=`, `!=`, comma-separated combinations).
+- Skipped rules are reported on stderr as `# N rule(s) skipped due to applies_when …` so users know rules are conditionally off rather than silently disabled.
+
+Adopt `applies_when` only when the gate is **substantive** — i.e., the rule would emit false positives on older providers because the argument it checks doesn't exist there. Don't add it just because the argument is "newer-ish"; permissive defaults are better than over-gated ones.
 
 ## Pattern kinds
 
@@ -88,7 +103,46 @@ Corpus-level kinds (run inside `detect_corpus` once per scan):
 | `backend_missing_arg` | Fires when a `terraform { backend "<type>" {} }` block is missing a required argument (e.g., S3 backend without `dynamodb_table`). Fields: `backend_type`, `arg`. |
 | `providers_version_missing` | Fires once per `required_providers` provider entry that has no `version` constraint. Used by `ROB-VERSION-003`. No extra fields needed — the kind scans all files. |
 | `output_sensitive_leak`, `cross_module`, `variable_unused`, `output_unused`, `module_missing_tests`, `backend_inconsistency`, `templatefile_sensitive_leak`, `remote_state_present`, `provider_alias_unused`, `provider_alias_module_mismatch`, `foreach_over_list`, `data_external_injection`, `tfstate_in_repo`, `submodule_version_missing`, `prod_no_deletion_protection`, `deprecated_datasource` | See in-source docstrings |
+| `foreach_keyset_unstable` | A `for_each` whose keyset is derived from another managed resource's attribute (splat `aws_subnet.x[*].id` or comprehension `[for s in aws_subnet.x : s.id]`). Re-keys on every upstream resource-set change → destroy/create on every existing instance. Leading identifier is checked against a deny-list of safe scopes (`var`, `local`, `data`, `module`, `each`, `count`) so input-driven keysets don't fire. |
+| `module_unused` | A directory that declares `variable {}` and/or `output {}` blocks but is not referenced by any `module { source = "<relpath>" }` block in the scan corpus. Conservative — only fires on directories with both an input/output contract and zero referrers. |
 | `graph_check` | Cross-resource detector dispatched to a registered Python function. The catalogue YAML names the function via `function: <name>` and the dispatcher in `detect.py` routes to `_GRAPH_CHECKS[name]`. Use this for conditions that span ≥2 resources (e.g., a logging target's hardening, a Workload Identity binding's bidirectionality). To add a new graph check: implement the function in `detect.py` next to `_GRAPH_CHECKS`, register it in that dict, then reference `kind: graph_check, function: <name>` in the catalogue YAML. |
+| `registry_fingerprint` | Module-reuse detector. Matches every directory's resource cluster against a fingerprint declared on the entry's top-level `fingerprint:` block (required types + supporting types + threshold + exclusions). One positive match per directory becomes one INFO-tier finding pointing at the registry module that the cluster resembles. Generic — no per-rule Python; add a new community-module rule by writing the YAML alone. See `MOD-REUSE-AWS-VPC-001.yaml` for a worked example. |
+
+### `registry_fingerprint` schema
+
+A rule using `kind: registry_fingerprint` adds a top-level `fingerprint:` block (separate from `patterns:`). All fields are validated by `validate_catalog_entry`:
+
+```yaml
+patterns:
+  - kind: registry_fingerprint
+    fingerprint: aws_vpc_module          # informational; the matcher reads from `fingerprint:` below
+    description: "What this fingerprint detects."
+
+fingerprint:
+  registry_module: "<namespace>/<module>/<provider>"   # e.g. terraform-aws-modules/vpc/aws
+  registry_url:    "<https://registry.terraform.io/modules/...>"
+  min_version:     "~> 5.0"                            # for the recommendation snippet only
+  required:                                            # all must meet their min count
+    - type: aws_vpc
+      min: 1
+    - type: aws_subnet
+      min: 2
+  supporting:                                          # need ≥ threshold of these types
+    threshold: 3
+    types:
+      - aws_internet_gateway
+      - aws_nat_gateway
+      - aws_route_table
+      - ...
+  exclusions:                                          # signals that bespoke is intentional
+    - aws_vpc_ipam_pool
+```
+
+Findings emitted by the matcher carry two extra fields beyond the standard finding shape:
+- `confidence` — `low` / `medium` / `high`. Scales with how far the cluster overshoots the supporting-types threshold.
+- `registry_url` — verbatim from the catalogue entry, used by the VS Code Module Reuse Advisor panel and the per-rule docs page.
+
+Module-reuse rules MUST default to `default_urgency: INFO` and `section: module-reuse`. INFO carries weight 0 in the score formula, so these findings never gate CI by default.
 
 The detection pass walks every `.tf` file in scope, applies every catalogue
 pattern, and produces `(file, line, finding_id)` triples. The judgement pass
