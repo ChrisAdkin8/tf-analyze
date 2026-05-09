@@ -7,3 +7,6 @@ docs/sentinel/
 *.html
 !reports/*.html
 !demo/*.html
+# Google Search Console verification files. Required to live at the
+# site root for ownership verification — must be tracked.
+!docs/google*.html

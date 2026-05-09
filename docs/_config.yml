@@ -6,6 +6,17 @@ remote_theme: pages-themes/cayman@v0.2.0
 plugins:
   - jekyll-remote-theme
   - jekyll-relative-links
+  # jekyll-seo-tag emits <title>, <meta name="description">,
+  # canonical link, Open Graph, and Twitter Card markup driven by
+  # per-page front matter (title, description, image, lang, …).
+  # Rule pages set those fields from the catalogue YAML; section
+  # pages inherit the site defaults below.
+  - jekyll-seo-tag
+  # jekyll-sitemap auto-generates /sitemap.xml from every published
+  # page. Submitting that URL once to Google Search Console gives
+  # all 215 rule pages a discovery path that doesn't depend on
+  # external backlinks.
+  - jekyll-sitemap
 
 # Treat .md files outside _posts as standalone pages — keeps the existing
 # reference docs (vscode-extension.md, lsp.md, cli.md, …) addressable at
@@ -20,8 +31,41 @@ exclude:
   - launch/                # release planning + crosspost drafts
   - "*.tmp"
   - vendor/
+  # Google Search Console verification file — Google does a byte-exact
+  # match on the file body, so it must NOT be wrapped in a Jekyll
+  # layout. Excluding from the build means Pages serves it as a raw
+  # static asset.
+  - "google*.html"
 
 # Posts live at /blog/<slug>/ rather than the Jekyll default
 # /<year>/<month>/<day>/<title>/ — the version-numbered URL is more
 # useful when an arc spans a single day.
 permalink: /blog/:slug/
+
+# Site-wide defaults applied to every page. jekyll-seo-tag uses
+# `author` and `lang` automatically; per-page front matter overrides
+# both. (No default `image:` field — set one per page if needed,
+# otherwise the share preview falls back to the site title.)
+defaults:
+  - scope:
+      path: ""
+    values:
+      author: tf-analyze
+      lang: en
+
+# Per-rule comments. Off by default — when on, every rule page
+# embeds a giscus thread keyed on the rule ID (so feedback shows
+# up as a GitHub Discussion under the canonical category). Run the
+# generator at https://giscus.app against the project repo, then
+# paste the four IDs below and set `enabled: true`.
+giscus:
+  enabled: false
+  repo: ChrisAdkin8/tf-analyze
+  repo_id: __SET_VIA_GISCUS_APP__
+  category: General
+  category_id: __SET_VIA_GISCUS_APP__
+  mapping: pathname               # threads keyed on /rules/<RULE-ID>/
+  theme: preferred_color_scheme   # follow visitor's OS preference
+  reactions: 1
+  emit_metadata: 0
+  input_position: top
