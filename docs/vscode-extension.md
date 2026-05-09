@@ -63,20 +63,32 @@ jump to the source line.
 
 ### Status bar
 
-The extension contributes two status-bar items, anchored bottom-left:
+The extension contributes five status-bar items, anchored bottom-left, reading "scan · graph · report · delta · compliance" left to right:
 
-1. **Scan summary** — shows the current scan state and is clickable to run a fresh scan:
-   - `⏳ tf-analyze scanning…` — scan in progress
+1. **🛡 tf-analyze (scan summary)** — current scan state, click to run a fresh scan.
+   - `⏳ tf-analyze scanning…` — in progress
    - `✓ tf-analyze: clean` — zero findings
    - `🛡 tf-analyze: 7 (C:1 H:2 M:4)` — summary by urgency
-2. **Attack Graph shortcut** — `🛤️ Attack Graph`, sits immediately to the right of the scan summary. One click opens the internet → crown-jewels webview. Hidden in workspaces that contain no `.tf` files (so non-Terraform projects don't see a useless button).
+2. **🛤 Attack Graph** — opens the internet → crown-jewels webview.
+3. **📄 Report** — opens the urgency-grouped HTML report inline (with **Open in browser** for full-fidelity print).
+4. **🔀 Delta** — *Since last scan*. New / resolved / unchanged findings against the most recent prior JSON report.
+5. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / All).
 
-Both items are wired to the same commands available from the Command Palette (`tf-analyze: Run Scan`, `tf-analyze: Show Attack Graph`) — the status-bar buttons are just the fast path.
+All five are gated on the workspace containing at least one `.tf` file. Each is wired to the same command available from the Command Palette — the status bar is just the fast path.
 
-### Auto-scan on save
+### Real-time diagnostics (LSP)
 
-When `tf-analyze.runOnSave` is `true` (default), the extension
-automatically re-scans when any `.tf` file is saved.
+Since v0.1.14 the extension starts `python3 detect.py --lsp` as a JSON-RPC language server on activation. Diagnostics + Quick Fix update as you type, not only on save. The legacy exec-on-save path is still wired up as a fallback when the language server can't start (e.g. on systems without Python on `$PATH`).
+
+The `tf-analyze: Run Scan` command remains exec-based — it covers the whole workspace, including files that aren't currently open in an editor. Open files get LSP coverage; the workspace-wide tree comes from the explicit scan.
+
+### Baseline / suppression
+
+Right-click any row in the **Findings** tree → **Suppress finding (add to baseline)** to write the (id, file, line, resource) tuple to `<workspace>/.tf-analyze-baseline.json`. Subsequent scans automatically pick up the baseline file and suppress matching findings. **Unsuppress finding** reverses it; **Open Baseline File** loads the JSON in the editor for bulk edits.
+
+### MITRE ATT&CK view
+
+Run `tf-analyze: Show MITRE ATT&CK View` from the Command Palette to see findings grouped by ATT&CK technique (`T1078.004`, `T1530`, …). Useful when prepping a red-team report or correlating Terraform findings with broader detection coverage.
 
 ## Configuration
 
@@ -94,18 +106,25 @@ automatically re-scans when any `.tf` file is saved.
 |---------|-------------|
 | `tf-analyze: Run Scan` | Run a full scan of the workspace. |
 | `tf-analyze: Clear Findings` | Remove all diagnostics and reset the tree. |
-| `tf-analyze: Show Attack Graph` | Open the attack-graph view (requires `--attack-graph`). |
+| `tf-analyze: Show Attack Graph` | Open the attack-graph view (`--attack-graph`). |
+| `tf-analyze: Show Report` | Open the HTML findings report inline. |
+| `tf-analyze: Since Last Scan (Delta)` | Show new / resolved / unchanged findings vs. most recent prior report. |
+| `tf-analyze: Show Compliance Report` | Compliance gap report with framework picker. |
+| `tf-analyze: Show MITRE ATT&CK View` | Findings grouped by ATT&CK technique. |
+| `tf-analyze: Suppress Finding` | Add the selected finding to the workspace baseline. |
+| `tf-analyze: Unsuppress Finding` | Remove the selected finding from the baseline. |
+| `tf-analyze: Open Baseline File` | Open `<ws>/.tf-analyze-baseline.json` in the editor. |
 
 ## Architecture
 
-The extension is a thin wrapper around `detect.py --format json`. It:
+The extension drives `detect.py` through two complementary surfaces:
 
-1. Spawns `python3 scripts/detect.py --target <workspace> --format json`
-2. Parses the JSON array of findings (`id`, `file`, `line`, `urgency`, …)
-3. Creates VS Code `Diagnostic` objects mapped to source positions
-4. Registers a `CodeActionProvider` that generates Quick Fix actions for
-   findings that have `fix_hcl`
-5. Populates the `FindingsProvider` tree view
+1. **LSP (per-open-file, real-time).** On activation the extension spawns `python3 detect.py --lsp` as a JSON-RPC language server. Diagnostics and code actions for `.tf` files currently open in an editor flow through `vscode-languageclient` and update on every change/save.
+2. **Exec (whole-workspace, on-demand).** `tf-analyze: Run Scan` shells out to `python3 detect.py --format json --target <ws>` once and uses the JSON to populate the **Findings** tree, the per-file diagnostic collection, and the status-bar summary. The same exec path also drives the Attack Graph, HTML Report, Delta, Compliance, and MITRE panels — each panel runs its own `detect.py` invocation with the right `--format` and prints into a dedicated webview.
+
+Both paths share `scriptResolver.resolveScriptPath()` so a misconfigured `tf-analyze.scriptPath` (or a workspace nested inside the tf-analyze repo) is handled identically across all surfaces.
+
+The runScan exec path also auto-detects `<workspace>/.tf-analyze-baseline.json` and adds `--baseline <path>` when present, so the baseline UI's writes take effect on the very next scan.
 
 No network calls are made. All analysis is local.
 
