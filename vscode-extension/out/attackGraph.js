@@ -69,12 +69,24 @@ class AttackGraphPanel {
             return;
         }
         cp.exec(`python3 "${absScript}" --target "${wsFolder}" --format json --attack-graph`, { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
-            // exit 1 = findings exist (expected); exit > 1 = real error
-            const realError = err && err.code !== undefined
-                && err.code > 1;
-            if (realError) {
-                this._panel.webview.html = this._getErrorHtml("detect.py failed", `<pre>${this._escape(stderr || (err && err.message) || "unknown error")}</pre>` +
-                    `<p>Command: <code>python3 ${absScript} --target ${wsFolder} --format json --attack-graph</code></p>`);
+            // exit 1 = findings exist (expected); exit > 1 = real error.
+            // BUT: Python emits exit 1 for any unhandled exception, with a
+            // traceback on stderr and empty stdout. Don't conflate the two —
+            // an empty/non-JSON stdout means detect.py crashed before emitting,
+            // regardless of the exit code, and stderr is the only useful clue.
+            const errCode = err?.code;
+            const exitGtOne = typeof errCode === "number" && errCode > 1;
+            const stdoutEmpty = !stdout || !stdout.trim();
+            const cmdLine = `python3 ${absScript} --target ${wsFolder} --format json --attack-graph`;
+            if (exitGtOne || stdoutEmpty) {
+                const reason = stdoutEmpty && !exitGtOne
+                    ? "detect.py exited without printing JSON. Most often this is an unhandled Python exception — see stderr below."
+                    : "detect.py exited with an error.";
+                this._panel.webview.html = this._getErrorHtml("detect.py failed", `<p>${this._escape(reason)}</p>` +
+                    `<p><strong>Exit code:</strong> ${errCode ?? "(none)"}</p>` +
+                    `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || "(empty)")}</pre>` +
+                    `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>` +
+                    `<p>Re-run the command in a terminal to see the full traceback.</p>`);
                 return;
             }
             let data = {};
@@ -83,7 +95,9 @@ class AttackGraphPanel {
             }
             catch (parseErr) {
                 this._panel.webview.html = this._getErrorHtml("Could not parse detect.py output", `<pre>${this._escape(parseErr.message)}</pre>` +
-                    `<p>First 500 chars of stdout:</p><pre>${this._escape(stdout.slice(0, 500))}</pre>`);
+                    `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || "(empty)")}</pre>` +
+                    `<p><strong>First 500 chars of stdout:</strong></p><pre>${this._escape(stdout.slice(0, 500))}</pre>` +
+                    `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;
             }
             // The engine emits the graph under the top-level `graph` key
@@ -125,22 +139,63 @@ class AttackGraphPanel {
     }
     /** Mirror the resolution strategy used by the main scan path so both
      * surfaces find the same script. Honour the user's setting first; fall
-     * back to common workspace layouts. */
+     * back to common workspace layouts; finally walk up parents so a
+     * fixture/submodule opened as the workspace still finds the repo's
+     * `scripts/detect.py`. The result must be a regular file — `python3
+     * <dir>` would otherwise fail with "can't find '__main__' module". */
     static _resolveScriptPath(cfg, wsFolder) {
+        const isFile = (p) => {
+            try {
+                return fs.statSync(p).isFile();
+            }
+            catch {
+                return false;
+            }
+        };
+        const isDir = (p) => {
+            try {
+                return fs.statSync(p).isDirectory();
+            }
+            catch {
+                return false;
+            }
+        };
+        // 1. Honour the configured setting. If it points at a directory
+        //    (a common misconfiguration — users set this to the `scripts/`
+        //    folder rather than the file inside), look for `detect.py` there.
         const configured = cfg.get('scriptPath', '').trim();
         if (configured) {
             const abs = path.isAbsolute(configured) ? configured : path.join(wsFolder, configured);
-            if (fs.existsSync(abs))
+            if (isFile(abs))
                 return abs;
+            if (isDir(abs)) {
+                const inDir = path.join(abs, 'detect.py');
+                if (isFile(inDir))
+                    return inDir;
+            }
         }
+        // 2. Workspace-relative fallbacks.
         for (const cand of [
             path.join(wsFolder, 'scripts', 'detect.py'),
             path.join(wsFolder, 'detect.py'),
             // tf-analyze repo cloned alongside the user's TF code:
             path.join(wsFolder, '..', 'tf-analyze', 'scripts', 'detect.py'),
         ]) {
-            if (fs.existsSync(cand))
+            if (isFile(cand))
                 return cand;
+        }
+        // 3. Walk up parents of wsFolder. Catches the case where the
+        //    workspace is a subfolder of the tf-analyze repo (e.g. a fixture
+        //    or submodule) and `scripts/detect.py` lives a few levels above.
+        let dir = wsFolder;
+        for (let i = 0; i < 6; i++) {
+            const parent = path.dirname(dir);
+            if (parent === dir)
+                break;
+            const cand = path.join(parent, 'scripts', 'detect.py');
+            if (isFile(cand))
+                return cand;
+            dir = parent;
         }
         return null;
     }
@@ -222,7 +277,11 @@ class AttackGraphPanel {
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 const nodes = ${nodesJson};
-const edges = ${edgesJson};
+// The engine emits edges as { from, to, label } but d3.forceLink reads
+// { source, target } and resolves them via .id(d => d.id). Without this
+// aliasing d3 sees source=undefined / target=undefined on every link
+// and throws "node not found: undefined" inside d3.v7.min.js.
+const edges = ${edgesJson}.map(e => ({ ...e, source: e.from, target: e.to }));
 
 const COLOR = {
   compute: '#4A90D9', storage: '#E8A838', iam: '#D4A017',

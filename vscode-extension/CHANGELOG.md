@@ -5,6 +5,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.12] — 2026-05-09
+
+### Fixed
+- **Attack graph webview crashed inside `d3.v7.min.js` with `Uncaught Error: node not found: undefined` for every workspace that actually had edges.** The engine emits edges as `{ from, to, label }`, but `d3.forceLink` reads `{ source, target }` and resolves the endpoints via `.id(d => d.id)`. Without aliasing, d3 saw `source = undefined` on every link, looked up node id `undefined`, and threw before any nodes rendered. The webview now maps `from → source` and `to → target` when populating the edge array, leaving the engine's wire format untouched. This rendering path had never run end-to-end before — 0.1.8/0.1.9 fixed *empty-panel* edge cases, and 0.1.10/0.1.11 fixed *script-resolution* failures, both of which short-circuited before d3 was reached.
+
+---
+
+## [0.1.11] — 2026-05-09
+
+### Fixed
+- **Attack graph failed with `can't find '__main__' module in '…/scripts'` when the configured `tf-analyze.scriptPath` pointed at the scripts *directory* rather than the `detect.py` file inside it, or when the workspace was opened on a subfolder of the tf-analyze repo (e.g. a fixture).** `_resolveScriptPath` was accepting any path that existed — including directories — so `python3 <dir>` ran with no `__main__.py` and crashed before emitting JSON. The resolver now requires a regular file, treats a configured directory as "look for `detect.py` inside", and walks up to six parent directories of the workspace looking for `scripts/detect.py`. The 0.1.10 diagnostic surfaced this as `detect.py exited without printing JSON` with the bad command line — that's the path that revealed the root cause.
+
+---
+
+## [0.1.10] — 2026-05-09
+
+### Fixed
+- **Attack graph showed `Unexpected end of JSON input` with an empty stdout dump and no clue what went wrong.** `detect.py` exits 1 both when findings exist (expected) *and* when Python raises an unhandled exception — in the second case stdout is empty and the traceback is on stderr. The webview was treating any exit code ≤ 1 as success and falling through to `JSON.parse('')`, hiding the only useful diagnostic. The error path now triggers on empty/whitespace stdout regardless of exit code, surfaces the captured stderr, and shows the exact reproduction command so the underlying Python error is visible directly in the panel.
+
+---
+
 ## [0.1.9] — 2026-05-09
 
 ### Fixed
