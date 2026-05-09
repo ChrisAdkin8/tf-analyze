@@ -6863,6 +6863,18 @@ def main():
             "Provides real-time diagnostics and code actions for .tf files."
         ),
     )
+    # Accepted-but-ignored transport hints injected by some LSP clients
+    # (notably vscode-languageclient, which appends `--stdio` to the
+    # spawned server's argv when `transport: TransportKind.stdio` is
+    # set on the Executable). Without these, argparse rejects the
+    # unknown flag with exit code 2 and the LSP startup loop hits the
+    # "server crashed 5 times" bailout. We default to stdio anyway, so
+    # treating these as no-ops is correct.
+    ap.add_argument("--stdio", action="store_true", default=False, help=argparse.SUPPRESS)
+    ap.add_argument("--node-ipc", action="store_true", default=False, help=argparse.SUPPRESS)
+    ap.add_argument("--socket", default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--port", default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--clientProcessId", default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
     # python-hcl2 fast-path is on by default; `--no-hcl2` (or
     # TF_ANALYZE_NO_HCL2=1) restores the stdlib-only regex path.  When

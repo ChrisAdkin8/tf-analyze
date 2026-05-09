@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.22] — 2026-05-09
+
+### Fixed
+- **`detect.py: error: unrecognized arguments: --stdio` — actual root cause of the LSP crash loop reported against 0.1.21.** `vscode-languageclient` v9 injects `--stdio` (and depending on configuration, `--node-ipc`, `--socket`, `--port`, `--clientProcessId`) into the server's argv when `transport: TransportKind.stdio` is set on the `Executable` server options. detect.py's argparse refused the unknown flag and exited with code 2 *before* the engine could reach `_run_lsp_server`, so the loop-hardening landed in 0.1.21 never had a chance to help. Added the five injected flags to argparse as `argparse.SUPPRESS`-d no-ops; stdio is the default and only transport detect.py supports anyway, so accepting the hints is semantically correct. The 0.1.21 try/except hardening still matters — it'll catch any *runtime* exceptions once the engine is actually running.
+
+---
+
 ## [0.1.21] — 2026-05-09
 
 ### Fixed
