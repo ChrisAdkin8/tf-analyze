@@ -121,16 +121,23 @@ runs:
         # cache flag means subsequent runs are near-instant.
         docker run --rm -v "${{ github.workspace }}:/workspace" \
           "${{ inputs.image }}" \
-          "${BASE_ARGS[@]}" --format json --cache --cache-file /workspace/.tf-analyze-cache.json \
-          > "${{ github.workspace }}/tf-analyze-findings.json" 2>tf-analyze-stderr.txt || true
+          "${BASE_ARGS[@]}" --format json --cache --cache-file /tmp/tf-analyze-cache.json \
+          > "${{ github.workspace }}/tf-analyze-findings.json" 2>tf-analyze-json-stderr.txt || true
         docker run --rm -v "${{ github.workspace }}:/workspace" \
           "${{ inputs.image }}" \
-          "${BASE_ARGS[@]}" --format sarif --cache --cache-file /workspace/.tf-analyze-cache.json \
-          > "${{ github.workspace }}/tf-analyze.sarif" 2>/dev/null || true
+          "${BASE_ARGS[@]}" --format sarif --cache --cache-file /tmp/tf-analyze-cache.json \
+          > "${{ github.workspace }}/tf-analyze.sarif" 2>tf-analyze-sarif-stderr.txt || true
         docker run --rm -v "${{ github.workspace }}:/workspace" \
           "${{ inputs.image }}" \
-          "${BASE_ARGS[@]}" --format html --cache --cache-file /workspace/.tf-analyze-cache.json \
-          > "${{ github.workspace }}/tf-analyze-report.html" 2>/dev/null || true
+          "${BASE_ARGS[@]}" --format html --cache --cache-file /tmp/tf-analyze-cache.json \
+          > "${{ github.workspace }}/tf-analyze-report.html" 2>tf-analyze-html-stderr.txt || true
+        for f in tf-analyze-json-stderr.txt tf-analyze-sarif-stderr.txt tf-analyze-html-stderr.txt; do
+          if [ -s "$f" ]; then
+            echo "::group::$f"
+            cat "$f"
+            echo "::endgroup::"
+          fi
+        done
 
         # Surface the score + counts as outputs.
         python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -205,17 +212,23 @@ runs:
           const rank = u => ({ CRITICAL:4, HIGH:3, MEDIUM:2, LOW:1, INFO:0 }[u] ?? 0);
           const URGENCY_EMOJI = { CRITICAL:'🚨', HIGH:'⚠️', MEDIUM:'💡', LOW:'ℹ️' };
 
+          // Dedup by (file, line, rule_id) so multiple rules on the same line each
+          // post a suggestion, but identical rule re-fires (e.g. from -recursive scans)
+          // collapse. Higher-urgency wins ties.
           const byLoc = new Map();
           for (const f of findings) {
             if (!f.fix_hcl) continue;
-            const key = `${f.file}:${f.line}`;
+            if (f.line == null) continue;
+            const key = `${f.file}:${f.line}:${f.id}`;
             const existing = byLoc.get(key);
             if (!existing || rank(f.urgency) > rank(existing.urgency)) byLoc.set(key, f);
           }
 
           let posted = 0;
           for (const [, f] of byLoc) {
-            const rel = f.file.replace(process.env.GITHUB_WORKSPACE + '/', '');
+            // Strip the in-container mount prefix; the runner-side GITHUB_WORKSPACE
+            // is a different path entirely, so don't use it here.
+            const rel = f.file.replace(/^\/workspace\//, '');
             if (!changedPaths.has(rel)) continue;
             const emoji = URGENCY_EMOJI[f.urgency] ?? '•';
             const body = [
