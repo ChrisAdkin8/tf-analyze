@@ -10,7 +10,19 @@ question can be answered in 30 seconds without reading prose.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State at last sync (2026-05-09): 215 rules · 500 tests · ext v0.1.28 · `action.yml` shipped · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service (`integrations/badge-service/`).
+State at last sync (2026-05-09): 215 rules · 500 tests · ext v0.1.29 · `action.yml` shipped · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service (`integrations/badge-service/`).
+
+---
+
+## Round 28 sprint — Top-5 from the deep analysis
+
+The five items from the 2026-05-09 deep analysis that compound *with* publication.
+
+- [ ] **P0 · S** `--format pr-summary` flag + Mermaid attack-graph in PR comment summaryBody → `PLAN.md§Round-28 R28.1`
+- [ ] **P0 · L** Property-based HCL primitive tests (`hypothesis` against `block_arg_value`, `_resolve_var_ref`, `_expand_dynamic_blocks`, `_hcl_object_to_json`) → `PLAN.md§Round-28 R28.2`
+- [ ] **P0 · M** LSP server JSON-RPC tests (`tests/test_lsp_server.py`, ~10 cases) → `PLAN.md§Round-28 R28.3`
+- [ ] **P0 · L** MCP server adapter (`integrations/mcp-server/`, FastAPI/MCP wrapper, 4 tools) → `PLAN.md§Round-28 R28.4`
+- [ ] **P0 · XL** Terraform provider (`terraform-provider-tfanalyze`, Go module, `data "tfanalyze_scan"` v1) → `PLAN.md§Round-28 R28.5`
 
 ---
 
