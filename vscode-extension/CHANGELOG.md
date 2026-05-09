@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.16] — 2026-05-09
+
+### Fixed
+- **Manifest validation error: "Missing property icon" on activation.** `tf-analyze.clearFindings` was wired into the `view/title` `navigation` group but its command declaration had no `icon` field — VS Code's contribution-point schema requires one for any command rendered as a navigation button. The error surfaced louder in 0.1.15 because the same view-title bar now hosts six other navigation commands; the previously-quiet warning becomes a hard validation failure once VS Code starts caching the contribution registry across reloads. Added `$(clear-all)` to the command declaration. The other icon-less commands (showMitre, suppressFinding, unsuppressFinding, openBaseline, openFinding, applyFix) are command-palette / context-menu only — never rendered as buttons — and don't need icons.
+
+---
+
 ## [0.1.15] — 2026-05-09
 
 ### Added
