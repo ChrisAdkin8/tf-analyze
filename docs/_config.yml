@@ -27,15 +27,17 @@ relative_links:
 
 # Don't try to render the project-level CHANGELOG or planning docs as
 # Jekyll pages — they're internal artefacts, not site content.
+#
+# Note on the Google Search Console verification file: it lives at
+# `docs/google*.html` with NO front matter. Jekyll treats files with
+# no front matter as static assets and copies them through verbatim,
+# so the byte-exact match Google requires is preserved. Don't add the
+# verification file to this exclude list — `exclude:` removes the
+# file from the build output entirely (verified the hard way).
 exclude:
   - launch/                # release planning + crosspost drafts
   - "*.tmp"
   - vendor/
-  # Google Search Console verification file — Google does a byte-exact
-  # match on the file body, so it must NOT be wrapped in a Jekyll
-  # layout. Excluding from the build means Pages serves it as a raw
-  # static asset.
-  - "google*.html"
 
 # Posts live at /blog/<slug>/ rather than the Jekyll default
 # /<year>/<month>/<day>/<title>/ — the version-numbered URL is more
