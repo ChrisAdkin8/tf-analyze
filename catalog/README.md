@@ -42,7 +42,7 @@ status: active               # optional, default active. one of: active|deprecat
 cis:                         # optional, list of CIS GCP v4.0 control IDs
   - "1.6"
 mitre:                       # optional, ATT&CK technique IDs (Tnnnn or Tnnnn.nnn)
-  - "T1078.004"              # see scripts/detect.py:MITRE_ATTACK_VERSION for the pin
+  - "T1078.004"              # pinned against scripts/_mitre.py:MITRE_ATTACK_VERSION
 cwe:                         # optional, CWE IDs in canonical "CWE-<digits>" form
   - "CWE-269"                # cwe.mitre.org/data/definitions/269.html
   - "CWE-732"
@@ -91,7 +91,7 @@ Three optional fields tag a rule with adversary / weakness / defense ontologies.
 
 | Field | Form | Validation | Curation principle |
 |---|---|---|---|
-| `mitre` | `["Tnnnn"]` or `["Tnnnn.nnn"]` (sub-techniques preferred) | Pinned against `MITRE_ATTACK_VERSION` (currently v17 / April 2025); validated by [`_MITRE_TECHNIQUE_INFO`](../scripts/detect.py) at engine load | Map only when the link is unambiguous; vague mappings hurt the SOC-readability of `--format mitre` |
+| `mitre` | `["Tnnnn"]` or `["Tnnnn.nnn"]` (sub-techniques preferred) | Pinned against `MITRE_ATTACK_VERSION` (currently v17 / April 2025); table lives in [`scripts/_mitre.py`](../scripts/_mitre.py); CI's [`check_attack_drift.py`](../scripts/check_attack_drift.py) gate fails the build if a new technique is referenced without being added to the table | Map only when the link is unambiguous; vague mappings hurt the SOC-readability of `--format mitre` |
 | `cwe` | `["CWE-<digits>"]` (e.g. `CWE-732`) | Regex-validated by `validate_catalog_entry`; SARIF taxonomies emit verbatim | Map the obvious weakness type — usually one or two CWE IDs per rule; more is noise |
 | `d3fend` | `["D3-<TOKEN>"]` (e.g. `D3-MFA`) | Regex-validated by `validate_catalog_entry`; SARIF tags emit `d3fend:D3-<TOKEN>` | Derived from the rule's `mitre:` via D3FEND's [ATT&CK ↔ D3FEND ontology](https://d3fend.mitre.org/); curated subset only |
 

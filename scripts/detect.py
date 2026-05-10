@@ -3893,8 +3893,148 @@ def _enrich_findings_for_output(
     return findings
 
 
+# SARIF v2.1 supports a `taxonomies` array of structured taxonomy
+# definitions (CWE, MITRE ATT&CK, etc.) plus per-rule `relationships`
+# arrays linking each rule to the taxa it touches. Code Scanning
+# consumers use these for semantic filtering ("show me all CWE-732
+# findings"). The flat `cwe:CWE-732` tags emitted alongside are
+# preserved for backward-compat with consumers that haven't moved off
+# tag-only filtering.
+_SARIF_TAXONOMY_DEFS: dict[str, dict] = {
+    "CWE": {
+        "name": "CWE",
+        "guid": "F04C9E7C-2D60-49C8-B41A-9CCEB48F4E7E",
+        "shortDescription": {"text": "Common Weakness Enumeration"},
+        "informationUri": "https://cwe.mitre.org/",
+        "downloadUri": "https://cwe.mitre.org/data/downloads.html",
+        "isComprehensive": False,
+    },
+    "MITRE-ATT&CK": {
+        "name": "MITRE-ATT&CK",
+        "guid": "AAA0F22F-6F4C-4F2D-B14E-09EE2B5641D6",
+        "shortDescription": {"text": "MITRE ATT&CK adversary tactics and techniques"},
+        "informationUri": "https://attack.mitre.org/",
+        "isComprehensive": False,
+    },
+    "MITRE-D3FEND": {
+        "name": "MITRE-D3FEND",
+        "guid": "A8FCD935-8523-4D04-95F7-7AAFC3E9A731",
+        "shortDescription": {"text": "MITRE D3FEND defensive techniques"},
+        "informationUri": "https://d3fend.mitre.org/",
+        "isComprehensive": False,
+    },
+    "CIS": {
+        "name": "CIS",
+        "guid": "6F8B6E37-C9C3-4B1E-AD1E-4C8E5BE1F7B0",
+        "shortDescription": {"text": "Center for Internet Security Benchmarks"},
+        "informationUri": "https://www.cisecurity.org/cis-benchmarks/",
+        "isComprehensive": False,
+    },
+}
+
+
+def _sarif_taxonomies(entries: list[dict]) -> list[dict]:
+    """Build the SARIF `taxonomies` array from every taxon referenced
+    by any rule in `entries`. Each taxonomy gets its own block with
+    `taxa` listing the specific IDs cited.
+
+    Returns an empty list if no rule references any of the four
+    supported taxonomies — keeps SARIF output minimal on small repos.
+    """
+    seen_taxa: dict[str, dict[str, dict]] = {
+        "CWE": {}, "MITRE-ATT&CK": {}, "MITRE-D3FEND": {}, "CIS": {},
+    }
+    for entry in entries:
+        for cid in (entry.get("cwe") or []):
+            num = str(cid).removeprefix("CWE-")
+            seen_taxa["CWE"][cid] = {
+                "id": num,
+                "name": cid,
+                "shortDescription": {"text": cid},
+                "helpUri": f"https://cwe.mitre.org/data/definitions/{num}.html",
+            }
+        for tid in (entry.get("mitre") or []):
+            seen_taxa["MITRE-ATT&CK"][str(tid)] = {
+                "id": str(tid),
+                "name": str(tid),
+                "shortDescription": {"text": _mitre_technique_name(str(tid)) or str(tid)},
+                "helpUri": f"https://attack.mitre.org/techniques/{str(tid).replace('.', '/')}/",
+            }
+        for did in (entry.get("d3fend") or []):
+            seen_taxa["MITRE-D3FEND"][str(did)] = {
+                "id": str(did),
+                "name": str(did),
+                "shortDescription": {"text": str(did)},
+                "helpUri": f"https://d3fend.mitre.org/technique/{str(did)}/",
+            }
+        for cis in (entry.get("cis") or []):
+            cid = str(cis)
+            seen_taxa["CIS"][cid] = {
+                "id": cid,
+                "name": f"CIS {cid}",
+                "shortDescription": {"text": f"CIS Benchmark control {cid}"},
+            }
+
+    out: list[dict] = []
+    for tax_name, taxa_map in seen_taxa.items():
+        if not taxa_map:
+            continue
+        defn = dict(_SARIF_TAXONOMY_DEFS[tax_name])
+        defn["taxa"] = sorted(taxa_map.values(), key=lambda t: t["id"])
+        out.append(defn)
+    return out
+
+
+def _sarif_rule_relationships(entry: dict) -> list[dict]:
+    """Per-rule taxonomy references. Each entry produces one
+    `relationships` element pointing at the matching taxon defined in
+    the run's `taxonomies` block."""
+    rels: list[dict] = []
+    for cid in (entry.get("cwe") or []):
+        rels.append({
+            "target": {
+                "id": str(cid).removeprefix("CWE-"),
+                "name": str(cid),
+                "toolComponent": {"name": "CWE", "guid": _SARIF_TAXONOMY_DEFS["CWE"]["guid"]},
+            },
+            "kinds": ["relevant"],
+        })
+    for tid in (entry.get("mitre") or []):
+        rels.append({
+            "target": {
+                "id": str(tid),
+                "name": str(tid),
+                "toolComponent": {"name": "MITRE-ATT&CK", "guid": _SARIF_TAXONOMY_DEFS["MITRE-ATT&CK"]["guid"]},
+            },
+            "kinds": ["relevant"],
+        })
+    for did in (entry.get("d3fend") or []):
+        rels.append({
+            "target": {
+                "id": str(did),
+                "name": str(did),
+                "toolComponent": {"name": "MITRE-D3FEND", "guid": _SARIF_TAXONOMY_DEFS["MITRE-D3FEND"]["guid"]},
+            },
+            # D3FEND is a defensive countermeasure — different relationship
+            # kind so consumers can distinguish "this rule indicates the
+            # named ATT&CK technique" from "this rule implements the named
+            # D3FEND defence".
+            "kinds": ["incomparable"],
+        })
+    for cis in (entry.get("cis") or []):
+        rels.append({
+            "target": {
+                "id": str(cis),
+                "name": f"CIS {cis}",
+                "toolComponent": {"name": "CIS", "guid": _SARIF_TAXONOMY_DEFS["CIS"]["guid"]},
+            },
+            "kinds": ["relevant"],
+        })
+    return rels
+
+
 def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
-    """Convert findings to SARIF v2.1.0 format."""
+    """Convert findings to SARIF v2.1.0 format with proper taxonomies."""
     rules = []
     rule_index = {}
     level_map = {
@@ -3918,7 +4058,7 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
         rule_index[eid] = len(rules)
         urgency = entry.get("default_urgency", "MEDIUM")
         recommendation = entry.get("recommendation") or entry.get("title", eid)
-        rules.append({
+        rule_obj: dict = {
             "id": eid,
             "name": eid,
             "shortDescription": {"text": entry.get("title", eid)},
@@ -3945,7 +4085,14 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
                 "problem.severity": urgency.lower(),
                 "security-severity": severity_map.get(urgency, "5.0"),
             },
-        })
+        }
+        # Taxonomy relationships — pointers into the run's `taxonomies`
+        # block so consumers can semantically filter without parsing
+        # the flat tag strings.
+        rels = _sarif_rule_relationships(entry)
+        if rels:
+            rule_obj["relationships"] = rels
+        rules.append(rule_obj)
 
     results = []
     for f in findings:
@@ -3968,22 +4115,30 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
             result["level"] = rules[rule_index[f["id"]]]["defaultConfiguration"]["level"]
         results.append(result)
 
+    taxonomies = _sarif_taxonomies(entries)
+    run: dict = {
+        "tool": {
+            "driver": {
+                "name": "tf-analyze",
+                "version": "1.2.0",
+                "informationUri": "https://github.com/ChrisAdkin8/tf-analyze",
+                "rules": rules,
+            }
+        },
+        "results": results,
+    }
+    # Only declare supportedTaxonomies + the taxonomies block when at
+    # least one rule references one — keeps SARIF lean on small repos.
+    if taxonomies:
+        run["tool"]["driver"]["supportedTaxonomies"] = [
+            {"name": t["name"], "guid": t["guid"]} for t in taxonomies
+        ]
+        run["taxonomies"] = taxonomies
+
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
         "version": "2.1.0",
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "tf-analyze",
-                        "version": "1.2.0",
-                        "informationUri": "https://github.com/ChrisAdkin8/tf-analyze",
-                        "rules": rules,
-                    }
-                },
-                "results": results,
-            }
-        ],
+        "runs": [run],
     }
 
 

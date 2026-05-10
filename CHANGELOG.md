@@ -5,6 +5,55 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## MITRE round-2: SARIF taxonomies + drift gate + first detect.py refactor — 2026-05-10
+
+**Closes the items the prior MITRE sweep deferred: proper SARIF taxonomies (vs. flat tags), an ATT&CK drift CI gate, and the first low-risk seam in the detect.py refactor.**
+
+### Engine changes
+
+- **`scripts/_mitre.py` (new module).** `MITRE_ATTACK_VERSION`, `MITRE_TECHNIQUE_INFO`, `MITRE_TACTIC_ORDER`, `mitre_technique_name()`, `mitre_technique_tactics()` extracted from `detect.py`. Pure data + helpers, no I/O, no engine state. `detect.py` re-imports under the legacy `_MITRE_*` private names so all internal callers and tests work unchanged. **Single-file extraction, ~100 lines moved, zero behavioural diff** — first low-risk seam in modularising the 8000-line monolith. The extraction cost (one new file) bought a clean import target for the drift-check script (no need to import all of detect.py to read one dict) and lays groundwork for further splits.
+
+- **SARIF v2.1 `taxonomies` + per-rule `relationships`.** SARIF output now includes a proper `taxonomies` array with structured taxonomy definitions for CWE, MITRE-ATT&CK, MITRE-D3FEND, and CIS. Each rule emits a `relationships` array pointing at the specific taxa it touches — Code Scanning consumers can semantically filter findings ("show me everything that touches CWE-732") without parsing flat tag strings. The flat `cwe:CWE-732` / `mitre:T1078.004` / `d3fend:D3-MFA` tags are preserved on rule properties for backward compat. D3FEND relationships use `kinds: ["incomparable"]` so consumers can distinguish "this rule indicates the named ATT&CK technique" from "this rule implements the named D3FEND defence."
+
+  Concrete shapes in a terragoat-corpus SARIF run:
+  - `tool.driver.supportedTaxonomies`: `[CWE, MITRE-ATT&CK, MITRE-D3FEND, CIS]`
+  - `runs[0].taxonomies[]`: 4 blocks, 131 total taxa (26 CWE + 25 MITRE + 11 D3FEND + 69 CIS)
+  - 168 rules carry `relationships` arrays referencing their taxa
+
+- **`scripts/check_attack_drift.py` (new) + CI gate.** Walks the catalogue, collects every `mitre:` technique referenced, and verifies all of them appear in `MITRE_TECHNIQUE_INFO`. Fails with a friendly "add this technique to the table" message if not. Reports techniques in the table that no rule cites as informational (harmless — anticipates future catalogue work). Wired into `.github/workflows/ci.yml` as a fresh job step.
+
+- **`--explain` now emits MITRE / CWE / D3FEND lines.** Was a gap — the engine emitted only CIS in the explain header. Fixed independently as part of the round-1 sweep follow-up; locked here as test contract.
+
+### Extension v0.1.33
+
+- **Bundle pipeline now smoke-tests the engine.** `scripts/bundle-engine.js` previously copied `detect.py` + `catalog/` into `engine/` and stopped there. Now it spawns `python3 engine/scripts/detect.py --list-rules` against the freshly-bundled engine and asserts a non-zero rule count. Catches the exact failure mode the new `_mitre.py` introduced: a bundled `detect.py` that can't import its sibling because the bundle script didn't know to copy the sibling. The new `ENGINE_SIBLING_FILES` array names every Python file `detect.py` imports as a sibling — adding a new file there is the only step required to ship a new helper module inside the `.vsix`. Smoke test catches: sibling-import miss, catalogue YAML parse error, missing top-level Python dependency. Set `PYTHON=...` if the build host needs a specific Python binary.
+- Bundled `_mitre.py` ships at `engine/scripts/_mitre.py` alongside the engine.
+- The new SARIF taxonomies, ATT&CK drift gate, and `--explain` output enrichments all flow through to extension consumers automatically — the extension calls `detect.py` as a subprocess, no extension-side changes were required.
+
+### Tests: 603 → 617 (+14) — `tests/test_sarif_taxonomies_and_refactor.py`
+
+| Test class | Locks |
+|---|---|
+| `TestMitreModule` | `_mitre.py` exposes the right public surface; `detect.py` re-export shim binds (not copies) so future renames stay in sync |
+| `TestAttackDriftGate` | Drift script passes on the current catalogue; reports the ATT&CK pin; emits the OK summary line |
+| `TestSarifTaxonomies` | SARIF declares all 4 supported taxonomies; taxonomy blocks have proper guid/uri/taxa structure; CWE taxa use bare-numeric IDs (matches OASIS examples + CodeQL); MITRE taxa use technique names not bare IDs; ≥100 rules have relationships; no relationship targets an undeclared taxonomy; D3FEND uses `incomparable` kind; flat tags still emit for backward compat |
+
+### Counts
+
+- Active rules: **217** (unchanged — this round is structure work, no new rules)
+- Pytest: 603 → **617** (+14)
+- Self-test: **219/219** positive fixtures + **142/142** clean fixtures
+- Engine: `_mitre.py` is +110 LOC on its own; the corresponding extraction from `detect.py` was offset by the SARIF-taxonomies additions in the same round (`_sarif_taxonomies` + `_sarif_rule_relationships` ≈ +150 LOC). Net `detect.py` size moved up not down — the refactor's value isn't LOC reduction, it's establishing the seam pattern. Future rounds extracting render / dispatch will inherit the seam shape and start showing net reduction.
+- Extension version: 0.1.32 → **0.1.33**
+
+### Coverage gaps that remain (deferred)
+
+- Vendoring an ATT&CK STIX bundle (`mitre/cti` `enterprise-attack.json`, ~10 MB) for richer per-rule docs content (platform / data-source / parent-technique embedding) — defer until per-rule pages need it for SEO traction
+- Procedure-example linking from `_ATTACK_NARRATIVES` to ATT&CK's published procedures — depends on the STIX bundle
+- Further detect.py modularisation (extract SARIF emit, HTML render, etc.) — `_mitre.py` is the proof-of-concept; future rounds can split more behaviour out using the same shape
+
+---
+
 ## MITRE / CWE / D3FEND coverage sweep — 2026-05-10
 
 **Closes the MITRE-coverage gaps surfaced in `docs/launch/detection-gaps-plan.md`. Adds two new taxonomies (CWE, D3FEND) that no other OSS IaC scanner emits today.**

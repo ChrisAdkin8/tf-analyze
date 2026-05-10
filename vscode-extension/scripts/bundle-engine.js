@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const here = __dirname;                                            // vscode-extension/scripts/
 const extensionRoot = path.dirname(here);                          // vscode-extension/
@@ -26,13 +27,22 @@ const repoRoot = path.dirname(extensionRoot);                      // tf-analyze
 // default `--catalog` resolution (Path(__file__).parent.parent /
 // "catalog") finds the catalog automatically. With this layout:
 //   engine/scripts/detect.py
+//   engine/scripts/_mitre.py            ← sibling helper modules
 //   engine/catalog/*.yaml
 // the engine works with no extension-side flag bookkeeping.
-const sourceEngineFile = path.join(repoRoot, 'scripts', 'detect.py');
+//
+// `ENGINE_SIBLING_FILES` lists every Python file in scripts/ that
+// detect.py imports as a sibling. Add a name here when extracting a
+// new module from detect.py — without it, `import _mitre` (or
+// whatever) blows up at extension load time inside a packaged .vsix.
+const ENGINE_SIBLING_FILES = ['detect.py', '_mitre.py'];
+
+const sourceScriptsDir = path.join(repoRoot, 'scripts');
 const sourceCatalogDir = path.join(repoRoot, 'catalog');
 const engineRoot = path.join(extensionRoot, 'engine');
-const targetEngineFile = path.join(engineRoot, 'scripts', 'detect.py');
+const targetScriptsDir = path.join(engineRoot, 'scripts');
 const targetCatalogDir = path.join(engineRoot, 'catalog');
+const targetEngineFile = path.join(targetScriptsDir, 'detect.py');
 
 function fail(msg) {
   console.error(`[bundle-engine] FATAL: ${msg}`);
@@ -40,16 +50,26 @@ function fail(msg) {
   process.exit(1);
 }
 
-if (!fs.existsSync(sourceEngineFile)) fail(`${sourceEngineFile} not found`);
 if (!fs.existsSync(sourceCatalogDir)) fail(`${sourceCatalogDir} not found`);
+for (const name of ENGINE_SIBLING_FILES) {
+  if (!fs.existsSync(path.join(sourceScriptsDir, name))) {
+    fail(`${path.join(sourceScriptsDir, name)} not found`);
+  }
+}
 
 // Reset engine/ on every run so deletions in the source repo don't
 // leave orphaned files behind in the extension bundle.
 if (fs.existsSync(engineRoot)) fs.rmSync(engineRoot, { recursive: true, force: true });
-fs.mkdirSync(path.join(engineRoot, 'scripts'), { recursive: true });
+fs.mkdirSync(targetScriptsDir, { recursive: true });
 fs.mkdirSync(targetCatalogDir, { recursive: true });
 
-fs.copyFileSync(sourceEngineFile, targetEngineFile);
+let scriptsBytes = 0;
+for (const name of ENGINE_SIBLING_FILES) {
+  const src = path.join(sourceScriptsDir, name);
+  const dst = path.join(targetScriptsDir, name);
+  fs.copyFileSync(src, dst);
+  scriptsBytes += fs.statSync(dst).size;
+}
 
 let catalogCount = 0;
 let catalogBytes = 0;
@@ -62,6 +82,54 @@ for (const entry of fs.readdirSync(sourceCatalogDir)) {
   catalogBytes += fs.statSync(dst).size;
 }
 
-const engineSize = fs.statSync(targetEngineFile).size;
-console.log(`[bundle-engine] engine: ${(engineSize / 1024).toFixed(1)} KB -> ${targetEngineFile}`);
+console.log(`[bundle-engine] scripts: ${ENGINE_SIBLING_FILES.length} files, ${(scriptsBytes / 1024).toFixed(1)} KB -> ${targetScriptsDir}`);
 console.log(`[bundle-engine] catalog: ${catalogCount} entries, ${(catalogBytes / 1024).toFixed(1)} KB -> ${targetCatalogDir}`);
+
+// ─── Smoke test ──────────────────────────────────────────────────
+//
+// Run `python3 engine/scripts/detect.py --list-rules` against the
+// freshly-bundled engine. Catches three classes of build-time failure
+// that would otherwise only surface at the user's first click:
+//   1. Sibling-import miss — e.g. detect.py adds `from _mitre import …`
+//      without anyone updating ENGINE_SIBLING_FILES above. Engine
+//      crashes on every invocation inside the .vsix.
+//   2. Catalogue YAML parse error introduced in this build. Engine
+//      runs but `--list-rules` exits non-zero on strict-load.
+//   3. Missing top-level Python dependency — though detect.py is
+//      stdlib-only by contract, a regression here is silent in a
+//      .vsix and triggers a runtime crash.
+//
+// A red CI / failed `npm run package` here is the right outcome —
+// shipping a broken engine in a .vsix is the only failure that's
+// invisible to regular tests.
+
+const python = process.env.PYTHON || 'python3';
+const probe = spawnSync(python, [targetEngineFile, '--list-rules'], {
+  cwd: engineRoot,
+  env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' },
+  encoding: 'utf8',
+});
+
+if (probe.error) {
+  if (probe.error.code === 'ENOENT') {
+    console.warn(`[bundle-engine] WARN: ${python} not on PATH; skipping engine smoke test.`);
+    console.warn('[bundle-engine] Set PYTHON env var to a real Python 3.10+ if this build is publication-bound.');
+  } else {
+    console.error(`[bundle-engine] FATAL: smoke test launcher errored: ${probe.error.message}`);
+    process.exit(1);
+  }
+} else if (probe.status !== 0) {
+  console.error(`[bundle-engine] FATAL: bundled engine smoke test failed (exit ${probe.status}).`);
+  console.error('[bundle-engine] stderr from the bundled engine:');
+  console.error((probe.stderr || '').replace(/^/gm, '  | '));
+  console.error('[bundle-engine] This usually means a Python file detect.py imports as a sibling');
+  console.error('[bundle-engine] is missing from ENGINE_SIBLING_FILES above. Add it.');
+  process.exit(1);
+} else {
+  // --list-rules emits lines like '  SEC-AWS-IAM-001       HIGH     <title>'.
+  // Indented + starts with a rule-ID-shaped token. Headers (`# Section (N)`)
+  // and the python-hcl2 stderr note are ignored.
+  const ruleCount = (probe.stdout || '').split('\n')
+    .filter(l => /^\s+[A-Z]+(?:-[A-Z0-9-]+)+\s/.test(l)).length;
+  console.log(`[bundle-engine] smoke test OK (${python} listed ${ruleCount} rules from the bundled engine).`);
+}

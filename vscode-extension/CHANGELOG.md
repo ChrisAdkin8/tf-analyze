@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.33] — 2026-05-10
+
+### Added
+
+- **Bundle pipeline now smoke-tests the engine.** `scripts/bundle-engine.js` previously copied `detect.py` + `catalog/` into the extension's `engine/` directory and stopped there. As of 0.1.33 it also spawns `python3 engine/scripts/detect.py --list-rules` against the freshly-bundled engine and asserts a non-zero rule count. Catches three classes of build-time failure that would otherwise only surface at the user's first click:
+  1. **Sibling-import miss.** When `detect.py` was refactored to `from _mitre import …`, the bundle script needed to know to copy `_mitre.py` too. The new `ENGINE_SIBLING_FILES` array lists every Python file `detect.py` imports as a sibling — adding a new file there is the only step required to ship a new helper module inside the `.vsix`.
+  2. **Catalogue YAML parse error** introduced in this build.
+  3. **Missing top-level Python dependency** (the engine is stdlib-only by contract; a regression here is otherwise silent in a `.vsix`).
+  Set `PYTHON=...` if the build host needs a specific Python binary.
+- **Bundled `_mitre.py` sibling module.** Engine refactor splits MITRE ATT&CK data + helpers into `scripts/_mitre.py`. The extension now ships both files at `engine/scripts/`. No behavioural change vs. 0.1.32; the file split lays groundwork for the broader detect.py modularisation.
+
+### Internal (engine, consumed by extension)
+
+- **SARIF v2.1 taxonomies + per-rule relationships.** SARIF output now includes a proper `taxonomies` array (CWE, MITRE-ATT&CK, MITRE-D3FEND, CIS) plus per-rule `relationships` references. GitHub Code Scanning consumers can semantically filter findings by taxon ("show me all CWE-732") instead of parsing flat tag strings. Flat tags are still emitted alongside for backward compat with consumers that haven't migrated. D3FEND relationships use the `incomparable` kind so consumers can distinguish "this rule indicates the named ATT&CK technique" from "this rule implements the named D3FEND defence".
+- **ATT&CK drift CI gate.** `scripts/check_attack_drift.py` runs in CI and fails the build if any rule cites a `mitre:` technique missing from `_mitre.py`'s `MITRE_TECHNIQUE_INFO` table. Prevents silent decay as new techniques get added to the catalogue.
+
+---
+
 ## [0.1.32] — 2026-05-10
 
 ### Changed
