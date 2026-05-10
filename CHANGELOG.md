@@ -27,15 +27,21 @@ Self-test fixture counts are cumulative.
 
 ### Integration cleanup (Round 29 follow-up)
 
-Three integration gaps surfaced by the Phase 0 audit; closed alongside the hardening commit so the Round 29 surface ships consistently across all four agent-facing channels (engine, MCP, Terraform provider, Run Task).
+Four integration gaps surfaced by the Phase 0 audit; closed alongside the hardening commit so the Round 29 surface ships consistently across every agent-facing channel (engine, MCP, Terraform provider, Run Task, GitHub Action).
 
 - **HCP Terraform Run Task — `compliance_framework` support.** R29 wired the framework through the engine, MCP, and Terraform provider, but `integrations/run-task/server.py` was missed. New env var `TFA_RUN_TASK_FRAMEWORK` (one of `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`); when set, the engine renders a compliance gap report alongside its findings and the run-task callback message gains a `compliance: <fw> <fail>/<total> controls failing.` line. Default unset → identical behaviour to before.
 - **Terraform provider registry docs.** `terraform-provider/docs/` was an empty directory — registry pages would have rendered with no body. Hand-written `docs/index.md` + `docs/data-sources/scan.md` matching the schema, with example-usage blocks for both the basic score gate and the compliance gate.
 - **Compliance-gate worked example.** New `terraform-provider/examples/data-sources/tfanalyze_scan/compliance-gate.tf` showing `compliance_framework = "owasp_iac"` driving a `precondition` with `compliance_report` pasted into `error_message`. The headline R29 feature is now copy-pasteable.
+- **GitHub Action — critical clone-URL fix + R28.1 wiring + R29/R26/R27 inputs.** Four issues, one of them publish-blocking:
+  - **Clone URL was wrong** (the publish-blocking bug). `action.yml` cloned `https://github.com/anthropics/claude-code-skills` and symlinked a non-existent path into `~/.tf-analyze`; any external user adopting the action would have hit `~/.tf-analyze/scripts/detect.py: No such file or directory` on first CI run. Now correctly clones `https://github.com/ChrisAdkin8/tf-analyze`.
+  - **`--format pr-summary` is now actually used.** R28.1 added the engine flag and PLAN claimed `action.yml posts --format pr-summary blocks` — but the action was still rebuilding the summary table in JavaScript. The github-script step now reads `tf-analyze-summary.md` (the engine's pre-rendered Markdown) into the upserted PR comment. The hand-rolled fallback table stays as a defence-in-depth path if the file is empty.
+  - **`compliance-framework` input** (R29 parity). When set, the engine receives `--compliance-framework <fw>` on every invocation and a `<details><summary>📋 Compliance: <fw></summary>` appendix is added to the PR comment with the rendered gap report inside.
+  - **`attack-graph` and `show-info` inputs** (R26/R27 parity). Boolean inputs that toggle the engine flags through every invocation.
+  - **`ref` input for pinning.** Defaults to `main` for getting-started; users can pin to a tag or SHA for reproducible CI. Branch/tag refs use `--depth 1 --branch`; SHA refs fall back to a full clone + `git checkout`.
 
-Two new drift-gate tests in `tests/test_terraform_provider.py` cover the docs and compliance-gate example, so the registry-readiness contract is enforced going forward.
+  17 drift-gate tests in `tests/test_github_action.py` lock down the clone URL (so the publish-blocking class of bug can't regress), the `--format pr-summary` plumbing, the input declarations, and the engine-flag wiring for every input.
 
-570 pytest cases passing post-Phase-0 (529 base + 17 existing MCP tests + 22 new hardening tests + 2 new TF provider drift gates). No changes to the engine, catalogue, rule docs site, or rule count (still 217). Phases 1–4 of the OWASP coverage sweep are queued separately.
+587 pytest cases passing post-Phase-0 (529 base + 17 existing MCP tests + 22 new hardening tests + 2 new TF provider drift gates + 17 new GitHub Action drift gates). No changes to the engine, catalogue, rule docs site, or rule count (still 217). Phases 1–4 of the OWASP coverage sweep are queued separately.
 
 ---
 

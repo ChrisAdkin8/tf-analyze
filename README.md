@@ -16,7 +16,7 @@
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 217](https://img.shields.io/badge/rules-217-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 570](https://img.shields.io/badge/tests-570%20passing-brightgreen)
+![Tests: 587](https://img.shields.io/badge/tests-587%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-217%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
@@ -85,10 +85,13 @@ To see the deeper panels render against rich input, open one of the showcase cor
 - uses: ChrisAdkin8/tf-analyze@v1
   with:
     fail-on: HIGH
-    post-pr-comment: true     # inline `suggestion` blocks on every PR
+    post-pr-comment: true                # inline `suggestion` blocks on every PR
+    compliance-framework: owasp_iac      # optional — adds a collapsible compliance gap report
+    attack-graph: true                   # optional — embeds Mermaid attack graph in PR summary
+    ref: v0.2.1                          # optional — pin the engine version (default: main)
 ```
 
-See [`integrations/github-action.yml`](integrations/github-action.yml) for the full workflow with SARIF upload and HTML artefact.
+See [`integrations/github-action.yml`](integrations/github-action.yml) for the full workflow with SARIF upload, engine-rendered PR summary (R28.1), and HTML artefact.
 
 ---
 
@@ -212,7 +215,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 
 | | Path | Doc |
 |---|------|-----|
-| GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks |
+| GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks + engine-rendered PR summary (`--format pr-summary`); optional `compliance-framework` / `attack-graph` / `show-info` inputs; pin via `ref` for reproducible CI |
 | VS Code extension (v0.1.30) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |

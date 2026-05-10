@@ -26,15 +26,28 @@ The fallback path is silently used if the env var is unset, which is the right b
 
 ## GitHub Actions
 
-Full CI integration with SARIF upload to Code Scanning and an HTML artifact for manual review.
+Full CI integration with SARIF upload to Code Scanning, an engine-rendered PR summary comment (`--format pr-summary` — score + grade emoji + top-3 findings + top fix + optional Mermaid attack graph), inline `suggestion` blocks on changed lines, and an HTML artifact for manual review.
 
 **Install:** copy `github-action.yml` into `.github/workflows/tf-analyze.yml`.
 
+**Inputs:**
+
+| Input | Default | Purpose |
+|---|---|---|
+| `fail-on` | `HIGH` | Minimum urgency that fails the job (`CRITICAL` / `HIGH` / `MEDIUM` / `LOW`). |
+| `section` | _empty_ | Restrict to a catalogue section (`security`, `robustness`, `ops`, …). |
+| `compliance-framework` | _empty_ | Optional. `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`. When set, the engine renders a compliance gap report and the PR comment gains a collapsible `<details>📋 Compliance: <fw></details>` section. |
+| `attack-graph` | `false` | Build the internet → crown-jewels graph; promotes critical-path findings and embeds the Mermaid graph in the PR summary. |
+| `show-info` | `false` | Include INFO-tier advisories (Module Reuse, etc.). |
+| `ref` | `main` | Git ref of tf-analyze to install. Pin to a release tag for reproducible CI; SHAs are also accepted. |
+| `post-pr-comment` | `true` | Post the suggestion-block comments + summary comment on PRs. |
+
 **Behavior:**
 
-- **PR runs:** diff mode — only changed files scanned. Fails the job on HIGH+ findings.
+- **PR runs:** diff mode — only changed files scanned. Fails the job on HIGH+ findings (configurable via `fail-on`).
 - **Main/master push:** full static scan. Always uploads SARIF + HTML report.
 - **SARIF upload:** findings appear in the repo's Security → Code Scanning tab, with line-level annotations on the PR diff.
+- **PR comment:** engine-rendered summary (R28.1) is upserted on every run so the comment never stacks. Inline `suggestion` blocks let reviewers click **Apply suggestion** for any finding with `fix_hcl`.
 
 **Prerequisites:**
 
