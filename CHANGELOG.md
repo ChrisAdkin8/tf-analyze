@@ -5,6 +5,72 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## detect.py modularisation — Session B (`_hcl.py`) — 2026-05-10
+
+**Fourth seam in the detect.py refactor. Pure HCL primitives — text normalisation, comment scrubbing, top-level block extraction, attribute-presence checks, dynamic-block expansion — split out so every later extract that touches resource bodies has a clean import to depend on instead of poking back into `detect.py`. No behaviour change; same shape as the prior three seams.**
+
+### What moved
+
+- **`scripts/_hcl.py` (new — 320 LOC).** 9 pure functions + 3 regex constants:
+  - `_LINE_COMMENT_RE`, `_BLOCK_COMMENT_RE` — used by `strip_hcl_context`.
+  - `_DYNAMIC_BLOCK_START_RE` — used by `_expand_dynamic_blocks`.
+  - `_read_normalized` — read text, normalise CRLF/CR to LF.
+  - `_parse_scalar` — coerce a YAML-ish bareword to a Python scalar.
+  - `strip_hcl_context` — replace HCL comments with whitespace, preserving total length.
+  - `find_blocks` / `find_simple_blocks` — top-level brace-balanced block extraction.
+  - `block_has_arg` — top-level attribute-or-nested-block presence check.
+  - `_hcl_object_to_json` — best-effort coerce an HCL object literal to a Python dict.
+  - `block_has_nested_path` — recursive nested-path presence check.
+  - `_expand_dynamic_blocks` — `dynamic "X" { content { ... } }` → `X { ... }` rewrite pass.
+
+### Scope rule
+
+Pure functions only — same purity criterion that `_versions.py` and `_scoring.py` followed. The state-touching wrappers (`_USE_HCL2`-aware `block_arg_value`, the var-resolution layer in `_resolve_var_ref` / `_extract_var_defaults_by_dir` / `_resource_is_count_zero`) intentionally **stay in `detect.py`** for now — they read or mutate the `_USE_HCL2` global, which is a separate concern. A later session can either thread the toggle through explicitly or extract a `_var_resolve.py` slice.
+
+### Re-export shims
+
+`detect.py` keeps the legacy names pointing at `_hcl.py` so every external caller (`tests/test_hcl_primitives.py` reaches them via `detect.find_blocks`, `detect._hcl_object_to_json`, `detect._expand_dynamic_blocks`, etc.) keeps working without migration:
+
+```python
+# detect.py
+from _hcl import (
+    _LINE_COMMENT_RE, _BLOCK_COMMENT_RE, _DYNAMIC_BLOCK_START_RE,
+    _read_normalized, _parse_scalar, strip_hcl_context,
+    find_blocks, find_simple_blocks, block_has_arg,
+    _hcl_object_to_json, block_has_nested_path, _expand_dynamic_blocks,
+)
+```
+
+Bindings are by-reference (verified by `is`-equality tests in `tests/test_session_b_extracts.py`).
+
+### Bundle pipeline
+
+`vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists **5 files**: `detect.py`, `_mitre.py`, `_versions.py`, `_scoring.py`, `_hcl.py`. The post-bundle smoke test caught a deliberate omission cleanly — removing `_hcl.py` from the array triggered `ModuleNotFoundError: No module named '_hcl'` with the existing `bundle-engine.js` diagnostic ("This usually means a Python file detect.py imports as a sibling is missing from ENGINE_SIBLING_FILES above. Add it.").
+
+### Tests
+
+- **`tests/test_session_b_extracts.py` (new — 5 tests).**
+  - `test_module_imports_cleanly` — public surface (3 regex constants + 9 functions).
+  - `test_detect_re_exports_bindings_not_copies` — `is`-equality across all 12 names.
+  - `test_round_trip_through_shim` — `detect.find_blocks` + `detect.RESOURCE_START` end-to-end on a tiny HCL fragment with nested-path lookup.
+  - `test_strip_hcl_context_preserves_total_length` — locks the equal-length-whitespace invariant (every grep-kind detector depends on it).
+  - `test_expand_dynamic_blocks_round_trip` — locks the `dynamic "X" { content { ... } }` → `X { ... }` rewrite shape.
+
+The functional contracts for these primitives are already covered by `tests/test_hcl_primitives.py`, which reaches them through the `detect` module's re-export shim. Session B's 5 new tests cover the **seam contract** — that the re-imports stay in lock-step with the module's actual exports.
+
+### Counts
+
+| | before | after |
+|---|---:|---:|
+| `detect.py` | 8,214 LOC | 7,991 LOC (−223) |
+| extracted modules total | 421 LOC (`_mitre`+`_versions`+`_scoring`) | 741 LOC (+`_hcl`) |
+| pytest | 624 | 629 (+5) |
+| self-test | 219+142 | 219+142 (no change) |
+| active rules | 217 | 217 (no change — refactor only) |
+| extension version | 0.1.34 | 0.1.35 |
+
+---
+
 ## detect.py modularisation — Session A (`_versions.py` + `_scoring.py`) — 2026-05-10
 
 **Second + third seams in the detect.py refactor. No behaviour change; same shape as the `_mitre.py` extraction in R30.0.5. Validates the seam pattern at three modules; future sessions extract HCL primitives, catalog, attack graph using the same shape.**

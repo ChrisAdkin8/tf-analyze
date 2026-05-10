@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.35] — 2026-05-10
+
+### Changed
+
+- **Bundle pipeline now ships 5 sibling Python files (was 4).** R30.0.7 / Session B extracted a fourth pure-function module out of `detect.py`: `_hcl.py` (HCL primitives — text normalisation, comment scrubbing, top-level block extraction, attribute-presence checks, dynamic-block expansion — 320 LOC). `vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists `['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py']`; the `.vsix` ships all five siblings at `engine/scripts/`. No user-visible behaviour change — `detect.py`'s re-export shim preserves every legacy private name.
+
+  The smoke test the v0.1.33 work added did its job again: deliberately removing `_hcl.py` from the bundle output triggered `ModuleNotFoundError: No module named '_hcl'` plus the existing diagnostic ("This usually means a Python file detect.py imports as a sibling is missing from ENGINE_SIBLING_FILES above. Add it."). The verified bundle inside `tf-analyze-0.1.35.vsix`:
+
+      extension/engine/scripts/_hcl.py          (11.6 KB)
+      extension/engine/scripts/_mitre.py         (6.3 KB)
+      extension/engine/scripts/_scoring.py       (3.7 KB)
+      extension/engine/scripts/_versions.py      (8.0 KB)
+      extension/engine/scripts/detect.py       (340 KB)  ← 357 KB → 340 KB after extraction
+
+---
+
 ## [0.1.34] — 2026-05-10
 
 ### Changed
