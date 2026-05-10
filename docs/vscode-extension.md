@@ -26,7 +26,7 @@ against their working copy of `detect.py`), not user features.
 
 **From the `.vsix` (the only supported user path):**
 ```bash
-code --install-extension tf-analyze-0.1.29.vsix
+code --install-extension tf-analyze-0.1.30.vsix
 ```
 
 That's it. Open any Terraform workspace and the status-bar items
@@ -104,7 +104,7 @@ The extension contributes six status-bar items, anchored bottom-left, reading "s
    Badge text is recoloured by grade — `charts.green` for A, `charts.blue` for B, `charts.yellow` for C, `charts.orange` for D, `charts.red` for F — so an F repo visibly reds out without forcing the eye to read the digits. The colour resets on scan-start and on errors so the bar never carries stale visual state. Score and grade are read from the engine's `summary` block in JSON; both are missing on engines older than Round 25, in which case the badge falls back to the historical `tf-analyze: <total> (C:… H:… M:…)` shape.
 2. **🛤 Attack Graph** — opens the internet → crown-jewels webview.
 3. **🔀 Delta** — *Since last scan*. New / resolved / unchanged findings against the most recent prior JSON report.
-4. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / All).
+4. **✅ Compliance** — Compliance gap report with framework picker (CIS / PCI DSS / SOC 2 / OWASP IaC / All). The OWASP IaC choice maps against the [OWASP Infrastructure-as-Code Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) — static-analysable items only.
 5. **🪄 Remediate** — Bulk apply-fixes with diff preview. Two-stage flow: dry-run shows the unified diff, **Apply Fixes** rewrites files on disk and saves originals as `<file>.bak`.
 6. **📦 Module Reuse** — opens the Module Reuse Advisor. Surfaces directories whose resource cluster matches a popular community module on the Terraform Registry (today: AWS VPC, GCP network, Azure AKS). Findings are INFO-tier (advisory, never gate CI); confidence is rendered as a low / medium / high badge per row, and each match shows an ROI estimate (`~85 lines saved (87%)`) plus a per-rule banner summarising savings across all matches (`~258 lines saved across 3 matches`). Behind the scenes the panel runs `detect.py --show-info --format json` and filters to the `module-reuse` section; the `roi` field on the finding (`{bespoke_lines, replacement_lines, lines_saved, pct_saved, resource_count}`) is the source of truth.
 

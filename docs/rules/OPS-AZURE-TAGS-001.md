@@ -99,6 +99,9 @@ Confirm in the Azure portal that the resource shows the expected tags, or run:
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Deploy / Cloud Asset Tagging`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/OPS-AZURE-TAGS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/OPS-AZURE-TAGS-001.yaml) — canonical YAML
 

@@ -158,6 +158,40 @@ class TestAttackGraphTool:
         assert result["mermaid"], "mermaid output must not be empty"
 
 
+class TestComplianceReportTool:
+    def test_default_framework_renders_compliance_text(self, tmp_path: Path) -> None:
+        (tmp_path / "main.tf").write_text(
+            'resource "aws_db_instance" "x" {\n'
+            '  storage_encrypted = false\n'
+            '}\n'
+        )
+        out = _underlying(server.compliance_report)(str(tmp_path))
+        # Default framework is `cis`; if not, compliance text falls back
+        # to the "no entries mapped" sentinel — still a string, never an
+        # exception.
+        assert isinstance(out, str)
+        assert out, "compliance_report should never be empty when entries exist"
+
+    def test_owasp_iac_framework_emits_owasp_section(self, tmp_path: Path) -> None:
+        (tmp_path / "main.tf").write_text(
+            'resource "aws_db_instance" "x" {\n'
+            '  identifier        = "demo"\n'
+            '  storage_encrypted = false\n'
+            '}\n'
+            'variable "db_password" {\n'
+            '  type = string\n'
+            '}\n'
+        )
+        out = _underlying(server.compliance_report)(
+            str(tmp_path), framework="owasp_iac",
+        )
+        assert "OWASP IaC Cheat Sheet" in out, out
+
+    def test_invalid_framework_is_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="framework must be"):
+            _underlying(server.compliance_report)(str(tmp_path), framework="banana")
+
+
 class TestApplyFixesTool:
     def test_dry_run_returns_engine_output_without_writing(
         self, tmp_path: Path,

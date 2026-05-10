@@ -10,6 +10,8 @@ patterns:
     regex: '(?m)^\s*ignore_changes\s*=\s*all\s*$'
     hcl_context: true
     description: lifecycle block with ignore_changes = all masks all drift
+owasp_iac:
+  - "Runtime / Immutable Infrastructure Model"
 recommendation: |
   Replace `ignore_changes = all` with an explicit list of the specific
   attributes that must be ignored. The nuclear option masks legitimate drift

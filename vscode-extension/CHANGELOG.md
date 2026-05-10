@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.30] — 2026-05-10
+
+### Added
+
+- **Compliance panel: OWASP IaC framework choice.** The framework picker (top of the Compliance panel) now offers `OWASP IaC` alongside `CIS / PCI DSS / SOC 2 / All`. Maps against the static-analysable items from the [OWASP Infrastructure-as-Code Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) — `Develop and Distribute / Secrets Detection`, `Resource Permission Minimization`, `Open Source Dependency Scanning`, `Cloud Asset Tagging`, `Comprehensive Logging Enablement`, etc. 49 catalogue rules carry the new mappings.
+
+  Status-bar tooltip updated: `tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2 / OWASP IaC)`.
+
+### Internal
+
+- No engine code changes inside the bundled VSIX — the framework picker just exposes the `--compliance-framework owasp_iac` choice the engine has supported since the matching engine release.
+
+---
+
 ## [0.1.29] — 2026-05-09
 
 ### Added

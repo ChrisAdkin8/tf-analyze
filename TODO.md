@@ -10,7 +10,16 @@ question can be answered in 30 seconds without reading prose.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State at last sync (2026-05-09): 215 rules · 565 tests + 24 node:test · ext v0.1.29 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service (`integrations/badge-service/`) · MCP server (`integrations/mcp-server/`) · Terraform provider (`terraform-provider/`).
+State at last sync (2026-05-10): 217 rules · 582 tests + 24 node:test · ext v0.1.30 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service · MCP server · Terraform provider · **OWASP IaC compliance framework** (4th: CIS / PCI-DSS / SOC 2 / OWASP IaC).
+
+---
+
+## Round 29 sprint — OWASP IaC Cheat Sheet — ✅ all shipped (2026-05-10)
+
+- [x] **P0 · L** `--compliance-framework owasp_iac` + 49-rule mapping pass + per-rule docs references *(Round 29 — covers 9 cheat-sheet items across 3 sections; renderer auto-sizes for prose labels; 10 tests in `tests/test_compliance_owasp_iac.py`)*
+- [x] **P0 · S** `SEC-SENSITIVE-PATTERN-001` HIGH — credential-shaped vars without `sensitive = true` *(Round 29 — suffix-anchored regex; positive + clean fixtures)*
+- [x] **P0 · S** `ROB-DRIFT-003` LOW — `ignore_changes` >5 attributes (drift-disable by attrition) *(Round 29 — extends existing `ignore_changes` walker; positive + clean fixtures)*
+- [x] **integrations** Compliance picker in VS Code extension v0.1.30; `compliance_report` MCP tool; `compliance_framework` argument on the Terraform provider data source
 
 ---
 

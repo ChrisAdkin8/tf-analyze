@@ -8,6 +8,8 @@ patterns:
   - kind: grep
     regex: 'source\s*=\s*"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+"'
     description: Registry-style module source present (staleness checked via --check-registry)
+owasp_iac:
+  - "Develop and Distribute / Open Source Dependency Scanning"
 recommendation: |
   Run `detect.py --check-registry` to identify modules pinned significantly behind their
   latest published version on the Terraform Registry. Upgrade the `version` constraint and

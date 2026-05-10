@@ -82,6 +82,9 @@ as `<sensitive>` in any module output that references the variable.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Secrets Detection`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
 

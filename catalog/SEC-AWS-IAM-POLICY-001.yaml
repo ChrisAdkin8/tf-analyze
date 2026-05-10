@@ -19,6 +19,8 @@ patterns:
       A statement inside `data "aws_iam_policy_document"` grants `actions = ["*"]`.
       Effective grant is "any AWS API call against any resource selected
       by this policy" — the canonical privilege-escalation foothold.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Replace `actions = ["*"]` with the explicit minimum set the workload
   requires. Use `aws iam simulate-principal-policy` to validate that

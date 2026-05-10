@@ -25,6 +25,8 @@ patterns:
       Without access logs, questions like "who downloaded this object?",
       "when was this object deleted?", or "is there unusual GET activity from
       an unexpected IP?" have no answer.
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
 recommendation: |
   Add a dedicated logging bucket and enable access logging on every bucket
   that requires audit trails:

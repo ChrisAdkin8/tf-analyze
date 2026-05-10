@@ -14,6 +14,7 @@ scan, explain, fix, and graph Terraform code through the same surface.
 | `explain_rule(rule_id)` | Print the catalogue entry for one rule. |
 | `apply_fixes(path, dry_run=True)` | Preview or apply `--apply-fixes`. Default dry-run. |
 | `attack_graph(path)` | Build the internet → crown-jewels graph; returns JSON graph + Mermaid string. |
+| `compliance_report(path, framework='cis')` | Plain-text compliance gap report. `framework` ∈ {`cis`, `pci_dss`, `soc2`, `owasp_iac`, `all`}. The `owasp_iac` choice maps the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) static-analysable items. |
 
 The catalogue index is also exposed as an MCP resource at
 `tfanalyze://catalogue`.

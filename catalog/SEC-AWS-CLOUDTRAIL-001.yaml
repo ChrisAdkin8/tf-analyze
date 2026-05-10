@@ -16,6 +16,8 @@ patterns:
     resource: aws_cloudtrail
     arg: is_multi_region_trail
     description: CloudTrail missing is_multi_region_trail (defaults to false)
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
 recommendation: |
   Set `is_multi_region_trail = true` and `include_global_service_events = true`
   on every `aws_cloudtrail`. Single-region trails miss API calls made in

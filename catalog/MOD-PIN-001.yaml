@@ -21,6 +21,8 @@ patterns:
     arg: version
     source_regex: '^[^./].*'
     description: registry source without version constraint
+owasp_iac:
+  - "Develop and Distribute / Open Source Dependency Scanning"
 recommendation: |
   Pin every external module:
    - Registry: add `version = "~> X.Y"`.

@@ -64,6 +64,7 @@ DETECT_PY = Path(os.environ.get(
 
 
 _VALID_MODES = {"static", "diff", "plan", "fleet", "trend", "pr-review", "verify-fixed"}
+_VALID_COMPLIANCE_FRAMEWORKS = {"cis", "pci_dss", "soc2", "owasp_iac", "all"}
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +261,41 @@ def attack_graph(path: str) -> dict[str, Any]:
         "graph": graph,
         "mermaid": mermaid,
     }
+
+
+@mcp.tool(
+    description=(
+        "Render a compliance gap report against a named framework. "
+        "Frameworks: cis (default), pci_dss, soc2, owasp_iac, all. "
+        "Returns the engine's plain-text compliance table — every "
+        "control listed with PASS/FAIL status and the rule(s) that "
+        "map to it. The owasp_iac framework maps against the OWASP "
+        "Infrastructure-as-Code Security Cheat Sheet "
+        "(https://cheatsheetseries.owasp.org/cheatsheets/"
+        "Infrastructure_as_Code_Security_Cheat_Sheet.html); only the "
+        "static-analysable items are covered (process and runtime "
+        "controls are out of scope for a static analyser)."
+    ),
+)
+def compliance_report(path: str, framework: str = "cis") -> str:
+    """Compliance gap report for a workspace.
+
+    Args:
+        path: Absolute path to the workspace directory.
+        framework: Compliance framework name. One of `cis`, `pci_dss`,
+                   `soc2`, `owasp_iac`, `all`. Default `cis`.
+    """
+    target = _resolve_target(path)
+    if framework not in _VALID_COMPLIANCE_FRAMEWORKS:
+        raise ValueError(
+            f"framework must be one of {sorted(_VALID_COMPLIANCE_FRAMEWORKS)}, "
+            f"got {framework!r}"
+        )
+    return _run_engine([
+        "--target", str(target),
+        "--format", "compliance",
+        "--compliance-framework", framework,
+    ])
 
 
 @mcp.resource("tfanalyze://catalogue")

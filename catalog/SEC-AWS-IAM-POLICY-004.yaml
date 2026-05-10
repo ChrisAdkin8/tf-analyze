@@ -21,6 +21,8 @@ patterns:
       grants the action set to *any* principal — effectively making
       whatever resource it attaches to public (S3 buckets, SNS topics,
       KMS keys, Secrets Manager secrets all support resource policies).
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Replace the wildcard principal with the specific account or role
   ARNs that should have access. If true public exposure is the

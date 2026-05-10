@@ -81,6 +81,9 @@ argument.
 **SOC 2 Trust Services Criteria**
   - `CC9.2`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Open Source Dependency Scanning`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 

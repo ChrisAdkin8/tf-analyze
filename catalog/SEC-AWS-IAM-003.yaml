@@ -34,6 +34,8 @@ patterns:
     description: |
       `aws_iam_account_password_policy` has `minimum_password_length` below 14.
       CIS AWS Foundations 1.8 requires a minimum of 14 characters.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Define a strong password policy:
 

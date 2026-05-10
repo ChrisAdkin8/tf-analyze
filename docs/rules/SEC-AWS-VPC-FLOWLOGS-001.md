@@ -92,6 +92,9 @@ At least one active flow log must be present. Or:
 **CIS Benchmark**
   - `CIS 3.9`
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
 

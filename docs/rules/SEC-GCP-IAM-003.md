@@ -100,6 +100,9 @@ equivalent for the resource type) should not show overlap.
 **CIS Benchmark**
   - `CIS 1.6`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)
   - [`SEC-IAM-002`](./SEC-IAM-002.md)

@@ -22,6 +22,8 @@ patterns:
       `Action: "*"`. The principal bound to this policy can perform
       any AWS API call against the scoped resources — the canonical
       privilege-escalation foothold.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Replace `Action: "*"` with the explicit minimum API set the workload
   requires. Use `aws iam simulate-principal-policy` to validate that

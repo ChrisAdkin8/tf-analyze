@@ -22,6 +22,8 @@ patterns:
       includes cost-allocation tags, compliance scope tags, and whatever
       `default_tags` propagates from the provider — masking exactly the
       attributes auditors expect to be tracked.
+owasp_iac:
+  - "Runtime / Immutable Infrastructure Model"
 recommendation: |
   Replace with an explicit list of attributes that must be ignored:
 

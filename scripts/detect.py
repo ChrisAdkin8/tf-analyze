@@ -1666,6 +1666,82 @@ def detect_in_file(
                                 "resource": f"output.{blk['groups'][0]}",
                             }
                         )
+            elif kind == "variable_credential_pattern":
+                # Variables whose name suggests they hold a credential
+                # (`*_password`, `*_token`, `*_secret`, `*_key`, …) MUST
+                # have `sensitive = true` — without it, `terraform plan`
+                # / `terraform output` print the value into CI logs.
+                # Catalog supplies the regex via `name_regex` so the
+                # rule definition can extend the pattern set later.
+                raw_re = pat.get("name_regex") or (
+                    r"^.*_(password|passwd|pwd|token|secret|secrets|"
+                    r"apikey|api_key|access_key|private_key|credential|"
+                    r"credentials|auth|oauth)$"
+                )
+                try:
+                    name_re = re.compile(raw_re, re.IGNORECASE)
+                except re.error:
+                    continue
+                for blk in variables:
+                    var_name = blk["groups"][0]
+                    if not name_re.match(var_name):
+                        continue
+                    if re.search(
+                        r"(?m)^\s*sensitive\s*=\s*true\s*$", blk["body"]
+                    ):
+                        continue
+                    findings.append(
+                        {
+                            "id": eid,
+                            "file": str(file_path),
+                            "line": blk["start_line"],
+                            "resource": f"var.{var_name}",
+                        }
+                    )
+            elif kind == "ignore_changes_overuse":
+                # Resources whose `lifecycle.ignore_changes = [...]`
+                # block lists more than `max_attrs` attributes are
+                # likely disabling drift detection by attrition rather
+                # than declaring a targeted exception. ROB-DRIFT-002
+                # already catches `["*"]`; this catches the next
+                # failure mode at LOW so reviewers see the signal
+                # without it gating CI.
+                max_attrs = int(pat.get("max_attrs", 5))
+                for blk in find_blocks(text, RESOURCE_START):
+                    body = blk["body"]
+                    # Find the lifecycle { ... ignore_changes = [...] ... } shape.
+                    lc = re.search(
+                        r"(?ms)lifecycle\s*\{(.*?)^\s*\}",
+                        body,
+                    )
+                    if not lc:
+                        continue
+                    ic = re.search(
+                        r"ignore_changes\s*=\s*\[(.*?)\]",
+                        lc.group(1),
+                        re.DOTALL,
+                    )
+                    if not ic:
+                        continue
+                    inner = ic.group(1)
+                    # ROB-DRIFT-002 owns the wildcard case; skip here.
+                    if re.search(r"['\"]\*['\"]", inner) or "[*]" in inner:
+                        continue
+                    items = [x.strip() for x in inner.split(",") if x.strip()]
+                    if len(items) > max_attrs:
+                        btype, bname = blk["groups"]
+                        findings.append(
+                            {
+                                "id": eid,
+                                "file": str(file_path),
+                                "line": blk["start_line"],
+                                "resource": f"{btype}.{bname}",
+                                "context": (
+                                    f"ignore_changes lists {len(items)} "
+                                    f"attributes (threshold: {max_attrs})"
+                                ),
+                            }
+                        )
             # corpus-level kinds handled in detect_corpus
     return findings
 
@@ -4278,6 +4354,7 @@ def _compliance_gap_report(
     want_cis    = framework in ("cis", "all")
     want_pci    = framework in ("pci_dss", "all")
     want_soc2   = framework in ("soc2", "all")
+    want_owasp  = framework in ("owasp_iac", "all")
 
     for entry in entries:
         eid = entry.get("id", "")
@@ -4324,6 +4401,20 @@ def _compliance_gap_report(
                     }
                 control_map[key]["rules"].append(eid)
 
+        if want_owasp:
+            owasp_list = entry.get("owasp_iac", [])
+            if not isinstance(owasp_list, list):
+                owasp_list = [owasp_list] if owasp_list else []
+            for ctrl in owasp_list:
+                fw_name = "OWASP IaC Cheat Sheet"
+                key = f"{fw_name}::{ctrl}"
+                if key not in control_map:
+                    control_map[key] = {
+                        "framework": fw_name, "control": str(ctrl),
+                        "rules": [], "failed_rules": [], "status": "PASS",
+                    }
+                control_map[key]["rules"].append(eid)
+
     for item in control_map.values():
         failed = [r for r in item["rules"] if r in fired_ids]
         item["failed_rules"] = failed
@@ -4335,14 +4426,15 @@ def _compliance_gap_report(
 
     def _ctrl_sort_key(c: dict) -> list:
         # Compliance control IDs are dotted/hyphenated mixes like "1.2.3",
-        # "AC-2.a", "CC6.1". Splitting yields a mix of numeric and alpha
-        # parts, and Python refuses to compare int with str directly. Wrap
-        # each part as (sort_class, value) so comparisons are always tuple-
-        # vs-tuple between like types: 0=numeric (int-sorted), 1=alpha
+        # "AC-2.a", "CC6.1" — but the OWASP IaC cheat sheet uses prose
+        # labels like "Develop and Distribute / Secrets Detection". Split
+        # on /, ., - so prose-shaped labels still sort by their lexical
+        # parts, then wrap each part as (sort_class, value) so int vs.
+        # str comparisons never raise: 0=numeric (int-sorted), 1=alpha
         # (str-sorted). Numeric parts sort before alpha ones at the same
         # position, which matches how humans read control IDs.
-        parts = re.split(r'[.\-]', c["control"])
-        return [(0, int(x)) if x.isdigit() else (1, x) for x in parts]
+        parts = re.split(r'[./\-]', c["control"])
+        return [(0, int(x)) if x.isdigit() else (1, x.strip()) for x in parts]
 
     for fw in by_fw:
         by_fw[fw].sort(key=_ctrl_sort_key)
@@ -4569,21 +4661,29 @@ def _render_compliance_text(by_fw: dict) -> str:
         lines.append(f"### {fw}")
         lines.append(f"Coverage: {passed}/{total} PASS, {failed} FAIL")
         lines.append("")
-        lines.append(f"{'Control':<14}{'Status':<10}Rules")
-        lines.append("-" * 70)
+        # Auto-size the Control column to the widest label in this
+        # framework. Numeric IDs (`1.2.3`, `CC6.1`) need ~14 cols; the
+        # OWASP IaC cheat sheet uses prose labels (`Develop and
+        # Distribute / Secrets Detection`) that are 30-50 cols. Pad
+        # at least 14 so existing CIS/PCI/SOC2 layouts don't change.
+        ctrl_w = max(14, max((len(c["control"]) for c in controls), default=14) + 2)
+        lines.append(f"{'Control':<{ctrl_w}}{'Status':<10}Rules")
+        lines.append("-" * (ctrl_w + 60))
         for ctrl in controls:
             rules_str = ", ".join(ctrl["rules"])
             fail_str = (
                 f"  [FAIL: {', '.join(ctrl['failed_rules'])}]"
                 if ctrl["failed_rules"] else ""
             )
-            lines.append(f"{ctrl['control']:<14}{ctrl['status']:<10}{rules_str}{fail_str}")
+            lines.append(
+                f"{ctrl['control']:<{ctrl_w}}{ctrl['status']:<10}{rules_str}{fail_str}"
+            )
             # For each failed rule, print the docs URL on its own line.
             # Terminals auto-link these; users can click to read the
             # explanation, why-it-fired, and fix without leaving the
             # CI log.
             for r in ctrl["failed_rules"]:
-                lines.append(f"{'':<24}↳ {RULE_DOCS_URL_BASE.format(id=r)}")
+                lines.append(f"{'':<{ctrl_w + 10}}↳ {RULE_DOCS_URL_BASE.format(id=r)}")
         lines.append("")
     return "\n".join(lines)
 
@@ -5586,6 +5686,33 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     if soc2_cc is not None:
         if not isinstance(soc2_cc, list) or not all(isinstance(x, str) for x in soc2_cc):
             errs.append(f"{source}: 'soc2_cc' must be a list of strings if present")
+    # OWASP IaC Security Cheat Sheet mapping. Items are textual labels of
+    # the form `Develop and Distribute / Secrets Detection`. The cheat
+    # sheet's three sections — `Develop and Distribute`, `Deploy`,
+    # `Runtime` — appear before the `/`. Validate the shape so a typo
+    # (`Devleop and Distribute / …`) fails CI rather than silently
+    # creating a singleton column in the compliance output.
+    owasp_iac = data.get("owasp_iac")
+    if owasp_iac is not None:
+        if not isinstance(owasp_iac, list) or not all(isinstance(x, str) for x in owasp_iac):
+            errs.append(f"{source}: 'owasp_iac' must be a list of strings if present")
+        else:
+            valid_sections = {"Develop and Distribute", "Deploy", "Runtime"}
+            for item in owasp_iac:
+                if " / " not in item:
+                    errs.append(
+                        f"{source}: owasp_iac item {item!r} must be of the "
+                        f"form '<Section> / <Item label>' (sections: "
+                        f"{sorted(valid_sections)})"
+                    )
+                    continue
+                section = item.split(" / ", 1)[0]
+                if section not in valid_sections:
+                    errs.append(
+                        f"{source}: owasp_iac item {item!r} has unknown "
+                        f"section {section!r}; expected one of "
+                        f"{sorted(valid_sections)}"
+                    )
     fid = data.get("id")
     fname = Path(source).stem
     if fid and fid != fname:
@@ -7042,13 +7169,15 @@ def main():
     ap.add_argument(
         "--compliance-framework",
         default="cis",
-        choices=["cis", "pci_dss", "soc2", "all"],
+        choices=["cis", "pci_dss", "soc2", "owasp_iac", "all"],
         metavar="FRAMEWORK",
         help=(
             "Compliance framework to map against. Choices: cis (default), "
-            "pci_dss, soc2, all. 'all' combines CIS, PCI-DSS v4.0, and "
-            "SOC2 Trust Services Criteria in one report. Requires --compliance "
-            "or --format compliance."
+            "pci_dss, soc2, owasp_iac, all. 'all' combines every framework "
+            "in one report. owasp_iac maps against the OWASP IaC Security "
+            "Cheat Sheet (Develop and Distribute / Deploy / Runtime sections; "
+            "static-analysable items only). Requires --compliance or --format "
+            "compliance."
         ),
     )
     ap.add_argument(
@@ -7910,7 +8039,8 @@ def main():
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
-                _emit("# No CIS-mapped catalogue entries found.")
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
             _emit(_render_mitre(findings, entries))
         elif args.format == "pr-summary":
@@ -7964,7 +8094,8 @@ def main():
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
-                _emit("# No CIS-mapped catalogue entries found.")
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
             _emit(_render_mitre(findings, entries))
         elif args.format == "pr-summary":

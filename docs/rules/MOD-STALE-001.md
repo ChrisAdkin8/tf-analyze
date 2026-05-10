@@ -89,6 +89,9 @@ Confirm `terraform plan` shows no unintended resource replacements after the upg
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Open Source Dependency Scanning`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/MOD-STALE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/MOD-STALE-001.yaml) — canonical YAML
 

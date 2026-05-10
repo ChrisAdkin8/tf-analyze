@@ -38,7 +38,7 @@ Brings the **`tf-analyze`** detection engine (215 catalogue rules across AWS, GC
 ### 1. Install
 
 ```bash
-code --install-extension tf-analyze-0.1.29.vsix
+code --install-extension tf-analyze-0.1.30.vsix
 ```
 
 That's it. The extension ships with everything it needs.
@@ -66,7 +66,7 @@ All commands are available via the Command Palette (`⌘⇧P` / `Ctrl+Shift+P`):
 | `tf-analyze: Show Attack Graph` | Open the interactive resource-graph webview. |
 | `tf-analyze: Show Report` | Open the urgency-grouped HTML findings report. |
 | `tf-analyze: Since Last Scan (Delta)` | Show new / resolved / unchanged findings vs. last scan. |
-| `tf-analyze: Show Compliance Report` | Compliance gap report with CIS / PCI DSS / SOC 2 / All picker. |
+| `tf-analyze: Show Compliance Report` | Compliance gap report with CIS / PCI DSS / SOC 2 / OWASP IaC / All picker. |
 | `tf-analyze: Show MITRE ATT&CK View` | Findings grouped by ATT&CK technique. |
 | `tf-analyze: Remediate (preview & apply fixes)` | Bulk apply-fixes panel — dry-run preview, then apply with `.bak` backups. |
 | `tf-analyze: Show Module Reuse Advisor` | Surface directories whose resource cluster matches a community module on the Terraform Registry. INFO-tier — never gates CI. |

@@ -22,6 +22,8 @@ patterns:
       shape — equivalent to attaching the AWS-managed Administrator
       policy by hand-rolled means and bypassing org-level guardrails
       that detect the named policy.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   If true administrator access is intentional, attach
   `arn:aws:iam::aws:policy/AdministratorAccess` directly via

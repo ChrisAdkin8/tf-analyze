@@ -5,6 +5,73 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 29 — OWASP IaC Cheat Sheet compliance + 2 new rules — 2026-05-10
+
+**Implements the three highest-leverage items from the [OWASP Infrastructure-as-Code Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) analysis: a dedicated framework mapping (positions tf-analyze as the canonical OWASP IaC scanner), a credential-shaped-variable rule, and an `ignore_changes` overuse rule.**
+
+### Engine
+
+- **`--compliance-framework owasp_iac`** — new framework choice in `_compliance_gap_report`. 49 catalogue rules carry `owasp_iac:` mappings to the three cheat-sheet sections (`Develop and Distribute`, `Deploy`, `Runtime`). Coverage breakdown across the 16 static-analysable items: Secrets Detection, Secrets Storage Management, Resource Permission Minimization, Open Source Dependency Scanning, Version Control Discipline, Cloud Asset Tagging, Resource Decommissioning Process, Comprehensive Logging Enablement, Immutable Infrastructure Model. Process and runtime items are intentionally out-of-scope for a static analyser; the docs make this honest separation explicit.
+- **Catalogue schema validator** — accepts `owasp_iac:` field; rejects malformed entries (`<Section> / <Item label>` shape required, sections pinned to the cheat sheet's three).
+- **Compliance text renderer** — auto-sizes the Control column for prose-shaped framework labels. Existing CIS/PCI/SOC2 layouts (≤14-char IDs) unchanged; OWASP IaC's 30-50-char labels now render without colliding with the Status column.
+- **`SEC-SENSITIVE-PATTERN-001`** (HIGH) — variables whose name suffix matches `_(password|passwd|pwd|token|secret|secrets|apikey|api_key|access_key|private_key|credential|credentials|auth|oauth)$` (case-insensitive) must declare `sensitive = true`. Without it, Terraform prints the value to plan output and CI logs. Pattern is suffix-anchored so identifier-shaped names (`kms_key_arn`, `secret_id`) don't false-positive.
+- **`ROB-DRIFT-003`** (LOW) — `lifecycle.ignore_changes` listing >5 specific attributes. Drift-disable-by-attrition is the third leg of the same regression `ROB-DRIFT-001` (the `all` form) and `ROB-DRIFT-002` (the wildcard / `[tags]` form) cover. LOW because legitimate uses exist (autoscaling, CD-pipeline-managed fields); the value is in the signal, not the gate.
+
+### Per-rule docs site
+
+- **`OWASP IaC Cheat Sheet` references** added on every page that carries an `owasp_iac:` mapping. Sits alongside the existing CIS / PCI-DSS / SOC 2 / MITRE references. 217 pages total (was 215; added the two new rules).
+
+### Integrations
+
+- **VS Code extension v0.1.30** — Compliance panel framework picker now offers `OWASP IaC` alongside `CIS / PCI DSS / SOC 2 / All`. No engine change inside the bundled extension; the picker just exposes the new choice the engine already supports.
+- **MCP server** — new `compliance_report(path, framework='cis')` tool. Returns the engine's plain-text compliance table for any framework choice including `owasp_iac`. AI agents can now ask "what's our OWASP IaC posture?" via MCP without per-rule chatter.
+- **Terraform provider** — `data "tfanalyze_scan"` gains `compliance_framework` (input) and `compliance_report` (computed output). Plans can now `precondition` on the rendered compliance text for human-readable failure messages:
+
+  ```hcl
+  data "tfanalyze_scan" "this" {
+    target               = path.module
+    compliance_framework = "owasp_iac"
+  }
+
+  resource "null_resource" "owasp_gate" {
+    lifecycle {
+      precondition {
+        condition     = data.tfanalyze_scan.this.high_count == 0
+        error_message = data.tfanalyze_scan.this.compliance_report
+      }
+    }
+  }
+  ```
+
+### Test coverage — 565 → 582 pytest (+17)
+
+| New test file | Cases | Locks |
+|---|---|---|
+| `tests/test_compliance_owasp_iac.py` (NEW) | 10 | Catalogue invariant (`<Section> / <Item>` shape, sections pinned), ≥30 rules carry mappings, dedicated framework column emits, PASS when no finding fires, `--framework all` combines OWASP with CIS/PCI/SOC2, unmapped framework returns empty, argparse rejects unknown framework names, compliance text auto-sizes the column for long labels, HTML output includes the OWASP section |
+| `tests/test_fixtures.py::test_positive_fixture[sensitive_pattern]` + `[ignore_changes_overuse]` | 2 | The two new rules fire on their positive fixtures |
+| `tests/test_clean_fixtures.py::test_clean_fixture_no_false_positive[SEC-SENSITIVE-PATTERN-001]` + `[ROB-DRIFT-003]` | 2 | Negative fixtures don't fire (identifier-shaped vars stay silent; <5-attribute `ignore_changes` blocks stay silent) |
+| `tests/test_mcp_server.py::TestComplianceReportTool` | 3 | Default framework renders text, OWASP framework emits its section, invalid framework rejected |
+
+### Files of note
+
+- `scripts/detect.py` — `_compliance_gap_report` extended; argparse `--compliance-framework` adds `owasp_iac`; new `variable_credential_pattern` and `ignore_changes_overuse` pattern dispatchers; schema validator accepts `owasp_iac` field; compliance text renderer auto-sizes for prose labels
+- `scripts/gen_rule_docs.py` — `_references()` renders `OWASP IaC Cheat Sheet` block when `owasp_iac` is present
+- `catalog/SEC-SENSITIVE-PATTERN-001.yaml`, `catalog/ROB-DRIFT-003.yaml` (NEW)
+- `catalog/*.yaml` × 49 — `owasp_iac:` annotations
+- `fixtures/{sensitive_pattern,ignore_changes_overuse,SEC-SENSITIVE-PATTERN-001_clean,ROB-DRIFT-003_clean}/main.tf` (NEW)
+- `vscode-extension/src/compliancePanel.ts` — picker adds `owasp_iac`; package.json bumped to v0.1.30
+- `integrations/mcp-server/server.py` — new `compliance_report` tool
+- `terraform-provider/internal/provider/scan_data_source.go` — `compliance_framework` input + `compliance_report` output
+- `docs/cli.md` regenerated; 217 per-rule docs regenerated
+
+### Operator follow-ups
+
+- [ ] `vsce publish` v0.1.30 of the VS Code extension
+- [ ] Refresh the bundled engine inside the VSIX (~60 LoC delta vs. v0.1.29) so users running `--apply-fixes` from the extension pick up the two new rules
+- [ ] Submit feedback to OWASP — the cheat sheet doesn't have stable per-item URLs; offering to host them on chrisadkin8.github.io is a possible upstream contribution
+
+---
+
 ## Round 28 — `--format pr-summary`, MCP server, Terraform provider, +69 tests — 2026-05-09
 
 **The Top-5 sprint from the deep-analysis recommendations: every item that compounds *with* publication rather than against it.**

@@ -11,6 +11,8 @@ patterns:
     description: |
       A sensitive variable in a parent module is passed to a child
       module input whose corresponding variable is NOT marked sensitive.
+owasp_iac:
+  - "Develop and Distribute / Secrets Detection"
 recommendation: |
   Add `sensitive = true` to the child module's variable declaration.
   Sensitivity does not propagate automatically across module boundaries

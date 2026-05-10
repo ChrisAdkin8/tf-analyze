@@ -16,6 +16,8 @@ patterns:
       Logging targets accumulate access records for every read/write on
       the source bucket; if the target is publicly readable, an attacker
       can enumerate which objects exist and how often they're read.
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
 recommendation: |
   Add `public_access_prevention = "enforced"` to the target bucket
   block. Also confirm `uniform_bucket_level_access = true` and that no

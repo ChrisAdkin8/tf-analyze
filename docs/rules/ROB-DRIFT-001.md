@@ -88,6 +88,9 @@ are real drift that was previously hidden.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Immutable Infrastructure Model`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/ROB-DRIFT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-DRIFT-001.yaml) — canonical YAML
 
@@ -96,6 +99,7 @@ are real drift that was previously hidden.
 See also rules in the `ROB-DRIFT-*` family:
 
 - [`ROB-DRIFT-002`](./ROB-DRIFT-002.md) — ignore_changes hides too much (wildcard, or tags-wide on a tagged resource)
+- [`ROB-DRIFT-003`](./ROB-DRIFT-003.md) — ignore_changes lists too many attributes (drift-disable by attrition)
 
 ---
 

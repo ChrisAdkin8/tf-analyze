@@ -80,6 +80,9 @@ and run `terraform destroy` — it should fail with "bucket is not empty".
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Deploy / Resource Decommissioning Process`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/ROB-GCP-LIFECYCLE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-GCP-LIFECYCLE-002.yaml) — canonical YAML
 

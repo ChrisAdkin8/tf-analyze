@@ -78,6 +78,9 @@ CI should pin the same version via `setup-terraform`.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Version Control Discipline`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/ROB-VERSION-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-VERSION-001.yaml) — canonical YAML
 

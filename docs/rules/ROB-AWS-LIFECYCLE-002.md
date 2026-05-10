@@ -98,6 +98,9 @@ forced deletion). Confirm `force_destroy` is absent or `false` in
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Deploy / Resource Decommissioning Process`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/ROB-AWS-LIFECYCLE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-LIFECYCLE-002.yaml) — canonical YAML
 

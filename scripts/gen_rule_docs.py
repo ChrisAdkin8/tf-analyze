@@ -144,6 +144,19 @@ def _references(entry: dict, rule_id: str) -> str:
     soc2 = entry.get("soc2_cc") or []
     if soc2:
         parts.append("**SOC 2 Trust Services Criteria**\n" + "\n".join(f"  - `{s}`" for s in soc2))
+    owasp_iac = entry.get("owasp_iac") or []
+    if owasp_iac:
+        # The cheat sheet doesn't have stable per-item URLs, so we
+        # link to the page itself; the section heading on the page is
+        # the user's anchor for the item label.
+        owasp_url = (
+            "https://cheatsheetseries.owasp.org/cheatsheets/"
+            "Infrastructure_as_Code_Security_Cheat_Sheet.html"
+        )
+        owasp_lines = [
+            f"  - [`{item}`]({owasp_url})" for item in owasp_iac
+        ]
+        parts.append("**OWASP IaC Cheat Sheet**\n" + "\n".join(owasp_lines))
     mitre = entry.get("mitre") or []
     if mitre:
         mitre_links = []

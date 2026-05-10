@@ -111,6 +111,9 @@ be committed to version control.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Version Control Discipline`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Related rules**
   - [`ROB-VERSION-001`](./ROB-VERSION-001.md)
   - [`ROB-VERSION-002`](./ROB-VERSION-002.md)

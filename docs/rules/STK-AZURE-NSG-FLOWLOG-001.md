@@ -114,6 +114,9 @@ an active flow log. Or:
 **CIS Benchmark**
   - `CIS 6.5`
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/STK-AZURE-NSG-FLOWLOG-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-NSG-FLOWLOG-001.yaml) — canonical YAML
 

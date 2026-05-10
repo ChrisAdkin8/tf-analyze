@@ -20,6 +20,8 @@ patterns:
       Statement grants an `iam:*` wildcard action (e.g. `iam:Create*`,
       `iam:*`). This class of grant lets the principal create or attach
       policies to itself, escalating to full administrative access.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Replace `iam:*` with the explicit IAM operations actually required.
   If full IAM access is intentional, use the AWS-managed

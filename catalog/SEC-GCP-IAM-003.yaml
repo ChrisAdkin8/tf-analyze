@@ -15,6 +15,8 @@ patterns:
       key, etc.). The project-level grant supersedes the resource-level
       scoping, making the resource-level binding pointless and signalling
       that the project-level role is broader than intended.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Remove the project-level binding. Keep the resource-level bindings —
   they encode the actual access boundary. If you genuinely need the

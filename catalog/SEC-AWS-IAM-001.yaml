@@ -15,6 +15,8 @@ patterns:
     file_glob: "**/*.tf"
     regex: 'resources\s*=\s*\["\*"\]'
     description: aws_iam_policy_document statement with resources = ["*"]
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Narrow the `Resource` field to the specific ARN(s) the policy needs.
   Wildcard resources grant the actions to every resource in the account,

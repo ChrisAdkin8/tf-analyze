@@ -110,6 +110,9 @@ no longer trigger churn.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Immutable Infrastructure Model`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Related rules**
   - [`ROB-DRIFT-001`](./ROB-DRIFT-001.md)
 
@@ -121,6 +124,7 @@ no longer trigger churn.
 See also rules in the `ROB-DRIFT-*` family:
 
 - [`ROB-DRIFT-001`](./ROB-DRIFT-001.md) — Resource uses ignore_changes = all
+- [`ROB-DRIFT-003`](./ROB-DRIFT-003.md) — ignore_changes lists too many attributes (drift-disable by attrition)
 
 ---
 

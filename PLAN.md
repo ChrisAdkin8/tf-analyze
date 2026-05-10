@@ -19,7 +19,19 @@ the subject of this plan.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State of the world at time of writing (2026-05-09): 215 rules · 565 pytest cases + 24 `node:test` cases · extension v0.1.29 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live with JSON-LD + family backlinks + 4-verb `vscode://` URI handler · Module Reuse Advisor with ROI signal · status-bar grade badge · **ten surfaces** — adds MCP server (`integrations/mcp-server/`) and native Terraform provider (`terraform-provider/`).
+State of the world at time of writing (2026-05-10): 217 rules · 582 pytest cases + 24 `node:test` cases · extension v0.1.30 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live with JSON-LD + family backlinks + 4-verb `vscode://` URI handler + OWASP IaC references · Module Reuse Advisor with ROI signal · status-bar grade badge · **ten surfaces** + four compliance frameworks (CIS, PCI-DSS, SOC 2, OWASP IaC).
+
+---
+
+## Round 29 — OWASP IaC Cheat Sheet compliance + 2 new rules — ✅ shipped (2026-05-10)
+
+Three highest-leverage items from the [OWASP IaC Security Cheat Sheet analysis](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html). Acceptance below; full details in `CHANGELOG.md`.
+
+| # | Item | Status | Acceptance |
+|---|------|--------|------------|
+| **R29.1** | `--compliance-framework owasp_iac` framework mapping | ✅ | 49 catalogue rules carry `owasp_iac:` mappings across 9 cheat-sheet items in 3 sections (Develop and Distribute / Deploy / Runtime). Per-rule docs surface the references; compliance text/HTML/OSCAL output all carry the new framework. VS Code extension picker adds `OWASP IaC`. MCP server gains a `compliance_report` tool. Terraform provider gains `compliance_framework` input + `compliance_report` output. |
+| **R29.2** | `SEC-SENSITIVE-PATTERN-001` (HIGH) | ✅ | Credential-shaped variable suffixes (`_password`, `_token`, `_secret`, `_apikey`, etc.) without `sensitive = true` fire HIGH. Suffix-anchored regex avoids false-positives on identifier-shaped names (`kms_key_arn`, `secret_id`). |
+| **R29.3** | `ROB-DRIFT-003` (LOW) | ✅ | `lifecycle.ignore_changes` lists >5 specific attributes — drift-disable-by-attrition. ROB-DRIFT-001 owns `all`; ROB-DRIFT-002 owns wildcard / `[tags]`; this catches the slow-bleed third leg. LOW because legitimate uses exist. |
 
 ---
 

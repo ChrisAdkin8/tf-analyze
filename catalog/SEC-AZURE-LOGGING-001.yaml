@@ -10,6 +10,8 @@ patterns:
   - kind: resource_absent
     resource: azurerm_monitor_diagnostic_setting
     when_present: azurerm_key_vault
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
 recommendation: |
   Add `azurerm_monitor_diagnostic_setting` targeting the Key Vault with
   `AuditEvent` logs enabled and at minimum a `log_analytics_workspace_id`

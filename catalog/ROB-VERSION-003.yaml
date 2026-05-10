@@ -12,6 +12,8 @@ patterns:
       may pull a newer major version that introduces breaking changes or new
       provider defaults (e.g., a security-relevant default changing from
       `false` to `true` or vice versa).
+owasp_iac:
+  - "Develop and Distribute / Version Control Discipline"
 recommendation: |
   Add a `version` constraint to every provider entry in `required_providers`:
 

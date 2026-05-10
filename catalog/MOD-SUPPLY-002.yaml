@@ -9,6 +9,8 @@ patterns:
     file_glob: "**/*.tf"
     regex: 'source\s*=\s*"git::'
     description: Module sourced from raw git URL rather than Terraform Registry
+owasp_iac:
+  - "Develop and Distribute / Open Source Dependency Scanning"
 recommendation: |
   Prefer Terraform Registry sources (`namespace/module/provider`) over raw
   git URLs. Registry modules are integrity-hashed in `.terraform.lock.hcl`;

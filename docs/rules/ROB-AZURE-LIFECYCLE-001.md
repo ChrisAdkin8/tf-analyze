@@ -95,6 +95,9 @@ the resource with an error citing the prevent_destroy lifecycle rule.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Deploy / Resource Decommissioning Process`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/ROB-AZURE-LIFECYCLE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AZURE-LIFECYCLE-001.yaml) — canonical YAML
 

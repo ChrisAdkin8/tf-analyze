@@ -97,6 +97,9 @@ no diff shows `is_multi_region_trail = false` or a missing value.
 **SOC 2 Trust Services Criteria**
   - `CC7.2`
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
 

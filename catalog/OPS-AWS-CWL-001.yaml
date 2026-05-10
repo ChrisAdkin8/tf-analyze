@@ -15,6 +15,8 @@ patterns:
       to "Never expire", accumulating data indefinitely. This inflates costs,
       complicates log search, and may violate GDPR data-minimisation requirements
       by retaining personal data longer than necessary.
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
 recommendation: |
   Set an explicit retention period appropriate to your compliance requirements:
 

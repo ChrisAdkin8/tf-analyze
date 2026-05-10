@@ -106,6 +106,7 @@ Wrapper at [`mcp-server/`](mcp-server/) that exposes the engine over MCP — the
 | `explain_rule(rule_id)` | Catalogue entry for one rule. ID validated against `^[A-Z][A-Z0-9-]{2,63}$` before the engine sees it. |
 | `apply_fixes(path, dry_run=True)` | Preview or apply `--apply-fixes`. Default dry-run so the agent must opt in to writes. |
 | `attack_graph(path)` | Build the graph; returns JSON shape + a Mermaid string. |
+| `compliance_report(path, framework='cis')` | Plain-text compliance gap report. Frameworks: `cis`, `pci_dss`, `soc2`, `owasp_iac`, `all`. The `owasp_iac` framework maps against the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) — static-analysable items only. |
 
 The catalogue index is also exposed as the resource `tfanalyze://catalogue`.
 

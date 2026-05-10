@@ -13,6 +13,8 @@ patterns:
     resource: google_project
     arg: force_destroy
     regex: "^true$"
+owasp_iac:
+  - "Deploy / Resource Decommissioning Process"
 recommendation: |
   Set `force_destroy = false` (or remove the argument). With force_destroy
   enabled, a `terraform destroy` will silently delete every object in the

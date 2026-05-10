@@ -91,6 +91,9 @@ every machine. Commit `.terraform.lock.hcl`.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Open Source Dependency Scanning`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/MOD-PIN-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/MOD-PIN-001.yaml) — canonical YAML
 

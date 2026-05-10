@@ -105,6 +105,9 @@ should not fire.
 **CIS Benchmark**
   - `CIS 5.1`
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Related rules**
   - [`SEC-BUCKET-001`](./SEC-BUCKET-001.md)
   - [`SEC-BUCKET-002`](./SEC-BUCKET-002.md)

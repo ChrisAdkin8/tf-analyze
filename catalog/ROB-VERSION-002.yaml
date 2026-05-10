@@ -7,6 +7,8 @@ status: active
 patterns:
   - kind: submodule_version_missing
     description: A submodule directory (.tf present) has no required_version constraint anywhere
+owasp_iac:
+  - "Develop and Distribute / Version Control Discipline"
 recommendation: |
   Submodules inherit the root's Terraform version *implicitly*. That hides
   feature-level assumptions: a submodule using `optional()` object attrs or
