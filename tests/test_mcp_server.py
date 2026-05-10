@@ -38,6 +38,17 @@ server = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(server)
 
 
+@pytest.fixture(autouse=True)
+def _allow_outside_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests scan ``tmp_path`` (under /tmp/), which sits outside the
+    MCP server's ``TFA_REPO_ROOT`` and is rejected by the LLM06
+    containment gate. Set the documented escape hatch for the suite;
+    ``test_mcp_server_hardening.py`` exercises the gate explicitly with
+    the env var unset.
+    """
+    monkeypatch.setenv("TFA_MCP_ALLOW_OUTSIDE_ROOT", "1")
+
+
 # ---------------------------------------------------------------------------
 # Path validation
 # ---------------------------------------------------------------------------
