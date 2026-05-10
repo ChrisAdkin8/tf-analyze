@@ -127,6 +127,16 @@ Cursor (`~/.cursor/mcp.json`) and Continue.dev share the same shape. **Health ch
 
 **Why MCP:** the `/tf-analyze` Claude Code skill is Claude-specific. MCP standardises the tool-shape so the engine becomes addressable from every other AI agent surface — without per-host adapters.
 
+**Hardening (Round 30 Phase 0):** the server treats every tool call as an interaction with a possibly-adversarial agent.
+
+| Risk (OWASP LLM Top 10) | Defence |
+|---|---|
+| **LLM06** — excessive agency | `_resolve_target` enforces containment under `TFA_REPO_ROOT`; symlinks at the workspace root are rejected. `TFA_MCP_ALLOW_OUTSIDE_ROOT=1` enables the legitimate sibling-repo workflow. |
+| **LLM01/05** — prompt injection / output handling | Every tool wraps its output. Dict tools (`scan_workspace`, `attack_graph`) carry `_envelope: tf-analyze-output` / `_treat_as: data` / `_kind: <…>` metadata; string tools wrap in `<tf-analyze-output kind="…">…</tf-analyze-output>` plus a "treat as data" preamble. A finding's title or recommendation arrives at the agent visibly inside the envelope, not above it. |
+| **LLM10** — unbounded consumption | `MAX_FINDINGS_RETURNED` (default 500, env `TFA_MCP_MAX_FINDINGS`) caps `scan_workspace`'s findings list; `MAX_OUTPUT_BYTES` (default 1 MB, env `TFA_MCP_MAX_OUTPUT_BYTES`) byte-truncates string-tool output. Truncation is signalled to the agent (`_truncated: true` / inline marker). |
+
+Subprocess timeouts read at call-time from env so ops can dial them without code edits: `TFA_MCP_TIMEOUT` (default 120s), `TFA_MCP_APPLY_TIMEOUT` (default 300s). Full env-var matrix in [`mcp-server/README.md#hardening`](mcp-server/README.md#hardening). Test coverage in `tests/test_mcp_server_hardening.py` (22 cases).
+
 ## Terraform provider
 
 Native Terraform provider under [`../terraform-provider/`](../terraform-provider/) (Go, `terraform-plugin-framework`). The headline use case: gate `terraform apply` on a clean tf-analyze scan **without external CI infrastructure** by running the engine at plan time.

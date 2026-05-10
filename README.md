@@ -16,7 +16,7 @@
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 217](https://img.shields.io/badge/rules-217-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 582](https://img.shields.io/badge/tests-582%20passing-brightgreen)
+![Tests: 568](https://img.shields.io/badge/tests-568%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-217%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
@@ -220,7 +220,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |
 | Pre-commit hook | [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) | [`docs/pre-commit.md`](docs/pre-commit.md) |
 | HCP Terraform Run Task | [`integrations/run-task/`](integrations/run-task/) | [`docs/run-task.md`](docs/run-task.md) |
-| MCP server (Cursor / Claude Desktop / Continue / …) | [`integrations/mcp-server/`](integrations/mcp-server/) | FastMCP wrapper — `scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph` tools + `tfanalyze://catalogue` resource. stdio transport. |
+| MCP server (Cursor / Claude Desktop / Continue / …) | [`integrations/mcp-server/`](integrations/mcp-server/) | FastMCP wrapper — `scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph`, `compliance_report` tools + `tfanalyze://catalogue` resource. stdio transport. Hardened against agent-side abuse: `TFA_REPO_ROOT` containment, `<tf-analyze-output>` envelope on every tool, finding/byte truncation caps. See [`integrations/mcp-server/README.md#hardening`](integrations/mcp-server/README.md#hardening). |
 | Terraform provider | [`terraform-provider/`](terraform-provider/) | `data "tfanalyze_scan"` data source — gates `terraform plan`/`apply` on a clean scan via `precondition` blocks, no external CI required. |
 
 ---

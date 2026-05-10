@@ -10,7 +10,17 @@ question can be answered in 30 seconds without reading prose.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State at last sync (2026-05-10): 217 rules · 582 tests + 24 node:test · ext v0.1.30 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service · MCP server · Terraform provider · **OWASP IaC compliance framework** (4th: CIS / PCI-DSS / SOC 2 / OWASP IaC).
+State at last sync (2026-05-10): 217 rules · 568 tests + 24 node:test · ext v0.1.30 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service · MCP server (**hardened** against agent-side abuse, R30.0) · Terraform provider · **OWASP IaC compliance framework** (4th: CIS / PCI-DSS / SOC 2 / OWASP IaC).
+
+---
+
+## Round 30 sprint — OWASP coverage sweep — Phase 0 ✅ shipped, 1–4 queued
+
+- [x] **P0 · M** **R30.0** MCP server hardening — LLM01/05/06/10 — *(Phase 0 — `_resolve_target` containment in `TFA_REPO_ROOT` + symlink-root rejection + `TFA_MCP_ALLOW_OUTSIDE_ROOT` escape hatch; `<tf-analyze-output>` envelope on every tool with "treat as data" preamble; `MAX_FINDINGS_RETURNED` / `MAX_OUTPUT_BYTES` truncation caps; env-tunable timeouts; 22 tests in `tests/test_mcp_server_hardening.py`; `tests/test_mcp_server.py` autouse-fixture-bypass for tmp_path tests)*
+- [ ] **P1 · M** **R30.1** Unified `owasp:` field + five new `--compliance-framework` modes (`owasp_asvs`, `owasp_top10`, `owasp_cicd`, `owasp_llm`, `owasp_k8s`) → `PLAN.md§Round-30 R30.1`
+- [ ] **P1 · L** **R30.2** New rules — supply-chain / CICD / OIDC (5 rules) → `PLAN.md§Round-30 R30.2`
+- [ ] **P1 · L** **R30.3** New rules — user-data, logging, TLS, throttling, K8s version (8 rules) → `PLAN.md§Round-30 R30.3`
+- [ ] **P1 · L** **R30.4** Enhancements — Confused Deputy / RBAC verbs / helm PSA / ASG-ECS IMDS / `>=` drift / templatefile + SSM (6 enhancements) → `PLAN.md§Round-30 R30.4`
 
 ---
 

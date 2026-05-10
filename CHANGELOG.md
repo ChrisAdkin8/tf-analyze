@@ -25,7 +25,7 @@ Self-test fixture counts are cumulative.
 
 - **`integrations/mcp-server/README.md`** — new *Hardening* section with the threat-model table and the full env-var matrix.
 
-568 pytest cases passing (was 546). No changes to the engine, catalogue, rule docs site, or rule count (still 217).
+568 pytest cases passing post-Phase-0 (529 base + 17 existing MCP tests + 22 new hardening tests). No changes to the engine, catalogue, rule docs site, or rule count (still 217). Phases 1–4 of the OWASP coverage sweep are queued separately.
 
 ---
 
