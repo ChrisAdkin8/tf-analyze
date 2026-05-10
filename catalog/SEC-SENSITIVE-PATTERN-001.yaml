@@ -1,0 +1,46 @@
+id: SEC-SENSITIVE-PATTERN-001
+title: "Credential-shaped variable not marked sensitive=true"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+mitre:
+  - "T1552.001"
+  - "T1552.004"
+patterns:
+  - kind: variable_credential_pattern
+    description: |
+      Variable name matches a credential-shaped pattern (`*_password`,
+      `*_token`, `*_secret`, `*_key`, `*_apikey`, `*_credential`,
+      `*_auth`) but the variable block does not include
+      `sensitive = true`. Without that marker Terraform will print the
+      value in `terraform plan` and `terraform output` console output —
+      a class of credential leak that ends up in CI logs and PR-bot
+      comments. The pattern set is intentionally narrow (suffix-anchored)
+      to avoid false positives on names like `key_arn` or
+      `secret_id` that refer to identifiers rather than secret values.
+    name_regex: '^.*_(password|passwd|pwd|token|secret|secrets|apikey|api_key|access_key|private_key|credential|credentials|auth|oauth)$'
+owasp_iac:
+  - "Develop and Distribute / Secrets Detection"
+  - "Develop and Distribute / Secrets Storage Management"
+references: []
+recommendation: |
+  Add `sensitive = true` to the variable block. If the value is set
+  via `*.tfvars`, the file itself should be excluded from version
+  control and stored in a dedicated secrets store (HashiCorp Vault,
+  AWS Secrets Manager, GCP Secret Manager, Azure Key Vault) — the
+  variable definition just declares the contract; provisioning is
+  out-of-band.
+verification: |
+  Run `terraform plan` and confirm any value derived from this
+  variable is rendered as `<sensitive>`. Re-run tf-analyze in
+  `mode:verify-fixed` to confirm the rule no longer fires.
+fix_hcl: |
+  variable "db_password" {
+    type        = string
+    sensitive   = true
+    description = "Database password — supplied via TF_VAR_db_password or a secrets-manager data source."
+  }
+fix_disruption: none
+fixtures:
+  - sensitive_pattern

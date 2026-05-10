@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-BUCKET-002 — GCS bucket missing uniform_bucket_level_access"
 description: "tf-analyze rule SEC-GCP-BUCKET-002 (MEDIUM · security): GCS bucket missing uniform_bucket_level_access"
-keywords: "security, medium, terraform, iac, gcp, cis-5.2"
+keywords: "security, medium, terraform, iac, gcp, cis-5.2, mitre-T1530, cwe-732, cwe-284"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, gcp, cis-5.2"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, CIS 5.2",
+  "keywords": "security, medium, terraform, CIS 5.2, MITRE T1530, CWE-732, CWE-284",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -81,6 +81,13 @@ After applying, run `gcloud storage buckets describe gs://<bucket>
 
 **CIS Benchmark**
   - `CIS 5.2`
+
+**MITRE ATT&CK**
+  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
 
 **Source**
   - [`catalog/SEC-GCP-BUCKET-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-BUCKET-002.yaml) — canonical YAML

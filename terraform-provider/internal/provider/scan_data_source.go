@@ -47,24 +47,26 @@ func NewScanDataSource() datasource.DataSource {
 // ScanDataSourceModel mirrors the HCL data source block.
 type ScanDataSourceModel struct {
 	// Inputs
-	Target       types.String `tfsdk:"target"`
-	Mode         types.String `tfsdk:"mode"`
-	ShowInfo     types.Bool   `tfsdk:"show_info"`
-	AttackGraph  types.Bool   `tfsdk:"attack_graph"`
-	ScriptPath   types.String `tfsdk:"script_path"`
+	Target              types.String `tfsdk:"target"`
+	Mode                types.String `tfsdk:"mode"`
+	ShowInfo            types.Bool   `tfsdk:"show_info"`
+	AttackGraph         types.Bool   `tfsdk:"attack_graph"`
+	ScriptPath          types.String `tfsdk:"script_path"`
+	ComplianceFramework types.String `tfsdk:"compliance_framework"`
 
 	// Outputs
-	Score           types.Int64  `tfsdk:"score"`
-	Grade           types.String `tfsdk:"grade"`
-	ScoringVersion  types.Int64  `tfsdk:"scoring_version"`
-	TotalFindings   types.Int64  `tfsdk:"total_findings"`
-	CriticalCount   types.Int64  `tfsdk:"critical_count"`
-	HighCount       types.Int64  `tfsdk:"high_count"`
-	MediumCount     types.Int64  `tfsdk:"medium_count"`
-	LowCount        types.Int64  `tfsdk:"low_count"`
-	InfoCount       types.Int64  `tfsdk:"info_count"`
-	FindingsJSON    types.String `tfsdk:"findings_json"`
-	JSONReport      types.String `tfsdk:"json_report"`
+	Score              types.Int64  `tfsdk:"score"`
+	Grade              types.String `tfsdk:"grade"`
+	ScoringVersion     types.Int64  `tfsdk:"scoring_version"`
+	TotalFindings      types.Int64  `tfsdk:"total_findings"`
+	CriticalCount      types.Int64  `tfsdk:"critical_count"`
+	HighCount          types.Int64  `tfsdk:"high_count"`
+	MediumCount        types.Int64  `tfsdk:"medium_count"`
+	LowCount           types.Int64  `tfsdk:"low_count"`
+	InfoCount          types.Int64  `tfsdk:"info_count"`
+	FindingsJSON       types.String `tfsdk:"findings_json"`
+	JSONReport         types.String `tfsdk:"json_report"`
+	ComplianceReport   types.String `tfsdk:"compliance_report"`
 }
 
 // Metadata sets the data source's HCL type name (`tfanalyze_scan`).
@@ -107,6 +109,15 @@ func (d *ScanDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 					"to `detect.py`. Falls back to the provider-block setting.",
 				Optional: true,
 			},
+			"compliance_framework": schema.StringAttribute{
+				MarkdownDescription: "When set, also runs the engine's " +
+					"compliance gap report against the named framework " +
+					"(`cis`, `pci_dss`, `soc2`, `owasp_iac`, `all`) and " +
+					"surfaces the rendered text in the `compliance_report` " +
+					"output. Useful for `precondition` checks that gate on " +
+					"specific control coverage rather than just score.",
+				Optional: true,
+			},
 
 			// ---------- outputs ----------
 			"score": schema.Int64Attribute{
@@ -139,6 +150,14 @@ func (d *ScanDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 			"json_report": schema.StringAttribute{
 				MarkdownDescription: "Full engine JSON output (summary + " +
 					"findings + optional graph). `jsondecode()` to consume.",
+				Computed: true,
+			},
+			"compliance_report": schema.StringAttribute{
+				MarkdownDescription: "Plain-text compliance gap report. " +
+					"Empty unless `compliance_framework` was set on the " +
+					"data source. Suitable for embedding in a " +
+					"`precondition.error_message` to fail the plan with a " +
+					"human-readable framework breakdown.",
 				Computed: true,
 			},
 		},
@@ -283,6 +302,52 @@ func (d *ScanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	findingsJSON, _ := json.Marshal(report.Findings)
 	data.FindingsJSON = types.StringValue(string(findingsJSON))
 	data.JSONReport = types.StringValue(string(stdout))
+
+	// Compliance report — second engine invocation only when the user
+	// actually asked for it. Skipping this for the default case keeps
+	// the data source's plan-time cost equal to a single scan.
+	complianceText := ""
+	if !data.ComplianceFramework.IsNull() && data.ComplianceFramework.ValueString() != "" {
+		fw := data.ComplianceFramework.ValueString()
+		validFw := map[string]bool{
+			"cis": true, "pci_dss": true, "soc2": true,
+			"owasp_iac": true, "all": true,
+		}
+		if !validFw[fw] {
+			resp.Diagnostics.AddError(
+				"invalid compliance_framework",
+				fmt.Sprintf("compliance_framework must be one of "+
+					"cis / pci_dss / soc2 / owasp_iac / all; got %q", fw),
+			)
+			return
+		}
+		cArgs := []string{
+			scriptPath,
+			"--target", absTarget,
+			"--mode", mode,
+			"--format", "compliance",
+			"--compliance-framework", fw,
+		}
+		cCmd := exec.CommandContext(ctx, engineCmd, cArgs...)
+		cOut, cErr := cCmd.Output()
+		if cErr != nil {
+			if exitErr, ok := cErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				// fall through; compliance text is on stdout
+			} else {
+				stderr := ""
+				if exitErr, ok := cErr.(*exec.ExitError); ok {
+					stderr = string(exitErr.Stderr)
+				}
+				resp.Diagnostics.AddWarning(
+					"compliance gap report failed",
+					fmt.Sprintf("framework=%s stderr:\n%s\nerr: %s",
+						fw, stderr, cErr.Error()),
+				)
+			}
+		}
+		complianceText = string(cOut)
+	}
+	data.ComplianceReport = types.StringValue(complianceText)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

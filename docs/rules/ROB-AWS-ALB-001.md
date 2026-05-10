@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-ALB-001 — Load balancer deletion protection disabled"
 description: "tf-analyze rule ROB-AWS-ALB-001 (MEDIUM · robustness): Load balancer deletion protection disabled"
-keywords: "robustness, medium, terraform, iac, aws"
+keywords: "robustness, medium, terraform, iac, aws, mitre-T1485"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform",
+  "keywords": "robustness, medium, terraform, MITRE T1485",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -100,6 +100,9 @@ must return `true`.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **Source**
   - [`catalog/ROB-AWS-ALB-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-ALB-001.yaml) — canonical YAML

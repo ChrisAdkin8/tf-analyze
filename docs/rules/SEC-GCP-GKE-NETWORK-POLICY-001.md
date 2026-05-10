@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-GKE-NETWORK-POLICY-001 — GKE cluster missing network_policy enforcement"
 description: "tf-analyze rule SEC-GCP-GKE-NETWORK-POLICY-001 (HIGH · security): GKE cluster missing network_policy enforcement"
-keywords: "security, high, terraform, iac, gcp, cis-6.6.7"
+keywords: "security, high, terraform, iac, gcp, cis-6.6.7, mitre-T1611"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-6.6.7"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 6.6.7",
+  "keywords": "security, high, terraform, CIS 6.6.7, MITRE T1611",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -113,6 +113,9 @@ show at least one default-deny policy in workload namespaces.
 
 **CIS Benchmark**
   - `CIS 6.6.7`
+
+**MITRE ATT&CK**
+  - [`T1611`](https://attack.mitre.org/techniques/T1611/)
 
 **Related rules**
   - [`STK-GKE-001`](./STK-GKE-001.md)

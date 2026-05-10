@@ -8,6 +8,8 @@ pci_dss:
   - "Req-9.5"
 soc2_cc:
   - "A1.2"
+mitre:
+  - "T1490"
 patterns:
   - kind: resource_absent
     resource: aws_backup_plan

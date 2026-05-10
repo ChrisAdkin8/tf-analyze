@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-S3-001 — S3 bucket missing server-side encryption configuration"
 description: "tf-analyze rule SEC-AWS-S3-001 (HIGH · security): S3 bucket missing server-side encryption configuration"
-keywords: "security, high, terraform, iac, aws, cis-2.1.1, mitre-T1530"
+keywords: "security, high, terraform, iac, aws, cis-2.1.1, mitre-T1530, cwe-311, cwe-312, d3-ear"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-2.1.1, mitre-T1530"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 2.1.1, MITRE T1530",
+  "keywords": "security, high, terraform, CIS 2.1.1, MITRE T1530, CWE-311, CWE-312, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -94,6 +94,13 @@ encryption is enabled.
 
 **MITRE ATT&CK**
   - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)
+  - [`CWE-312`](https://cwe.mitre.org/data/definitions/312.html)
+
+**MITRE D3FEND**
+  - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
 
 **Source**
   - [`catalog/SEC-AWS-S3-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-S3-001.yaml) — canonical YAML

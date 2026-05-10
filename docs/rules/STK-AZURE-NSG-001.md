@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-NSG-001 — Azure NSG rule open to the internet on sensitive ports"
 description: "tf-analyze rule STK-AZURE-NSG-001 (HIGH · stack): Azure NSG rule open to the internet on sensitive ports"
-keywords: "stack, high, terraform, iac, azure, cis-6.1, cis-6.2"
+keywords: "stack, high, terraform, iac, azure, cis-6.1, cis-6.2, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, azure, cis-6.1, cis-6.2"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 6.1, CIS 6.2",
+  "keywords": "stack, high, terraform, CIS 6.1, CIS 6.2, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -106,6 +106,12 @@ destination.
 **CIS Benchmark**
   - `CIS 6.1`
   - `CIS 6.2`
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Source**
   - [`catalog/STK-AZURE-NSG-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-NSG-001.yaml) — canonical YAML

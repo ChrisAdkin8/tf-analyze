@@ -87,6 +87,7 @@ Then `terraform init` will pick up your local build instead of the registry.
 | `show_info` | no | Include INFO-tier (Module Reuse) findings. Default `false`. |
 | `attack_graph` | no | Build the attack graph and promote critical-path findings. |
 | `script_path` | no | Per-data-source override of the provider-level setting. |
+| `compliance_framework` | no | Render a compliance gap report against `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`. Surfaces in `compliance_report`. The `owasp_iac` choice maps the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) static-analysable items. |
 
 | Computed output | Type | Description |
 |---|---|---|
@@ -97,6 +98,7 @@ Then `terraform init` will pick up your local build instead of the registry.
 | `critical_count` / `high_count` / `medium_count` / `low_count` / `info_count` | number | Per-tier counts. |
 | `findings_json` | string | Full findings list as JSON. `jsondecode()` to inspect. |
 | `json_report` | string | Full engine JSON output (summary + findings + graph). |
+| `compliance_report` | string | Plain-text compliance gap report. Empty unless `compliance_framework` was set. Pasteable into `precondition.error_message` for human-readable plan failures. |
 
 ## Why a Terraform provider
 

@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-COMPUTE-PUBLIC-IP-001 — Compute instance has a public IP via access_config"
 description: "tf-analyze rule SEC-GCP-COMPUTE-PUBLIC-IP-001 (HIGH · security): Compute instance has a public IP via access_config"
-keywords: "security, high, terraform, iac, gcp, cis-4.9"
+keywords: "security, high, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-4.9"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 4.9",
+  "keywords": "security, high, terraform, CIS 4.9, MITRE T1190, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -108,6 +108,15 @@ This should print nothing. Re-run tf-analyze to confirm clean.
 
 **CIS Benchmark**
   - `CIS 4.9`
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Related rules**
   - [`SEC-NETWORK-001`](./SEC-NETWORK-001.md)

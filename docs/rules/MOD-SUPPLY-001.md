@@ -1,7 +1,7 @@
 ---
 title: "MOD-SUPPLY-001 — Module pinned to mutable git ref (main or master)"
 description: "tf-analyze rule MOD-SUPPLY-001 (HIGH · module): Module pinned to mutable git ref (main or master)"
-keywords: "module, high, terraform, iac, mitre-T1195.002"
+keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "module, high, terraform, iac, mitre-T1195.002"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "module, high, terraform, MITRE T1195.002",
+  "keywords": "module, high, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "module",
   "isAccessibleForFree": true
@@ -80,8 +80,17 @@ Verify all git-sourced module URLs use a pinned tag or SHA, not main/master.
 **SOC 2 Trust Services Criteria**
   - `CC9.2`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Open Source Dependency Scanning`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Source**
   - [`catalog/MOD-SUPPLY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/MOD-SUPPLY-001.yaml) — canonical YAML

@@ -15,6 +15,8 @@ patterns:
     resource: google_project_iam_binding
     arg: role
     regex: "^roles/(owner|editor|admin|iam\\.securityAdmin|resourcemanager\\.organizationAdmin|resourcemanager\\.folderAdmin|resourcemanager\\.projectAdmin|compute\\.admin|storage\\.admin|container\\.admin|cloudsql\\.admin|bigquery\\.admin|pubsub\\.admin|secretmanager\\.admin|dataproc\\.admin|appengine\\.appAdmin)$"
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Replace the broad role with a narrowly-scoped resource-level binding.
   See Appendix A for the IAM compatibility matrix — not every service
@@ -32,6 +34,13 @@ pci_dss:
   - "Req-7.1"
 soc2_cc:
   - "CC6.1"
+mitre:
+  - "T1078.004"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
+d3fend:
+  - "D3-PA"
 fix_hcl: |
   resource "google_project_iam_member" "example" {
     project = var.project_id

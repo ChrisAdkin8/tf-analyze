@@ -10,6 +10,12 @@ docs/sentinel/
 # Google Search Console verification files. Required to live at the
 # site root for ownership verification — must be tracked.
 !docs/google*.html
+# Local-only working strategy docs. The other docs/launch/*-plan.md
+# files are deliberately tracked (post-Round-29 convention); these two
+# are excluded by explicit per-file paths because the implementation
+# backlog they hold is ahead of the published roadmap.
+docs/launch/detection-gaps-plan.md
+docs/launch/detection-gaps-todo.md
 # Local-only working strategy docs — kept in the repo workspace for
 # easy editing but not version-controlled. Excluded by explicit paths
 # (not a glob) so unrelated files in docs/launch/ stay tracked.

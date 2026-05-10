@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-AKS-002 — AKS cluster missing network policy"
 description: "tf-analyze rule SEC-AZURE-AKS-002 (HIGH · security): AKS cluster missing network policy"
-keywords: "security, high, terraform, iac, azure, cis-5.3"
+keywords: "security, high, terraform, iac, azure, cis-5.3, mitre-T1133, mitre-T1611"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-5.3"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.3",
+  "keywords": "security, high, terraform, CIS 5.3, MITRE T1133, MITRE T1611",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -115,6 +115,10 @@ must return `"azure"`, `"calico"`, or `"cilium"` (not `null` or `"none"`).
 
 **CIS Benchmark**
   - `CIS 5.3`
+
+**MITRE ATT&CK**
+  - [`T1133`](https://attack.mitre.org/techniques/T1133/)
+  - [`T1611`](https://attack.mitre.org/techniques/T1611/)
 
 **Source**
   - [`catalog/SEC-AZURE-AKS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-AKS-002.yaml) — canonical YAML

@@ -23,6 +23,12 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_elasticache_replication_group
     nested_path: lifecycle.prevent_destroy
+owasp_iac:
+  - "Deploy / Resource Decommissioning Process"
+mitre:
+  - "T1485"
+cwe:
+  - "CWE-693"
 recommendation: |
   Add `lifecycle { prevent_destroy = true }` to any resource that holds
   irrecoverable state:

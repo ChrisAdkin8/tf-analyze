@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDSQL-001 — Cloud SQL instance missing backup_configuration"
 description: "tf-analyze rule STK-GCP-CLOUDSQL-001 (HIGH · stack): Cloud SQL instance missing backup_configuration"
-keywords: "stack, high, terraform, iac, gcp, cis-6.4"
+keywords: "stack, high, terraform, iac, gcp, cis-6.4, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-6.4"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 6.4",
+  "keywords": "stack, high, terraform, CIS 6.4, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -90,6 +90,9 @@ Run `gcloud sql instances describe <instance> --format='value(settings.backupCon
 
 **CIS Benchmark**
   - `CIS 6.4`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/STK-GCP-CLOUDSQL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-CLOUDSQL-001.yaml) — canonical YAML

@@ -4,6 +4,8 @@ section: security
 default_urgency: HIGH
 blast_radius: infrastructure-wide
 status: active
+cwe:
+  - "CWE-78"
 patterns:
   - kind: data_external_injection
     description: data.external program array includes var/local references — untrusted input reaches a plan-time shell

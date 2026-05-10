@@ -41,6 +41,12 @@ pci_dss:
   - "Req-7.1"
 soc2_cc:
   - "CC6.1"
+mitre:
+  - "T1078.004"
+cwe:
+  - "CWE-269"
+d3fend:
+  - "D3-PA"
 fix_hcl: |
   resource "azurerm_role_assignment" "example" {
     scope                = azurerm_resource_group.example.id

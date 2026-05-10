@@ -6,6 +6,8 @@ blast_radius: environment
 status: active
 cis:
   - "3.9"
+mitre:
+  - "T1583.002"
 patterns:
   - kind: resource_missing_arg
     resource: google_dns_managed_zone

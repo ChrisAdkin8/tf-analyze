@@ -6,6 +6,12 @@ blast_radius: single-resource
 status: active
 cis:
   - "4.9"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-IAA"
 patterns:
   - kind: resource_body_contains
     resource: google_compute_instance

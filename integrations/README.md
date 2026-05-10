@@ -26,15 +26,28 @@ The fallback path is silently used if the env var is unset, which is the right b
 
 ## GitHub Actions
 
-Full CI integration with SARIF upload to Code Scanning and an HTML artifact for manual review.
+Full CI integration with SARIF upload to Code Scanning, an engine-rendered PR summary comment (`--format pr-summary` — score + grade emoji + top-3 findings + top fix + optional Mermaid attack graph), inline `suggestion` blocks on changed lines, and an HTML artifact for manual review.
 
 **Install:** copy `github-action.yml` into `.github/workflows/tf-analyze.yml`.
 
+**Inputs:**
+
+| Input | Default | Purpose |
+|---|---|---|
+| `fail-on` | `HIGH` | Minimum urgency that fails the job (`CRITICAL` / `HIGH` / `MEDIUM` / `LOW`). |
+| `section` | _empty_ | Restrict to a catalogue section (`security`, `robustness`, `ops`, …). |
+| `compliance-framework` | _empty_ | Optional. `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`. When set, the engine renders a compliance gap report and the PR comment gains a collapsible `<details>📋 Compliance: <fw></details>` section. |
+| `attack-graph` | `false` | Build the internet → crown-jewels graph; promotes critical-path findings and embeds the Mermaid graph in the PR summary. |
+| `show-info` | `false` | Include INFO-tier advisories (Module Reuse, etc.). |
+| `ref` | `main` | Git ref of tf-analyze to install. Pin to a release tag for reproducible CI; SHAs are also accepted. |
+| `post-pr-comment` | `true` | Post the suggestion-block comments + summary comment on PRs. |
+
 **Behavior:**
 
-- **PR runs:** diff mode — only changed files scanned. Fails the job on HIGH+ findings.
+- **PR runs:** diff mode — only changed files scanned. Fails the job on HIGH+ findings (configurable via `fail-on`).
 - **Main/master push:** full static scan. Always uploads SARIF + HTML report.
 - **SARIF upload:** findings appear in the repo's Security → Code Scanning tab, with line-level annotations on the PR diff.
+- **PR comment:** engine-rendered summary (R28.1) is upserted on every run so the comment never stacks. Inline `suggestion` blocks let reviewers click **Apply suggestion** for any finding with `fix_hcl`.
 
 **Prerequisites:**
 
@@ -106,6 +119,7 @@ Wrapper at [`mcp-server/`](mcp-server/) that exposes the engine over MCP — the
 | `explain_rule(rule_id)` | Catalogue entry for one rule. ID validated against `^[A-Z][A-Z0-9-]{2,63}$` before the engine sees it. |
 | `apply_fixes(path, dry_run=True)` | Preview or apply `--apply-fixes`. Default dry-run so the agent must opt in to writes. |
 | `attack_graph(path)` | Build the graph; returns JSON shape + a Mermaid string. |
+| `compliance_report(path, framework='cis')` | Plain-text compliance gap report. Frameworks: `cis`, `pci_dss`, `soc2`, `owasp_iac`, `all`. The `owasp_iac` framework maps against the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) — static-analysable items only. |
 
 The catalogue index is also exposed as the resource `tfanalyze://catalogue`.
 
@@ -125,6 +139,16 @@ The catalogue index is also exposed as the resource `tfanalyze://catalogue`.
 Cursor (`~/.cursor/mcp.json`) and Continue.dev share the same shape. **Health check:** `python3 server.py --health` confirms the engine wiring.
 
 **Why MCP:** the `/tf-analyze` Claude Code skill is Claude-specific. MCP standardises the tool-shape so the engine becomes addressable from every other AI agent surface — without per-host adapters.
+
+**Hardening (Round 30 Phase 0):** the server treats every tool call as an interaction with a possibly-adversarial agent.
+
+| Risk (OWASP LLM Top 10) | Defence |
+|---|---|
+| **LLM06** — excessive agency | `_resolve_target` enforces containment under `TFA_REPO_ROOT`; symlinks at the workspace root are rejected. `TFA_MCP_ALLOW_OUTSIDE_ROOT=1` enables the legitimate sibling-repo workflow. |
+| **LLM01/05** — prompt injection / output handling | Every tool wraps its output. Dict tools (`scan_workspace`, `attack_graph`) carry `_envelope: tf-analyze-output` / `_treat_as: data` / `_kind: <…>` metadata; string tools wrap in `<tf-analyze-output kind="…">…</tf-analyze-output>` plus a "treat as data" preamble. A finding's title or recommendation arrives at the agent visibly inside the envelope, not above it. |
+| **LLM10** — unbounded consumption | `MAX_FINDINGS_RETURNED` (default 500, env `TFA_MCP_MAX_FINDINGS`) caps `scan_workspace`'s findings list; `MAX_OUTPUT_BYTES` (default 1 MB, env `TFA_MCP_MAX_OUTPUT_BYTES`) byte-truncates string-tool output. Truncation is signalled to the agent (`_truncated: true` / inline marker). |
+
+Subprocess timeouts read at call-time from env so ops can dial them without code edits: `TFA_MCP_TIMEOUT` (default 120s), `TFA_MCP_APPLY_TIMEOUT` (default 300s). Full env-var matrix in [`mcp-server/README.md#hardening`](mcp-server/README.md#hardening). Test coverage in `tests/test_mcp_server_hardening.py` (22 cases).
 
 ## Terraform provider
 

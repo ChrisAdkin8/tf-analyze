@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-ECS-002 — ECS task definition runs a privileged container"
 description: "tf-analyze rule SEC-AWS-ECS-002 (HIGH · security): ECS task definition runs a privileged container"
-keywords: "security, high, terraform, iac, aws, mitre-T1611"
+keywords: "security, high, terraform, iac, aws, mitre-T1611, cwe-250"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, mitre-T1611"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1611",
+  "keywords": "security, high, terraform, MITRE T1611, CWE-250",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -116,6 +116,9 @@ must return `null` or `false` for all containers.
 
 **MITRE ATT&CK**
   - [`T1611`](https://attack.mitre.org/techniques/T1611/)
+
+**CWE**
+  - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
 
 **Source**
   - [`catalog/SEC-AWS-ECS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ECS-002.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-NODEPOOL-001 — GKE node pool missing shielded-instance hardening"
 description: "tf-analyze rule STK-GCP-GKE-NODEPOOL-001 (HIGH · stack): GKE node pool missing shielded-instance hardening"
-keywords: "stack, high, terraform, iac, gcp, cis-6.5.5"
+keywords: "stack, high, terraform, iac, gcp, cis-6.5.5, mitre-T1542.003, cwe-1278, d3-psh"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-6.5.5"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 6.5.5",
+  "keywords": "stack, high, terraform, CIS 6.5.5, MITRE T1542.003, CWE-1278, D3-PSH",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -110,6 +110,15 @@ Both fields should print `True`. Re-run tf-analyze to confirm clean.
 
 **CIS Benchmark**
   - `CIS 6.5.5`
+
+**MITRE ATT&CK**
+  - [`T1542.003`](https://attack.mitre.org/techniques/T1542/003/)
+
+**CWE**
+  - [`CWE-1278`](https://cwe.mitre.org/data/definitions/1278.html)
+
+**MITRE D3FEND**
+  - [`D3-PSH`](https://d3fend.mitre.org/technique/D3-PSH/)
 
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)

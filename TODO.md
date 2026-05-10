@@ -10,7 +10,37 @@ question can be answered in 30 seconds without reading prose.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State at last sync (2026-05-09): 215 rules · 565 tests + 24 node:test · ext v0.1.29 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service (`integrations/badge-service/`) · MCP server (`integrations/mcp-server/`) · Terraform provider (`terraform-provider/`).
+State at last sync (2026-05-10): 217 rules · 617 tests + 24 node:test · ext v0.1.33 · `action.yml` posts `--format pr-summary` blocks (R28.1 actually wired in R30.0.2; was claim-only before) · `v0.1.0` tagged · per-rule docs site live (now with dedicated pages for all ten surfaces, R30.0.3) · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service · MCP server (**hardened** against agent-side abuse, R30.0) · Terraform provider (registry docs + compliance-gate example) · HCP Run Task (R29 framework parity) · GitHub Action (clone-URL fix + R29 framework parity + R26/R27 inputs) · **OWASP IaC** + **MITRE ATT&CK v17** (69%) + **CWE** (53%) + **MITRE D3FEND** (40%) all tagged in catalogue · SARIF v2.1 emits structured `taxonomies` + per-rule `relationships` (R30.0.5).
+
+---
+
+## Round 30 sprint — OWASP + multi-framework coverage — sub-rounds 0–0.5 ✅ shipped, 1–5 queued
+
+### Shipped
+
+- [x] **P0 · M** **R30.0** MCP server hardening — LLM01/05/06/10 — *(`_resolve_target` containment in `TFA_REPO_ROOT` + symlink-root rejection + `TFA_MCP_ALLOW_OUTSIDE_ROOT` escape hatch; `<tf-analyze-output>` envelope on every tool with "treat as data" preamble; `MAX_FINDINGS_RETURNED` / `MAX_OUTPUT_BYTES` truncation caps; env-tunable timeouts; 22 tests in `tests/test_mcp_server_hardening.py`)*
+- [x] **P1 · S** **R30.0.1** R29 integration cleanup — Run Task `TFA_RUN_TASK_FRAMEWORK` env, TF provider registry docs (`docs/index.md`, `docs/data-sources/scan.md`), compliance-gate worked example, 2 new drift gates in `tests/test_terraform_provider.py`
+- [x] **P0 · S** **R30.0.2** GitHub Action sweep — *critical clone-URL fix* (pointed at `anthropics/claude-code-skills`, would have failed on every external user's CI); R28.1 properly wired (`--format pr-summary` is now the comment source); new inputs `compliance-framework` / `attack-graph` / `show-info` / `ref`; 17 drift gates in `tests/test_github_action.py`
+- [x] **P1 · S** **R30.0.3** GitHub Pages site coverage — three new pages (`docs/mcp-server.md`, `docs/github-action.md`, `docs/terraform-provider.md`); `docs/index.md` reorganised into Rule reference / Surfaces (10) / Authoring
+- [x] **P1 · L** **R30.0.4** MITRE / CWE / D3FEND coverage sweep — 27% → 69% mitre (+91 rules), +114 cwe rules (53%), +87 d3fend rules (40%); ATT&CK pinned to v17 via new `scripts/_mitre.py`; `--format mitre` tactic-grouped + `--mitre-tactic <tactic>` filter; SARIF emits `cwe:` + `d3fend:` tags; per-rule docs render both; 16 tests in `tests/test_mitre_cwe_d3fend.py`; VS Code ext v0.1.30 → v0.1.32
+- [x] **P1 · M** **R30.0.5** MITRE round-2 — SARIF v2.1 `taxonomies` + per-rule `relationships` (4 supportedTaxonomies, 131 taxa, 168 rules carry relationships against TerraGoat); D3FEND uses `kinds: ["incomparable"]` so consumers can distinguish "indicates ATT&CK" from "implements D3FEND"; flat tags preserved on properties for backward compat. `--explain` now emits MITRE / CWE / D3FEND lines alongside CIS. New `scripts/check_attack_drift.py` walks the catalogue + verifies every `mitre:` technique exists in `MITRE_TECHNIQUE_INFO`; wired into `.github/workflows/ci.yml`. Extension v0.1.32 → v0.1.33: `bundle-engine.js` drives off `ENGINE_SIBLING_FILES` array + post-bundle smoke test.
+
+### Queued (Phases 1–5)
+
+- [ ] **P1 · M** **R30.1** Multi-framework taxonomy sweep — five new optional catalogue fields (`owasp:`, `nist_csf:`, `nist_800_53:`, `csa_ccm:`, `slsa:`) in one schema change. Eight new `--compliance-framework` modes (`nist_csf`, `nist_800_53`, `csa_ccm`, `slsa` + five OWASP sub-modes auto-derived from `owasp:` prefix). Bulk catalogue tagging via `scripts/apply_taxonomies.py` (manifest-driven, idempotent, same shape as `apply_mitre.py`). Single validator + single dispatch pattern. → `PLAN.md§Round-30 R30.1`
+- [ ] **P1 · L** **R30.2** Exploitability prioritisation — `--rank-by {urgency\|exploitability\|hybrid}` flag + `scripts/_threat_intel.py` (CISA KEV + FIRST.org EPSS, daily-cached at `~/.cache/tf-analyze/`, offline-degrades-gracefully). Promotes findings whose backing CVEs are in KEV; ranks by EPSS within urgency tier. New `🔥 KEV` badge in PR summary / VS Code panel / SARIF tags. ~300 lines + ~10 tests. *No other OSS IaC scanner integrates KEV today* — comparison-table win. → `PLAN.md§Round-30 R30.2`
+- [ ] **P1 · L** **R30.3** New rules — supply-chain / CICD / OIDC (7 rules; +`SEC-CICD-002` from SLSA L2 + `SEC-CICD-003` from SLSA L3 / NIST SSDF on top of original 5) → `PLAN.md§Round-30 R30.3`
+- [ ] **P1 · L** **R30.4** New rules — user-data / logging / TLS / throttling / K8s / hygiene (12 rules; +`STK-K8S-IMAGE-SIGNED-001` + `STK-K8S-AUDIT-POLICY-001` from NSA K8s Hardening + `STK-DEFAULTS-001` from CISA Secure-by-Design on top of original 8) → `PLAN.md§Round-30 R30.4`
+- [ ] **P1 · L** **R30.5** Enhancements (6) — Confused Deputy / RBAC verbs / helm PSA + container runtime (absorbs NIST 800-190 `STK-K8S-RUNTIME-001` requirement) / ASG-ECS IMDS / `>=` drift / templatefile + SSM → `PLAN.md§Round-30 R30.5`
+
+---
+
+## Round 29 sprint — OWASP IaC Cheat Sheet — ✅ all shipped (2026-05-10)
+
+- [x] **P0 · L** `--compliance-framework owasp_iac` + 49-rule mapping pass + per-rule docs references *(Round 29 — covers 9 cheat-sheet items across 3 sections; renderer auto-sizes for prose labels; 10 tests in `tests/test_compliance_owasp_iac.py`)*
+- [x] **P0 · S** `SEC-SENSITIVE-PATTERN-001` HIGH — credential-shaped vars without `sensitive = true` *(Round 29 — suffix-anchored regex; positive + clean fixtures)*
+- [x] **P0 · S** `ROB-DRIFT-003` LOW — `ignore_changes` >5 attributes (drift-disable by attrition) *(Round 29 — extends existing `ignore_changes` walker; positive + clean fixtures)*
+- [x] **integrations** Compliance picker in VS Code extension v0.1.30; `compliance_report` MCP tool; `compliance_framework` argument on the Terraform provider data source
 
 ---
 

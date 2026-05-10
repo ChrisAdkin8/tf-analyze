@@ -157,7 +157,7 @@ Add a compliance gap report tab to HTML output, or (with --format compliance) ou
 
 ### `--compliance-framework`
 
-Compliance framework to map against. Choices: cis (default), pci_dss, soc2, all. 'all' combines CIS, PCI-DSS v4.0, and SOC2 Trust Services Criteria in one report. Requires --compliance or --format compliance.
+Compliance framework to map against. Choices: cis (default), pci_dss, soc2, owasp_iac, all. 'all' combines every framework in one report. owasp_iac maps against the OWASP IaC Security Cheat Sheet (Develop and Distribute / Deploy / Runtime sections; static-analysable items only). Requires --compliance or --format compliance.
 
 ### `--oscal`
 
@@ -186,6 +186,10 @@ Days of git history to analyse in --mode trend (default: 30).
 ### `--show-info`
 
 Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
+
+### `--mitre-tactic`
+
+Restrict --format mitre output to one ATT&CK tactic (e.g. 'Initial Access', 'Defense Evasion'). Case-insensitive; hyphens and underscores accepted as separators ('initial-access' is equivalent).
 
 ### `--baseline`
 

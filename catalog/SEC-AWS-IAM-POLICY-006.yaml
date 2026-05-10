@@ -21,6 +21,10 @@ patterns:
       error-prone: any new AWS API or resource type added in future
       is implicitly allowed. AWS itself recommends against negative
       form for Allow statements.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
 recommendation: |
   Rewrite the statement using `actions` and `resources` to enumerate
   the explicit allow set. Reserve `not_actions` / `not_resources` for

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDSQL-004 — Cloud SQL instance does not require SSL connections"
 description: "tf-analyze rule STK-GCP-CLOUDSQL-004 (HIGH · stack): Cloud SQL instance does not require SSL connections"
-keywords: "stack, high, terraform, iac, gcp, cis-6.1.2"
+keywords: "stack, high, terraform, iac, gcp, cis-6.1.2, mitre-T1040, cwe-319, d3-ei"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-6.1.2"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 6.1.2",
+  "keywords": "stack, high, terraform, CIS 6.1.2, MITRE T1040, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -97,6 +97,15 @@ must return `True`.
 
 **CIS Benchmark**
   - `CIS 6.1.2`
+
+**MITRE ATT&CK**
+  - [`T1040`](https://attack.mitre.org/techniques/T1040/)
+
+**CWE**
+  - [`CWE-319`](https://cwe.mitre.org/data/definitions/319.html)
+
+**MITRE D3FEND**
+  - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
 
 **Source**
   - [`catalog/STK-GCP-CLOUDSQL-004.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-CLOUDSQL-004.yaml) — canonical YAML

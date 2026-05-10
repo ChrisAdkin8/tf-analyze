@@ -7,6 +7,10 @@ cis:
   - "4.1.2"
 mitre:
   - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
 status: active
 patterns:
   - kind: resource_absent

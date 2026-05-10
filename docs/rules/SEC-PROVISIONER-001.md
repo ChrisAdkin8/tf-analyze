@@ -1,7 +1,7 @@
 ---
 title: "SEC-PROVISIONER-001 — Provisioner block used for shell execution"
 description: "tf-analyze rule SEC-PROVISIONER-001 (HIGH · security): Provisioner block used for shell execution"
-keywords: "security, high, terraform, iac, mitre-T1059"
+keywords: "security, high, terraform, iac, mitre-T1059, cwe-78"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, mitre-T1059"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1059",
+  "keywords": "security, high, terraform, MITRE T1059, CWE-78",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -103,6 +103,9 @@ provisioner is documented with a justification comment or suppression.
 
 **MITRE ATT&CK**
   - [`T1059`](https://attack.mitre.org/techniques/T1059/)
+
+**CWE**
+  - [`CWE-78`](https://cwe.mitre.org/data/definitions/78.html)
 
 **Source**
   - [`catalog/SEC-PROVISIONER-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-PROVISIONER-001.yaml) — canonical YAML

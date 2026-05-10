@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-POLICY-005 — IAM policy grants both `actions = [\\"*\\"]` and `resources = [\\"*\\"]`"
 description: "tf-analyze rule SEC-AWS-IAM-POLICY-005 (CRITICAL · security): IAM policy grants both `actions = [\'*\']` and `resources = [\'*\']`"
-keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, mitre-T1098.001"
+keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, mitre-T1098.001, cwe-269, cwe-732"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, m
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 1.16, MITRE T1078.004, MITRE T1098.001",
+  "keywords": "security, critical, terraform, CIS 1.16, MITRE T1078.004, MITRE T1098.001, CWE-269, CWE-732",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -101,9 +101,16 @@ set of services after the fix.
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
   - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-POLICY-005.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-POLICY-005.yaml) — canonical YAML

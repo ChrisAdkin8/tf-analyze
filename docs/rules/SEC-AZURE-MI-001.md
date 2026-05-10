@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-MI-001 — Azure user-assigned identity with no role assignment (orphan UAMI)"
 description: "tf-analyze rule SEC-AZURE-MI-001 (MEDIUM · security): Azure user-assigned identity with no role assignment (orphan UAMI)"
-keywords: "security, medium, terraform, iac, azure"
+keywords: "security, medium, terraform, iac, azure, mitre-T1078.004, cwe-250, d3-pa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform",
+  "keywords": "security, medium, terraform, MITRE T1078.004, CWE-250, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -106,6 +106,15 @@ must return at least one row.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
 
 **Source**
   - [`catalog/SEC-AZURE-MI-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-MI-001.yaml) — canonical YAML

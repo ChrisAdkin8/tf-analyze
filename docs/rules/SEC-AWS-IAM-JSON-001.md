@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-JSON-001 — Inline IAM policy JSON grants wildcard `Action: \\"*\\"`"
 description: "tf-analyze rule SEC-AWS-IAM-JSON-001 (HIGH · security): Inline IAM policy JSON grants wildcard `Action: \'*\'`"
-keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004"
+keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, cwe-732"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.16, MITRE T1078.004",
+  "keywords": "security, high, terraform, CIS 1.16, MITRE T1078.004, CWE-269, CWE-732",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -109,8 +109,15 @@ must return finite lists, never `"*"`.
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-JSON-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-JSON-001.yaml) — canonical YAML

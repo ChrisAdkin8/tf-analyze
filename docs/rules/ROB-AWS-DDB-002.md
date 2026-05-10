@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-DDB-002 — DynamoDB table missing point-in-time recovery"
 description: "tf-analyze rule ROB-AWS-DDB-002 (MEDIUM · robustness): DynamoDB table missing point-in-time recovery"
-keywords: "robustness, medium, terraform, iac, aws"
+keywords: "robustness, medium, terraform, iac, aws, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform",
+  "keywords": "robustness, medium, terraform, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -101,6 +101,9 @@ must return `"ENABLED"`.
 
 **SOC 2 Trust Services Criteria**
   - `A1.2`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/ROB-AWS-DDB-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-DDB-002.yaml) — canonical YAML

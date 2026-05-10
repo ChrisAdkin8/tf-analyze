@@ -6,6 +6,8 @@ blast_radius: single-resource
 status: active
 mitre:
   - "T1059"
+cwe:
+  - "CWE-78"
 patterns:
   - kind: grep
     file_glob: "**/*.tf"

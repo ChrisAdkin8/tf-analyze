@@ -4,6 +4,12 @@ section: stack
 default_urgency: HIGH
 blast_radius: environment
 status: active
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-IAA"
 patterns:
   - kind: resource_missing_arg
     resource: azurerm_kubernetes_cluster

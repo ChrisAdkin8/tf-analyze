@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-DNS-001 — Cloud DNS managed zone missing DNSSEC"
 description: "tf-analyze rule STK-GCP-DNS-001 (HIGH · stack): Cloud DNS managed zone missing DNSSEC"
-keywords: "stack, high, terraform, iac, gcp, cis-3.9"
+keywords: "stack, high, terraform, iac, gcp, cis-3.9, mitre-T1583.002"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-3.9"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 3.9",
+  "keywords": "stack, high, terraform, CIS 3.9, MITRE T1583.002",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -94,6 +94,9 @@ must return `on`.
 
 **CIS Benchmark**
   - `CIS 3.9`
+
+**MITRE ATT&CK**
+  - [`T1583.002`](https://attack.mitre.org/techniques/T1583/002/)
 
 **Source**
   - [`catalog/STK-GCP-DNS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-DNS-001.yaml) — canonical YAML

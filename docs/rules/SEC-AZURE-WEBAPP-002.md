@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-WEBAPP-002 — App Service / Function App HTTPS not enforced"
 description: "tf-analyze rule SEC-AZURE-WEBAPP-002 (HIGH · security): App Service / Function App HTTPS not enforced"
-keywords: "security, high, terraform, iac, azure, cis-9.2"
+keywords: "security, high, terraform, iac, azure, cis-9.2, mitre-T1071.001, cwe-319, d3-ei"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-9.2"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 9.2",
+  "keywords": "security, high, terraform, CIS 9.2, MITRE T1071.001, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -105,6 +105,15 @@ must return `true`.
 
 **CIS Benchmark**
   - `CIS 9.2`
+
+**MITRE ATT&CK**
+  - [`T1071.001`](https://attack.mitre.org/techniques/T1071/001/)
+
+**CWE**
+  - [`CWE-319`](https://cwe.mitre.org/data/definitions/319.html)
+
+**MITRE D3FEND**
+  - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
 
 **Source**
   - [`catalog/SEC-AZURE-WEBAPP-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-WEBAPP-002.yaml) — canonical YAML

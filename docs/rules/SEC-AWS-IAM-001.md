@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-001 — IAM policy with wildcard resource"
 description: "tf-analyze rule SEC-AWS-IAM-001 (HIGH · security): IAM policy with wildcard resource"
-keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004"
+keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, cwe-732, d3-pa, d3-mfa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.16, MITRE T1078.004",
+  "keywords": "security, high, terraform, CIS 1.16, MITRE T1078.004, CWE-269, CWE-732, D3-PA, D3-MFA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -95,8 +95,19 @@ has no `"Resource": "*"` statements.
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+  - [`D3-MFA`](https://d3fend.mitre.org/technique/D3-MFA/)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-001.yaml) — canonical YAML

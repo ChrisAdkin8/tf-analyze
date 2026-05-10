@@ -20,6 +20,10 @@ patterns:
       `resources = ["*"]`. Combined with any non-trivial action set,
       this lets the principal touch every matching resource in the
       account, not just the ones it owns.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
 recommendation: |
   Scope `resources` to specific ARNs or ARN patterns. For S3 use
   `arn:aws:s3:::my-bucket/*`; for KMS use the key ARN; for EC2 use

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-COGNITO-001 — Cognito user pool MFA not enabled"
 description: "tf-analyze rule SEC-AWS-COGNITO-001 (HIGH · security): Cognito user pool MFA not enabled"
-keywords: "security, high, terraform, iac, aws, mitre-T1556.006"
+keywords: "security, high, terraform, iac, aws, mitre-T1556.006, cwe-308, d3-mfa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, mitre-T1556.006"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1556.006",
+  "keywords": "security, high, terraform, MITRE T1556.006, CWE-308, D3-MFA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -111,6 +111,12 @@ must return `ON`.
 
 **MITRE ATT&CK**
   - [`T1556.006`](https://attack.mitre.org/techniques/T1556/006/)
+
+**CWE**
+  - [`CWE-308`](https://cwe.mitre.org/data/definitions/308.html)
+
+**MITRE D3FEND**
+  - [`D3-MFA`](https://d3fend.mitre.org/technique/D3-MFA/)
 
 **Source**
   - [`catalog/SEC-AWS-COGNITO-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-COGNITO-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-NSG-FLOWLOG-001 — Azure NSG missing flow log resource"
 description: "tf-analyze rule STK-AZURE-NSG-FLOWLOG-001 (HIGH · stack): Azure NSG missing flow log resource"
-keywords: "stack, high, terraform, iac, azure, cis-6.5"
+keywords: "stack, high, terraform, iac, azure, cis-6.5, mitre-T1562.008, cwe-778, d3-nta"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, azure, cis-6.5"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 6.5",
+  "keywords": "stack, high, terraform, CIS 6.5, MITRE T1562.008, CWE-778, D3-NTA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -113,6 +113,18 @@ an active flow log. Or:
 
 **CIS Benchmark**
   - `CIS 6.5`
+
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-NTA`](https://d3fend.mitre.org/technique/D3-NTA/)
 
 **Source**
   - [`catalog/STK-AZURE-NSG-FLOWLOG-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-NSG-FLOWLOG-001.yaml) — canonical YAML

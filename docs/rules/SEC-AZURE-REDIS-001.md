@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-REDIS-001 — Azure Redis Cache allows non-TLS connections"
 description: "tf-analyze rule SEC-AZURE-REDIS-001 (HIGH · security): Azure Redis Cache allows non-TLS connections"
-keywords: "security, high, terraform, iac, azure"
+keywords: "security, high, terraform, iac, azure, mitre-T1040, mitre-T1071.001, cwe-319, d3-ei"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform",
+  "keywords": "security, high, terraform, MITRE T1040, MITRE T1071.001, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -110,6 +110,16 @@ must return `[false, "1.2"]`.
 
 **SOC 2 Trust Services Criteria**
   - `CC6.7`
+
+**MITRE ATT&CK**
+  - [`T1040`](https://attack.mitre.org/techniques/T1040/)
+  - [`T1071.001`](https://attack.mitre.org/techniques/T1071/001/)
+
+**CWE**
+  - [`CWE-319`](https://cwe.mitre.org/data/definitions/319.html)
+
+**MITRE D3FEND**
+  - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
 
 **Source**
   - [`catalog/SEC-AZURE-REDIS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-REDIS-001.yaml) — canonical YAML

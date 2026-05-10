@@ -14,6 +14,10 @@ patterns:
       delete every object in the bucket — including objects written by
       applications after the infrastructure was provisioned — on the next
       `terraform destroy`. This makes data loss a single command away.
+owasp_iac:
+  - "Deploy / Resource Decommissioning Process"
+mitre:
+  - "T1485"
 recommendation: |
   Remove `force_destroy = true` from production buckets:
 

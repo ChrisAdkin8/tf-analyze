@@ -27,6 +27,8 @@ recommendation: |
   a new table — they do not overwrite the original.
 soc2_cc:
   - "A1.2"
+mitre:
+  - "T1490"
 verification: |
   `aws dynamodb describe-continuous-backups --table-name <name> \
     --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus'`

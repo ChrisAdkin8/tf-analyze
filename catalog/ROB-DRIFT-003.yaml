@@ -1,0 +1,64 @@
+id: ROB-DRIFT-003
+title: "ignore_changes lists too many attributes (drift-disable by attrition)"
+section: robustness
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+patterns:
+  - kind: ignore_changes_overuse
+    max_attrs: 5
+    description: |
+      `lifecycle.ignore_changes` enumerates more than 5 specific
+      attributes. Listing many attributes is "drift disable by
+      attrition" — the team ratcheted up the list one attribute at a
+      time, and the practical effect is the same as `ignore_changes
+      = all` with extra steps. ROB-DRIFT-001 catches the explicit
+      `all` form; ROB-DRIFT-002 catches the wildcard `["*"]` and
+      `[tags]` shapes; this rule is the third leg of the same
+      regression: drift detection has been disabled in fact, just
+      not in name.
+
+      Default urgency is LOW because legitimate uses exist
+      (autoscaling group `desired_capacity`, Lambda code packages,
+      ECS task definitions in CD pipelines) — the value is in the
+      *signal*, not the gate.
+owasp_iac:
+  - "Runtime / Immutable Infrastructure Model"
+mitre:
+  - "T1562.001"
+cwe:
+  - "CWE-693"
+recommendation: |
+  Audit the `ignore_changes` list. For each attribute:
+
+    - If the attribute is genuinely managed out-of-band (autoscaling,
+      pipelines, CRDs), keep it and add a comment explaining why.
+    - If it's there because a noisy pipeline is rewriting it, fix
+      the pipeline rather than ignoring the attribute.
+    - If it's there because a migration removed an old field, delete
+      the entry — Terraform won't complain about an unknown ignore.
+
+  When more than ~5 attributes are genuinely managed out-of-band the
+  resource may be the wrong one to import into Terraform at all —
+  consider a `data` source or a provider-managed resource that
+  returns the desired_state directly.
+verification: |
+  Re-run `terraform plan` after pruning the list. The diff should
+  show only attributes that are genuinely intended to converge.
+related:
+  - ROB-DRIFT-001
+  - ROB-DRIFT-002
+fix_hcl: |
+  resource "aws_autoscaling_group" "app" {
+    # ... configuration ...
+    lifecycle {
+      # Pipeline-managed; intentionally excluded from drift detection.
+      ignore_changes = [
+        desired_capacity,  # set by app autoscaler
+        target_group_arns, # rotated by blue/green deploys
+      ]
+    }
+  }
+fix_disruption: none
+fixtures:
+  - ignore_changes_overuse

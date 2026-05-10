@@ -29,6 +29,8 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_rds_cluster
     arg: tags
+owasp_iac:
+  - "Deploy / Cloud Asset Tagging"
 recommendation: |
   Add a `tags` block with at minimum `Environment`, `ManagedBy = "terraform"`,
   and `Project`. Use a `locals` block for shared tags:

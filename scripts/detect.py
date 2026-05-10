@@ -1666,6 +1666,82 @@ def detect_in_file(
                                 "resource": f"output.{blk['groups'][0]}",
                             }
                         )
+            elif kind == "variable_credential_pattern":
+                # Variables whose name suggests they hold a credential
+                # (`*_password`, `*_token`, `*_secret`, `*_key`, …) MUST
+                # have `sensitive = true` — without it, `terraform plan`
+                # / `terraform output` print the value into CI logs.
+                # Catalog supplies the regex via `name_regex` so the
+                # rule definition can extend the pattern set later.
+                raw_re = pat.get("name_regex") or (
+                    r"^.*_(password|passwd|pwd|token|secret|secrets|"
+                    r"apikey|api_key|access_key|private_key|credential|"
+                    r"credentials|auth|oauth)$"
+                )
+                try:
+                    name_re = re.compile(raw_re, re.IGNORECASE)
+                except re.error:
+                    continue
+                for blk in variables:
+                    var_name = blk["groups"][0]
+                    if not name_re.match(var_name):
+                        continue
+                    if re.search(
+                        r"(?m)^\s*sensitive\s*=\s*true\s*$", blk["body"]
+                    ):
+                        continue
+                    findings.append(
+                        {
+                            "id": eid,
+                            "file": str(file_path),
+                            "line": blk["start_line"],
+                            "resource": f"var.{var_name}",
+                        }
+                    )
+            elif kind == "ignore_changes_overuse":
+                # Resources whose `lifecycle.ignore_changes = [...]`
+                # block lists more than `max_attrs` attributes are
+                # likely disabling drift detection by attrition rather
+                # than declaring a targeted exception. ROB-DRIFT-002
+                # already catches `["*"]`; this catches the next
+                # failure mode at LOW so reviewers see the signal
+                # without it gating CI.
+                max_attrs = int(pat.get("max_attrs", 5))
+                for blk in find_blocks(text, RESOURCE_START):
+                    body = blk["body"]
+                    # Find the lifecycle { ... ignore_changes = [...] ... } shape.
+                    lc = re.search(
+                        r"(?ms)lifecycle\s*\{(.*?)^\s*\}",
+                        body,
+                    )
+                    if not lc:
+                        continue
+                    ic = re.search(
+                        r"ignore_changes\s*=\s*\[(.*?)\]",
+                        lc.group(1),
+                        re.DOTALL,
+                    )
+                    if not ic:
+                        continue
+                    inner = ic.group(1)
+                    # ROB-DRIFT-002 owns the wildcard case; skip here.
+                    if re.search(r"['\"]\*['\"]", inner) or "[*]" in inner:
+                        continue
+                    items = [x.strip() for x in inner.split(",") if x.strip()]
+                    if len(items) > max_attrs:
+                        btype, bname = blk["groups"]
+                        findings.append(
+                            {
+                                "id": eid,
+                                "file": str(file_path),
+                                "line": blk["start_line"],
+                                "resource": f"{btype}.{bname}",
+                                "context": (
+                                    f"ignore_changes lists {len(items)} "
+                                    f"attributes (threshold: {max_attrs})"
+                                ),
+                            }
+                        )
             # corpus-level kinds handled in detect_corpus
     return findings
 
@@ -3750,6 +3826,11 @@ def _render_graph_html(graph: dict) -> str:
 # hover lands on the actual published page.
 RULE_DOCS_URL_BASE = "https://chrisadkin8.github.io/tf-analyze/rules/{id}/"
 SARIF_HELP_URI_BASE = RULE_DOCS_URL_BASE
+# ATT&CK release the catalogue's `mitre:` technique IDs are pinned against.
+# Single source of truth lives in `scripts/_mitre.py`; re-exported here for
+# backward compat (existing test imports + the drift-check script both
+# work against either module).
+from _mitre import MITRE_ATTACK_VERSION
 
 
 def _sarif_fingerprint(finding: dict) -> dict:
@@ -3812,8 +3893,148 @@ def _enrich_findings_for_output(
     return findings
 
 
+# SARIF v2.1 supports a `taxonomies` array of structured taxonomy
+# definitions (CWE, MITRE ATT&CK, etc.) plus per-rule `relationships`
+# arrays linking each rule to the taxa it touches. Code Scanning
+# consumers use these for semantic filtering ("show me all CWE-732
+# findings"). The flat `cwe:CWE-732` tags emitted alongside are
+# preserved for backward-compat with consumers that haven't moved off
+# tag-only filtering.
+_SARIF_TAXONOMY_DEFS: dict[str, dict] = {
+    "CWE": {
+        "name": "CWE",
+        "guid": "F04C9E7C-2D60-49C8-B41A-9CCEB48F4E7E",
+        "shortDescription": {"text": "Common Weakness Enumeration"},
+        "informationUri": "https://cwe.mitre.org/",
+        "downloadUri": "https://cwe.mitre.org/data/downloads.html",
+        "isComprehensive": False,
+    },
+    "MITRE-ATT&CK": {
+        "name": "MITRE-ATT&CK",
+        "guid": "AAA0F22F-6F4C-4F2D-B14E-09EE2B5641D6",
+        "shortDescription": {"text": "MITRE ATT&CK adversary tactics and techniques"},
+        "informationUri": "https://attack.mitre.org/",
+        "isComprehensive": False,
+    },
+    "MITRE-D3FEND": {
+        "name": "MITRE-D3FEND",
+        "guid": "A8FCD935-8523-4D04-95F7-7AAFC3E9A731",
+        "shortDescription": {"text": "MITRE D3FEND defensive techniques"},
+        "informationUri": "https://d3fend.mitre.org/",
+        "isComprehensive": False,
+    },
+    "CIS": {
+        "name": "CIS",
+        "guid": "6F8B6E37-C9C3-4B1E-AD1E-4C8E5BE1F7B0",
+        "shortDescription": {"text": "Center for Internet Security Benchmarks"},
+        "informationUri": "https://www.cisecurity.org/cis-benchmarks/",
+        "isComprehensive": False,
+    },
+}
+
+
+def _sarif_taxonomies(entries: list[dict]) -> list[dict]:
+    """Build the SARIF `taxonomies` array from every taxon referenced
+    by any rule in `entries`. Each taxonomy gets its own block with
+    `taxa` listing the specific IDs cited.
+
+    Returns an empty list if no rule references any of the four
+    supported taxonomies — keeps SARIF output minimal on small repos.
+    """
+    seen_taxa: dict[str, dict[str, dict]] = {
+        "CWE": {}, "MITRE-ATT&CK": {}, "MITRE-D3FEND": {}, "CIS": {},
+    }
+    for entry in entries:
+        for cid in (entry.get("cwe") or []):
+            num = str(cid).removeprefix("CWE-")
+            seen_taxa["CWE"][cid] = {
+                "id": num,
+                "name": cid,
+                "shortDescription": {"text": cid},
+                "helpUri": f"https://cwe.mitre.org/data/definitions/{num}.html",
+            }
+        for tid in (entry.get("mitre") or []):
+            seen_taxa["MITRE-ATT&CK"][str(tid)] = {
+                "id": str(tid),
+                "name": str(tid),
+                "shortDescription": {"text": _mitre_technique_name(str(tid)) or str(tid)},
+                "helpUri": f"https://attack.mitre.org/techniques/{str(tid).replace('.', '/')}/",
+            }
+        for did in (entry.get("d3fend") or []):
+            seen_taxa["MITRE-D3FEND"][str(did)] = {
+                "id": str(did),
+                "name": str(did),
+                "shortDescription": {"text": str(did)},
+                "helpUri": f"https://d3fend.mitre.org/technique/{str(did)}/",
+            }
+        for cis in (entry.get("cis") or []):
+            cid = str(cis)
+            seen_taxa["CIS"][cid] = {
+                "id": cid,
+                "name": f"CIS {cid}",
+                "shortDescription": {"text": f"CIS Benchmark control {cid}"},
+            }
+
+    out: list[dict] = []
+    for tax_name, taxa_map in seen_taxa.items():
+        if not taxa_map:
+            continue
+        defn = dict(_SARIF_TAXONOMY_DEFS[tax_name])
+        defn["taxa"] = sorted(taxa_map.values(), key=lambda t: t["id"])
+        out.append(defn)
+    return out
+
+
+def _sarif_rule_relationships(entry: dict) -> list[dict]:
+    """Per-rule taxonomy references. Each entry produces one
+    `relationships` element pointing at the matching taxon defined in
+    the run's `taxonomies` block."""
+    rels: list[dict] = []
+    for cid in (entry.get("cwe") or []):
+        rels.append({
+            "target": {
+                "id": str(cid).removeprefix("CWE-"),
+                "name": str(cid),
+                "toolComponent": {"name": "CWE", "guid": _SARIF_TAXONOMY_DEFS["CWE"]["guid"]},
+            },
+            "kinds": ["relevant"],
+        })
+    for tid in (entry.get("mitre") or []):
+        rels.append({
+            "target": {
+                "id": str(tid),
+                "name": str(tid),
+                "toolComponent": {"name": "MITRE-ATT&CK", "guid": _SARIF_TAXONOMY_DEFS["MITRE-ATT&CK"]["guid"]},
+            },
+            "kinds": ["relevant"],
+        })
+    for did in (entry.get("d3fend") or []):
+        rels.append({
+            "target": {
+                "id": str(did),
+                "name": str(did),
+                "toolComponent": {"name": "MITRE-D3FEND", "guid": _SARIF_TAXONOMY_DEFS["MITRE-D3FEND"]["guid"]},
+            },
+            # D3FEND is a defensive countermeasure — different relationship
+            # kind so consumers can distinguish "this rule indicates the
+            # named ATT&CK technique" from "this rule implements the named
+            # D3FEND defence".
+            "kinds": ["incomparable"],
+        })
+    for cis in (entry.get("cis") or []):
+        rels.append({
+            "target": {
+                "id": str(cis),
+                "name": f"CIS {cis}",
+                "toolComponent": {"name": "CIS", "guid": _SARIF_TAXONOMY_DEFS["CIS"]["guid"]},
+            },
+            "kinds": ["relevant"],
+        })
+    return rels
+
+
 def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
-    """Convert findings to SARIF v2.1.0 format."""
+    """Convert findings to SARIF v2.1.0 format with proper taxonomies."""
     rules = []
     rule_index = {}
     level_map = {
@@ -3837,7 +4058,7 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
         rule_index[eid] = len(rules)
         urgency = entry.get("default_urgency", "MEDIUM")
         recommendation = entry.get("recommendation") or entry.get("title", eid)
-        rules.append({
+        rule_obj: dict = {
             "id": eid,
             "name": eid,
             "shortDescription": {"text": entry.get("title", eid)},
@@ -3857,12 +4078,21 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
                     f"blast-radius:{entry.get('blast_radius', 'single-resource')}",
                 ]
                 + [f"cis:{c}" for c in (entry.get("cis") or [])]
-                + [f"mitre:{t}" for t in (entry.get("mitre") or [])],
+                + [f"mitre:{t}" for t in (entry.get("mitre") or [])]
+                + [f"cwe:{c}" for c in (entry.get("cwe") or [])]
+                + [f"d3fend:{d}" for d in (entry.get("d3fend") or [])],
                 "precision": "high",
                 "problem.severity": urgency.lower(),
                 "security-severity": severity_map.get(urgency, "5.0"),
             },
-        })
+        }
+        # Taxonomy relationships — pointers into the run's `taxonomies`
+        # block so consumers can semantically filter without parsing
+        # the flat tag strings.
+        rels = _sarif_rule_relationships(entry)
+        if rels:
+            rule_obj["relationships"] = rels
+        rules.append(rule_obj)
 
     results = []
     for f in findings:
@@ -3885,22 +4115,30 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
             result["level"] = rules[rule_index[f["id"]]]["defaultConfiguration"]["level"]
         results.append(result)
 
+    taxonomies = _sarif_taxonomies(entries)
+    run: dict = {
+        "tool": {
+            "driver": {
+                "name": "tf-analyze",
+                "version": "1.2.0",
+                "informationUri": "https://github.com/ChrisAdkin8/tf-analyze",
+                "rules": rules,
+            }
+        },
+        "results": results,
+    }
+    # Only declare supportedTaxonomies + the taxonomies block when at
+    # least one rule references one — keeps SARIF lean on small repos.
+    if taxonomies:
+        run["tool"]["driver"]["supportedTaxonomies"] = [
+            {"name": t["name"], "guid": t["guid"]} for t in taxonomies
+        ]
+        run["taxonomies"] = taxonomies
+
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
         "version": "2.1.0",
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "tf-analyze",
-                        "version": "1.2.0",
-                        "informationUri": "https://github.com/ChrisAdkin8/tf-analyze",
-                        "rules": rules,
-                    }
-                },
-                "results": results,
-            }
-        ],
+        "runs": [run],
     }
 
 
@@ -4278,6 +4516,7 @@ def _compliance_gap_report(
     want_cis    = framework in ("cis", "all")
     want_pci    = framework in ("pci_dss", "all")
     want_soc2   = framework in ("soc2", "all")
+    want_owasp  = framework in ("owasp_iac", "all")
 
     for entry in entries:
         eid = entry.get("id", "")
@@ -4324,6 +4563,20 @@ def _compliance_gap_report(
                     }
                 control_map[key]["rules"].append(eid)
 
+        if want_owasp:
+            owasp_list = entry.get("owasp_iac", [])
+            if not isinstance(owasp_list, list):
+                owasp_list = [owasp_list] if owasp_list else []
+            for ctrl in owasp_list:
+                fw_name = "OWASP IaC Cheat Sheet"
+                key = f"{fw_name}::{ctrl}"
+                if key not in control_map:
+                    control_map[key] = {
+                        "framework": fw_name, "control": str(ctrl),
+                        "rules": [], "failed_rules": [], "status": "PASS",
+                    }
+                control_map[key]["rules"].append(eid)
+
     for item in control_map.values():
         failed = [r for r in item["rules"] if r in fired_ids]
         item["failed_rules"] = failed
@@ -4335,14 +4588,15 @@ def _compliance_gap_report(
 
     def _ctrl_sort_key(c: dict) -> list:
         # Compliance control IDs are dotted/hyphenated mixes like "1.2.3",
-        # "AC-2.a", "CC6.1". Splitting yields a mix of numeric and alpha
-        # parts, and Python refuses to compare int with str directly. Wrap
-        # each part as (sort_class, value) so comparisons are always tuple-
-        # vs-tuple between like types: 0=numeric (int-sorted), 1=alpha
+        # "AC-2.a", "CC6.1" — but the OWASP IaC cheat sheet uses prose
+        # labels like "Develop and Distribute / Secrets Detection". Split
+        # on /, ., - so prose-shaped labels still sort by their lexical
+        # parts, then wrap each part as (sort_class, value) so int vs.
+        # str comparisons never raise: 0=numeric (int-sorted), 1=alpha
         # (str-sorted). Numeric parts sort before alpha ones at the same
         # position, which matches how humans read control IDs.
-        parts = re.split(r'[.\-]', c["control"])
-        return [(0, int(x)) if x.isdigit() else (1, x) for x in parts]
+        parts = re.split(r'[./\-]', c["control"])
+        return [(0, int(x)) if x.isdigit() else (1, x.strip()) for x in parts]
 
     for fw in by_fw:
         by_fw[fw].sort(key=_ctrl_sort_key)
@@ -4350,47 +4604,105 @@ def _compliance_gap_report(
     return by_fw
 
 
-def _render_mitre(findings: list[dict], entries: list[dict]) -> str:
-    """Group findings by MITRE ATT&CK technique using catalogue `mitre:`.
+# MITRE ATT&CK reference data + helpers live in `scripts/_mitre.py`.
+# Module-level aliases here preserve the legacy `_MITRE_*` private
+# names for code inside this file (no behavioural change) and let
+# external consumers (drift-check script, tests) import from either
+# location.
+from _mitre import (
+    MITRE_TECHNIQUE_INFO as _MITRE_TECHNIQUE_INFO,
+    MITRE_TACTIC_ORDER as _MITRE_TACTIC_ORDER,
+    mitre_technique_name as _mitre_technique_name,
+    mitre_technique_tactics as _mitre_technique_tactics,
+)
 
-    Findings whose rule has no mitre mapping are grouped under "(unmapped)"
-    so coverage gaps are visible. T-IDs are sorted lexicographically; rules
-    inside each group are sorted by urgency then ID.
+
+def _render_mitre(findings: list[dict], entries: list[dict],
+                  tactic_filter: str | None = None) -> str:
+    """Render findings grouped by ATT&CK tactic → technique.
+
+    Output structure (matches how SOC analysts read ATT&CK):
+
+        ## MITRE ATT&CK Coverage  (vN, ATT&CK release)
+
+        ### Initial Access
+          T1190 — Exploit Public-Facing Application  (3 findings)
+            [HIGH] SEC-AWS-APIGW-001 ...
+        ### Defense Evasion
+          T1562.008 — Impair Defenses: Disable or Modify Cloud Logs  (5 findings)
+            ...
+
+    Findings whose rule has no `mitre:` mapping are grouped under a
+    final '(unmapped)' tactic so coverage gaps stay visible.
+
+    `tactic_filter` (from --mitre-tactic) restricts output to one tactic;
+    case-insensitive, hyphen/space tolerant ('initial-access' == 'Initial Access').
     """
     entry_map = {e["id"]: e for e in entries}
-    by_tech: dict[str, list[dict]] = {}
+
+    # Bucket findings by (tactic, technique) — a finding can appear in
+    # multiple tactics if its technique is multi-tactic (e.g. T1078.004
+    # is both Initial Access and Persistence).
+    by_tactic: dict[str, dict[str, list[dict]]] = {}
     for f in findings:
         e = entry_map.get(f["id"], {})
         techs = e.get("mitre") or []
         if not techs:
-            by_tech.setdefault("(unmapped)", []).append(f)
+            by_tactic.setdefault("(unmapped)", {}).setdefault("(unmapped)", []).append(f)
             continue
         for t in techs:
-            by_tech.setdefault(str(t), []).append(f)
+            for tactic in _mitre_technique_tactics(str(t)):
+                by_tactic.setdefault(tactic, {}).setdefault(str(t), []).append(f)
+
+    if tactic_filter:
+        wanted = re.sub(r"[-_ ]", "", tactic_filter).lower()
+        by_tactic = {
+            k: v for k, v in by_tactic.items()
+            if re.sub(r"[-_ ]", "", k).lower() == wanted
+        }
 
     URGENCY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
-    out: list[str] = ["## MITRE ATT&CK Coverage", ""]
-    if not by_tech:
+    out: list[str] = [
+        f"## MITRE ATT&CK Coverage  (pinned to ATT&CK {MITRE_ATTACK_VERSION})",
+        "",
+    ]
+    if not by_tactic:
         out.append("(no findings)")
         return "\n".join(out)
-    for tech in sorted(by_tech):
-        group = by_tech[tech]
-        out.append(f"### {tech}  ({len(group)} finding{'s' if len(group) != 1 else ''})")
-        # Render with stable sort: urgency, then rule id, then file.
-        for f in sorted(
-            group,
-            key=lambda x: (
-                URGENCY_RANK.get(entry_map.get(x["id"], {}).get("default_urgency", "INFO"), 9),
-                x["id"],
-                x.get("file", ""),
-                x.get("line", 0),
-            ),
-        ):
-            urg = entry_map.get(f["id"], {}).get("default_urgency", "?")
-            out.append(
-                f"  [{urg}] {f['id']}  {f.get('file','')}:{f.get('line','?')}  "
-                f"{f.get('resource','')}"
-            )
+
+    # Render in canonical tactic order; unknown / synthetic tactics
+    # (Other, (unmapped)) sort to the end.
+    def _tactic_sort_key(name: str) -> tuple[int, str]:
+        try:
+            return (_MITRE_TACTIC_ORDER.index(name), name)
+        except ValueError:
+            return (len(_MITRE_TACTIC_ORDER) + (1 if name == "(unmapped)" else 0), name)
+
+    for tactic in sorted(by_tactic, key=_tactic_sort_key):
+        techs_in_tactic = by_tactic[tactic]
+        # Total findings under this tactic (deduped by file:line:id)
+        total = len({(f["id"], f.get("file"), f.get("line"))
+                     for group in techs_in_tactic.values() for f in group})
+        out.append(f"### {tactic}  ({total} finding{'s' if total != 1 else ''})")
+        for tech in sorted(techs_in_tactic):
+            group = techs_in_tactic[tech]
+            name = _mitre_technique_name(tech)
+            label = f"{tech} — {name}" if name else tech
+            out.append(f"  {label}  ({len(group)} finding{'s' if len(group) != 1 else ''})")
+            for f in sorted(
+                group,
+                key=lambda x: (
+                    URGENCY_RANK.get(entry_map.get(x["id"], {}).get("default_urgency", "INFO"), 9),
+                    x["id"],
+                    x.get("file", ""),
+                    x.get("line", 0),
+                ),
+            ):
+                urg = entry_map.get(f["id"], {}).get("default_urgency", "?")
+                out.append(
+                    f"    [{urg}] {f['id']}  {f.get('file','')}:{f.get('line','?')}  "
+                    f"{f.get('resource','')}"
+                )
         out.append("")
     return "\n".join(out)
 
@@ -4569,21 +4881,29 @@ def _render_compliance_text(by_fw: dict) -> str:
         lines.append(f"### {fw}")
         lines.append(f"Coverage: {passed}/{total} PASS, {failed} FAIL")
         lines.append("")
-        lines.append(f"{'Control':<14}{'Status':<10}Rules")
-        lines.append("-" * 70)
+        # Auto-size the Control column to the widest label in this
+        # framework. Numeric IDs (`1.2.3`, `CC6.1`) need ~14 cols; the
+        # OWASP IaC cheat sheet uses prose labels (`Develop and
+        # Distribute / Secrets Detection`) that are 30-50 cols. Pad
+        # at least 14 so existing CIS/PCI/SOC2 layouts don't change.
+        ctrl_w = max(14, max((len(c["control"]) for c in controls), default=14) + 2)
+        lines.append(f"{'Control':<{ctrl_w}}{'Status':<10}Rules")
+        lines.append("-" * (ctrl_w + 60))
         for ctrl in controls:
             rules_str = ", ".join(ctrl["rules"])
             fail_str = (
                 f"  [FAIL: {', '.join(ctrl['failed_rules'])}]"
                 if ctrl["failed_rules"] else ""
             )
-            lines.append(f"{ctrl['control']:<14}{ctrl['status']:<10}{rules_str}{fail_str}")
+            lines.append(
+                f"{ctrl['control']:<{ctrl_w}}{ctrl['status']:<10}{rules_str}{fail_str}"
+            )
             # For each failed rule, print the docs URL on its own line.
             # Terminals auto-link these; users can click to read the
             # explanation, why-it-fired, and fix without leaving the
             # CI log.
             for r in ctrl["failed_rules"]:
-                lines.append(f"{'':<24}↳ {RULE_DOCS_URL_BASE.format(id=r)}")
+                lines.append(f"{'':<{ctrl_w + 10}}↳ {RULE_DOCS_URL_BASE.format(id=r)}")
         lines.append("")
     return "\n".join(lines)
 
@@ -5586,6 +5906,62 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     if soc2_cc is not None:
         if not isinstance(soc2_cc, list) or not all(isinstance(x, str) for x in soc2_cc):
             errs.append(f"{source}: 'soc2_cc' must be a list of strings if present")
+    # CWE — Common Weakness Enumeration. Items are bare numeric IDs as
+    # strings (e.g. "CWE-732") so SARIF taxonomies can emit them
+    # verbatim. Validate the shape so typos (`cwe-732`, `732`,
+    # `CWE 732`) fail catalogue load rather than silently producing
+    # broken SARIF output.
+    cwe = data.get("cwe")
+    if cwe is not None:
+        if not isinstance(cwe, list) or not all(isinstance(x, str) for x in cwe):
+            errs.append(f"{source}: 'cwe' must be a list of strings if present")
+        else:
+            for item in cwe:
+                if not re.fullmatch(r"CWE-\d+", item):
+                    errs.append(
+                        f"{source}: cwe item {item!r} must match the form 'CWE-<digits>'"
+                    )
+    # D3FEND — defensive techniques (the ATT&CK counterpart). Items
+    # are D3FEND IDs of the form D3-<token> (e.g. D3-MFA, D3-EAR).
+    # No comparable IaC scanner emits these today; the field is a
+    # deliberate differentiator.
+    d3fend = data.get("d3fend")
+    if d3fend is not None:
+        if not isinstance(d3fend, list) or not all(isinstance(x, str) for x in d3fend):
+            errs.append(f"{source}: 'd3fend' must be a list of strings if present")
+        else:
+            for item in d3fend:
+                if not re.fullmatch(r"D3-[A-Z]{2,8}", item):
+                    errs.append(
+                        f"{source}: d3fend item {item!r} must match the form 'D3-<2-8 uppercase letters>'"
+                    )
+    # OWASP IaC Security Cheat Sheet mapping. Items are textual labels of
+    # the form `Develop and Distribute / Secrets Detection`. The cheat
+    # sheet's three sections — `Develop and Distribute`, `Deploy`,
+    # `Runtime` — appear before the `/`. Validate the shape so a typo
+    # (`Devleop and Distribute / …`) fails CI rather than silently
+    # creating a singleton column in the compliance output.
+    owasp_iac = data.get("owasp_iac")
+    if owasp_iac is not None:
+        if not isinstance(owasp_iac, list) or not all(isinstance(x, str) for x in owasp_iac):
+            errs.append(f"{source}: 'owasp_iac' must be a list of strings if present")
+        else:
+            valid_sections = {"Develop and Distribute", "Deploy", "Runtime"}
+            for item in owasp_iac:
+                if " / " not in item:
+                    errs.append(
+                        f"{source}: owasp_iac item {item!r} must be of the "
+                        f"form '<Section> / <Item label>' (sections: "
+                        f"{sorted(valid_sections)})"
+                    )
+                    continue
+                section = item.split(" / ", 1)[0]
+                if section not in valid_sections:
+                    errs.append(
+                        f"{source}: owasp_iac item {item!r} has unknown "
+                        f"section {section!r}; expected one of "
+                        f"{sorted(valid_sections)}"
+                    )
     fid = data.get("id")
     fname = Path(source).stem
     if fid and fid != fname:
@@ -5968,6 +6344,12 @@ def _cmd_explain(catalog_dir: Path, rule_id: str) -> int:
         print(f"# status: {data['status']}")
     if data.get("cis"):
         print(f"# CIS: {', '.join(str(c) for c in data['cis'])}")
+    if data.get("mitre"):
+        print(f"# MITRE ATT&CK: {', '.join(str(t) for t in data['mitre'])}")
+    if data.get("cwe"):
+        print(f"# CWE: {', '.join(str(c) for c in data['cwe'])}")
+    if data.get("d3fend"):
+        print(f"# MITRE D3FEND: {', '.join(str(d) for d in data['d3fend'])}")
     print()
     print("## Patterns")
     for p in data.get("patterns") or []:
@@ -7042,13 +7424,15 @@ def main():
     ap.add_argument(
         "--compliance-framework",
         default="cis",
-        choices=["cis", "pci_dss", "soc2", "all"],
+        choices=["cis", "pci_dss", "soc2", "owasp_iac", "all"],
         metavar="FRAMEWORK",
         help=(
             "Compliance framework to map against. Choices: cis (default), "
-            "pci_dss, soc2, all. 'all' combines CIS, PCI-DSS v4.0, and "
-            "SOC2 Trust Services Criteria in one report. Requires --compliance "
-            "or --format compliance."
+            "pci_dss, soc2, owasp_iac, all. 'all' combines every framework "
+            "in one report. owasp_iac maps against the OWASP IaC Security "
+            "Cheat Sheet (Develop and Distribute / Deploy / Runtime sections; "
+            "static-analysable items only). Requires --compliance or --format "
+            "compliance."
         ),
     )
     ap.add_argument(
@@ -7183,6 +7567,16 @@ def main():
             "Include INFO-tier findings (advisory; e.g. module-reuse "
             "suggestions) in output. Default off — INFO findings are "
             "counted in the summary but not rendered."
+        ),
+    )
+    ap.add_argument(
+        "--mitre-tactic",
+        default=None,
+        help=(
+            "Restrict --format mitre output to one ATT&CK tactic "
+            "(e.g. 'Initial Access', 'Defense Evasion'). "
+            "Case-insensitive; hyphens and underscores accepted "
+            "as separators ('initial-access' is equivalent)."
         ),
     )
     ap.add_argument(
@@ -7910,9 +8304,11 @@ def main():
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
-                _emit("# No CIS-mapped catalogue entries found.")
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries))
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
             _emit(_render_pr_summary(
                 findings, entries, summary,
@@ -7964,9 +8360,11 @@ def main():
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
-                _emit("# No CIS-mapped catalogue entries found.")
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries))
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
             _emit(_render_pr_summary(
                 findings, entries, summary,

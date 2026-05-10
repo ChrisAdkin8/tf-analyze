@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-SQL-002 — Azure SQL Server firewall rule allows access from all IPs"
 description: "tf-analyze rule SEC-AZURE-SQL-002 (HIGH · security): Azure SQL Server firewall rule allows access from all IPs"
-keywords: "security, high, terraform, iac, azure, cis-4.1.3"
+keywords: "security, high, terraform, iac, azure, cis-4.1.3, mitre-T1190, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-4.1.3"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 4.1.3",
+  "keywords": "security, high, terraform, CIS 4.1.3, MITRE T1190, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -118,6 +118,15 @@ must show no rules with `startIpAddress = 0.0.0.0` or
 
 **CIS Benchmark**
   - `CIS 4.1.3`
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Source**
   - [`catalog/SEC-AZURE-SQL-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-SQL-002.yaml) — canonical YAML

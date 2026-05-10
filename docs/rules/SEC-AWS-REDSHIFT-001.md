@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-REDSHIFT-001 — Redshift cluster encryption disabled"
 description: "tf-analyze rule SEC-AWS-REDSHIFT-001 (HIGH · security): Redshift cluster encryption disabled"
-keywords: "security, high, terraform, iac, aws, cis-{'id': '2.3', 'title': 'Ensure that encryption is enabled for Amazon Redshift Clusters'}, mitre-T1530"
+keywords: "security, high, terraform, iac, aws, cis-{'id': '2.3', 'title': 'Ensure that encryption is enabled for Amazon Redshift Clusters'}, mitre-T1530, cwe-311, d3-ear"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-{'id': '2.3', 'title': 'Ensu
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS {'id': '2.3', 'title': 'Ensure that encryption is enabled for Amazon Redshift Clusters'}, MITRE T1530",
+  "keywords": "security, high, terraform, CIS {'id': '2.3', 'title': 'Ensure that encryption is enabled for Amazon Redshift Clusters'}, MITRE T1530, CWE-311, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -107,6 +107,12 @@ must return `true`.
 
 **MITRE ATT&CK**
   - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)
+
+**MITRE D3FEND**
+  - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
 
 **Source**
   - [`catalog/SEC-AWS-REDSHIFT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-REDSHIFT-001.yaml) — canonical YAML

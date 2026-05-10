@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.29",
+  "version": "0.1.33",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -293,8 +293,8 @@
     "pretest": "npm run bundle-engine && npm run compile",
     "test": "node --test 'out/test/**/*.test.js'",
     "prepackage": "npm run bundle-engine && npm run compile",
-    "package": "vsce package",
-    "publish": "vsce publish"
+    "package": "vsce package --baseImagesUrl https://github.com/ChrisAdkin8/tf-analyze/raw/HEAD/vscode-extension",
+    "publish": "vsce publish --baseImagesUrl https://github.com/ChrisAdkin8/tf-analyze/raw/HEAD/vscode-extension"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

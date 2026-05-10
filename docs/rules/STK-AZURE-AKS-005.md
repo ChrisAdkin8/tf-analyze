@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-AKS-005 — AKS cluster API server missing authorized IP ranges"
 description: "tf-analyze rule STK-AZURE-AKS-005 (MEDIUM · stack): AKS cluster API server missing authorized IP ranges"
-keywords: "stack, medium, terraform, iac, azure"
+keywords: "stack, medium, terraform, iac, azure, mitre-T1190, mitre-T1133, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform",
+  "keywords": "stack, medium, terraform, MITRE T1190, MITRE T1133, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -112,6 +112,16 @@ must return a non-empty list.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+  - [`T1133`](https://attack.mitre.org/techniques/T1133/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Source**
   - [`catalog/STK-AZURE-AKS-005.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-AKS-005.yaml) — canonical YAML

@@ -5,6 +5,75 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.33] — 2026-05-10
+
+### Added
+
+- **Bundle pipeline now smoke-tests the engine.** `scripts/bundle-engine.js` previously copied `detect.py` + `catalog/` into the extension's `engine/` directory and stopped there. As of 0.1.33 it also spawns `python3 engine/scripts/detect.py --list-rules` against the freshly-bundled engine and asserts a non-zero rule count. Catches three classes of build-time failure that would otherwise only surface at the user's first click:
+  1. **Sibling-import miss.** When `detect.py` was refactored to `from _mitre import …`, the bundle script needed to know to copy `_mitre.py` too. The new `ENGINE_SIBLING_FILES` array lists every Python file `detect.py` imports as a sibling — adding a new file there is the only step required to ship a new helper module inside the `.vsix`.
+  2. **Catalogue YAML parse error** introduced in this build.
+  3. **Missing top-level Python dependency** (the engine is stdlib-only by contract; a regression here is otherwise silent in a `.vsix`).
+  Set `PYTHON=...` if the build host needs a specific Python binary.
+- **Bundled `_mitre.py` sibling module.** Engine refactor splits MITRE ATT&CK data + helpers into `scripts/_mitre.py`. The extension now ships both files at `engine/scripts/`. No behavioural change vs. 0.1.32; the file split lays groundwork for the broader detect.py modularisation.
+
+### Internal (engine, consumed by extension)
+
+- **SARIF v2.1 taxonomies + per-rule relationships.** SARIF output now includes a proper `taxonomies` array (CWE, MITRE-ATT&CK, MITRE-D3FEND, CIS) plus per-rule `relationships` references. GitHub Code Scanning consumers can semantically filter findings by taxon ("show me all CWE-732") instead of parsing flat tag strings. Flat tags are still emitted alongside for backward compat with consumers that haven't migrated. D3FEND relationships use the `incomparable` kind so consumers can distinguish "this rule indicates the named ATT&CK technique" from "this rule implements the named D3FEND defence".
+- **ATT&CK drift CI gate.** `scripts/check_attack_drift.py` runs in CI and fails the build if any rule cites a `mitre:` technique missing from `_mitre.py`'s `MITRE_TECHNIQUE_INFO` table. Prevents silent decay as new techniques get added to the catalogue.
+
+---
+
+## [0.1.32] — 2026-05-10
+
+### Changed
+
+- **Re-release of the 0.1.31 fixes after iterating on the hero-image bug.** No new code or content beyond what 0.1.31 documents — the version bump exists because 0.1.31 went through three failed attempts at fixing the broken hero image (relative path, then HTML img wrapper, then markdown syntax) before the actual root cause was identified (vsce's `--baseImagesUrl` rewrite ignores `repository.directory` in monorepo packages). 0.1.32 is the clean release that ships the working state in one consistent .vsix; 0.1.31 should be considered superseded.
+
+  Concretely, 0.1.32 carries:
+  - `package`/`publish` npm scripts pin `--baseImagesUrl https://github.com/ChrisAdkin8/tf-analyze/raw/HEAD/vscode-extension`, so future builds via `npm run package` always emit a correct absolute hero URL
+  - README hero is markdown `![]()` syntax (vsce rewrites this reliably); previous `<p align="center"><img>` block dropped
+  - Hero URL inside the `.vsix`-bundled README resolves to HTTP 302 → 200 via github.com → raw.githubusercontent.com
+
+  Verified with `unzip -p tf-analyze-0.1.32.vsix extension/README.md | head -1` showing the rewritten URL, then `curl -sIL` confirming reachability.
+
+---
+
+## [0.1.31] — 2026-05-10
+
+### Added
+
+- **MitrePanel: tactic-grouped output.** Engine's `--format mitre` now groups by ATT&CK tactic (Initial Access → … → Impact), with techniques as second-tier headers (`T1078.004 — Valid Accounts: Cloud Accounts`). MitrePanel was previously promoting `### Tnnnn` lines to `<h3>` chips, but the new shape uses `### <Tactic>` at the top level and indented `T<id> — <name>` lines underneath. Webview now renders three tiers: `<h1>` for the engine title, `<h2 class="tactic">` for tactic groups (gradient background, accent left-border), `<h3>` for techniques (chip + name + count). Legacy single-tier `### Tnnnn` output still renders correctly as a fallback.
+
+- **RuleExplainerPanel: CWE + D3FEND chip rows.** `detect.py --explain <RULE-ID>` now emits four taxonomy header lines — CIS, MITRE ATT&CK, CWE, MITRE D3FEND — when the rule carries them. The panel promotes each to a coloured chip-row with click-through links to `cwe.mitre.org/data/definitions/<n>.html`, `attack.mitre.org/techniques/<id>/`, and `d3fend.mitre.org/technique/<id>/`. The four chip colours are distinct (CIS blue, MITRE purple, CWE amber, D3FEND green) so a finding's full threat-language footprint is visible at a glance.
+
+- **Engine `--explain` upgrade (engine, not extension):** Previously only emitted CIS. Now emits MITRE ATT&CK, CWE, and D3FEND when present. The extension panel above consumes this.
+
+### Fixed
+
+- **Hero image now renders in the Extensions details panel.** Three layered bugs had to be peeled to find the actual root cause:
+
+  1. **Earlier "fix" went the wrong direction.** A previous edit had changed the README's hero `<img>` from a relative path to an absolute `raw.githubusercontent.com/.../main/...` URL on the assumption that Marketplace required absolute URLs. That works for the Marketplace listing but breaks VS Code's installed-extension details panel on machines with restricted egress (corporate networks blocking `raw.githubusercontent.com` from VS Code's webview). Reverted to relative.
+
+  2. **HTML `<img>` vs. markdown `![]()` aren't treated equivalently.** VS Code's README renderer handles markdown image syntax reliably; raw HTML `<img>` tags get less consistent treatment depending on the surrounding HTML block. Switched the hero from `<p align="center"><img src="..."></p>` to plain markdown `![alt](path)`.
+
+  3. **The actual root cause: monorepo `directory:` mismatch in vsce's path rewriter.** `vsce` rewrites markdown image paths to absolute URLs at package time using the repo's `repository.url`, but it does **not** prepend the `repository.directory` field — even when one is set. With `directory: "vscode-extension"` and a relative `assets/hero.png`, vsce rewrote to `https://github.com/.../raw/HEAD/assets/hero.png` (404 — the actual file is at `.../raw/HEAD/vscode-extension/assets/hero.png`). Fixed by passing `--baseImagesUrl https://github.com/ChrisAdkin8/tf-analyze/raw/HEAD/vscode-extension` to both `vsce package` and `vsce publish`. The flag is now baked into the `package` and `publish` npm scripts so future builds don't regress. Verified: the `.vsix`-bundled README's image URL now resolves to HTTP 200 (after a single 302 redirect through GitHub).
+
+---
+
+## [0.1.30] — 2026-05-10
+
+### Added
+
+- **Compliance panel: OWASP IaC framework choice.** The framework picker (top of the Compliance panel) now offers `OWASP IaC` alongside `CIS / PCI DSS / SOC 2 / All`. Maps against the static-analysable items from the [OWASP Infrastructure-as-Code Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) — `Develop and Distribute / Secrets Detection`, `Resource Permission Minimization`, `Open Source Dependency Scanning`, `Cloud Asset Tagging`, `Comprehensive Logging Enablement`, etc. 49 catalogue rules carry the new mappings.
+
+  Status-bar tooltip updated: `tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2 / OWASP IaC)`.
+
+### Internal
+
+- No engine code changes inside the bundled VSIX — the framework picker just exposes the `--compliance-framework owasp_iac` choice the engine has supported since the matching engine release.
+
+---
+
 ## [0.1.29] — 2026-05-09
 
 ### Added

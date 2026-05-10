@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-SECURITYHUB-001 — Security Hub not enabled"
 description: "tf-analyze rule SEC-AWS-SECURITYHUB-001 (MEDIUM · security): Security Hub not enabled"
-keywords: "security, medium, terraform, iac, aws, mitre-T1562.001"
+keywords: "security, medium, terraform, iac, aws, mitre-T1562.001, cwe-693"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1562.001"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1562.001",
+  "keywords": "security, medium, terraform, MITRE T1562.001, CWE-693",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -105,6 +105,9 @@ must return a Hub ARN (non-empty).
 
 **MITRE ATT&CK**
   - [`T1562.001`](https://attack.mitre.org/techniques/T1562/001/)
+
+**CWE**
+  - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
 
 **Source**
   - [`catalog/SEC-AWS-SECURITYHUB-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-SECURITYHUB-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-ACR-001 — Azure Container Registry admin account enabled"
 description: "tf-analyze rule SEC-AZURE-ACR-001 (HIGH · security): Azure Container Registry admin account enabled"
-keywords: "security, high, terraform, iac, azure"
+keywords: "security, high, terraform, iac, azure, mitre-T1078.004, cwe-250"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform",
+  "keywords": "security, high, terraform, MITRE T1078.004, CWE-250",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -110,6 +110,12 @@ must return `false`.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
 
 **Source**
   - [`catalog/SEC-AZURE-ACR-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-ACR-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-REDSHIFT-001 — Redshift cluster has no automated snapshot retention"
 description: "tf-analyze rule ROB-AWS-REDSHIFT-001 (MEDIUM · robustness): Redshift cluster has no automated snapshot retention"
-keywords: "robustness, medium, terraform, iac, aws"
+keywords: "robustness, medium, terraform, iac, aws, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform",
+  "keywords": "robustness, medium, terraform, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -95,6 +95,9 @@ must return a value greater than 0.
 
 **SOC 2 Trust Services Criteria**
   - `A1.2`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/ROB-AWS-REDSHIFT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-REDSHIFT-001.yaml) — canonical YAML

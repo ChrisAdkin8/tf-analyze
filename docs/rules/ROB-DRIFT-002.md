@@ -1,7 +1,7 @@
 ---
 title: "ROB-DRIFT-002 — ignore_changes hides too much (wildcard, or tags-wide on a tagged resource)"
 description: "tf-analyze rule ROB-DRIFT-002 (MEDIUM · robustness): ignore_changes hides too much (wildcard, or tags-wide on a tagged resource)"
-keywords: "robustness, medium, terraform, iac"
+keywords: "robustness, medium, terraform, iac, mitre-T1562.001, cwe-693"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform",
+  "keywords": "robustness, medium, terraform, MITRE T1562.001, CWE-693",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -110,6 +110,15 @@ no longer trigger churn.
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Immutable Infrastructure Model`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1562.001`](https://attack.mitre.org/techniques/T1562/001/)
+
+**CWE**
+  - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
+
 **Related rules**
   - [`ROB-DRIFT-001`](./ROB-DRIFT-001.md)
 
@@ -121,6 +130,7 @@ no longer trigger churn.
 See also rules in the `ROB-DRIFT-*` family:
 
 - [`ROB-DRIFT-001`](./ROB-DRIFT-001.md) — Resource uses ignore_changes = all
+- [`ROB-DRIFT-003`](./ROB-DRIFT-003.md) — ignore_changes lists too many attributes (drift-disable by attrition)
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "OPS-ENV-001 — Prod-scoped resource lacks deletion_protection"
 description: "tf-analyze rule OPS-ENV-001 (HIGH · ops): Prod-scoped resource lacks deletion_protection"
-keywords: "ops, high, terraform, iac, cis-2.3"
+keywords: "ops, high, terraform, iac, cis-2.3, mitre-T1485"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "ops, high, terraform, iac, cis-2.3"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "ops, high, terraform, CIS 2.3",
+  "keywords": "ops, high, terraform, CIS 2.3, MITRE T1485",
   "proficiencyLevel": "Expert",
   "articleSection": "ops",
   "isAccessibleForFree": true
@@ -84,6 +84,9 @@ appear — the resource itself is not modified.
 
 **CIS Benchmark**
   - `CIS 2.3`
+
+**MITRE ATT&CK**
+  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **Source**
   - [`catalog/OPS-ENV-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/OPS-ENV-001.yaml) — canonical YAML

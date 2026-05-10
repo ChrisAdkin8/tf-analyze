@@ -49,6 +49,8 @@ verification: |
   must return `true`.
 soc2_cc:
   - "A1.2"
+mitre:
+  - "T1485"
 fix_hcl: |
   resource "aws_db_instance" "example" {
     # ... other arguments ...

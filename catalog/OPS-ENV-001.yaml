@@ -6,6 +6,8 @@ blast_radius: environment
 status: active
 cis:
   - "2.3"
+mitre:
+  - "T1485"
 patterns:
   - kind: prod_no_deletion_protection
     description: A resource in a prod path (or with environment=prod label) is missing deletion_protection=true on a type that supports it

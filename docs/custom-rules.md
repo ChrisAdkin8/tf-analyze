@@ -111,8 +111,12 @@ fields:
 | `recommendation`  | string       | What to do about it                                |
 | `verification`    | string       | How to verify the fix                              |
 
-Optional fields: `cis`, `pci_dss`, `soc2_cc`, `mitre`, `fix_hcl`,
-`fix_disruption`, `fixtures`, `test_template`, `related`, `status`.
+Optional fields: `cis`, `pci_dss`, `soc2_cc`, `owasp_iac`, `mitre`,
+`fix_hcl`, `fix_disruption`, `fixtures`, `test_template`, `related`,
+`status`. The `owasp_iac` field maps the rule to the [OWASP IaC
+Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html);
+each entry is `<Section> / <Item label>` with section ∈ `{Develop and
+Distribute, Deploy, Runtime}`.
 
 ## Pattern kinds
 

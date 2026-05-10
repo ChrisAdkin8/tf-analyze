@@ -84,12 +84,31 @@ export class RuleExplainerPanel {
   private _render(text: string): string {
     const docsUrl = ruleDocsUrl(this._ruleId);
     const escaped = this._escape(text)
+      // Taxonomy header lines emitted by `detect.py --explain`:
+      //   # CIS: 1.16
+      //   # MITRE ATT&CK: T1078.004
+      //   # CWE: CWE-269, CWE-732
+      //   # MITRE D3FEND: D3-PA, D3-MFA
+      // Promote each to a styled chip-row before the H1 promotion below
+      // catches them as part of an h1 block.
+      .replace(/^# CIS: (.+)$/gm, (_m, items: string) =>
+        `<div class="taxon"><span class="taxon-label">CIS</span>${items.split(',').map(s => `<span class="chip chip-cis">${s.trim()}</span>`).join('')}</div>`)
+      .replace(/^# MITRE ATT&amp;CK: (.+)$/gm, (_m, items: string) =>
+        `<div class="taxon"><span class="taxon-label">MITRE ATT&amp;CK</span>${items.split(',').map(s => `<a class="chip chip-mitre" href="https://attack.mitre.org/techniques/${s.trim().replace('.', '/')}/" target="_blank" rel="noopener">${s.trim()}</a>`).join('')}</div>`)
+      .replace(/^# CWE: (.+)$/gm, (_m, items: string) =>
+        `<div class="taxon"><span class="taxon-label">CWE</span>${items.split(',').map(s => {
+          const id = s.trim();
+          const num = id.replace(/^CWE-/, '');
+          return `<a class="chip chip-cwe" href="https://cwe.mitre.org/data/definitions/${num}.html" target="_blank" rel="noopener">${id}</a>`;
+        }).join('')}</div>`)
+      .replace(/^# MITRE D3FEND: (.+)$/gm, (_m, items: string) =>
+        `<div class="taxon"><span class="taxon-label">D3FEND</span>${items.split(',').map(s => `<a class="chip chip-d3fend" href="https://d3fend.mitre.org/technique/${s.trim()}/" target="_blank" rel="noopener">${s.trim()}</a>`).join('')}</div>`)
       // Promote `## Section` headings to <h2>
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
       // First line `# RULE-ID — title` to <h1>
       .replace(/^# (.+)$/gm, '<h1>$1</h1>')
       // Cross-link any other rule IDs in the body to their docs pages.
-      .replace(/\b((?:SEC|ROB|STK|OPS|MOD|COST|INT|CI|STYLE|CUSTOM)-[A-Z0-9-]+)\b/g,
+      .replace(/\b((?:SEC|ROB|STK|OPS|MOD|COST|INT|CI|STYLE|CUSTOM|DRY)-[A-Z0-9-]+)\b/g,
         (_m, id: string) =>
           id === this._ruleId ? id : `<a href="${ruleDocsUrl(id)}">${id}</a>`);
     return `<!DOCTYPE html>
@@ -103,6 +122,16 @@ export class RuleExplainerPanel {
   .toolbar { margin-bottom: 16px; }
   .toolbar a { display: inline-block; background: #157878; color: #fff !important; padding: 6px 12px; border-radius: 4px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-weight: 600; font-size: 12px; }
   .toolbar a:hover { text-decoration: none; opacity: 0.9; }
+  /* Taxonomy chip rows — CIS / MITRE / CWE / D3FEND.
+     One row per framework, label on the left, chip-style links across.  */
+  .taxon { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .taxon-label { color: #888; font-size: 11px; font-weight: 600; min-width: 100px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-family: ui-monospace, Menlo, monospace; text-decoration: none; }
+  .chip:hover { opacity: 0.9; text-decoration: none; }
+  .chip-cis    { background: #2a4a6a; color: #cce0f5 !important; }
+  .chip-mitre  { background: #4A2A6A; color: #e0c8f5 !important; }
+  .chip-cwe    { background: #6a4a2a; color: #f5e0c8 !important; }
+  .chip-d3fend { background: #2a6a4a; color: #c8f5e0 !important; }
 </style></head><body>
 <div class="toolbar"><a href="${docsUrl}" target="_blank" rel="noopener">📖 Open full rule docs in browser →</a></div>
 <pre>${escaped}</pre>

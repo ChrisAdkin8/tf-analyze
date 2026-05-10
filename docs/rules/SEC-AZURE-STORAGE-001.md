@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-STORAGE-001 — Azure storage account allows non-HTTPS traffic"
 description: "tf-analyze rule SEC-AZURE-STORAGE-001 (HIGH · security): Azure storage account allows non-HTTPS traffic"
-keywords: "security, high, terraform, iac, azure, cis-3.1"
+keywords: "security, high, terraform, iac, azure, cis-3.1, mitre-T1071.001, cwe-319, d3-ei"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-3.1"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 3.1",
+  "keywords": "security, high, terraform, CIS 3.1, MITRE T1071.001, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -91,6 +91,15 @@ The command should return `true`.
 
 **CIS Benchmark**
   - `CIS 3.1`
+
+**MITRE ATT&CK**
+  - [`T1071.001`](https://attack.mitre.org/techniques/T1071/001/)
+
+**CWE**
+  - [`CWE-319`](https://cwe.mitre.org/data/definitions/319.html)
+
+**MITRE D3FEND**
+  - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
 
 **Source**
   - [`catalog/SEC-AZURE-STORAGE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-STORAGE-001.yaml) — canonical YAML

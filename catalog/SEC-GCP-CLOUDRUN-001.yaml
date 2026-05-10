@@ -4,6 +4,12 @@ section: security
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-IAA"
 patterns:
   - kind: resource_arg
     resource: google_cloud_run_v2_service

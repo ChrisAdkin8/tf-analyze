@@ -14,10 +14,11 @@
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/ChrisAdkin8/tf-analyze/pkgs/container/tf-analyze)
 
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 215](https://img.shields.io/badge/rules-215-brightgreen)
+![Rules: 217](https://img.shields.io/badge/rules-217-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 565](https://img.shields.io/badge/tests-565%20passing-brightgreen)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-215%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
+![Tests: 617](https://img.shields.io/badge/tests-617%20passing-brightgreen)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-217%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
@@ -68,7 +69,7 @@ Live diagnostics, Quick Fix, attack graph, Module Reuse Advisor, and a `vscode:/
 code --install-extension tfanalyze.tf-analyze
 
 # Or from a downloaded .vsix (current path until the Marketplace listing publishes)
-code --install-extension tf-analyze-0.1.29.vsix
+code --install-extension tf-analyze-0.1.33.vsix
 ```
 
 Open any Terraform workspace and the six status-bar shortcuts appear bottom-left:
@@ -85,10 +86,13 @@ To see the deeper panels render against rich input, open one of the showcase cor
 - uses: ChrisAdkin8/tf-analyze@v1
   with:
     fail-on: HIGH
-    post-pr-comment: true     # inline `suggestion` blocks on every PR
+    post-pr-comment: true                # inline `suggestion` blocks on every PR
+    compliance-framework: owasp_iac      # optional — adds a collapsible compliance gap report
+    attack-graph: true                   # optional — embeds Mermaid attack graph in PR summary
+    ref: v0.2.1                          # optional — pin the engine version (default: main)
 ```
 
-See [`integrations/github-action.yml`](integrations/github-action.yml) for the full workflow with SARIF upload and HTML artefact.
+See [`integrations/github-action.yml`](integrations/github-action.yml) for the full workflow with SARIF upload, engine-rendered PR summary (R28.1), and HTML artefact.
 
 ---
 
@@ -105,11 +109,16 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Aggregate risk score + letter grade (A–F) | ✅ | ❌ | ❌ | ❌ |
 | `fix_hcl` snippet on **every** rule | ✅ (100%) | ⚠️ partial | ⚠️ partial | n/a |
 | Inline GitHub PR `suggestion` blocks | ✅ | ❌ | ❌ | n/a |
-| MITRE ATT&CK mapping in output | ✅ | ❌ | ⚠️ partial | ⚠️ via plugin |
+| MITRE ATT&CK mapping (technique + tactic-grouped output) | ✅ pinned to v17 | ❌ | ⚠️ partial | ⚠️ via plugin |
+| MITRE D3FEND defensive-technique tagging | ✅ | ❌ | ❌ | ❌ |
+| CWE taxonomy in SARIF output | ✅ | ❌ | ⚠️ partial | ❌ |
 | OSCAL Assessment Results JSON output | ✅ | ❌ | ❌ | ❌ |
+| OWASP IaC Cheat Sheet compliance mapping | ✅ | ❌ | ❌ | ❌ |
 | Baseline ratcheting (`--baseline prior.json`) | ✅ | ⚠️ via filter | ✅ | ❌ |
 | LSP server for IDE diagnostics | ✅ | ❌ | ❌ | ❌ |
 | HCP Terraform Run Task integration | ✅ | ❌ | ❌ | ❌ |
+| Native Terraform provider (`data "tfanalyze_scan"`) | ✅ | ❌ | ❌ | ❌ |
+| MCP server for AI agents (Cursor / Claude Desktop / …) | ✅ | ❌ | ❌ | ❌ |
 | YAML custom rules | ✅ | ✅ (Rego) | ✅ (Python+YAML) | ✅ (Python) |
 | Stdlib-only core (optional fast-path) | ✅ | n/a | ❌ (pip) | ❌ (pip) |
 
@@ -131,7 +140,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-215 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+217 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -142,7 +151,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Cross-resource | `INT-*`, `graph_check` | Intent–implementation gaps, KMS location parity, IAM breadth |
 | Module reuse (advisory) | `MOD-REUSE-*` | Hand-rolled scaffolding that mirrors a popular Terraform Registry module — INFO tier, never gates CI. Pass `--show-info` to render |
 
-**Per-cloud breakdown:** AWS 81 · GCP 42 · Azure 33 · Kubernetes/Helm 5 · cross-cloud 48.
+**Per-cloud breakdown:** AWS 86 · GCP 43 · Azure 34 · Kubernetes/Helm 5 · cross-cloud 49.
 
 ### Execution modes
 
@@ -163,7 +172,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | `json` | Top-level `summary` block + findings; consumed by `--compare`, `--baseline` |
 | `sarif` | SARIF v2.1.0 — line-level annotations on GitHub Code Scanning |
 | `html` | Self-contained report with score banner, urgency badges, attack-graph SVG |
-| `compliance` | CIS / PCI-DSS / SOC 2 PASS/FAIL per control (`--oscal PATH` for OSCAL JSON) |
+| `compliance` | CIS / PCI-DSS / SOC 2 / OWASP IaC PASS/FAIL per control (`--compliance-framework <name>`; `--oscal PATH` for OSCAL JSON). The `owasp_iac` framework maps the static-analysable items from the [OWASP IaC Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html). |
 | `mitre` | Findings grouped by MITRE ATT&CK technique |
 | `pr-summary` | GitHub-flavoured Markdown shape sized for PR descriptions / PR-bot comments — score banner, top-3 findings table (linked to docs site), top fix, collapsed Mermaid attack graph |
 
@@ -209,15 +218,15 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 
 | | Path | Doc |
 |---|------|-----|
-| GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks |
-| VS Code extension (v0.1.29) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
+| GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks + engine-rendered PR summary (`--format pr-summary`); optional `compliance-framework` / `attack-graph` / `show-info` inputs; pin via `ref` for reproducible CI |
+| VS Code extension (v0.1.33) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |
 | Pre-commit hook | [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) | [`docs/pre-commit.md`](docs/pre-commit.md) |
 | HCP Terraform Run Task | [`integrations/run-task/`](integrations/run-task/) | [`docs/run-task.md`](docs/run-task.md) |
-| MCP server (Cursor / Claude Desktop / Continue / …) | [`integrations/mcp-server/`](integrations/mcp-server/) | FastMCP wrapper — `scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph` tools + `tfanalyze://catalogue` resource. stdio transport. |
+| MCP server (Cursor / Claude Desktop / Continue / …) | [`integrations/mcp-server/`](integrations/mcp-server/) | FastMCP wrapper — `scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph`, `compliance_report` tools + `tfanalyze://catalogue` resource. stdio transport. Hardened against agent-side abuse: `TFA_REPO_ROOT` containment, `<tf-analyze-output>` envelope on every tool, finding/byte truncation caps. See [`integrations/mcp-server/README.md#hardening`](integrations/mcp-server/README.md#hardening). |
 | Terraform provider | [`terraform-provider/`](terraform-provider/) | `data "tfanalyze_scan"` data source — gates `terraform plan`/`apply` on a clean scan via `precondition` blocks, no external CI required. |
 
 ---
@@ -314,7 +323,7 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (218 positive + 140 clea
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration
 ├── .github/workflows/          # CI (ci.yml, docker.yml)
-├── catalog/                    # 215 rule definitions (one YAML per rule)
+├── catalog/                    # 217 rule definitions (one YAML per rule)
 │   └── README.md               # Schema reference
 ├── fixtures/                   # 218 positive + 140 clean (negative) fixtures
 ├── examples/                   # Showcase corpora
@@ -368,7 +377,7 @@ CI gate (`.github/workflows/ci.yml`) runs the pytest suite, the schema validator
 
 ## Provenance
 
-Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design and runs across AWS (86 rules), GCP (43 rules), Azure (34 rules), Kubernetes/Helm (5), and 47 cross-cloud rules — total 215 active. Full CIS Foundations Benchmark coverage on GCP; growing parity on AWS and Azure.
+Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design and runs across AWS (86 rules), GCP (43 rules), Azure (34 rules), Kubernetes/Helm (5), and 49 cross-cloud rules — total 217 active. Full CIS Foundations Benchmark coverage on GCP; growing parity on AWS and Azure. Compliance output covers CIS, PCI-DSS v4.0, SOC 2 Trust Services Criteria, and the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html).
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: "MOD-STALE-001 — Registry module is significantly behind latest version"
 description: "tf-analyze rule MOD-STALE-001 (LOW · dry): Registry module is significantly behind latest version"
-keywords: "dry, low, terraform, iac"
+keywords: "dry, low, terraform, iac, mitre-T1195.002, cwe-1395, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "dry, low, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "dry, low, terraform",
+  "keywords": "dry, low, terraform, MITRE T1195.002, CWE-1395, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "dry",
   "isAccessibleForFree": true
@@ -88,6 +88,18 @@ should match the latest from `terraform.io/registry/v1/modules/{ns}/{name}/{prov
 Confirm `terraform plan` shows no unintended resource replacements after the upgrade.
 
 ## References
+
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Open Source Dependency Scanning`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1395`](https://cwe.mitre.org/data/definitions/1395.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Source**
   - [`catalog/MOD-STALE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/MOD-STALE-001.yaml) — canonical YAML

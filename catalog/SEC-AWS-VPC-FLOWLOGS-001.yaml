@@ -13,6 +13,12 @@ patterns:
     resource: aws_flow_log
     when_present: aws_vpc
     scope: repo
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-NTA"
 recommendation: |
   Add an `aws_flow_log` resource targeting every VPC:
 

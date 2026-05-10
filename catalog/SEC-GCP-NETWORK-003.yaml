@@ -6,6 +6,12 @@ blast_radius: environment
 status: active
 cis:
   - "3.8"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-NTA"
 patterns:
   - kind: resource_missing_arg
     resource: google_compute_subnetwork

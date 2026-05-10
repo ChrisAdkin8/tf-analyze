@@ -95,30 +95,53 @@ class MitrePanel {
      * a styled `<pre>` keeps the engine's column alignment intact and
      * highlights the technique IDs and urgency tags inline. */
     _renderMitre(text) {
+        // Engine output shape (post-Round-30 sweep):
+        //
+        //   ## MITRE ATT&CK Coverage  (pinned to ATT&CK v17)
+        //
+        //   ### Initial Access  (56 findings)
+        //     T1078.004 — Valid Accounts: Cloud Accounts  (20 findings)
+        //       [CRITICAL] SEC-AWS-IAM-002  /path/to/file.tf:61  aws_iam_role.x
+        //
+        // Three header tiers to promote:
+        //   * `## …` → <h2>: title (engine version banner)
+        //   * `### <Tactic>  (N findings)` → <h2 class="tactic">: tactic group
+        //   * `  T<id> — <name>  (N findings)` (two-space indent) → <h3>: technique
+        //
+        // The old single-tier `### T<id>` shape (pre-sweep) still works as a
+        // fallback because the technique-line regex below is the only source
+        // of `<h3>` promotion now.
         const escaped = this._escape(text)
-            // Section header: ### Txxxx.yyy or ### (unmapped)
-            .replace(/^### (T\d+(?:\.\d+)?|.+?)(\s+\(\d+ findings?\))?$/gm, (_m, tid, count) => {
-            const tagged = tid.startsWith('T')
-                ? `<span class="tech">${tid}</span>`
-                : `<span class="tech-unmapped">${tid}</span>`;
-            return `<h3>${tagged}${count ? `<span class="count">${count.trim()}</span>` : ''}</h3>`;
+            // Tactic groups — '### Initial Access (56 findings)' becomes a tactic header.
+            // Match anything that ISN'T a bare T-id-with-dot — those are handled below
+            // (legacy fallback) but the bare-T form no longer appears in current output.
+            .replace(/^### (.+?)(\s+\(\d+ findings?\))?$/gm, (_m, tactic, count) => {
+            // Is it a legacy `### T1078.004` line? Style as a technique chip.
+            if (/^T\d+(?:\.\d+)?$/.test(tactic)) {
+                return `<h3><span class="tech">${tactic}</span>${count ? `<span class="count">${count.trim()}</span>` : ''}</h3>`;
+            }
+            // Otherwise it's a tactic group. Mark as h2.tactic — tactic-coloured pill.
+            return `<h2 class="tactic">${tactic}${count ? `<span class="count">${count.trim()}</span>` : ''}</h2>`;
         })
-            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-            // Urgency tag inside finding bullets
+            // Technique lines — '  T1078.004 — Valid Accounts: Cloud Accounts  (20 findings)'
+            // Two-space indent + 'T<id>' + em-dash + name + count. Promote to h3 with chip.
+            .replace(/^ {2}(T\d+(?:\.\d+)?)( — [^\n]*?)(\s+\(\d+ findings?\))?$/gm, (_m, tid, name, count) => `<h3><span class="tech">${tid}</span><span class="tech-name">${name.replace(/^ — /, '')}</span>${count ? `<span class="count">${count.trim()}</span>` : ''}</h3>`)
+            // Title.
+            .replace(/^## (.+)$/gm, '<h1>$1</h1>')
+            // Urgency tag inside finding bullets.
             .replace(/\[(CRITICAL|HIGH|MEDIUM|LOW|INFO)\]/g, (_m, u) => `<span class="u u-${u}">${u}</span>`)
-            // Rule IDs in finding bullets: SEC-AWS-IAM-001, ROB-AWS-RDS-002, …
-            // The plain-text output emits them as bare tokens after the
-            // urgency tag; turn each into an anchor that links to the
-            // per-rule docs page.
-            .replace(/\b((?:SEC|ROB|STK|OPS|MOD|COST|INT|CI|STYLE|CUSTOM)-[A-Z0-9-]+)\b/g, (_m, ruleId) => `<a class="rule-id" href="${(0, urls_1.ruleDocsUrl)(ruleId)}" target="_blank" rel="noopener" title="Open rule documentation">${ruleId}</a>`);
+            // Rule IDs — bare tokens after the urgency tag. Cross-link to docs.
+            .replace(/\b((?:SEC|ROB|STK|OPS|MOD|COST|INT|CI|STYLE|CUSTOM|DRY)-[A-Z0-9-]+)\b/g, (_m, ruleId) => `<a class="rule-id" href="${(0, urls_1.ruleDocsUrl)(ruleId)}" target="_blank" rel="noopener" title="Open rule documentation">${ruleId}</a>`);
         return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
-  body { margin: 0; background: #1e1e1e; color: #ccc; font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 24px; line-height: 1.5; }
-  h2 { font-size: 16px; color: #e1e1e1; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #3c3c3c; }
-  h3 { font-size: 13px; color: #ddd; margin: 16px 0 4px; display: flex; align-items: baseline; gap: 8px; }
-  .tech { background: #4A90D9; color: #fff; padding: 1px 6px; border-radius: 3px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
-  .tech-unmapped { color: #888; font-style: italic; }
-  .count { color: #888; font-size: 11px; font-weight: normal; }
+  body { margin: 0; background: #1e1e1e; color: #ccc; font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 24px; line-height: 1.55; }
+  h1 { font-size: 17px; color: #e1e1e1; margin: 0 0 16px; padding-bottom: 6px; border-bottom: 1px solid #3c3c3c; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  h2.tactic { font-size: 13px; color: #ddd; margin: 22px 0 8px 0; padding: 4px 10px; border-radius: 3px; background: linear-gradient(90deg, #2a4a6a, #1e1e1e 60%); border-left: 3px solid #4daafc; display: inline-block; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  h2.tactic .count { color: #aaa; font-weight: 400; margin-left: 8px; font-size: 11px; }
+  h3 { font-size: 12px; color: #ccc; margin: 8px 0 4px 16px; display: flex; align-items: baseline; gap: 8px; font-weight: 600; }
+  .tech { background: #4A90D9; color: #fff; padding: 1px 6px; border-radius: 3px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; flex-shrink: 0; }
+  .tech-name { color: #ddd; font-weight: 500; }
+  .count { color: #888; font-size: 11px; font-weight: normal; margin-left: auto; padding-left: 12px; }
   .u { display: inline-block; padding: 0 5px; border-radius: 2px; font-size: 10px; font-weight: 600; margin-right: 4px; }
   .u-CRITICAL { background: #c0392b; color: #fff; }
   .u-HIGH { background: #e67e22; color: #fff; }

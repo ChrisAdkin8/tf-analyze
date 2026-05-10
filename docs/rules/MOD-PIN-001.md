@@ -1,7 +1,7 @@
 ---
 title: "MOD-PIN-001 — Module source not pinned"
 description: "tf-analyze rule MOD-PIN-001 (HIGH · module): Module source not pinned"
-keywords: "module, high, terraform, iac"
+keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "module, high, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "module, high, terraform",
+  "keywords": "module, high, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "module",
   "isAccessibleForFree": true
@@ -90,6 +90,18 @@ Run `terraform get -update` and confirm the same version resolves on
 every machine. Commit `.terraform.lock.hcl`.
 
 ## References
+
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Open Source Dependency Scanning`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Source**
   - [`catalog/MOD-PIN-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/MOD-PIN-001.yaml) — canonical YAML

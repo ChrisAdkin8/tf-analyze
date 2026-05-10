@@ -21,6 +21,11 @@ patterns:
       `Action: "iam:*"` or `Action: "iam:Create*"`). This is the
       self-mutating-identity privilege-escalation class — the bound
       principal can attach policies to itself or rotate access keys.
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
 recommendation: |
   Replace `iam:*` with the explicit IAM operations actually required.
   If full IAM access is intentional, attach the AWS-managed

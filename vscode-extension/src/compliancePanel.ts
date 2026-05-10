@@ -6,7 +6,7 @@ import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
 import { injectLinkInterceptor, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
 
-const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'all'] as const;
+const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'owasp_iac', 'all'] as const;
 type Framework = (typeof FRAMEWORKS)[number];
 
 /** Compliance gap report panel. Wraps `detect.py --format html
@@ -109,7 +109,12 @@ export class CompliancePanel {
   private _wrap(reportHtml: string): string {
     const srcdoc = reportHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     const opts = FRAMEWORKS.map(fw => {
-      const label = fw === 'cis' ? 'CIS' : fw === 'pci_dss' ? 'PCI DSS' : fw === 'soc2' ? 'SOC 2' : 'All';
+      const label =
+        fw === 'cis' ? 'CIS' :
+        fw === 'pci_dss' ? 'PCI DSS' :
+        fw === 'soc2' ? 'SOC 2' :
+        fw === 'owasp_iac' ? 'OWASP IaC' :
+        'All';
       const sel = fw === this._framework ? ' selected' : '';
       return `<option value="${fw}"${sel}>${label}</option>`;
     }).join('');

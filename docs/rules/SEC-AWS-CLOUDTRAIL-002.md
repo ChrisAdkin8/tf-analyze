@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CLOUDTRAIL-002 — CloudTrail log file integrity validation disabled"
 description: "tf-analyze rule SEC-AWS-CLOUDTRAIL-002 (HIGH · security): CloudTrail log file integrity validation disabled"
-keywords: "security, high, terraform, iac, aws, cis-3.2, mitre-T1562.008"
+keywords: "security, high, terraform, iac, aws, cis-3.2, mitre-T1562.008, cwe-778, d3-faa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-3.2, mitre-T1562.008"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 3.2, MITRE T1562.008",
+  "keywords": "security, high, terraform, CIS 3.2, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -112,8 +112,17 @@ must return `true`.
 **SOC 2 Trust Services Criteria**
   - `CC7.2`
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
 
 **Source**
   - [`catalog/SEC-AWS-CLOUDTRAIL-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-CLOUDTRAIL-002.yaml) — canonical YAML

@@ -6,6 +6,12 @@ blast_radius: single-resource
 status: active
 cis:
   - "7.3"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
 patterns:
   - kind: resource_missing_arg
     resource: google_bigquery_dataset

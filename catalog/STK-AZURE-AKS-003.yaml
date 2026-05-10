@@ -11,6 +11,8 @@ applies_when:
   # legacy infrastructure that legitimately can't enable the feature.
   min_provider:
     azurerm: "3.40"
+mitre:
+  - "T1078.004"
 patterns:
   - kind: resource_missing_arg
     resource: azurerm_kubernetes_cluster

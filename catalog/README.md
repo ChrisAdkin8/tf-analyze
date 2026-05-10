@@ -41,6 +41,14 @@ blast_radius: module         # required, one of: single-resource|module|environm
 status: active               # optional, default active. one of: active|deprecated|experimental
 cis:                         # optional, list of CIS GCP v4.0 control IDs
   - "1.6"
+mitre:                       # optional, ATT&CK technique IDs (Tnnnn or Tnnnn.nnn)
+  - "T1078.004"              # pinned against scripts/_mitre.py:MITRE_ATTACK_VERSION
+cwe:                         # optional, CWE IDs in canonical "CWE-<digits>" form
+  - "CWE-269"                # cwe.mitre.org/data/definitions/269.html
+  - "CWE-732"
+d3fend:                      # optional, MITRE D3FEND defensive-technique IDs
+  - "D3-PA"                  # Privileged Account Management
+  - "D3-MFA"                 # Multi-factor Authentication
 patterns:                    # required, ≥1. detection patterns the skill applies.
   - kind: resource_arg       # one of: resource_arg|resource_missing_arg|resource_present|grep|hcl_attr
     resource: google_project_iam_member
@@ -76,6 +84,34 @@ Use `applies_when` when the catalogue argument the rule checks **does not exist*
 - Skipped rules are reported on stderr as `# N rule(s) skipped due to applies_when …` so users know rules are conditionally off rather than silently disabled.
 
 Adopt `applies_when` only when the gate is **substantive** — i.e., the rule would emit false positives on older providers because the argument it checks doesn't exist there. Don't add it just because the argument is "newer-ish"; permissive defaults are better than over-gated ones.
+
+### Threat-language taxonomies — `mitre`, `cwe`, `d3fend`
+
+Three optional fields tag a rule with adversary / weakness / defense ontologies. All three flow into SARIF (as flat tags), into the per-rule docs page (as bulleted reference blocks), and — in the `mitre` case — into `--format mitre` tactic-grouped output.
+
+| Field | Form | Validation | Curation principle |
+|---|---|---|---|
+| `mitre` | `["Tnnnn"]` or `["Tnnnn.nnn"]` (sub-techniques preferred) | Pinned against `MITRE_ATTACK_VERSION` (currently v17 / April 2025); table lives in [`scripts/_mitre.py`](../scripts/_mitre.py); CI's [`check_attack_drift.py`](../scripts/check_attack_drift.py) gate fails the build if a new technique is referenced without being added to the table | Map only when the link is unambiguous; vague mappings hurt the SOC-readability of `--format mitre` |
+| `cwe` | `["CWE-<digits>"]` (e.g. `CWE-732`) | Regex-validated by `validate_catalog_entry`; SARIF taxonomies emit verbatim | Map the obvious weakness type — usually one or two CWE IDs per rule; more is noise |
+| `d3fend` | `["D3-<TOKEN>"]` (e.g. `D3-MFA`) | Regex-validated by `validate_catalog_entry`; SARIF tags emit `d3fend:D3-<TOKEN>` | Derived from the rule's `mitre:` via D3FEND's [ATT&CK ↔ D3FEND ontology](https://d3fend.mitre.org/); curated subset only |
+
+Bulk-assign all three via [`scripts/apply_mitre.py`](../scripts/apply_mitre.py) — the in-script manifests are the single source of truth for the catalogue's coverage; re-running is idempotent.
+
+Common D3FEND IDs the catalogue uses today (full list in `apply_mitre.py`):
+
+| ID | Defensive technique | Typical `mitre:` partner |
+|---|---|---|
+| `D3-MFA` | Multi-factor Authentication | `T1078.004` (Valid Accounts: Cloud) |
+| `D3-PA` | Privileged Account Management | `T1078.004`, `T1098.001` |
+| `D3-CH` | Credential Hardening | `T1552.001`, `T1098.001` |
+| `D3-EAR` | Encrypted Sensitive Data (at rest) | `T1530` |
+| `D3-EI` | Encrypted Information / In Transit | `T1071.001`, `T1040` |
+| `D3-IAA` | Inbound Application Allow-listing | `T1190`, `T1133` |
+| `D3-FAA` | File Access Auditing | `T1562.008` |
+| `D3-NTA` | Network Traffic Analysis | `T1190`, `T1562.008` |
+| `D3-SCA` | Software Component Analysis | `T1195.002` |
+| `D3-AL` | Account Locking | `T1110.001`, `T1078` |
+| `D3-PSH` | Process Self-Modification (shielded boot) | `T1542.003` |
 
 ## Pattern kinds
 

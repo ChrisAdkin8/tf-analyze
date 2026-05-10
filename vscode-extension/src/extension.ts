@@ -495,7 +495,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const complianceStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
   complianceStatusBar.command = "tf-analyze.showCompliance";
   complianceStatusBar.text = "$(checklist) Compliance";
-  complianceStatusBar.tooltip = "tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2)";
+  complianceStatusBar.tooltip = "tf-analyze: open the compliance gap report (CIS / PCI DSS / SOC 2 / OWASP IaC)";
 
   // Fifth: remediate. Bulk apply-fixes UX with two-stage preview/apply
   // flow (writes .bak backups). Priority 96.

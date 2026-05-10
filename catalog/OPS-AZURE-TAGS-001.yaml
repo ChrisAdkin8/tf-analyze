@@ -20,6 +20,8 @@ patterns:
   - kind: resource_missing_arg
     resource: azurerm_virtual_machine
     arg: tags
+owasp_iac:
+  - "Deploy / Cloud Asset Tagging"
 recommendation: |
   Add a `tags` block with at minimum `environment`, `managed_by = "terraform"`,
   and `project`. Use a `locals { common_tags = {...} }` pattern and merge with

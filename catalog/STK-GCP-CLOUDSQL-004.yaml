@@ -12,6 +12,12 @@ applies_when:
     google: "4.0"
 cis:
   - "6.1.2"
+mitre:
+  - "T1040"
+cwe:
+  - "CWE-319"
+d3fend:
+  - "D3-EI"
 patterns:
   # Modern provider (>=5.x) replaced require_ssl with ssl_mode. Suppress when
   # ssl_mode is set to ENCRYPTED_ONLY or TRUSTED_CLIENT_CERTIFICATE_REQUIRED.

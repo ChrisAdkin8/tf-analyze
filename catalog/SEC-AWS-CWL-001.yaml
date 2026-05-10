@@ -20,6 +20,12 @@ patterns:
       independently revoked, audited, or rotated. Logs often contain sensitive
       application data, credentials in error traces, and PII that requires
       customer-controlled encryption.
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-FAA"
 recommendation: |
   Encrypt every log group with a CMK:
 

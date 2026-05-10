@@ -8,6 +8,13 @@ pci_dss:
   - "Req-4.1"
 soc2_cc:
   - "CC6.7"
+mitre:
+  - "T1040"
+  - "T1071.001"
+cwe:
+  - "CWE-319"
+d3fend:
+  - "D3-EI"
 patterns:
   - kind: resource_arg
     resource: azurerm_redis_cache

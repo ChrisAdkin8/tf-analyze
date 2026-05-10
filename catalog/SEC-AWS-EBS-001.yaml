@@ -29,6 +29,10 @@ soc2_cc:
   - "CC6.7"
 mitre:
   - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
 verification: |
   Run `aws ec2 describe-volumes --volume-ids <id>` and confirm
   `Encrypted` is `true`. Run `terraform plan` and verify no diff shows

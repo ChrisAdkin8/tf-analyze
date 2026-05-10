@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-STORAGE-001 — Azure storage account missing blob versioning"
 description: "tf-analyze rule STK-AZURE-STORAGE-001 (MEDIUM · stack): Azure storage account missing blob versioning"
-keywords: "stack, medium, terraform, iac, azure"
+keywords: "stack, medium, terraform, iac, azure, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform",
+  "keywords": "stack, medium, terraform, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -108,6 +108,9 @@ must return `true`.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/STK-AZURE-STORAGE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-STORAGE-001.yaml) — canonical YAML

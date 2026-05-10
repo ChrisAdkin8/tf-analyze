@@ -9,6 +9,8 @@ patterns:
     file_glob: "**/*.tf"
     regex: 'source\s*=\s*"[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*"'
     description: Module block without a version = "..." argument
+owasp_iac:
+  - "Develop and Distribute / Open Source Dependency Scanning"
 recommendation: |
   Add `version = "~> X.Y"` to every registry module block. Without a
   version constraint, `terraform init` resolves the latest available
@@ -20,6 +22,10 @@ soc2_cc:
   - "CC9.2"
 mitre:
   - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
 fix_hcl: |
   module "example" {
     source  = "hashicorp/consul/aws"

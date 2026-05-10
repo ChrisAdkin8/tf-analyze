@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-STORAGE-002 — Azure storage account allows public blob access"
 description: "tf-analyze rule SEC-AZURE-STORAGE-002 (HIGH · security): Azure storage account allows public blob access"
-keywords: "security, high, terraform, iac, azure, cis-3.7"
+keywords: "security, high, terraform, iac, azure, cis-3.7, mitre-T1530, cwe-732, cwe-284"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-3.7"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 3.7",
+  "keywords": "security, high, terraform, CIS 3.7, MITRE T1530, CWE-732, CWE-284",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -88,6 +88,13 @@ The command should return `false`.
 
 **CIS Benchmark**
   - `CIS 3.7`
+
+**MITRE ATT&CK**
+  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
 
 **Source**
   - [`catalog/SEC-AZURE-STORAGE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-STORAGE-002.yaml) — canonical YAML

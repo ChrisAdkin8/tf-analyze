@@ -22,6 +22,8 @@ patterns:
     description: |
       `enable_log_file_validation = false` disables the SHA-256 hash
       chain that makes log tampering detectable.
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
 recommendation: |
   Enable log file validation on every CloudTrail trail:
 
@@ -46,6 +48,10 @@ soc2_cc:
   - "CC7.2"
 mitre:
   - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-FAA"
 fix_hcl: |
   resource "aws_cloudtrail" "example" {
     # ... other arguments ...

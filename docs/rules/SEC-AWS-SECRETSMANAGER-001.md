@@ -98,6 +98,9 @@ must return your CMK ARN, not null or aws/secretsmanager.
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Secrets Storage Management`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **Source**
   - [`catalog/SEC-AWS-SECRETSMANAGER-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-SECRETSMANAGER-001.yaml) — canonical YAML
 

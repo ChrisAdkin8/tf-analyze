@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-WEBAPP-001 — Azure App Service / Function App missing IP access restrictions"
 description: "tf-analyze rule SEC-AZURE-WEBAPP-001 (MEDIUM · security): Azure App Service / Function App missing IP access restrictions"
-keywords: "security, medium, terraform, iac, azure"
+keywords: "security, medium, terraform, iac, azure, mitre-T1133, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform",
+  "keywords": "security, medium, terraform, MITRE T1133, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -116,6 +116,15 @@ After applying, confirm with:
 The list should contain only expected CIDRs or service tags, not `Any`/`0.0.0.0/0`.
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1133`](https://attack.mitre.org/techniques/T1133/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Source**
   - [`catalog/SEC-AZURE-WEBAPP-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-WEBAPP-001.yaml) — canonical YAML

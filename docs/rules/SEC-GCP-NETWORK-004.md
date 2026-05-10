@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-NETWORK-004 — GCP firewall rule exposes database or cache port to 0.0.0.0/0"
 description: "tf-analyze rule SEC-GCP-NETWORK-004 (CRITICAL · security): GCP firewall rule exposes database or cache port to 0.0.0.0/0"
-keywords: "security, critical, terraform, iac, gcp, cis-3.6"
+keywords: "security, critical, terraform, iac, gcp, cis-3.6, mitre-T1190, cwe-284, cwe-1327, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, gcp, cis-3.6"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 3.6",
+  "keywords": "security, critical, terraform, CIS 3.6, MITRE T1190, CWE-284, CWE-1327, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -147,6 +147,16 @@ the allow column. Re-run tf-analyze; SEC-GCP-NETWORK-004 must not fire.
 
 **CIS Benchmark**
   - `CIS 3.6`
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+  - [`CWE-1327`](https://cwe.mitre.org/data/definitions/1327.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Source**
   - [`catalog/SEC-GCP-NETWORK-004.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-NETWORK-004.yaml) — canonical YAML

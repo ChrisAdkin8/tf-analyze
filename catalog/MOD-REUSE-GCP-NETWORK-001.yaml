@@ -4,6 +4,12 @@ section: module-reuse
 default_urgency: INFO
 blast_radius: module
 status: active
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
 patterns:
   - kind: registry_fingerprint
     fingerprint: gcp_network_module

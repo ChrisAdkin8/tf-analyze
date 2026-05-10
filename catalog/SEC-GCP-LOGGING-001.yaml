@@ -11,6 +11,8 @@ patterns:
     resource: google_project_iam_audit_config
     when_present: google_project_iam_member
     scope: repo
+owasp_iac:
+  - "Runtime / Comprehensive Logging Enablement"
 recommendation: |
   Add `google_project_iam_audit_config` resources covering at minimum
   `aiplatform.googleapis.com`, `storage.googleapis.com`, `iam.googleapis.com`,
@@ -25,6 +27,10 @@ soc2_cc:
   - "CC7.2"
 mitre:
   - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-FAA"
 fix_hcl: |
   resource "google_project_iam_audit_config" "all_services" {
     project = var.project_id

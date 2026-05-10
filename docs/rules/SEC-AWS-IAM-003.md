@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-003 — IAM account password policy is not configured or too weak"
 description: "tf-analyze rule SEC-AWS-IAM-003 (MEDIUM · security): IAM account password policy is not configured or too weak"
-keywords: "security, medium, terraform, iac, aws, cis-{'id': '1.8', 'title': 'Ensure IAM password policy requires minimum length of 14'}, cis-{'id': '1.9', 'title': 'Ensure IAM password policy prevents password reuse'}, mitre-T1098.001, mitre-T1078.004"
+keywords: "security, medium, terraform, iac, aws, cis-{'id': '1.8', 'title': 'Ensure IAM password policy requires minimum length of 14'}, cis-{'id': '1.9', 'title': 'Ensure IAM password policy prevents password reuse'}, mitre-T1098.001, mitre-T1078.004, cwe-269, d3-pa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, cis-{'id': '1.8', 'title': 'En
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, CIS {'id': '1.8', 'title': 'Ensure IAM password policy requires minimum length of 14'}, CIS {'id': '1.9', 'title': 'Ensure IAM password policy prevents password reuse'}, MITRE T1098.001, MITRE T1078.004",
+  "keywords": "security, medium, terraform, CIS {'id': '1.8', 'title': 'Ensure IAM password policy requires minimum length of 14'}, CIS {'id': '1.9', 'title': 'Ensure IAM password policy prevents password reuse'}, MITRE T1098.001, MITRE T1078.004, CWE-269, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -121,9 +121,18 @@ must return 14 or greater.
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-003.yaml) — canonical YAML

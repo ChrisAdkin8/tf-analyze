@@ -19,6 +19,8 @@ patterns:
     file_glob: "**/*.tf"
     regex: 'Principal\s*=\s*"\*"'
     description: IAM assume role policy Principal = "*" in jsonencode HCL object syntax
+owasp_iac:
+  - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
   Restrict the `Principal` in assume role policies to specific AWS account
   IDs, IAM roles, or services. A wildcard principal (`"Principal": "*"`)
@@ -39,6 +41,12 @@ soc2_cc:
   - "CC6.1"
 mitre:
   - "T1078.004"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
+d3fend:
+  - "D3-PA"
+  - "D3-MFA"
 fix_hcl: |
   resource "aws_iam_role" "example" {
     name = "example"

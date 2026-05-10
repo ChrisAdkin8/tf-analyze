@@ -1,7 +1,7 @@
 ---
 title: "SEC-SENSITIVE-001 — Sensitive output not marked sensitive=true"
 description: "tf-analyze rule SEC-SENSITIVE-001 (HIGH · security): Sensitive output not marked sensitive=true"
-keywords: "security, high, terraform, iac, mitre-T1552.001"
+keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-200, cwe-532, d3-ch"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, mitre-T1552.001"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1552.001",
+  "keywords": "security, high, terraform, MITRE T1552.001, CWE-200, CWE-532, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -80,8 +80,18 @@ Run `terraform output <name>` and confirm the value is masked as
 
 ## References
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Secrets Detection`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**CWE**
+  - [`CWE-200`](https://cwe.mitre.org/data/definitions/200.html)
+  - [`CWE-532`](https://cwe.mitre.org/data/definitions/532.html)
+
+**MITRE D3FEND**
+  - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
 
 **Source**
   - [`catalog/SEC-SENSITIVE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SENSITIVE-001.yaml) — canonical YAML

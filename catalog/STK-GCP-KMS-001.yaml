@@ -6,6 +6,11 @@ blast_radius: single-resource
 status: active
 cis:
   - "1.10"
+mitre:
+  - "T1098.001"
+  - "T1552.001"
+d3fend:
+  - "D3-CH"
 patterns:
   - kind: resource_missing_arg
     resource: google_kms_crypto_key

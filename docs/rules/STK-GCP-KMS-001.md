@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-KMS-001 — KMS crypto key missing rotation period"
 description: "tf-analyze rule STK-GCP-KMS-001 (HIGH · stack): KMS crypto key missing rotation period"
-keywords: "stack, high, terraform, iac, gcp, cis-1.10"
+keywords: "stack, high, terraform, iac, gcp, cis-1.10, mitre-T1098.001, mitre-T1552.001, d3-ch"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-1.10"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 1.10",
+  "keywords": "stack, high, terraform, CIS 1.10, MITRE T1098.001, MITRE T1552.001, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -103,6 +103,13 @@ Must return a value ≤ `7776000s`.
 
 **CIS Benchmark**
   - `CIS 1.10`
+
+**MITRE ATT&CK**
+  - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
+  - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**MITRE D3FEND**
+  - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
 
 **Related rules**
   - [`STK-KMS-LOCATION-001`](./STK-KMS-LOCATION-001.md)

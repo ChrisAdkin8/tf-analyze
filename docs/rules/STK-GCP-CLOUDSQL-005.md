@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDSQL-005 — Cloud SQL instance uses end-of-life database version"
 description: "tf-analyze rule STK-GCP-CLOUDSQL-005 (HIGH · stack): Cloud SQL instance uses end-of-life database version"
-keywords: "stack, high, terraform, iac, gcp"
+keywords: "stack, high, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe-1104, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform",
+  "keywords": "stack, high, terraform, MITRE T1190, MITRE T1195.002, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -91,6 +91,16 @@ must return a supported, non-EOL version string.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Source**
   - [`catalog/STK-GCP-CLOUDSQL-005.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-CLOUDSQL-005.yaml) — canonical YAML

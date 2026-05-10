@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-S3-LOGGING-001 — S3 bucket missing server access logging"
 description: "tf-analyze rule SEC-AWS-S3-LOGGING-001 (MEDIUM · security): S3 bucket missing server access logging"
-keywords: "security, medium, terraform, iac, aws, cis-3.6, mitre-T1562.008"
+keywords: "security, medium, terraform, iac, aws, cis-3.6, mitre-T1562.008, cwe-778, d3-faa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, cis-3.6, mitre-T1562.008"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, CIS 3.6, MITRE T1562.008",
+  "keywords": "security, medium, terraform, CIS 3.6, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -122,8 +122,17 @@ target bucket within a few minutes of S3 activity.
 **CIS Benchmark**
   - `CIS 3.6`
 
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
 
 **Source**
   - [`catalog/SEC-AWS-S3-LOGGING-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-S3-LOGGING-001.yaml) — canonical YAML

@@ -32,6 +32,11 @@ jobs:
         # no .tf files at the root — detect.py is happy with an empty
         # corpus, so this just exercises the strict-catalog path.
         run: python3 scripts/detect.py --target . --strict-catalog --list-rules > /dev/null
+      - name: ATT&CK drift check (catalogue ↔ scripts/_mitre.py)
+        # Fails the run if any rule cites a `mitre:` technique not in
+        # MITRE_TECHNIQUE_INFO. Action on failure: add the technique
+        # to the table with its human name and tactics.
+        run: python3 scripts/check_attack_drift.py
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

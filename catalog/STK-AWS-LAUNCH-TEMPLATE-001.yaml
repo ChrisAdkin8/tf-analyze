@@ -11,6 +11,10 @@ applies_when:
     aws: "3.0"
 mitre:
   - "T1552.005"
+cwe:
+  - "CWE-668"
+d3fend:
+  - "D3-CH"
 patterns:
   - kind: resource_missing_arg
     resource: aws_launch_template

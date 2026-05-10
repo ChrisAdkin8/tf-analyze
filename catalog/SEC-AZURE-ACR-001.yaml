@@ -4,6 +4,10 @@ section: security
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1078.004"
+cwe:
+  - "CWE-250"
 patterns:
   - kind: hcl_attr
     resource: azurerm_container_registry

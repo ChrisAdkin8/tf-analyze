@@ -72,6 +72,36 @@ class TestProviderRepoShape:
         assert 'data "tfanalyze_scan"' in text
         assert "precondition" in text or "count" in text
 
+    def test_compliance_gate_example_present(self) -> None:
+        # Second worked example must show the compliance-framework gate
+        # idiom Round 29 unlocked. Catches accidental deletion + drift
+        # between feature claims (README, registry docs) and what an
+        # operator can actually copy.
+        ex = (PROVIDER_DIR / "examples" / "data-sources" / "tfanalyze_scan"
+              / "compliance-gate.tf")
+        assert ex.exists(), "examples/data-sources/tfanalyze_scan/compliance-gate.tf missing"
+        text = ex.read_text()
+        assert "compliance_framework" in text
+        assert "compliance_report" in text
+        assert "precondition" in text
+
+    def test_registry_docs_present_and_non_empty(self) -> None:
+        # Terraform Registry conventionally renders provider pages from
+        # docs/index.md + docs/data-sources/<name>.md. An empty docs/
+        # directory means the registry page would render with no body.
+        docs_dir = PROVIDER_DIR / "docs"
+        assert docs_dir.is_dir(), "terraform-provider/docs/ missing"
+        index = docs_dir / "index.md"
+        scan = docs_dir / "data-sources" / "scan.md"
+        assert index.exists(), f"missing {index}"
+        assert scan.exists(), f"missing {scan}"
+        # Docs must at minimum carry the data source name and an
+        # example-usage block so the registry page isn't a stub.
+        for path in (index, scan):
+            text = path.read_text()
+            assert "tfanalyze_scan" in text, f"{path} doesn't mention the data source name"
+            assert "## " in text, f"{path} has no markdown headings"
+
     def test_readme_present(self) -> None:
         readme = PROVIDER_DIR / "README.md"
         assert readme.exists()

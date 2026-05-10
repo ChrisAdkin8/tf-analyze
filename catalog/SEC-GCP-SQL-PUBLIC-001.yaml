@@ -6,6 +6,12 @@ blast_radius: environment
 status: active
 cis:
   - "6.6"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-IAA"
 patterns:
   - kind: resource_body_contains
     resource: google_sql_database_instance

@@ -11,6 +11,14 @@ patterns:
   - kind: grep
     file_glob: "**/versions.tf"
     regex: 'required_version\s*=\s*"[~>=\s]*1\.[0-5]'
+owasp_iac:
+  - "Develop and Distribute / Version Control Discipline"
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
 recommendation: |
   Set `required_version = "~> 1.10"` (or whatever the current Terraform
   major is). Many checks in this skill assume features only available in

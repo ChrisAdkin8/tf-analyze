@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-RBAC-001 — Azure role assignment scope is subscription-wide"
 description: "tf-analyze rule SEC-AZURE-RBAC-001 (HIGH · security): Azure role assignment scope is subscription-wide"
-keywords: "security, high, terraform, iac, azure, cis-1.21"
+keywords: "security, high, terraform, iac, azure, cis-1.21, mitre-T1078.004, cwe-269, d3-pa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-1.21"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.21",
+  "keywords": "security, high, terraform, CIS 1.21, MITRE T1078.004, CWE-269, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -103,6 +103,15 @@ not `/subscriptions/<sub-id>`.
 
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
 
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)

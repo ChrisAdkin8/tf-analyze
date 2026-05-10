@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-POLICY-004 — IAM policy document grants principal `identifiers = [\\"*\\"]` (public)"
 description: "tf-analyze rule SEC-AWS-IAM-POLICY-004 (CRITICAL · security): IAM policy document grants principal `identifiers = [\'*\']` (public)"
-keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004"
+keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 1.16, MITRE T1078.004",
+  "keywords": "security, critical, terraform, CIS 1.16, MITRE T1078.004, CWE-269",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -105,8 +105,14 @@ object listing AWS account IDs or service principals, not `"*"`.
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
 
+**OWASP IaC Cheat Sheet**
+  - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-POLICY-004.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-POLICY-004.yaml) — canonical YAML

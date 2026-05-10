@@ -47,6 +47,14 @@ verification: |
   must return `true`.
 pci_dss:
   - "Req-8.2"
+mitre:
+  - "T1110.001"
+cwe:
+  - "CWE-521"
+  - "CWE-307"
+d3fend:
+  - "D3-AL"
+  - "D3-MFA"
 fix_hcl: |
   resource "azurerm_linux_virtual_machine" "example" {
     # ... other arguments ...

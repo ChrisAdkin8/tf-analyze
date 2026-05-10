@@ -24,6 +24,18 @@ inputs:
   section:
     description: 'Restrict findings to a catalogue section (security, robustness, ops, …). Empty = all.'
     default: ''
+  compliance-framework:
+    description: 'Optional. cis | pci_dss | soc2 | owasp_iac | all. When set, the engine also runs a compliance gap report and the PR comment gains a collapsible compliance section.'
+    default: ''
+  attack-graph:
+    description: 'Build the internet → crown-jewels attack graph; promotes critical-path findings and embeds the Mermaid graph in the PR summary.'
+    default: 'false'
+  show-info:
+    description: 'Include INFO-tier advisories (Module Reuse, etc.) in findings. Default false.'
+    default: 'false'
+  ref:
+    description: 'Git ref of tf-analyze to install (branch, tag, or SHA). Pin to a release tag for reproducible CI; default tracks main.'
+    default: 'main'
   post-pr-comment:
     description: 'Post PR suggestion comments on pull_request events'
     default: 'true'
@@ -47,9 +59,17 @@ jobs:
 
       - name: Fetch tf-analyze
         run: |
-          git clone --depth 1 https://github.com/anthropics/claude-code-skills \
-            /tmp/tf-analyze-skill
-          ln -s /tmp/tf-analyze-skill/tf-analyze ~/.tf-analyze
+          # Clone the engine itself; pin to a tag/SHA via the `ref` input
+          # for reproducible CI. `--depth 1 --branch <ref>` works for
+          # branches and tags; SHAs require a full clone.
+          REF="${{ inputs.ref || 'main' }}"
+          if [[ "$REF" =~ ^[0-9a-f]{7,40}$ ]]; then
+            git clone https://github.com/ChrisAdkin8/tf-analyze.git ~/.tf-analyze
+            git -C ~/.tf-analyze checkout "$REF"
+          else
+            git clone --depth 1 --branch "$REF" \
+              https://github.com/ChrisAdkin8/tf-analyze.git ~/.tf-analyze
+          fi
 
       - name: Run tf-analyze
         id: analyze
@@ -58,26 +78,62 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             MODE=diff
           fi
-          SECTION_ARG=""
+          # Collect optional engine flags into a bash array so empty
+          # inputs don't leak as bare shell tokens.
+          EXTRA_ARGS=()
           if [ -n "${{ inputs.section }}" ]; then
-            SECTION_ARG="--section ${{ inputs.section }}"
+            EXTRA_ARGS+=(--section "${{ inputs.section }}")
+          fi
+          if [ -n "${{ inputs.compliance-framework }}" ]; then
+            EXTRA_ARGS+=(--compliance-framework "${{ inputs.compliance-framework }}")
+          fi
+          if [ "${{ inputs.attack-graph }}" = "true" ]; then
+            EXTRA_ARGS+=(--attack-graph)
+          fi
+          if [ "${{ inputs.show-info }}" = "true" ]; then
+            EXTRA_ARGS+=(--show-info)
           fi
           FAIL_ON="${{ inputs.fail-on || 'HIGH' }}"
-          # Write JSON for suggestion-block step and exit-code evaluation
+
+          # JSON for suggestion-block step + exit-code evaluation.
           python3 ~/.tf-analyze/scripts/detect.py \
             --target . \
             --mode "$MODE" \
             --format json \
-            $SECTION_ARG \
+            "${EXTRA_ARGS[@]}" \
             > tf-analyze-findings.json 2>tf-analyze-stderr.txt || true
-          # Write SARIF for Code Scanning (enterprise/paid orgs)
+
+          # Engine-rendered PR summary (R28.1) — score+grade emoji,
+          # top-3 findings, top fix, attack-graph block when --attack-graph
+          # is set. Becomes the body of the upserted PR comment.
+          python3 ~/.tf-analyze/scripts/detect.py \
+            --target . \
+            --mode "$MODE" \
+            --format pr-summary \
+            "${EXTRA_ARGS[@]}" \
+            > tf-analyze-summary.md 2>/dev/null || true
+
+          # SARIF for Code Scanning (enterprise/paid orgs).
           python3 ~/.tf-analyze/scripts/detect.py \
             --target . \
             --mode "$MODE" \
             --format sarif \
-            $SECTION_ARG \
+            "${EXTRA_ARGS[@]}" \
             > tf-analyze.sarif 2>/dev/null || true
-          # Determine exit code based on fail-on threshold
+
+          # Optional compliance gap report — appended to the PR comment
+          # as a collapsible section so reviewers see framework posture
+          # without leaving the diff.
+          if [ -n "${{ inputs.compliance-framework }}" ]; then
+            python3 ~/.tf-analyze/scripts/detect.py \
+              --target . \
+              --mode "$MODE" \
+              --format compliance \
+              --compliance-framework "${{ inputs.compliance-framework }}" \
+              > tf-analyze-compliance.txt 2>/dev/null || true
+          fi
+
+          # Determine exit code based on fail-on threshold.
           python3 -c "
           import json, sys
           d = json.load(open('tf-analyze-findings.json'))
@@ -87,7 +143,7 @@ jobs:
           breach = [f for f in findings if rank.get(f.get('urgency',''), 0) >= threshold]
           print(f'finding_count={len(findings)}')
           sys.exit(1 if breach else 0)
-          " | tee -a \$GITHUB_OUTPUT
+          " | tee -a "$GITHUB_OUTPUT"
 
       - name: Upload SARIF to Code Scanning
         if: always()
@@ -165,32 +221,79 @@ jobs:
               }
             }
 
-            // Summary comment (upserted)
-            const critical = findings.filter(f => f.urgency === 'CRITICAL').length;
-            const high = findings.filter(f => f.urgency === 'HIGH').length;
-            const medium = findings.filter(f => f.urgency === 'MEDIUM').length;
-            const summaryBody = findings.length === 0
-              ? '✅ **tf-analyze**: no findings above threshold'
-              : [
-                  '## tf-analyze findings',
-                  '',
-                  '| Urgency | Count |',
-                  '|---------|-------|',
-                  `| 🚨 CRITICAL | ${critical} |`,
-                  `| ⚠️ HIGH | ${high} |`,
-                  `| 💡 MEDIUM | ${medium} |`,
-                  '',
-                  suggestionsPosted > 0
-                    ? `${suggestionsPosted} finding(s) have inline suggestion fixes — click **Apply suggestion** to fix in one click.`
-                    : '_No inline suggestions available for changed files._',
-                ].join('\n');
+            // Summary comment — engine-rendered pr-summary (R28.1) is
+            // the source of truth; we only fall back to a hand-rolled
+            // table if the file is somehow missing/empty.
+            let summaryBody;
+            try {
+              const rendered = fs.readFileSync('tf-analyze-summary.md', 'utf8').trim();
+              if (rendered) {
+                summaryBody = rendered;
+              }
+            } catch (e) {
+              core.warning('pr-summary file unreadable, falling back: ' + e.message);
+            }
+            if (!summaryBody) {
+              const critical = findings.filter(f => f.urgency === 'CRITICAL').length;
+              const high = findings.filter(f => f.urgency === 'HIGH').length;
+              const medium = findings.filter(f => f.urgency === 'MEDIUM').length;
+              summaryBody = findings.length === 0
+                ? '✅ **tf-analyze**: no findings above threshold'
+                : [
+                    '## tf-analyze findings',
+                    '',
+                    '| Urgency | Count |',
+                    '|---------|-------|',
+                    `| 🚨 CRITICAL | ${critical} |`,
+                    `| ⚠️ HIGH | ${high} |`,
+                    `| 💡 MEDIUM | ${medium} |`,
+                  ].join('\n');
+            }
 
+            // Append the inline-suggestion footer so reviewers know
+            // whether to expect Apply-suggestion buttons in the diff.
+            if (findings.length > 0) {
+              summaryBody += '\n\n' + (
+                suggestionsPosted > 0
+                  ? `${suggestionsPosted} finding(s) have inline suggestion fixes — click **Apply suggestion** to fix in one click.`
+                  : '_No inline suggestions available for changed files._'
+              );
+            }
+
+            // Optional compliance appendix when --compliance-framework
+            // was set. The engine writes the rendered text; we wrap it
+            // in <details> so the headline summary stays scannable.
+            const fw = '${{ inputs.compliance-framework }}';
+            if (fw) {
+              try {
+                const compliance = fs.readFileSync('tf-analyze-compliance.txt', 'utf8').trim();
+                if (compliance) {
+                  summaryBody += [
+                    '',
+                    '',
+                    `<details><summary>📋 Compliance: ${fw}</summary>`,
+                    '',
+                    '```',
+                    compliance,
+                    '```',
+                    '',
+                    '</details>',
+                  ].join('\n');
+                }
+              } catch (e) {
+                core.warning('compliance file unreadable: ' + e.message);
+              }
+            }
+
+            // Upsert the summary comment so repeated CI runs replace
+            // the prior summary instead of stacking N comments per PR.
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
             });
             const prior = comments.data.find(c =>
-              c.body.startsWith('## tf-analyze findings') || c.body.startsWith('✅ **tf-analyze**')
+              c.body.startsWith('## tf-analyze')
+              || c.body.startsWith('✅ **tf-analyze**')
             );
             if (prior) {
               await github.rest.issues.updateComment({

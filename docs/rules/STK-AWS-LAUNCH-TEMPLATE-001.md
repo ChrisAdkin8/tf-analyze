@@ -1,7 +1,7 @@
 ---
 title: "STK-AWS-LAUNCH-TEMPLATE-001 — EC2 launch template does not enforce IMDSv2"
 description: "tf-analyze rule STK-AWS-LAUNCH-TEMPLATE-001 (HIGH · stack): EC2 launch template does not enforce IMDSv2"
-keywords: "stack, high, terraform, iac, aws, mitre-T1552.005"
+keywords: "stack, high, terraform, iac, aws, mitre-T1552.005, cwe-668, d3-ch"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, aws, mitre-T1552.005"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, MITRE T1552.005",
+  "keywords": "stack, high, terraform, MITRE T1552.005, CWE-668, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -109,6 +109,12 @@ resource "aws_launch_template" "example" {
 
 **MITRE ATT&CK**
   - [`T1552.005`](https://attack.mitre.org/techniques/T1552/005/)
+
+**CWE**
+  - [`CWE-668`](https://cwe.mitre.org/data/definitions/668.html)
+
+**MITRE D3FEND**
+  - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
 
 **Related rules**
   - [`SEC-AWS-SSRF-001`](./SEC-AWS-SSRF-001.md)

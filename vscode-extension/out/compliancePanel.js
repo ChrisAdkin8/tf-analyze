@@ -41,7 +41,7 @@ const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const scriptResolver_1 = require("./scriptResolver");
 const iframeBridge_1 = require("./iframeBridge");
-const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'all'];
+const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'owasp_iac', 'all'];
 /** Compliance gap report panel. Wraps `detect.py --format html
  * --compliance --compliance-framework <fw>` in a webview with a
  * framework picker so the user can flip between CIS / PCI / SOC 2 / all
@@ -124,7 +124,11 @@ class CompliancePanel {
     _wrap(reportHtml) {
         const srcdoc = reportHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
         const opts = FRAMEWORKS.map(fw => {
-            const label = fw === 'cis' ? 'CIS' : fw === 'pci_dss' ? 'PCI DSS' : fw === 'soc2' ? 'SOC 2' : 'All';
+            const label = fw === 'cis' ? 'CIS' :
+                fw === 'pci_dss' ? 'PCI DSS' :
+                    fw === 'soc2' ? 'SOC 2' :
+                        fw === 'owasp_iac' ? 'OWASP IaC' :
+                            'All';
             const sel = fw === this._framework ? ' selected' : '';
             return `<option value="${fw}"${sel}>${label}</option>`;
         }).join('');

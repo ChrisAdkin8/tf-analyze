@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-COMPUTE-SA-001 — Compute instance uses default Compute Engine service account"
 description: "tf-analyze rule SEC-GCP-COMPUTE-SA-001 (HIGH · security): Compute instance uses default Compute Engine service account"
-keywords: "security, high, terraform, iac, gcp, cis-4.1"
+keywords: "security, high, terraform, iac, gcp, cis-4.1, mitre-T1078.004, cwe-250, d3-pa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-4.1"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 4.1",
+  "keywords": "security, high, terraform, CIS 4.1, MITRE T1078.004, CWE-250, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -116,6 +116,15 @@ The output should not match `<project-number>-compute@developer
 
 **CIS Benchmark**
   - `CIS 4.1`
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
 
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)

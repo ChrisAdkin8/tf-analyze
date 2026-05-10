@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**215 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**217 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -52,7 +52,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`OPS-GCP-LABELS-001`](./OPS-GCP-LABELS-001.md) | MEDIUM | GCP resource missing labels block |
 | [`OPS-AWS-CWL-001`](./OPS-AWS-CWL-001.md) | LOW | CloudWatch log group has no retention policy |
 
-## robustness (42)
+## robustness (43)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -92,6 +92,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-GCP-DEPRECATION-001`](./STK-GCP-DEPRECATION-001.md) | MEDIUM | Resource uses deprecated argument |
 | [`ROB-COUNT-001`](./ROB-COUNT-001.md) | LOW | Boolean count pattern instead of for_each |
 | [`ROB-COUNT-002`](./ROB-COUNT-002.md) | LOW | Module mixes count-based and for_each-based resources |
+| [`ROB-DRIFT-003`](./ROB-DRIFT-003.md) | LOW | ignore_changes lists too many attributes (drift-disable by attrition) |
 | [`ROB-MOVED-001`](./ROB-MOVED-001.md) | LOW | Stale moved block may need cleanup |
 | [`ROB-PROVIDER-ALIAS-002`](./ROB-PROVIDER-ALIAS-002.md) | LOW | Provider alias declared but never referenced |
 | [`ROB-REMOVED-001`](./ROB-REMOVED-001.md) | LOW | Stale removed block may need cleanup |
@@ -99,7 +100,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-UNUSED-002`](./ROB-UNUSED-002.md) | LOW | Declared output is never consumed by any caller |
 | [`ROB-VERSION-002`](./ROB-VERSION-002.md) | LOW | Submodule directory has no required_version |
 
-## security (116)
+## security (117)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -190,6 +191,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-SENSITIVE-001`](./SEC-SENSITIVE-001.md) | HIGH | Sensitive output not marked sensitive=true |
 | [`SEC-SENSITIVE-002`](./SEC-SENSITIVE-002.md) | HIGH | Sensitive marker dropped at module boundary |
 | [`SEC-SENSITIVE-003`](./SEC-SENSITIVE-003.md) | HIGH | Sensitive variable passed to templatefile() |
+| [`SEC-SENSITIVE-PATTERN-001`](./SEC-SENSITIVE-PATTERN-001.md) | HIGH | Credential-shaped variable not marked sensitive=true |
 | [`INT-INTENT-001`](./INT-INTENT-001.md) | MEDIUM | Security-intent variable defaults to false/null/0 |
 | [`INT-INTENT-002`](./INT-INTENT-002.md) | MEDIUM | Variable description says 'must be true' but has no validation block |
 | [`SEC-AWS-ALB-001`](./SEC-AWS-ALB-001.md) | MEDIUM | Load balancer access logs disabled |

@@ -1,7 +1,7 @@
 ---
 title: "SEC-DATASOURCE-002 — data.external program takes user-controlled input"
 description: "tf-analyze rule SEC-DATASOURCE-002 (HIGH · security): data.external program takes user-controlled input"
-keywords: "security, high, terraform, iac"
+keywords: "security, high, terraform, iac, cwe-78"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform",
+  "keywords": "security, high, terraform, CWE-78",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -91,6 +91,9 @@ in positions 1..N. If kept, pin the program path to a repo-local script
 whose contents are reviewed alongside the Terraform.
 
 ## References
+
+**CWE**
+  - [`CWE-78`](https://cwe.mitre.org/data/definitions/78.html)
 
 **Source**
   - [`catalog/SEC-DATASOURCE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-DATASOURCE-002.yaml) — canonical YAML

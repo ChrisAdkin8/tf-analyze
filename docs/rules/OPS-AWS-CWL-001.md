@@ -1,7 +1,7 @@
 ---
 title: "OPS-AWS-CWL-001 — CloudWatch log group has no retention policy"
 description: "tf-analyze rule OPS-AWS-CWL-001 (LOW · ops): CloudWatch log group has no retention policy"
-keywords: "ops, low, terraform, iac, aws"
+keywords: "ops, low, terraform, iac, aws, mitre-T1562.008, cwe-778, d3-faa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "ops, low, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "ops, low, terraform",
+  "keywords": "ops, low, terraform, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "ops",
   "isAccessibleForFree": true
@@ -95,6 +95,18 @@ must return an empty list.
 
 **SOC 2 Trust Services Criteria**
   - `CC7.2`
+
+**OWASP IaC Cheat Sheet**
+  - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
 
 **Source**
   - [`catalog/OPS-AWS-CWL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/OPS-AWS-CWL-001.yaml) — canonical YAML
