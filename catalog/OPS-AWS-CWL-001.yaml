@@ -17,6 +17,12 @@ patterns:
       by retaining personal data longer than necessary.
 owasp_iac:
   - "Runtime / Comprehensive Logging Enablement"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-FAA"
 recommendation: |
   Set an explicit retention period appropriate to your compliance requirements:
 

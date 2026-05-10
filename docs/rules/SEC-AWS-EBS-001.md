@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-EBS-001 — EBS volume not encrypted"
 description: "tf-analyze rule SEC-AWS-EBS-001 (HIGH · security): EBS volume not encrypted"
-keywords: "security, high, terraform, iac, aws, cis-2.2.1, mitre-T1530"
+keywords: "security, high, terraform, iac, aws, cis-2.2.1, mitre-T1530, cwe-311, d3-ear"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-2.2.1, mitre-T1530"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 2.2.1, MITRE T1530",
+  "keywords": "security, high, terraform, CIS 2.2.1, MITRE T1530, CWE-311, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -101,6 +101,12 @@ Run `aws ec2 describe-volumes --volume-ids <id>` and confirm
 
 **MITRE ATT&CK**
   - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)
+
+**MITRE D3FEND**
+  - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
 
 **Source**
   - [`catalog/SEC-AWS-EBS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-EBS-001.yaml) — canonical YAML

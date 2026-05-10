@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-EVENTHUB-001 — Event Hub namespace does not use CMK encryption"
 description: "tf-analyze rule SEC-AZURE-EVENTHUB-001 (MEDIUM · security): Event Hub namespace does not use CMK encryption"
-keywords: "security, medium, terraform, iac, azure"
+keywords: "security, medium, terraform, iac, azure, mitre-T1530, cwe-311, d3-ear"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform",
+  "keywords": "security, medium, terraform, MITRE T1530, CWE-311, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -113,6 +113,15 @@ must return `"Microsoft.KeyVault"`.
 
 **SOC 2 Trust Services Criteria**
   - `CC6.7`
+
+**MITRE ATT&CK**
+  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)
+
+**MITRE D3FEND**
+  - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
 
 **Source**
   - [`catalog/SEC-AZURE-EVENTHUB-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-EVENTHUB-001.yaml) — canonical YAML

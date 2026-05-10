@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDSQL-003 — Cloud SQL instance missing deletion protection"
 description: "tf-analyze rule STK-GCP-CLOUDSQL-003 (HIGH · stack): Cloud SQL instance missing deletion protection"
-keywords: "stack, high, terraform, iac, gcp, cis-6.6"
+keywords: "stack, high, terraform, iac, gcp, cis-6.6, mitre-T1485"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-6.6"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 6.6",
+  "keywords": "stack, high, terraform, CIS 6.6, MITRE T1485",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -86,6 +86,9 @@ must return `True`.
 
 **CIS Benchmark**
   - `CIS 6.6`
+
+**MITRE ATT&CK**
+  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **Source**
   - [`catalog/STK-GCP-CLOUDSQL-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-CLOUDSQL-003.yaml) — canonical YAML

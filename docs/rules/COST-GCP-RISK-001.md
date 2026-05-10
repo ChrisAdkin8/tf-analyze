@@ -1,7 +1,7 @@
 ---
 title: "COST-GCP-RISK-001 — Expensive resource without cost control"
 description: "tf-analyze rule COST-GCP-RISK-001 (MEDIUM · ops): Expensive resource without cost control"
-keywords: "ops, medium, terraform, iac, gcp"
+keywords: "ops, medium, terraform, iac, gcp, mitre-T1496"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "ops, medium, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "ops, medium, terraform",
+  "keywords": "ops, medium, terraform, MITRE T1496",
   "proficiencyLevel": "Expert",
   "articleSection": "ops",
   "isAccessibleForFree": true
@@ -100,6 +100,9 @@ Review `terraform plan` output to confirm the cost control arguments are
 set. Check billing alerts are configured for the project.
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1496`](https://attack.mitre.org/techniques/T1496/)
 
 **Source**
   - [`catalog/COST-GCP-RISK-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/COST-GCP-RISK-001.yaml) — canonical YAML

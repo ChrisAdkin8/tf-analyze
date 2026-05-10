@@ -3826,6 +3826,11 @@ def _render_graph_html(graph: dict) -> str:
 # hover lands on the actual published page.
 RULE_DOCS_URL_BASE = "https://chrisadkin8.github.io/tf-analyze/rules/{id}/"
 SARIF_HELP_URI_BASE = RULE_DOCS_URL_BASE
+# ATT&CK release the catalogue's `mitre:` technique IDs are pinned against.
+# Single source of truth lives in `scripts/_mitre.py`; re-exported here for
+# backward compat (existing test imports + the drift-check script both
+# work against either module).
+from _mitre import MITRE_ATTACK_VERSION
 
 
 def _sarif_fingerprint(finding: dict) -> dict:
@@ -3933,7 +3938,9 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
                     f"blast-radius:{entry.get('blast_radius', 'single-resource')}",
                 ]
                 + [f"cis:{c}" for c in (entry.get("cis") or [])]
-                + [f"mitre:{t}" for t in (entry.get("mitre") or [])],
+                + [f"mitre:{t}" for t in (entry.get("mitre") or [])]
+                + [f"cwe:{c}" for c in (entry.get("cwe") or [])]
+                + [f"d3fend:{d}" for d in (entry.get("d3fend") or [])],
                 "precision": "high",
                 "problem.severity": urgency.lower(),
                 "security-severity": severity_map.get(urgency, "5.0"),
@@ -4442,47 +4449,105 @@ def _compliance_gap_report(
     return by_fw
 
 
-def _render_mitre(findings: list[dict], entries: list[dict]) -> str:
-    """Group findings by MITRE ATT&CK technique using catalogue `mitre:`.
+# MITRE ATT&CK reference data + helpers live in `scripts/_mitre.py`.
+# Module-level aliases here preserve the legacy `_MITRE_*` private
+# names for code inside this file (no behavioural change) and let
+# external consumers (drift-check script, tests) import from either
+# location.
+from _mitre import (
+    MITRE_TECHNIQUE_INFO as _MITRE_TECHNIQUE_INFO,
+    MITRE_TACTIC_ORDER as _MITRE_TACTIC_ORDER,
+    mitre_technique_name as _mitre_technique_name,
+    mitre_technique_tactics as _mitre_technique_tactics,
+)
 
-    Findings whose rule has no mitre mapping are grouped under "(unmapped)"
-    so coverage gaps are visible. T-IDs are sorted lexicographically; rules
-    inside each group are sorted by urgency then ID.
+
+def _render_mitre(findings: list[dict], entries: list[dict],
+                  tactic_filter: str | None = None) -> str:
+    """Render findings grouped by ATT&CK tactic → technique.
+
+    Output structure (matches how SOC analysts read ATT&CK):
+
+        ## MITRE ATT&CK Coverage  (vN, ATT&CK release)
+
+        ### Initial Access
+          T1190 — Exploit Public-Facing Application  (3 findings)
+            [HIGH] SEC-AWS-APIGW-001 ...
+        ### Defense Evasion
+          T1562.008 — Impair Defenses: Disable or Modify Cloud Logs  (5 findings)
+            ...
+
+    Findings whose rule has no `mitre:` mapping are grouped under a
+    final '(unmapped)' tactic so coverage gaps stay visible.
+
+    `tactic_filter` (from --mitre-tactic) restricts output to one tactic;
+    case-insensitive, hyphen/space tolerant ('initial-access' == 'Initial Access').
     """
     entry_map = {e["id"]: e for e in entries}
-    by_tech: dict[str, list[dict]] = {}
+
+    # Bucket findings by (tactic, technique) — a finding can appear in
+    # multiple tactics if its technique is multi-tactic (e.g. T1078.004
+    # is both Initial Access and Persistence).
+    by_tactic: dict[str, dict[str, list[dict]]] = {}
     for f in findings:
         e = entry_map.get(f["id"], {})
         techs = e.get("mitre") or []
         if not techs:
-            by_tech.setdefault("(unmapped)", []).append(f)
+            by_tactic.setdefault("(unmapped)", {}).setdefault("(unmapped)", []).append(f)
             continue
         for t in techs:
-            by_tech.setdefault(str(t), []).append(f)
+            for tactic in _mitre_technique_tactics(str(t)):
+                by_tactic.setdefault(tactic, {}).setdefault(str(t), []).append(f)
+
+    if tactic_filter:
+        wanted = re.sub(r"[-_ ]", "", tactic_filter).lower()
+        by_tactic = {
+            k: v for k, v in by_tactic.items()
+            if re.sub(r"[-_ ]", "", k).lower() == wanted
+        }
 
     URGENCY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
-    out: list[str] = ["## MITRE ATT&CK Coverage", ""]
-    if not by_tech:
+    out: list[str] = [
+        f"## MITRE ATT&CK Coverage  (pinned to ATT&CK {MITRE_ATTACK_VERSION})",
+        "",
+    ]
+    if not by_tactic:
         out.append("(no findings)")
         return "\n".join(out)
-    for tech in sorted(by_tech):
-        group = by_tech[tech]
-        out.append(f"### {tech}  ({len(group)} finding{'s' if len(group) != 1 else ''})")
-        # Render with stable sort: urgency, then rule id, then file.
-        for f in sorted(
-            group,
-            key=lambda x: (
-                URGENCY_RANK.get(entry_map.get(x["id"], {}).get("default_urgency", "INFO"), 9),
-                x["id"],
-                x.get("file", ""),
-                x.get("line", 0),
-            ),
-        ):
-            urg = entry_map.get(f["id"], {}).get("default_urgency", "?")
-            out.append(
-                f"  [{urg}] {f['id']}  {f.get('file','')}:{f.get('line','?')}  "
-                f"{f.get('resource','')}"
-            )
+
+    # Render in canonical tactic order; unknown / synthetic tactics
+    # (Other, (unmapped)) sort to the end.
+    def _tactic_sort_key(name: str) -> tuple[int, str]:
+        try:
+            return (_MITRE_TACTIC_ORDER.index(name), name)
+        except ValueError:
+            return (len(_MITRE_TACTIC_ORDER) + (1 if name == "(unmapped)" else 0), name)
+
+    for tactic in sorted(by_tactic, key=_tactic_sort_key):
+        techs_in_tactic = by_tactic[tactic]
+        # Total findings under this tactic (deduped by file:line:id)
+        total = len({(f["id"], f.get("file"), f.get("line"))
+                     for group in techs_in_tactic.values() for f in group})
+        out.append(f"### {tactic}  ({total} finding{'s' if total != 1 else ''})")
+        for tech in sorted(techs_in_tactic):
+            group = techs_in_tactic[tech]
+            name = _mitre_technique_name(tech)
+            label = f"{tech} — {name}" if name else tech
+            out.append(f"  {label}  ({len(group)} finding{'s' if len(group) != 1 else ''})")
+            for f in sorted(
+                group,
+                key=lambda x: (
+                    URGENCY_RANK.get(entry_map.get(x["id"], {}).get("default_urgency", "INFO"), 9),
+                    x["id"],
+                    x.get("file", ""),
+                    x.get("line", 0),
+                ),
+            ):
+                urg = entry_map.get(f["id"], {}).get("default_urgency", "?")
+                out.append(
+                    f"    [{urg}] {f['id']}  {f.get('file','')}:{f.get('line','?')}  "
+                    f"{f.get('resource','')}"
+                )
         out.append("")
     return "\n".join(out)
 
@@ -5686,6 +5751,35 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     if soc2_cc is not None:
         if not isinstance(soc2_cc, list) or not all(isinstance(x, str) for x in soc2_cc):
             errs.append(f"{source}: 'soc2_cc' must be a list of strings if present")
+    # CWE — Common Weakness Enumeration. Items are bare numeric IDs as
+    # strings (e.g. "CWE-732") so SARIF taxonomies can emit them
+    # verbatim. Validate the shape so typos (`cwe-732`, `732`,
+    # `CWE 732`) fail catalogue load rather than silently producing
+    # broken SARIF output.
+    cwe = data.get("cwe")
+    if cwe is not None:
+        if not isinstance(cwe, list) or not all(isinstance(x, str) for x in cwe):
+            errs.append(f"{source}: 'cwe' must be a list of strings if present")
+        else:
+            for item in cwe:
+                if not re.fullmatch(r"CWE-\d+", item):
+                    errs.append(
+                        f"{source}: cwe item {item!r} must match the form 'CWE-<digits>'"
+                    )
+    # D3FEND — defensive techniques (the ATT&CK counterpart). Items
+    # are D3FEND IDs of the form D3-<token> (e.g. D3-MFA, D3-EAR).
+    # No comparable IaC scanner emits these today; the field is a
+    # deliberate differentiator.
+    d3fend = data.get("d3fend")
+    if d3fend is not None:
+        if not isinstance(d3fend, list) or not all(isinstance(x, str) for x in d3fend):
+            errs.append(f"{source}: 'd3fend' must be a list of strings if present")
+        else:
+            for item in d3fend:
+                if not re.fullmatch(r"D3-[A-Z]{2,8}", item):
+                    errs.append(
+                        f"{source}: d3fend item {item!r} must match the form 'D3-<2-8 uppercase letters>'"
+                    )
     # OWASP IaC Security Cheat Sheet mapping. Items are textual labels of
     # the form `Develop and Distribute / Secrets Detection`. The cheat
     # sheet's three sections — `Develop and Distribute`, `Deploy`,
@@ -6095,6 +6189,12 @@ def _cmd_explain(catalog_dir: Path, rule_id: str) -> int:
         print(f"# status: {data['status']}")
     if data.get("cis"):
         print(f"# CIS: {', '.join(str(c) for c in data['cis'])}")
+    if data.get("mitre"):
+        print(f"# MITRE ATT&CK: {', '.join(str(t) for t in data['mitre'])}")
+    if data.get("cwe"):
+        print(f"# CWE: {', '.join(str(c) for c in data['cwe'])}")
+    if data.get("d3fend"):
+        print(f"# MITRE D3FEND: {', '.join(str(d) for d in data['d3fend'])}")
     print()
     print("## Patterns")
     for p in data.get("patterns") or []:
@@ -7315,6 +7415,16 @@ def main():
         ),
     )
     ap.add_argument(
+        "--mitre-tactic",
+        default=None,
+        help=(
+            "Restrict --format mitre output to one ATT&CK tactic "
+            "(e.g. 'Initial Access', 'Defense Evasion'). "
+            "Case-insensitive; hyphens and underscores accepted "
+            "as separators ('initial-access' is equivalent)."
+        ),
+    )
+    ap.add_argument(
         "--compare",
         default=None,
         help="Path to a prior JSON report to compare against (outputs delta)",
@@ -8042,7 +8152,8 @@ def main():
                 _emit(f"# No catalogue entries mapped to compliance framework "
                       f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries))
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
             _emit(_render_pr_summary(
                 findings, entries, summary,
@@ -8097,7 +8208,8 @@ def main():
                 _emit(f"# No catalogue entries mapped to compliance framework "
                       f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries))
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
             _emit(_render_pr_summary(
                 findings, entries, summary,

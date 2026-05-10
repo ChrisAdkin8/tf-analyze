@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-KV-003 — Azure Key Vault key missing rotation policy"
 description: "tf-analyze rule SEC-AZURE-KV-003 (MEDIUM · security): Azure Key Vault key missing rotation policy"
-keywords: "security, medium, terraform, iac, azure, cis-8.6"
+keywords: "security, medium, terraform, iac, azure, cis-8.6, mitre-T1098.001, d3-ch"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure, cis-8.6"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, CIS 8.6",
+  "keywords": "security, medium, terraform, CIS 8.6, MITRE T1098.001, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -119,6 +119,12 @@ Key Vault → Keys → <key> → Rotation policy.
 
 **CIS Benchmark**
   - `CIS 8.6`
+
+**MITRE ATT&CK**
+  - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
+
+**MITRE D3FEND**
+  - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
 
 **Source**
   - [`catalog/SEC-AZURE-KV-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-KV-003.yaml) — canonical YAML

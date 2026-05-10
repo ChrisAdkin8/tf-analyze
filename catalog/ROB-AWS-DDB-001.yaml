@@ -37,6 +37,8 @@ recommendation: |
   Pair with `lifecycle { prevent_destroy = true }` for a two-layer guard.
 soc2_cc:
   - "A1.2"
+mitre:
+  - "T1485"
 verification: |
   `aws dynamodb describe-table --table-name <name> \
     --query 'Table.DeletionProtectionEnabled'`

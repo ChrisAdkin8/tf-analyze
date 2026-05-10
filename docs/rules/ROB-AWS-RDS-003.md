@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-RDS-003 — RDS instance or Aurora cluster missing deletion protection"
 description: "tf-analyze rule ROB-AWS-RDS-003 (HIGH · robustness): RDS instance or Aurora cluster missing deletion protection"
-keywords: "robustness, high, terraform, iac, aws"
+keywords: "robustness, high, terraform, iac, aws, mitre-T1485"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, high, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, high, terraform, MITRE T1485",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -111,6 +111,9 @@ must return `true`.
 
 **SOC 2 Trust Services Criteria**
   - `A1.2`
+
+**MITRE ATT&CK**
+  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **Source**
   - [`catalog/ROB-AWS-RDS-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-RDS-003.yaml) — canonical YAML

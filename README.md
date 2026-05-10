@@ -16,7 +16,8 @@
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 217](https://img.shields.io/badge/rules-217-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 587](https://img.shields.io/badge/tests-587%20passing-brightgreen)
+![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
+![Tests: 603](https://img.shields.io/badge/tests-603%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-217%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
@@ -68,7 +69,7 @@ Live diagnostics, Quick Fix, attack graph, Module Reuse Advisor, and a `vscode:/
 code --install-extension tfanalyze.tf-analyze
 
 # Or from a downloaded .vsix (current path until the Marketplace listing publishes)
-code --install-extension tf-analyze-0.1.30.vsix
+code --install-extension tf-analyze-0.1.32.vsix
 ```
 
 Open any Terraform workspace and the six status-bar shortcuts appear bottom-left:
@@ -108,7 +109,9 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Aggregate risk score + letter grade (A–F) | ✅ | ❌ | ❌ | ❌ |
 | `fix_hcl` snippet on **every** rule | ✅ (100%) | ⚠️ partial | ⚠️ partial | n/a |
 | Inline GitHub PR `suggestion` blocks | ✅ | ❌ | ❌ | n/a |
-| MITRE ATT&CK mapping in output | ✅ | ❌ | ⚠️ partial | ⚠️ via plugin |
+| MITRE ATT&CK mapping (technique + tactic-grouped output) | ✅ pinned to v17 | ❌ | ⚠️ partial | ⚠️ via plugin |
+| MITRE D3FEND defensive-technique tagging | ✅ | ❌ | ❌ | ❌ |
+| CWE taxonomy in SARIF output | ✅ | ❌ | ⚠️ partial | ❌ |
 | OSCAL Assessment Results JSON output | ✅ | ❌ | ❌ | ❌ |
 | OWASP IaC Cheat Sheet compliance mapping | ✅ | ❌ | ❌ | ❌ |
 | Baseline ratcheting (`--baseline prior.json`) | ✅ | ⚠️ via filter | ✅ | ❌ |
@@ -216,7 +219,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | | Path | Doc |
 |---|------|-----|
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks + engine-rendered PR summary (`--format pr-summary`); optional `compliance-framework` / `attack-graph` / `show-info` inputs; pin via `ref` for reproducible CI |
-| VS Code extension (v0.1.30) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
+| VS Code extension (v0.1.32) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |

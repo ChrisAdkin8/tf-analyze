@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-AKS-003 — AKS cluster workload identity not enabled"
 description: "tf-analyze rule STK-AZURE-AKS-003 (HIGH · stack): AKS cluster workload identity not enabled"
-keywords: "stack, high, terraform, iac, azure"
+keywords: "stack, high, terraform, iac, azure, mitre-T1078.004"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform",
+  "keywords": "stack, high, terraform, MITRE T1078.004",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -111,6 +111,9 @@ both must return `true`.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
 
 **Source**
   - [`catalog/STK-AZURE-AKS-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-AKS-003.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-003 — GKE cluster missing application-layer secrets encryption"
 description: "tf-analyze rule STK-GCP-GKE-003 (HIGH · stack): GKE cluster missing application-layer secrets encryption"
-keywords: "stack, high, terraform, iac, gcp, cis-8.5.5"
+keywords: "stack, high, terraform, iac, gcp, cis-8.5.5, mitre-T1552.001, cwe-522"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-8.5.5"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 8.5.5",
+  "keywords": "stack, high, terraform, CIS 8.5.5, MITRE T1552.001, CWE-522",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -90,6 +90,12 @@ must return `ENCRYPTED`.
 
 **CIS Benchmark**
   - `CIS 8.5.5`
+
+**MITRE ATT&CK**
+  - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**CWE**
+  - [`CWE-522`](https://cwe.mitre.org/data/definitions/522.html)
 
 **Source**
   - [`catalog/STK-GCP-GKE-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-GKE-003.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-SECRETS-001 — Hardcoded credential or API key in Terraform source"
 description: "tf-analyze rule SEC-SECRETS-001 (CRITICAL · security): Hardcoded credential or API key in Terraform source"
-keywords: "security, critical, terraform, iac"
+keywords: "security, critical, terraform, iac, cwe-798, d3-ch"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform",
+  "keywords": "security, critical, terraform, CWE-798, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -145,6 +145,12 @@ does not appear in `terraform show` output (it will be marked
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Secrets Detection`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
   - [`Develop and Distribute / Secrets Storage Management`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**CWE**
+  - [`CWE-798`](https://cwe.mitre.org/data/definitions/798.html)
+
+**MITRE D3FEND**
+  - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
 
 **Source**
   - [`catalog/SEC-SECRETS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SECRETS-001.yaml) — canonical YAML

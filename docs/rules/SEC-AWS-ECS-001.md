@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-ECS-001 — ECS task definition exposes secrets in plaintext environment variables"
 description: "tf-analyze rule SEC-AWS-ECS-001 (HIGH · security): ECS task definition exposes secrets in plaintext environment variables"
-keywords: "security, high, terraform, iac, aws, mitre-T1552.001"
+keywords: "security, high, terraform, iac, aws, mitre-T1552.001, cwe-552, cwe-522"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, mitre-T1552.001"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1552.001",
+  "keywords": "security, high, terraform, MITRE T1552.001, CWE-552, CWE-522",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -130,6 +130,10 @@ Secrets should appear under `secrets`, not `environment`.
 
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**CWE**
+  - [`CWE-552`](https://cwe.mitre.org/data/definitions/552.html)
+  - [`CWE-522`](https://cwe.mitre.org/data/definitions/522.html)
 
 **Source**
   - [`catalog/SEC-AWS-ECS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ECS-001.yaml) — canonical YAML

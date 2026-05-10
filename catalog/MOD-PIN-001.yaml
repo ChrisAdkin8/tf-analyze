@@ -23,6 +23,12 @@ patterns:
     description: registry source without version constraint
 owasp_iac:
   - "Develop and Distribute / Open Source Dependency Scanning"
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
 recommendation: |
   Pin every external module:
    - Registry: add `version = "~> X.Y"`.

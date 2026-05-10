@@ -16,6 +16,8 @@ patterns:
       `terraform destroy`. This makes data loss a single command away.
 owasp_iac:
   - "Deploy / Resource Decommissioning Process"
+mitre:
+  - "T1485"
 recommendation: |
   Remove `force_destroy = true` from production buckets:
 

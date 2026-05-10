@@ -46,6 +46,9 @@ soc2_cc:
   - "CC6.1"
 mitre:
   - "T1552.001"
+cwe:
+  - "CWE-552"
+  - "CWE-522"
 verification: |
   `aws ecs describe-task-definition --task-definition <family> \
     --query 'taskDefinition.containerDefinitions[*].environment'`

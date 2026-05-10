@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-BUCKET-001 — GCS bucket missing public_access_prevention=enforced"
 description: "tf-analyze rule SEC-GCP-BUCKET-001 (HIGH · security): GCS bucket missing public_access_prevention=enforced"
-keywords: "security, high, terraform, iac, gcp, cis-5.1"
+keywords: "security, high, terraform, iac, gcp, cis-5.1, mitre-T1530, cwe-732, cwe-284"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-5.1"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.1",
+  "keywords": "security, high, terraform, CIS 5.1, MITRE T1530, CWE-732, CWE-284",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -83,6 +83,13 @@ confirm the value is `enforced`.
 
 **CIS Benchmark**
   - `CIS 5.1`
+
+**MITRE ATT&CK**
+  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
 
 **Source**
   - [`catalog/SEC-GCP-BUCKET-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-BUCKET-001.yaml) — canonical YAML

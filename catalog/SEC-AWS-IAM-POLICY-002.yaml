@@ -22,6 +22,9 @@ patterns:
       policies to itself, escalating to full administrative access.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
 recommendation: |
   Replace `iam:*` with the explicit IAM operations actually required.
   If full IAM access is intentional, use the AWS-managed

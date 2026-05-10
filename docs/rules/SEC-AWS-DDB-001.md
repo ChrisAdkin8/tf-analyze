@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-DDB-001 — DynamoDB table not using customer-managed KMS key for encryption"
 description: "tf-analyze rule SEC-AWS-DDB-001 (MEDIUM · security): DynamoDB table not using customer-managed KMS key for encryption"
-keywords: "security, medium, terraform, iac, aws, mitre-T1530"
+keywords: "security, medium, terraform, iac, aws, mitre-T1530, cwe-311, d3-ear"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1530"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1530",
+  "keywords": "security, medium, terraform, MITRE T1530, CWE-311, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -121,6 +121,12 @@ to a customer-managed key (not the AWS-owned key ARN).
 
 **MITRE ATT&CK**
   - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)
+
+**MITRE D3FEND**
+  - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
 
 **Source**
   - [`catalog/SEC-AWS-DDB-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-DDB-001.yaml) — canonical YAML

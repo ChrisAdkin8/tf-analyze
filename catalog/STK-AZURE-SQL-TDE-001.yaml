@@ -14,6 +14,12 @@ applies_when:
   # users to add a resource type their provider can't create.
   min_provider:
     azurerm: "3.0"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
 patterns:
   - kind: resource_absent
     resource: azurerm_mssql_database_transparent_data_encryption

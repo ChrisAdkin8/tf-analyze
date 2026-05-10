@@ -27,6 +27,10 @@ patterns:
       an unexpected IP?" have no answer.
 owasp_iac:
   - "Runtime / Comprehensive Logging Enablement"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-FAA"
 recommendation: |
   Add a dedicated logging bucket and enable access logging on every bucket
   that requires audit trails:

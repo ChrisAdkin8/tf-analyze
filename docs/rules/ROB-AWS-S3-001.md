@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-S3-001 — S3 bucket versioning disabled or suspended"
 description: "tf-analyze rule ROB-AWS-S3-001 (MEDIUM · robustness): S3 bucket versioning disabled or suspended"
-keywords: "robustness, medium, terraform, iac, aws, cis-2.1.2"
+keywords: "robustness, medium, terraform, iac, aws, cis-2.1.2, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, aws, cis-2.1.2"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, CIS 2.1.2",
+  "keywords": "robustness, medium, terraform, CIS 2.1.2, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -94,6 +94,9 @@ Run `aws s3api get-bucket-versioning --bucket <name>` and confirm
 
 **CIS Benchmark**
   - `CIS 2.1.2`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/ROB-AWS-S3-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-S3-001.yaml) — canonical YAML

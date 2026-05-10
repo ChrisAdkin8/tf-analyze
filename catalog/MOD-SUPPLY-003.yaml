@@ -22,6 +22,10 @@ soc2_cc:
   - "CC9.2"
 mitre:
   - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
 fix_hcl: |
   module "example" {
     source  = "hashicorp/consul/aws"

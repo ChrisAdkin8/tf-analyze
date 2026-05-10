@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-S3-PUBLIC-BLOCK-001 — S3 bucket missing public access block"
 description: "tf-analyze rule SEC-AWS-S3-PUBLIC-BLOCK-001 (HIGH · security): S3 bucket missing public access block"
-keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530"
+keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530, cwe-732, cwe-284"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 2.1.5.1, MITRE T1530",
+  "keywords": "security, high, terraform, CIS 2.1.5.1, MITRE T1530, CWE-732, CWE-284",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -98,6 +98,10 @@ must show all four settings as `true`.
 
 **MITRE ATT&CK**
   - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
 
 **Source**
   - [`catalog/SEC-AWS-S3-PUBLIC-BLOCK-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-S3-PUBLIC-BLOCK-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "ROB-GCP-LIFECYCLE-002 — Stateful resource has force_destroy=true"
 description: "tf-analyze rule ROB-GCP-LIFECYCLE-002 (HIGH · robustness): Stateful resource has force_destroy=true"
-keywords: "robustness, high, terraform, iac, gcp"
+keywords: "robustness, high, terraform, iac, gcp, mitre-T1485"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, high, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, high, terraform, MITRE T1485",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -82,6 +82,9 @@ and run `terraform destroy` — it should fail with "bucket is not empty".
 
 **OWASP IaC Cheat Sheet**
   - [`Deploy / Resource Decommissioning Process`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **Source**
   - [`catalog/ROB-GCP-LIFECYCLE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-GCP-LIFECYCLE-002.yaml) — canonical YAML

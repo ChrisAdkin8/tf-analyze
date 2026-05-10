@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-DEPRECATION-001 — Resource uses deprecated argument"
 description: "tf-analyze rule STK-GCP-DEPRECATION-001 (MEDIUM · robustness): Resource uses deprecated argument"
-keywords: "robustness, medium, terraform, iac, gcp"
+keywords: "robustness, medium, terraform, iac, gcp, mitre-T1195.002, cwe-1104, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform",
+  "keywords": "robustness, medium, terraform, MITRE T1195.002, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -106,6 +106,15 @@ Run `terraform validate` and `terraform plan` — no deprecation warnings
 should appear.
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Source**
   - [`catalog/STK-GCP-DEPRECATION-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-DEPRECATION-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-POLICY-001 — IAM policy document grants wildcard `actions = [\\"*\\"]`"
 description: "tf-analyze rule SEC-AWS-IAM-POLICY-001 (HIGH · security): IAM policy document grants wildcard `actions = [\'*\']`"
-keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004"
+keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, cwe-732"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.16, MITRE T1078.004",
+  "keywords": "security, high, terraform, CIS 1.16, MITRE T1078.004, CWE-269, CWE-732",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -99,6 +99,10 @@ Re-render the policy with `terraform plan` and inspect the rendered
 
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-POLICY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-POLICY-001.yaml) — canonical YAML

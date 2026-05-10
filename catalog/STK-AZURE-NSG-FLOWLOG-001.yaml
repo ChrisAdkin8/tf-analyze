@@ -13,6 +13,12 @@ patterns:
     scope: repo
 owasp_iac:
   - "Runtime / Comprehensive Logging Enablement"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-NTA"
 recommendation: |
   Add an `azurerm_network_watcher_flow_log` resource for every NSG:
 

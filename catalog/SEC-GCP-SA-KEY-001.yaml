@@ -6,6 +6,9 @@ blast_radius: environment
 status: active
 cis:
   - "1.4"
+mitre:
+  - "T1098.001"
+  - "T1552.001"
 patterns:
   - kind: resource_present
     resource: google_service_account_key

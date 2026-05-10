@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-VPC-FLOWLOGS-001 — AWS VPC missing flow log resource"
 description: "tf-analyze rule SEC-AWS-VPC-FLOWLOGS-001 (HIGH · security): AWS VPC missing flow log resource"
-keywords: "security, high, terraform, iac, aws, cis-3.9, mitre-T1562.008"
+keywords: "security, high, terraform, iac, aws, cis-3.9, mitre-T1562.008, cwe-778, d3-nta"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-3.9, mitre-T1562.008"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 3.9, MITRE T1562.008",
+  "keywords": "security, high, terraform, CIS 3.9, MITRE T1562.008, CWE-778, D3-NTA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -97,6 +97,12 @@ At least one active flow log must be present. Or:
 
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-NTA`](https://d3fend.mitre.org/technique/D3-NTA/)
 
 **Source**
   - [`catalog/SEC-AWS-VPC-FLOWLOGS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-VPC-FLOWLOGS-001.yaml) — canonical YAML

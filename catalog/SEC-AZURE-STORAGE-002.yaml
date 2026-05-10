@@ -5,6 +5,11 @@ default_urgency: HIGH
 blast_radius: single-resource
 cis:
   - "3.7"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-732"
+  - "CWE-284"
 status: active
 patterns:
   - kind: resource_arg

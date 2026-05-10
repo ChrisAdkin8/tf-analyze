@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-002 — IAM assume role policy with wildcard Principal"
 description: "tf-analyze rule SEC-AWS-IAM-002 (CRITICAL · security): IAM assume role policy with wildcard Principal"
-keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004"
+keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, cwe-732, d3-pa, d3-mfa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 1.16, MITRE T1078.004",
+  "keywords": "security, critical, terraform, CIS 1.16, MITRE T1078.004, CWE-269, CWE-732, D3-PA, D3-MFA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -114,6 +114,14 @@ wildcard principal.
 
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+  - [`D3-MFA`](https://d3fend.mitre.org/technique/D3-MFA/)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-002.yaml) — canonical YAML

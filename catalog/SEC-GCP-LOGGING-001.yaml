@@ -27,6 +27,10 @@ soc2_cc:
   - "CC7.2"
 mitre:
   - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-FAA"
 fix_hcl: |
   resource "google_project_iam_audit_config" "all_services" {
     project = var.project_id

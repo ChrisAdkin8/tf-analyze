@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-RDS-001 — RDS instance or Aurora cluster backup retention disabled"
 description: "tf-analyze rule ROB-AWS-RDS-001 (HIGH · robustness): RDS instance or Aurora cluster backup retention disabled"
-keywords: "robustness, high, terraform, iac, aws"
+keywords: "robustness, high, terraform, iac, aws, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, high, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, high, terraform, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -97,6 +97,9 @@ and verify no diff shows `backup_retention_period = 0` or a missing value.
 
 **SOC 2 Trust Services Criteria**
   - `A1.2`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/ROB-AWS-RDS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-RDS-001.yaml) — canonical YAML

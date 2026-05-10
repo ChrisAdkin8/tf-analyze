@@ -5,6 +5,48 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## MITRE / CWE / D3FEND coverage sweep — 2026-05-10
+
+**Closes the MITRE-coverage gaps surfaced in `docs/launch/detection-gaps-plan.md`. Adds two new taxonomies (CWE, D3FEND) that no other OSS IaC scanner emits today.**
+
+### What's new
+
+- **MITRE catalogue sweep — 27% → 69%.** 91 additional rules now carry `mitre:` tags. Coverage by area: GCP rules 1/43 → 25/43, Azure 5/34 → 23/34, robustness 0/43 → 17/43, ops 0/7 → 2/7, module-reuse 0/3 → 3/3 (all three Module Reuse Advisor rules now mapped to `T1195.002`). 25 unique techniques referenced (was 17). Pinned against ATT&CK v17 (April 2025) via `MITRE_ATTACK_VERSION` in `scripts/detect.py`.
+
+- **`cwe:` field — Common Weakness Enumeration mapping.** New optional field, regex-validated against the canonical `CWE-<digits>` form by `validate_catalog_entry`. 114 rules tagged on first pass (53% coverage). Bulk patterns: storage public → `CWE-732 + CWE-284`, plaintext storage → `CWE-311 + CWE-312`, IAM wildcard → `CWE-269 + CWE-732`, 0.0.0.0/0 ingress → `CWE-284 + CWE-1327`, hardcoded secrets → `CWE-798`, missing TLS → `CWE-319`, insufficient logging → `CWE-778`. SARIF output now emits `cwe:CWE-<n>` tags alongside the existing `cis:` and `mitre:` tags — GitHub Code Scanning consumers can filter by CWE.
+
+- **`d3fend:` field — MITRE D3FEND defensive-technique tagging.** New optional field, regex-validated against `D3-<TOKEN>` form. **No comparable OSS IaC scanner emits D3FEND tags today** — Prowler, Checkov, tfsec, KICS, Snyk IaC all skip this taxonomy. 87 rules tagged on first pass (40% coverage). Common defensive techniques: `D3-MFA` (Multi-factor Authentication), `D3-PA` (Privileged Account Management), `D3-CH` (Credential Hardening), `D3-EAR` (Encrypted at Rest), `D3-EI` (Encrypted in Transit), `D3-IAA` (Inbound Application Allow-listing), `D3-FAA` (File Access Auditing), `D3-SCA` (Software Component Analysis), `D3-AL` (Account Locking).
+
+- **`--format mitre` tactic grouping.** Output now groups by ATT&CK tactic (Initial Access → Execution → ... → Impact) rather than by alphabetical technique ID. Each technique line is rendered with its human name (`T1078.004 — Valid Accounts: Cloud Accounts`), not just the bare ID. Backed by `_MITRE_TECHNIQUE_INFO` and `_MITRE_TACTIC_ORDER` constants in `detect.py`.
+
+- **`--mitre-tactic <tactic>` filter.** New CLI flag restricts `--format mitre` output to a single tactic. Case-insensitive, separator-tolerant — `--mitre-tactic initial-access`, `Initial Access`, and `INITIAL_ACCESS` are all equivalent. Powers tactic-scoped audits.
+
+- **Per-rule docs site renders both new taxonomies.** Each rule page now has `**CWE**` and `**MITRE D3FEND**` blocks with bulleted links to `cwe.mitre.org/data/definitions/<n>.html` and `d3fend.mitre.org/technique/<id>/`. Front-matter `keywords` field includes the lowercase taxonomy IDs (`cwe-732`, `d3-mfa`) so the per-rule pages can rank on those terms in search.
+
+### Bulk-edit script
+
+`scripts/apply_mitre.py` now drives all three fields from in-script manifests. Idempotent — re-running won't duplicate or reorder existing entries. Pattern: per-field `_MAPPINGS` dict, generic `insert_field(text, field, items)` helper that finds the right anchor in the YAML (after the last existing of `cis/mitre/cwe/d3fend/soc2_cc/pci_dss/owasp_iac/applies_when`, falling back to `status:`, then `patterns:`).
+
+### Tests: 587 → 603 (+16) — `tests/test_mitre_cwe_d3fend.py`
+
+| Test class | Locks |
+|---|---|
+| `TestCatalogCoverage` | Floor on each taxonomy's coverage (60/45/35%). Catches ≥20-rule regressions locally. |
+| `TestSchemaValidation` | Wrong-shape `cwe`/`d3fend` values fail `validate_catalog_entry`. |
+| `TestRenderMitre` | Tactic H2 grouping, technique-name rendering, `--mitre-tactic` filter (case + separator tolerance). |
+| `TestSarifTaxonomies` | SARIF rules emit `cwe:` and `d3fend:` tags in canonical form. |
+| `TestRuleDocsCWED3fend` | Per-rule pages render the two new blocks; front-matter keywords include the new taxonomy IDs. |
+
+### Why D3FEND is the differentiator
+
+Per the round-29 detection-gaps research, D3FEND has been mapped to ATT&CK's defensive counterpart since the framework's release in 2021, but no comparable OSS IaC scanner (Prowler, Checkov, tfsec, KICS, Snyk IaC, Kubescape) emits D3FEND tags. tf-analyze is the first. Every catalogue rule is structurally a hardening control by definition; D3FEND is the natural ontology for that. The mapping cost is low (mechanical lookup via D3FEND's published ATT&CK ↔ D3FEND ontology) and the differentiation is real — earns a unique line in any tool-comparison table.
+
+### Coverage gaps that remain
+
+Per-rule docs site can land richer ATT&CK content once a vendored ATT&CK STIX bundle is fetched (deferred — adds ~10 MB of tracked data). Procedure-example linking from `_ATTACK_NARRATIVES` to ATT&CK's published procedures is also deferred — depends on the STIX bundle. Engine SARIF taxonomies (the proper SARIF v2.1 `taxonomies` array, vs. the flat `tags` we emit today) deferred to a follow-up; the flat-tag approach is what GitHub Code Scanning consumes today and is sufficient.
+
+---
+
 ## Round 30 — MCP server hardening (LLM01/05/06/10) — 2026-05-10
 
 **Closes the agent-side abuse boundary on the Round 28 MCP adapter. No new rules; one file edit + a fresh test suite. Phase 0 of the OWASP coverage sweep — ships first because the gaps were exploitable today.**

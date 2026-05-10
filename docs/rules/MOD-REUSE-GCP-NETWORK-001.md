@@ -1,7 +1,7 @@
 ---
 title: "MOD-REUSE-GCP-NETWORK-001 — Hand-rolled VPC + subnets could be replaced by terraform-google-modules/network/google"
 description: "tf-analyze rule MOD-REUSE-GCP-NETWORK-001 (INFO · module-reuse): Hand-rolled VPC + subnets could be replaced by terraform-google-modules/network/google"
-keywords: "module-reuse, info, terraform, iac, gcp"
+keywords: "module-reuse, info, terraform, iac, gcp, mitre-T1195.002, cwe-1357, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "module-reuse, info, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "module-reuse, info, terraform",
+  "keywords": "module-reuse, info, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "module-reuse",
   "isAccessibleForFree": true
@@ -93,6 +93,15 @@ with a `moved` block pointing at the equivalent
 is a pure no-op rather than a destroy/create.
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Related rules**
   - [`MOD-PIN-001`](./MOD-PIN-001.md)

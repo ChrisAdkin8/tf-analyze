@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CWL-001 — CloudWatch log group not encrypted with KMS CMK"
 description: "tf-analyze rule SEC-AWS-CWL-001 (MEDIUM · security): CloudWatch log group not encrypted with KMS CMK"
-keywords: "security, medium, terraform, iac, aws, mitre-T1562.008"
+keywords: "security, medium, terraform, iac, aws, mitre-T1562.008, cwe-778, d3-faa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1562.008"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1562.008",
+  "keywords": "security, medium, terraform, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -108,6 +108,12 @@ must return a KMS key ARN for every group.
 
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
 
 **Source**
   - [`catalog/SEC-AWS-CWL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-CWL-001.yaml) — canonical YAML

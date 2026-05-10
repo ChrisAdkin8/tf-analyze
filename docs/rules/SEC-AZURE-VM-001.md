@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-VM-001 — Linux VM allows SSH password authentication"
 description: "tf-analyze rule SEC-AZURE-VM-001 (HIGH · security): Linux VM allows SSH password authentication"
-keywords: "security, high, terraform, iac, azure, cis-7.3"
+keywords: "security, high, terraform, iac, azure, cis-7.3, mitre-T1110.001, cwe-521, cwe-307, d3-al, d3-mfa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-7.3"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 7.3",
+  "keywords": "security, high, terraform, CIS 7.3, MITRE T1110.001, CWE-521, CWE-307, D3-AL, D3-MFA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -119,6 +119,17 @@ must return `true`.
 
 **PCI-DSS**
   - `Req-8.2`
+
+**MITRE ATT&CK**
+  - [`T1110.001`](https://attack.mitre.org/techniques/T1110/001/)
+
+**CWE**
+  - [`CWE-521`](https://cwe.mitre.org/data/definitions/521.html)
+  - [`CWE-307`](https://cwe.mitre.org/data/definitions/307.html)
+
+**MITRE D3FEND**
+  - [`D3-AL`](https://d3fend.mitre.org/technique/D3-AL/)
+  - [`D3-MFA`](https://d3fend.mitre.org/technique/D3-MFA/)
 
 **Source**
   - [`catalog/SEC-AZURE-VM-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-VM-001.yaml) — canonical YAML

@@ -5,6 +5,12 @@ default_urgency: HIGH
 blast_radius: single-resource
 cis:
   - "3.1"
+mitre:
+  - "T1071.001"
+cwe:
+  - "CWE-319"
+d3fend:
+  - "D3-EI"
 status: active
 patterns:
   - kind: resource_arg

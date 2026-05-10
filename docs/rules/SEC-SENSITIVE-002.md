@@ -1,7 +1,7 @@
 ---
 title: "SEC-SENSITIVE-002 — Sensitive marker dropped at module boundary"
 description: "tf-analyze rule SEC-SENSITIVE-002 (HIGH · security): Sensitive marker dropped at module boundary"
-keywords: "security, high, terraform, iac, mitre-T1552.001"
+keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-200, d3-ch"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, mitre-T1552.001"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1552.001",
+  "keywords": "security, high, terraform, MITRE T1552.001, CWE-200, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -87,6 +87,12 @@ as `<sensitive>` in any module output that references the variable.
 
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**CWE**
+  - [`CWE-200`](https://cwe.mitre.org/data/definitions/200.html)
+
+**MITRE D3FEND**
+  - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
 
 **Source**
   - [`catalog/SEC-SENSITIVE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SENSITIVE-002.yaml) — canonical YAML

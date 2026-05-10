@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-LIFECYCLE-002 — S3 bucket has force_destroy enabled"
 description: "tf-analyze rule ROB-AWS-LIFECYCLE-002 (HIGH · robustness): S3 bucket has force_destroy enabled"
-keywords: "robustness, high, terraform, iac, aws"
+keywords: "robustness, high, terraform, iac, aws, mitre-T1485"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, high, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, high, terraform, MITRE T1485",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -100,6 +100,9 @@ forced deletion). Confirm `force_destroy` is absent or `false` in
 
 **OWASP IaC Cheat Sheet**
   - [`Deploy / Resource Decommissioning Process`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **Source**
   - [`catalog/ROB-AWS-LIFECYCLE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-LIFECYCLE-002.yaml) — canonical YAML

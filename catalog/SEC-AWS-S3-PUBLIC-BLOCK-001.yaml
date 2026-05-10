@@ -7,6 +7,9 @@ cis:
   - "2.1.5.1"
 mitre:
   - "T1530"
+cwe:
+  - "CWE-732"
+  - "CWE-284"
 status: active
 patterns:
   - kind: resource_absent

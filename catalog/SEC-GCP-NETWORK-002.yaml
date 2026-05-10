@@ -6,6 +6,14 @@ blast_radius: infrastructure-wide
 status: active
 cis:
   - "3.7"
+mitre:
+  - "T1190"
+  - "T1133"
+cwe:
+  - "CWE-284"
+  - "CWE-1327"
+d3fend:
+  - "D3-IAA"
 patterns:
   - kind: firewall_open_port
     ports:

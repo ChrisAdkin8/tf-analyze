@@ -21,6 +21,9 @@ patterns:
       by this policy" — the canonical privilege-escalation foothold.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
 recommendation: |
   Replace `actions = ["*"]` with the explicit minimum set the workload
   requires. Use `aws iam simulate-principal-policy` to validate that

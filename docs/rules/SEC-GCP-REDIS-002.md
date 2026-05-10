@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-REDIS-002 — Cloud Memorystore Redis instance transit encryption disabled"
 description: "tf-analyze rule SEC-GCP-REDIS-002 (HIGH · security): Cloud Memorystore Redis instance transit encryption disabled"
-keywords: "security, high, terraform, iac, gcp"
+keywords: "security, high, terraform, iac, gcp, mitre-T1040, cwe-319, d3-ei"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform",
+  "keywords": "security, high, terraform, MITRE T1040, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -107,6 +107,15 @@ must return `SERVER_AUTHENTICATION`.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1040`](https://attack.mitre.org/techniques/T1040/)
+
+**CWE**
+  - [`CWE-319`](https://cwe.mitre.org/data/definitions/319.html)
+
+**MITRE D3FEND**
+  - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
 
 **Source**
   - [`catalog/SEC-GCP-REDIS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-REDIS-002.yaml) — canonical YAML

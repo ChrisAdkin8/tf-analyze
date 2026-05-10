@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-NETWORK-003 — VPC subnet missing flow logs"
 description: "tf-analyze rule SEC-GCP-NETWORK-003 (HIGH · security): VPC subnet missing flow logs"
-keywords: "security, high, terraform, iac, gcp, cis-3.8"
+keywords: "security, high, terraform, iac, gcp, cis-3.8, mitre-T1562.008, cwe-778, d3-nta"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-3.8"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 3.8",
+  "keywords": "security, high, terraform, CIS 3.8, MITRE T1562.008, CWE-778, D3-NTA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -96,6 +96,15 @@ must show `True` for all subnets in scope.
 
 **CIS Benchmark**
   - `CIS 3.8`
+
+**MITRE ATT&CK**
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-NTA`](https://d3fend.mitre.org/technique/D3-NTA/)
 
 **Source**
   - [`catalog/SEC-GCP-NETWORK-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-NETWORK-003.yaml) — canonical YAML

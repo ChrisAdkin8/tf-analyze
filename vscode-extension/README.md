@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="assets/hero.png" alt="tf-analyze in action" width="100%">
-</p>
+![tf-analyze in action — Terraform security and stack analysis directly in your editor](assets/hero.png)
 
 # tf-analyze for VS Code
 
@@ -38,7 +36,7 @@ Brings the **`tf-analyze`** detection engine (215 catalogue rules across AWS, GC
 ### 1. Install
 
 ```bash
-code --install-extension tf-analyze-0.1.30.vsix
+code --install-extension tf-analyze-0.1.32.vsix
 ```
 
 That's it. The extension ships with everything it needs.

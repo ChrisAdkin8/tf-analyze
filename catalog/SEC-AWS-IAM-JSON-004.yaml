@@ -23,6 +23,8 @@ patterns:
       granted actions.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
 recommendation: |
   Replace the wildcard principal with the specific account or role
   ARNs that should have access. If true public exposure is the

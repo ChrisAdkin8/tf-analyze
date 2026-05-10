@@ -43,6 +43,12 @@ soc2_cc:
   - "CC6.1"
 mitre:
   - "T1078.004"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
+d3fend:
+  - "D3-PA"
+  - "D3-MFA"
 fix_hcl: |
   statement {
     actions   = ["s3:GetObject", "s3:PutObject"]

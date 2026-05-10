@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-RDS-002 — RDS instance or Aurora cluster skips final snapshot on deletion"
 description: "tf-analyze rule ROB-AWS-RDS-002 (HIGH · robustness): RDS instance or Aurora cluster skips final snapshot on deletion"
-keywords: "robustness, high, terraform, iac, aws"
+keywords: "robustness, high, terraform, iac, aws, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, high, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, high, terraform, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -90,6 +90,9 @@ was created.
 
 **SOC 2 Trust Services Criteria**
   - `A1.2`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/ROB-AWS-RDS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-RDS-002.yaml) — canonical YAML

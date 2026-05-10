@@ -9,6 +9,12 @@ patterns:
     description: A submodule directory (.tf present) has no required_version constraint anywhere
 owasp_iac:
   - "Develop and Distribute / Version Control Discipline"
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
 recommendation: |
   Submodules inherit the root's Terraform version *implicitly*. That hides
   feature-level assumptions: a submodule using `optional()` object attrs or

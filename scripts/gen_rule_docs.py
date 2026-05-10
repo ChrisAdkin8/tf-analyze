@@ -165,6 +165,26 @@ def _references(entry: dict, rule_id: str) -> str:
             url = MITRE_URL_BASE.format(tid_with_slash=tid_with_slash)
             mitre_links.append(f"  - [`{tid}`]({url})")
         parts.append("**MITRE ATT&CK**\n" + "\n".join(mitre_links))
+    # CWE — common weakness enumeration. Items are bare "CWE-<digits>".
+    # Link to cwe.mitre.org's per-CWE page; the docs there are the
+    # canonical reference for each weakness.
+    cwe = entry.get("cwe") or []
+    if cwe:
+        cwe_links = []
+        for cid in cwe:
+            num = str(cid).removeprefix("CWE-")
+            url = f"https://cwe.mitre.org/data/definitions/{num}.html"
+            cwe_links.append(f"  - [`{cid}`]({url})")
+        parts.append("**CWE**\n" + "\n".join(cwe_links))
+    # D3FEND — defensive technique counterparts to ATT&CK. The d3fend.mitre.org
+    # site uses the technique ID as the URL slug.
+    d3fend = entry.get("d3fend") or []
+    if d3fend:
+        d3fend_links = []
+        for did in d3fend:
+            url = f"https://d3fend.mitre.org/technique/{did}/"
+            d3fend_links.append(f"  - [`{did}`]({url})")
+        parts.append("**MITRE D3FEND**\n" + "\n".join(d3fend_links))
     related = entry.get("related") or []
     if related:
         rel_links = [f"  - [`{r}`](./{r}.md)" for r in related]
@@ -209,6 +229,10 @@ def _front_matter(entry: dict) -> str:
         keywords.append(f"cis-{c}")
     for t in entry.get("mitre") or []:
         keywords.append(f"mitre-{t}")
+    for c in entry.get("cwe") or []:
+        keywords.append(c.lower())   # cwe-732 etc.
+    for d in entry.get("d3fend") or []:
+        keywords.append(d.lower())   # d3-mfa etc.
     keywords_csv = ", ".join(keywords)
 
     return (
@@ -240,6 +264,10 @@ def _json_ld(entry: dict) -> str:
         keywords.append(f"CIS {c}")
     for t in entry.get("mitre") or []:
         keywords.append(f"MITRE {t}")
+    for c in entry.get("cwe") or []:
+        keywords.append(c)
+    for d in entry.get("d3fend") or []:
+        keywords.append(d)
 
     payload = {
         "@context": "https://schema.org",

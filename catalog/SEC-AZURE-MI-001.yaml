@@ -4,6 +4,12 @@ section: security
 default_urgency: MEDIUM
 blast_radius: module
 status: active
+mitre:
+  - "T1078.004"
+cwe:
+  - "CWE-250"
+d3fend:
+  - "D3-PA"
 patterns:
   - kind: graph_check
     function: azure_uami_orphan

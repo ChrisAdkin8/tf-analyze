@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-SA-KEY-001 — GCP service account key created in Terraform"
 description: "tf-analyze rule SEC-GCP-SA-KEY-001 (HIGH · security): GCP service account key created in Terraform"
-keywords: "security, high, terraform, iac, gcp, cis-1.4"
+keywords: "security, high, terraform, iac, gcp, cis-1.4, mitre-T1098.001, mitre-T1552.001"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-1.4"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.4",
+  "keywords": "security, high, terraform, CIS 1.4, MITRE T1098.001, MITRE T1552.001",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -136,6 +136,10 @@ return only system-managed keys (type = SYSTEM_MANAGED). Re-run tf-analyze
 
 **CIS Benchmark**
   - `CIS 1.4`
+
+**MITRE ATT&CK**
+  - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
+  - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
 
 **Source**
   - [`catalog/SEC-GCP-SA-KEY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-SA-KEY-001.yaml) — canonical YAML

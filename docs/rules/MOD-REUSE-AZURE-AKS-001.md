@@ -1,7 +1,7 @@
 ---
 title: "MOD-REUSE-AZURE-AKS-001 — Hand-rolled AKS cluster could be replaced by Azure/aks/azurerm"
 description: "tf-analyze rule MOD-REUSE-AZURE-AKS-001 (INFO · module-reuse): Hand-rolled AKS cluster could be replaced by Azure/aks/azurerm"
-keywords: "module-reuse, info, terraform, iac, azure"
+keywords: "module-reuse, info, terraform, iac, azure, mitre-T1195.002, cwe-1357, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "module-reuse, info, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "module-reuse, info, terraform",
+  "keywords": "module-reuse, info, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "module-reuse",
   "isAccessibleForFree": true
@@ -97,6 +97,15 @@ Use `moved` blocks for every cluster, node pool, identity, and
 diagnostic setting so AKS is not destroyed and recreated.
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Related rules**
   - [`MOD-PIN-001`](./MOD-PIN-001.md)

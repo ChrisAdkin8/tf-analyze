@@ -13,6 +13,10 @@ patterns:
       module input whose corresponding variable is NOT marked sensitive.
 owasp_iac:
   - "Develop and Distribute / Secrets Detection"
+cwe:
+  - "CWE-200"
+d3fend:
+  - "D3-CH"
 recommendation: |
   Add `sensitive = true` to the child module's variable declaration.
   Sensitivity does not propagate automatically across module boundaries

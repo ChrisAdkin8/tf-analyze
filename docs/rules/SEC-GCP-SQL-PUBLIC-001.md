@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-SQL-PUBLIC-001 — Cloud SQL instance permits public IPv4"
 description: "tf-analyze rule SEC-GCP-SQL-PUBLIC-001 (HIGH · security): Cloud SQL instance permits public IPv4"
-keywords: "security, high, terraform, iac, gcp, cis-6.6"
+keywords: "security, high, terraform, iac, gcp, cis-6.6, mitre-T1190, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-6.6"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 6.6",
+  "keywords": "security, high, terraform, CIS 6.6, MITRE T1190, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -107,6 +107,15 @@ Should print only `PRIVATE` (no `PRIMARY`).
 
 **CIS Benchmark**
   - `CIS 6.6`
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Related rules**
   - [`STK-CLOUDSQL-002`](./STK-CLOUDSQL-002.md)

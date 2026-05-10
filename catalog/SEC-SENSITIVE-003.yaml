@@ -11,6 +11,10 @@ patterns:
     description: templatefile() call whose argument map references a sensitive variable, rendering the secret into a non-sensitive string
 owasp_iac:
   - "Develop and Distribute / Secrets Detection"
+cwe:
+  - "CWE-200"
+d3fend:
+  - "D3-CH"
 recommendation: |
   Avoid passing sensitive variables through `templatefile()`. The
   rendered output is a plain string that Terraform does NOT mark as

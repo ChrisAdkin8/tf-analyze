@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-LB-LISTENER-001 — ALB listener serves plain HTTP without redirect"
 description: "tf-analyze rule SEC-AWS-LB-LISTENER-001 (HIGH · security): ALB listener serves plain HTTP without redirect"
-keywords: "security, high, terraform, iac, aws, cis-{'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, mitre-T1071.001"
+keywords: "security, high, terraform, iac, aws, cis-{'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, mitre-T1071.001, cwe-319, d3-ei"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-{'id': '2.1', 'title': 'Ensu
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS {'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, MITRE T1071.001",
+  "keywords": "security, high, terraform, CIS {'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, MITRE T1071.001, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -133,6 +133,12 @@ must return `["redirect"]`, not `["forward"]`.
 
 **MITRE ATT&CK**
   - [`T1071.001`](https://attack.mitre.org/techniques/T1071/001/)
+
+**CWE**
+  - [`CWE-319`](https://cwe.mitre.org/data/definitions/319.html)
+
+**MITRE D3FEND**
+  - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
 
 **Source**
   - [`catalog/SEC-AWS-LB-LISTENER-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-LB-LISTENER-001.yaml) — canonical YAML

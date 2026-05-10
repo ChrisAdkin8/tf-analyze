@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-COMPUTE-SHIELDED-001 — GCP Compute instance missing shielded instance configuration"
 description: "tf-analyze rule SEC-GCP-COMPUTE-SHIELDED-001 (MEDIUM · security): GCP Compute instance missing shielded instance configuration"
-keywords: "security, medium, terraform, iac, gcp"
+keywords: "security, medium, terraform, iac, gcp, mitre-T1542.003, cwe-1278, d3-psh"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform",
+  "keywords": "security, medium, terraform, MITRE T1542.003, CWE-1278, D3-PSH",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -106,6 +106,15 @@ must show `enableSecureBoot: true`. Re-run tf-analyze in mode:verify-fixed.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1542.003`](https://attack.mitre.org/techniques/T1542/003/)
+
+**CWE**
+  - [`CWE-1278`](https://cwe.mitre.org/data/definitions/1278.html)
+
+**MITRE D3FEND**
+  - [`D3-PSH`](https://d3fend.mitre.org/technique/D3-PSH/)
 
 **Related rules**
   - [`STK-GCP-GKE-NODEPOOL-001`](./STK-GCP-GKE-NODEPOOL-001.md)

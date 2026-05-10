@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-GUARDDUTY-001 — GuardDuty detector not provisioned"
 description: "tf-analyze rule SEC-AWS-GUARDDUTY-001 (HIGH · security): GuardDuty detector not provisioned"
-keywords: "security, high, terraform, iac, aws, cis-{'id': '3.3', 'title': 'Ensure AWS Config is enabled in all regions'}, mitre-T1562.001"
+keywords: "security, high, terraform, iac, aws, cis-{'id': '3.3', 'title': 'Ensure AWS Config is enabled in all regions'}, mitre-T1562.001, cwe-693"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, aws, cis-{'id': '3.3', 'title': 'Ensu
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS {'id': '3.3', 'title': 'Ensure AWS Config is enabled in all regions'}, MITRE T1562.001",
+  "keywords": "security, high, terraform, CIS {'id': '3.3', 'title': 'Ensure AWS Config is enabled in all regions'}, MITRE T1562.001, CWE-693",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -113,6 +113,9 @@ must return at least one detector ID.
 
 **MITRE ATT&CK**
   - [`T1562.001`](https://attack.mitre.org/techniques/T1562/001/)
+
+**CWE**
+  - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
 
 **Source**
   - [`catalog/SEC-AWS-GUARDDUTY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-GUARDDUTY-001.yaml) — canonical YAML

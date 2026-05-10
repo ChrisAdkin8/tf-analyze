@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CLOUDFRONT-002 — CloudFront distribution missing access logging"
 description: "tf-analyze rule SEC-AWS-CLOUDFRONT-002 (MEDIUM · security): CloudFront distribution missing access logging"
-keywords: "security, medium, terraform, iac, aws, mitre-T1071.001"
+keywords: "security, medium, terraform, iac, aws, mitre-T1071.001, cwe-319, d3-ei"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1071.001"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1071.001",
+  "keywords": "security, medium, terraform, MITRE T1071.001, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -106,6 +106,12 @@ must return `true`.
 
 **MITRE ATT&CK**
   - [`T1071.001`](https://attack.mitre.org/techniques/T1071/001/)
+
+**CWE**
+  - [`CWE-319`](https://cwe.mitre.org/data/definitions/319.html)
+
+**MITRE D3FEND**
+  - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
 
 **Source**
   - [`catalog/SEC-AWS-CLOUDFRONT-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-CLOUDFRONT-002.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-IAM-003 — Member has both project-level and resource-level IAM grants"
 description: "tf-analyze rule SEC-GCP-IAM-003 (HIGH · security): Member has both project-level and resource-level IAM grants"
-keywords: "security, high, terraform, iac, gcp, cis-1.6"
+keywords: "security, high, terraform, iac, gcp, cis-1.6, mitre-T1098.001, mitre-T1078.004, cwe-269, d3-pa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-1.6"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.6",
+  "keywords": "security, high, terraform, CIS 1.6, MITRE T1098.001, MITRE T1078.004, CWE-269, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -102,6 +102,16 @@ equivalent for the resource type) should not show overlap.
 
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
 
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)

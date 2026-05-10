@@ -8,6 +8,12 @@ pci_dss:
   - "Req-3.4"
 soc2_cc:
   - "CC6.7"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
 patterns:
   - kind: resource_missing_arg
     resource: google_compute_disk

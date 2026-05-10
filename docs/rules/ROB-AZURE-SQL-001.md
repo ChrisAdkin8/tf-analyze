@@ -1,7 +1,7 @@
 ---
 title: "ROB-AZURE-SQL-001 — Azure SQL database missing short-term backup retention policy"
 description: "tf-analyze rule ROB-AZURE-SQL-001 (MEDIUM · robustness): Azure SQL database missing short-term backup retention policy"
-keywords: "robustness, medium, terraform, iac, azure, cis-4.1.7"
+keywords: "robustness, medium, terraform, iac, azure, cis-4.1.7, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, azure, cis-4.1.7"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, CIS 4.1.7",
+  "keywords": "robustness, medium, terraform, CIS 4.1.7, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -96,6 +96,9 @@ The value should be >= 14 for non-prod and >= 35 for production.
 
 **CIS Benchmark**
   - `CIS 4.1.7`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/ROB-AZURE-SQL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AZURE-SQL-001.yaml) — canonical YAML

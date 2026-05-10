@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-IAM-002 — Public IAM binding (allUsers / allAuthenticatedUsers)"
 description: "tf-analyze rule SEC-GCP-IAM-002 (CRITICAL · security): Public IAM binding (allUsers / allAuthenticatedUsers)"
-keywords: "security, critical, terraform, iac, gcp, cis-5.1, cis-7.1"
+keywords: "security, critical, terraform, iac, gcp, cis-5.1, cis-7.1, mitre-T1078.004, cwe-284, cwe-732, d3-pa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, gcp, cis-5.1, cis-7.1"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 5.1, CIS 7.1",
+  "keywords": "security, critical, terraform, CIS 5.1, CIS 7.1, MITRE T1078.004, CWE-284, CWE-732, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -94,6 +94,16 @@ mode:verify-fixed.
 
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
 
 **Source**
   - [`catalog/SEC-GCP-IAM-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-IAM-002.yaml) — canonical YAML

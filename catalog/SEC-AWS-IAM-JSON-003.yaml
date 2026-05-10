@@ -24,6 +24,9 @@ patterns:
       audit tools that recognise `AdministratorAccess`.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
 recommendation: |
   If true administrator access is intended, attach
   `arn:aws:iam::aws:policy/AdministratorAccess` directly via

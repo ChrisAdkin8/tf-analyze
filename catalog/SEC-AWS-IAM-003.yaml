@@ -36,6 +36,10 @@ patterns:
       CIS AWS Foundations 1.8 requires a minimum of 14 characters.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
+d3fend:
+  - "D3-PA"
 recommendation: |
   Define a strong password policy:
 

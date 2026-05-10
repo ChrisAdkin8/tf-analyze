@@ -1,7 +1,7 @@
 ---
 title: "ROB-DRIFT-003 — ignore_changes lists too many attributes (drift-disable by attrition)"
 description: "tf-analyze rule ROB-DRIFT-003 (LOW · robustness): ignore_changes lists too many attributes (drift-disable by attrition)"
-keywords: "robustness, low, terraform, iac"
+keywords: "robustness, low, terraform, iac, mitre-T1562.001, cwe-693"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, low, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, low, terraform",
+  "keywords": "robustness, low, terraform, MITRE T1562.001, CWE-693",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -122,6 +122,12 @@ show only attributes that are genuinely intended to converge.
 
 **OWASP IaC Cheat Sheet**
   - [`Runtime / Immutable Infrastructure Model`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1562.001`](https://attack.mitre.org/techniques/T1562/001/)
+
+**CWE**
+  - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
 
 **Related rules**
   - [`ROB-DRIFT-001`](./ROB-DRIFT-001.md)

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-AKS-001 — AKS cluster RBAC disabled"
 description: "tf-analyze rule SEC-AZURE-AKS-001 (HIGH · security): AKS cluster RBAC disabled"
-keywords: "security, high, terraform, iac, azure, cis-5.2"
+keywords: "security, high, terraform, iac, azure, cis-5.2, mitre-T1078.004"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, azure, cis-5.2"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.2",
+  "keywords": "security, high, terraform, CIS 5.2, MITRE T1078.004",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -107,6 +107,9 @@ The command should return `true`.
 
 **CIS Benchmark**
   - `CIS 5.2`
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
 
 **Source**
   - [`catalog/SEC-AZURE-AKS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-AKS-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-BIGQUERY-001 — BigQuery dataset missing default CMEK"
 description: "tf-analyze rule STK-GCP-BIGQUERY-001 (HIGH · stack): BigQuery dataset missing default CMEK"
-keywords: "stack, high, terraform, iac, gcp, cis-7.3"
+keywords: "stack, high, terraform, iac, gcp, cis-7.3, mitre-T1530, cwe-311, d3-ear"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-7.3"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 7.3",
+  "keywords": "stack, high, terraform, CIS 7.3, MITRE T1530, CWE-311, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -93,6 +93,15 @@ must return a key reference, not `null`.
 
 **CIS Benchmark**
   - `CIS 7.3`
+
+**MITRE ATT&CK**
+  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)
+
+**MITRE D3FEND**
+  - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
 
 **Source**
   - [`catalog/STK-GCP-BIGQUERY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-BIGQUERY-001.yaml) — canonical YAML

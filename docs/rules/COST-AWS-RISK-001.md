@@ -1,7 +1,7 @@
 ---
 title: "COST-AWS-RISK-001 — AWS resource missing cost control"
 description: "tf-analyze rule COST-AWS-RISK-001 (MEDIUM · ops): AWS resource missing cost control"
-keywords: "ops, medium, terraform, iac, aws"
+keywords: "ops, medium, terraform, iac, aws, mitre-T1496"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "ops, medium, terraform, iac, aws"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "ops, medium, terraform",
+  "keywords": "ops, medium, terraform, MITRE T1496",
   "proficiencyLevel": "Expert",
   "articleSection": "ops",
   "isAccessibleForFree": true
@@ -113,6 +113,9 @@ must return empty.
 For ASGs: confirm `max_size` is set and reasonable in `terraform show`.
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1496`](https://attack.mitre.org/techniques/T1496/)
 
 **Source**
   - [`catalog/COST-AWS-RISK-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/COST-AWS-RISK-001.yaml) — canonical YAML

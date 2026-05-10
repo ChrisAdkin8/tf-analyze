@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-SQL-001 — Azure MySQL/PostgreSQL single server is deprecated"
 description: "tf-analyze rule STK-AZURE-SQL-001 (HIGH · stack): Azure MySQL/PostgreSQL single server is deprecated"
-keywords: "stack, high, terraform, iac, azure"
+keywords: "stack, high, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, azure"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform",
+  "keywords": "stack, high, terraform, MITRE T1195.002, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -121,6 +121,15 @@ for MySQL — Single Server" and "Azure Database for PostgreSQL — Single
 Server" should show no instances.
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Source**
   - [`catalog/STK-AZURE-SQL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-SQL-001.yaml) — canonical YAML

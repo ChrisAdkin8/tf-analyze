@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CLOUDTRAIL-001 — CloudTrail not enabled for all regions"
 description: "tf-analyze rule SEC-AWS-CLOUDTRAIL-001 (CRITICAL · security): CloudTrail not enabled for all regions"
-keywords: "security, critical, terraform, iac, aws, cis-3.1, mitre-T1562.008"
+keywords: "security, critical, terraform, iac, aws, cis-3.1, mitre-T1562.008, cwe-778, d3-faa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, aws, cis-3.1, mitre-T1562.008"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 3.1, MITRE T1562.008",
+  "keywords": "security, critical, terraform, CIS 3.1, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -102,6 +102,12 @@ no diff shows `is_multi_region_trail = false` or a missing value.
 
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
 
 **Source**
   - [`catalog/SEC-AWS-CLOUDTRAIL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-CLOUDTRAIL-001.yaml) — canonical YAML

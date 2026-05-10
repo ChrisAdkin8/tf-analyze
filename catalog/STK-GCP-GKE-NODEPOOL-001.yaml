@@ -6,6 +6,12 @@ blast_radius: environment
 status: active
 cis:
   - "6.5.5"
+mitre:
+  - "T1542.003"
+cwe:
+  - "CWE-1278"
+d3fend:
+  - "D3-PSH"
 patterns:
   - kind: graph_check
     function: gke_nodepool_secure_boot

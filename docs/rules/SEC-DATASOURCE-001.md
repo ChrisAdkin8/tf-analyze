@@ -1,7 +1,7 @@
 ---
 title: "SEC-DATASOURCE-001 — External or HTTP data source executes at plan time"
 description: "tf-analyze rule SEC-DATASOURCE-001 (MEDIUM · security): External or HTTP data source executes at plan time"
-keywords: "security, medium, terraform, iac, mitre-T1552.001"
+keywords: "security, medium, terraform, iac, mitre-T1552.001, cwe-829"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, mitre-T1552.001"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1552.001",
+  "keywords": "security, medium, terraform, MITRE T1552.001, CWE-829",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -95,6 +95,9 @@ documented with a justification or replaced with a native alternative.
 
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**CWE**
+  - [`CWE-829`](https://cwe.mitre.org/data/definitions/829.html)
 
 **Source**
   - [`catalog/SEC-DATASOURCE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-DATASOURCE-001.yaml) — canonical YAML

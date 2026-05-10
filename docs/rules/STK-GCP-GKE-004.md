@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-004 — GKE cluster missing master authorized networks"
 description: "tf-analyze rule STK-GCP-GKE-004 (HIGH · stack): GKE cluster missing master authorized networks"
-keywords: "stack, high, terraform, iac, gcp, cis-8.5.4"
+keywords: "stack, high, terraform, iac, gcp, cis-8.5.4, mitre-T1190, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-8.5.4"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 8.5.4",
+  "keywords": "stack, high, terraform, CIS 8.5.4, MITRE T1190, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -102,6 +102,15 @@ must return at least one CIDR entry.
 
 **CIS Benchmark**
   - `CIS 8.5.4`
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Source**
   - [`catalog/STK-GCP-GKE-004.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-GKE-004.yaml) — canonical YAML

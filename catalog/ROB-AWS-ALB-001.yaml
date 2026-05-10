@@ -4,6 +4,8 @@ section: robustness
 default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1485"
 patterns:
   - kind: resource_arg
     resource: aws_lb

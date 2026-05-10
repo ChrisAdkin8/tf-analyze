@@ -5,6 +5,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.32] — 2026-05-10
+
+### Changed
+
+- **Re-release of the 0.1.31 fixes after iterating on the hero-image bug.** No new code or content beyond what 0.1.31 documents — the version bump exists because 0.1.31 went through three failed attempts at fixing the broken hero image (relative path, then HTML img wrapper, then markdown syntax) before the actual root cause was identified (vsce's `--baseImagesUrl` rewrite ignores `repository.directory` in monorepo packages). 0.1.32 is the clean release that ships the working state in one consistent .vsix; 0.1.31 should be considered superseded.
+
+  Concretely, 0.1.32 carries:
+  - `package`/`publish` npm scripts pin `--baseImagesUrl https://github.com/ChrisAdkin8/tf-analyze/raw/HEAD/vscode-extension`, so future builds via `npm run package` always emit a correct absolute hero URL
+  - README hero is markdown `![]()` syntax (vsce rewrites this reliably); previous `<p align="center"><img>` block dropped
+  - Hero URL inside the `.vsix`-bundled README resolves to HTTP 302 → 200 via github.com → raw.githubusercontent.com
+
+  Verified with `unzip -p tf-analyze-0.1.32.vsix extension/README.md | head -1` showing the rewritten URL, then `curl -sIL` confirming reachability.
+
+---
+
+## [0.1.31] — 2026-05-10
+
+### Added
+
+- **MitrePanel: tactic-grouped output.** Engine's `--format mitre` now groups by ATT&CK tactic (Initial Access → … → Impact), with techniques as second-tier headers (`T1078.004 — Valid Accounts: Cloud Accounts`). MitrePanel was previously promoting `### Tnnnn` lines to `<h3>` chips, but the new shape uses `### <Tactic>` at the top level and indented `T<id> — <name>` lines underneath. Webview now renders three tiers: `<h1>` for the engine title, `<h2 class="tactic">` for tactic groups (gradient background, accent left-border), `<h3>` for techniques (chip + name + count). Legacy single-tier `### Tnnnn` output still renders correctly as a fallback.
+
+- **RuleExplainerPanel: CWE + D3FEND chip rows.** `detect.py --explain <RULE-ID>` now emits four taxonomy header lines — CIS, MITRE ATT&CK, CWE, MITRE D3FEND — when the rule carries them. The panel promotes each to a coloured chip-row with click-through links to `cwe.mitre.org/data/definitions/<n>.html`, `attack.mitre.org/techniques/<id>/`, and `d3fend.mitre.org/technique/<id>/`. The four chip colours are distinct (CIS blue, MITRE purple, CWE amber, D3FEND green) so a finding's full threat-language footprint is visible at a glance.
+
+- **Engine `--explain` upgrade (engine, not extension):** Previously only emitted CIS. Now emits MITRE ATT&CK, CWE, and D3FEND when present. The extension panel above consumes this.
+
+### Fixed
+
+- **Hero image now renders in the Extensions details panel.** Three layered bugs had to be peeled to find the actual root cause:
+
+  1. **Earlier "fix" went the wrong direction.** A previous edit had changed the README's hero `<img>` from a relative path to an absolute `raw.githubusercontent.com/.../main/...` URL on the assumption that Marketplace required absolute URLs. That works for the Marketplace listing but breaks VS Code's installed-extension details panel on machines with restricted egress (corporate networks blocking `raw.githubusercontent.com` from VS Code's webview). Reverted to relative.
+
+  2. **HTML `<img>` vs. markdown `![]()` aren't treated equivalently.** VS Code's README renderer handles markdown image syntax reliably; raw HTML `<img>` tags get less consistent treatment depending on the surrounding HTML block. Switched the hero from `<p align="center"><img src="..."></p>` to plain markdown `![alt](path)`.
+
+  3. **The actual root cause: monorepo `directory:` mismatch in vsce's path rewriter.** `vsce` rewrites markdown image paths to absolute URLs at package time using the repo's `repository.url`, but it does **not** prepend the `repository.directory` field — even when one is set. With `directory: "vscode-extension"` and a relative `assets/hero.png`, vsce rewrote to `https://github.com/.../raw/HEAD/assets/hero.png` (404 — the actual file is at `.../raw/HEAD/vscode-extension/assets/hero.png`). Fixed by passing `--baseImagesUrl https://github.com/ChrisAdkin8/tf-analyze/raw/HEAD/vscode-extension` to both `vsce package` and `vsce publish`. The flag is now baked into the `package` and `publish` npm scripts so future builds don't regress. Verified: the `.vsix`-bundled README's image URL now resolves to HTTP 200 (after a single 302 redirect through GitHub).
+
+---
+
 ## [0.1.30] — 2026-05-10
 
 ### Added

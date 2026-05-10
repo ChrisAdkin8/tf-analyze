@@ -44,6 +44,10 @@ soc2_cc:
   - "CC7.2"
 mitre:
   - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-FAA"
 fix_hcl: |
   resource "azurerm_monitor_diagnostic_setting" "kv" {
     name                       = "kv-diagnostics"

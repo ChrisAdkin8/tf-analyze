@@ -37,6 +37,10 @@ escalation:
     new_urgency: CRITICAL
 soc2_cc:
   - "A1.2"
+mitre:
+  - "T1485"
+cwe:
+  - "CWE-693"
 fix_hcl: |
   resource "google_sql_database_instance" "example" {
     # ... other arguments ...

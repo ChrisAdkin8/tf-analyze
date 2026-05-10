@@ -4,6 +4,13 @@ section: stack
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1190"
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
 patterns:
   - kind: resource_arg
     resource: google_sql_database_instance

@@ -1,7 +1,7 @@
 ---
 title: "ROB-DRIFT-001 — Resource uses ignore_changes = all"
 description: "tf-analyze rule ROB-DRIFT-001 (HIGH · robustness): Resource uses ignore_changes = all"
-keywords: "robustness, high, terraform, iac"
+keywords: "robustness, high, terraform, iac, mitre-T1562.001, cwe-693"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, high, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, high, terraform, MITRE T1562.001, CWE-693",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -90,6 +90,12 @@ are real drift that was previously hidden.
 
 **OWASP IaC Cheat Sheet**
   - [`Runtime / Immutable Infrastructure Model`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1562.001`](https://attack.mitre.org/techniques/T1562/001/)
+
+**CWE**
+  - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
 
 **Source**
   - [`catalog/ROB-DRIFT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-DRIFT-001.yaml) — canonical YAML

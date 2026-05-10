@@ -187,6 +187,10 @@ Days of git history to analyse in --mode trend (default: 30).
 
 Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
 
+### `--mitre-tactic`
+
+Restrict --format mitre output to one ATT&CK tactic (e.g. 'Initial Access', 'Defense Evasion'). Case-insensitive; hyphens and underscores accepted as separators ('initial-access' is equivalent).
+
 ### `--baseline`
 
 Path to a baseline JSON report. Findings present in the baseline are suppressed (counted under `suppressed_by_baseline` in JSON output) so only NEW findings affect the exit code. Match key: (id, file, line, resource). Use to ratchet a legacy repo: snapshot today's findings, then enforce no regressions going forward.

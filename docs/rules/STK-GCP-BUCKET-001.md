@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-BUCKET-001 — GCS bucket missing versioning"
 description: "tf-analyze rule STK-GCP-BUCKET-001 (MEDIUM · stack): GCS bucket missing versioning"
-keywords: "stack, medium, terraform, iac, gcp, cis-5.3"
+keywords: "stack, medium, terraform, iac, gcp, cis-5.3, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp, cis-5.3"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, CIS 5.3",
+  "keywords": "stack, medium, terraform, CIS 5.3, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -102,6 +102,9 @@ Must return `True`. Re-run tf-analyze; STK-BUCKET-001 should not fire.
 
 **CIS Benchmark**
   - `CIS 5.3`
+
+**MITRE ATT&CK**
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Related rules**
   - [`SEC-BUCKET-001`](./SEC-BUCKET-001.md)

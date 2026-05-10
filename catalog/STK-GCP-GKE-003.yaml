@@ -6,6 +6,10 @@ blast_radius: environment
 status: active
 cis:
   - "8.5.5"
+mitre:
+  - "T1552.001"
+cwe:
+  - "CWE-522"
 patterns:
   - kind: resource_missing_arg
     resource: google_container_cluster

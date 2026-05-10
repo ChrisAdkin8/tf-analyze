@@ -24,6 +24,10 @@ patterns:
       attributes auditors expect to be tracked.
 owasp_iac:
   - "Runtime / Immutable Infrastructure Model"
+mitre:
+  - "T1562.001"
+cwe:
+  - "CWE-693"
 recommendation: |
   Replace with an explicit list of attributes that must be ignored:
 

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-002 — GKE cluster missing Workload Identity"
 description: "tf-analyze rule STK-GCP-GKE-002 (HIGH · stack): GKE cluster missing Workload Identity"
-keywords: "stack, high, terraform, iac, gcp, cis-8.5.2"
+keywords: "stack, high, terraform, iac, gcp, cis-8.5.2, mitre-T1078.004"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-8.5.2"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 8.5.2",
+  "keywords": "stack, high, terraform, CIS 8.5.2, MITRE T1078.004",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -102,6 +102,9 @@ should not fire.
 
 **CIS Benchmark**
   - `CIS 8.5.2`
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
 
 **Related rules**
   - [`STK-GKE-NODEPOOL-001`](./STK-GKE-NODEPOOL-001.md)

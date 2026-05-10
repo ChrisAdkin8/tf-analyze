@@ -10,6 +10,12 @@ patterns:
     description: Registry-style module source present (staleness checked via --check-registry)
 owasp_iac:
   - "Develop and Distribute / Open Source Dependency Scanning"
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1395"
+d3fend:
+  - "D3-SCA"
 recommendation: |
   Run `detect.py --check-registry` to identify modules pinned significantly behind their
   latest published version on the Terraform Registry. Upgrade the `version` constraint and

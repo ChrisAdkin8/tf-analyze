@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-PUBSUB-001 — Pub/Sub topic missing customer-managed encryption key"
 description: "tf-analyze rule STK-GCP-PUBSUB-001 (MEDIUM · stack): Pub/Sub topic missing customer-managed encryption key"
-keywords: "stack, medium, terraform, iac, gcp"
+keywords: "stack, medium, terraform, iac, gcp, mitre-T1530, cwe-311, d3-ear"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform",
+  "keywords": "stack, medium, terraform, MITRE T1530, CWE-311, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -105,6 +105,15 @@ must return the full key resource ID.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+
+**CWE**
+  - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)
+
+**MITRE D3FEND**
+  - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
 
 **Source**
   - [`catalog/STK-GCP-PUBSUB-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-PUBSUB-001.yaml) — canonical YAML

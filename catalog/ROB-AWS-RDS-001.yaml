@@ -36,6 +36,8 @@ verification: |
   and verify no diff shows `backup_retention_period = 0` or a missing value.
 soc2_cc:
   - "A1.2"
+mitre:
+  - "T1490"
 fix_hcl: |
   resource "aws_db_instance" "example" {
     # ... other arguments ...

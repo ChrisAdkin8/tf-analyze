@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GCS-LOGGING-001 — GCS bucket logging target lacks public_access_prevention"
 description: "tf-analyze rule STK-GCP-GCS-LOGGING-001 (HIGH · stack): GCS bucket logging target lacks public_access_prevention"
-keywords: "stack, high, terraform, iac, gcp, cis-5.1"
+keywords: "stack, high, terraform, iac, gcp, cis-5.1, mitre-T1530, mitre-T1562.008, cwe-778, d3-faa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-5.1"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 5.1",
+  "keywords": "stack, high, terraform, CIS 5.1, MITRE T1530, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -107,6 +107,16 @@ should not fire.
 
 **OWASP IaC Cheat Sheet**
   - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
+
+**CWE**
+  - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**MITRE D3FEND**
+  - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
 
 **Related rules**
   - [`SEC-BUCKET-001`](./SEC-BUCKET-001.md)

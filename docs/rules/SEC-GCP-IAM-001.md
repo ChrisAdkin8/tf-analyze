@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-IAM-001 — Project-level binding of overly broad role"
 description: "tf-analyze rule SEC-GCP-IAM-001 (HIGH · security): Project-level binding of overly broad role"
-keywords: "security, high, terraform, iac, gcp, cis-1.6"
+keywords: "security, high, terraform, iac, gcp, cis-1.6, mitre-T1078.004, cwe-269, cwe-732, d3-pa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp, cis-1.6"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.6",
+  "keywords": "security, high, terraform, CIS 1.6, MITRE T1078.004, CWE-269, CWE-732, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -93,6 +93,16 @@ mode:verify-fixed and confirm SEC-IAM-001 is RESOLVED.
 
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Resource Permission Minimization`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+  - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
+
+**MITRE D3FEND**
+  - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
 
 **Source**
   - [`catalog/SEC-GCP-IAM-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-IAM-001.yaml) — canonical YAML

@@ -24,6 +24,9 @@ patterns:
       privilege-escalation foothold.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
 recommendation: |
   Replace `Action: "*"` with the explicit minimum API set the workload
   requires. Use `aws iam simulate-principal-policy` to validate that

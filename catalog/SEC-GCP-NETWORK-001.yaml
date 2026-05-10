@@ -51,6 +51,14 @@ related:
   - SEC-NETWORK-002
 pci_dss:
   - "Req-1.2"
+mitre:
+  - "T1190"
+  - "T1133"
+cwe:
+  - "CWE-284"
+  - "CWE-1327"
+d3fend:
+  - "D3-IAA"
 fix_hcl: |
   resource "google_compute_firewall" "iap_ssh" {
     name          = "iap-ssh"

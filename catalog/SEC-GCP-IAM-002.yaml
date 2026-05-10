@@ -35,6 +35,13 @@ pci_dss:
   - "Req-6.4"
 soc2_cc:
   - "CC6.1"
+mitre:
+  - "T1078.004"
+cwe:
+  - "CWE-284"
+  - "CWE-732"
+d3fend:
+  - "D3-PA"
 fix_hcl: |
   resource "google_storage_bucket_iam_member" "example" {
     bucket = google_storage_bucket.example.name

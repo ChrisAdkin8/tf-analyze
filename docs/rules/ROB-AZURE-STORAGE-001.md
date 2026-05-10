@@ -1,7 +1,7 @@
 ---
 title: "ROB-AZURE-STORAGE-001 — Azure storage account missing blob soft delete"
 description: "tf-analyze rule ROB-AZURE-STORAGE-001 (MEDIUM · robustness): Azure storage account missing blob soft delete"
-keywords: "robustness, medium, terraform, iac, azure, cis-3.6"
+keywords: "robustness, medium, terraform, iac, azure, cis-3.6, mitre-T1485, mitre-T1490"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, azure, cis-3.6"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, CIS 3.6",
+  "keywords": "robustness, medium, terraform, CIS 3.6, MITRE T1485, MITRE T1490",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -107,6 +107,10 @@ The `enabled` field should be `true` and `days` should be >= 7.
 
 **CIS Benchmark**
   - `CIS 3.6`
+
+**MITRE ATT&CK**
+  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
+  - [`T1490`](https://attack.mitre.org/techniques/T1490/)
 
 **Source**
   - [`catalog/ROB-AZURE-STORAGE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AZURE-STORAGE-001.yaml) — canonical YAML

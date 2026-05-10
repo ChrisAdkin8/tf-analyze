@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-CLOUDRUN-001 — Cloud Run service allows all ingress traffic"
 description: "tf-analyze rule SEC-GCP-CLOUDRUN-001 (HIGH · security): Cloud Run service allows all ingress traffic"
-keywords: "security, high, terraform, iac, gcp"
+keywords: "security, high, terraform, iac, gcp, mitre-T1190, cwe-284, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, high, terraform, iac, gcp"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform",
+  "keywords": "security, high, terraform, MITRE T1190, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -101,6 +101,15 @@ must not return `all`.
 ```
 
 ## References
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Source**
   - [`catalog/SEC-GCP-CLOUDRUN-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-CLOUDRUN-001.yaml) — canonical YAML

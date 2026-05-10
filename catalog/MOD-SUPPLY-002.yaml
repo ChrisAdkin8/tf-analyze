@@ -21,6 +21,10 @@ soc2_cc:
   - "CC9.2"
 mitre:
   - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
 fix_hcl: |
   # Before: module sourced from raw git
   # source = "git::https://github.com/example/terraform-aws-vpc.git"

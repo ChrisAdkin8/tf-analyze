@@ -24,6 +24,10 @@ patterns:
       *signal*, not the gate.
 owasp_iac:
   - "Runtime / Immutable Infrastructure Model"
+mitre:
+  - "T1562.001"
+cwe:
+  - "CWE-693"
 recommendation: |
   Audit the `ignore_changes` list. For each attribute:
 

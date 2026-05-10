@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-NETWORK-002 — RDP (tcp:3389) exposed to 0.0.0.0/0"
 description: "tf-analyze rule SEC-GCP-NETWORK-002 (CRITICAL · security): RDP (tcp:3389) exposed to 0.0.0.0/0"
-keywords: "security, critical, terraform, iac, gcp, cis-3.7"
+keywords: "security, critical, terraform, iac, gcp, cis-3.7, mitre-T1190, mitre-T1133, cwe-284, cwe-1327, d3-iaa"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, gcp, cis-3.7"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 3.7",
+  "keywords": "security, critical, terraform, CIS 3.7, MITRE T1190, MITRE T1133, CWE-284, CWE-1327, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -106,6 +106,17 @@ should return zero rows.
 
 **CIS Benchmark**
   - `CIS 3.7`
+
+**MITRE ATT&CK**
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+  - [`T1133`](https://attack.mitre.org/techniques/T1133/)
+
+**CWE**
+  - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+  - [`CWE-1327`](https://cwe.mitre.org/data/definitions/1327.html)
+
+**MITRE D3FEND**
+  - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
 
 **Related rules**
   - [`SEC-GCP-NETWORK-001`](./SEC-GCP-NETWORK-001.md)

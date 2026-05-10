@@ -7,6 +7,11 @@ cis:
   - "2.1.1"
 mitre:
   - "T1530"
+cwe:
+  - "CWE-311"
+  - "CWE-312"
+d3fend:
+  - "D3-EAR"
 status: active
 patterns:
   - kind: resource_missing_arg

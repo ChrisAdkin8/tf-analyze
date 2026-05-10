@@ -12,6 +12,10 @@ patterns:
     description: lifecycle block with ignore_changes = all masks all drift
 owasp_iac:
   - "Runtime / Immutable Infrastructure Model"
+mitre:
+  - "T1562.001"
+cwe:
+  - "CWE-693"
 recommendation: |
   Replace `ignore_changes = all` with an explicit list of the specific
   attributes that must be ignored. The nuclear option masks legitimate drift

@@ -4,6 +4,12 @@ section: robustness
 default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
 patterns:
   # google provider ≥6.0 deprecations
   - kind: resource_arg

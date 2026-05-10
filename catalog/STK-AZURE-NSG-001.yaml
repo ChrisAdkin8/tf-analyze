@@ -6,6 +6,10 @@ blast_radius: environment
 cis:
   - "6.1"
   - "6.2"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-IAA"
 status: active
 escalation:
   - condition: "destination_port_range matches (^22$|^3389$)"

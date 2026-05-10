@@ -1,7 +1,7 @@
 ---
 title: "ROB-VERSION-003 — required_providers entry missing version constraint"
 description: "tf-analyze rule ROB-VERSION-003 (HIGH · robustness): required_providers entry missing version constraint"
-keywords: "robustness, high, terraform, iac"
+keywords: "robustness, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, high, terraform, iac"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, high, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -113,6 +113,15 @@ be committed to version control.
 
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Version Control Discipline`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**MITRE ATT&CK**
+  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+
+**CWE**
+  - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
+
+**MITRE D3FEND**
+  - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
 
 **Related rules**
   - [`ROB-VERSION-001`](./ROB-VERSION-001.md)

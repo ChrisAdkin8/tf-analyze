@@ -29,6 +29,8 @@ verification: |
   was created.
 soc2_cc:
   - "A1.2"
+mitre:
+  - "T1490"
 fix_hcl: |
   resource "aws_db_instance" "example" {
     # ... other arguments ...
