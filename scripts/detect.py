@@ -142,174 +142,18 @@ def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
 # ---- Minimal YAML loader -------------------------------------------------
 # Avoid PyYAML dependency. Catalogue YAML is shallow and well-formed.
 
-def _version_tuple(s: str) -> tuple[int, ...]:
-    """Extract the first dotted-numeric sequence from a string."""
-    m = re.search(r"(\d+(?:\.\d+)+)", s)
-    if not m:
-        m = re.search(r"(\d+)", s)
-        if not m:
-            return ()
-    return tuple(int(x) for x in m.group(1).split("."))
-
-
-def _provider_constraint_allows(constraint: str, min_version: str) -> bool:
-    """Does the user's `version =` constraint allow any version
-    >= `min_version`? Each comma-separated clause is parsed
-    individually (`>=`, `<`, `<=`, `~>`, `=`, `!=`), and the answer is
-    "yes" only if no clause excludes versions ≥ `min_version`.
-
-    Behaviour is permissive: an unparseable clause is ignored (rules
-    are gated by the readable clauses), and an empty constraint always
-    passes.
-
-    Examples:
-      ('~> 5.40',          '5.0')  -> True   (5.40 to <6.0 reaches 5.0+)
-      ('~> 4.50',          '5.0')  -> False  (4.50 to <5.0 — no 5.x)
-      ('>= 4.0',           '5.0')  -> True   (open upper bound)
-      ('< 5.0',            '5.0')  -> False  (excludes 5.0+)
-      ('>= 1.5.0, < 1.10', '1.10') -> False  (upper bound shuts out 1.10)
-      ('>= 1.5.0',         '1.10') -> True   (no upper bound)
-      ('',                 '5.0')  -> True   (no constraint = trust user)
-    """
-    if not constraint:
-        return True
-    min_v = _version_tuple(min_version)
-    if not min_v:
-        return True
-
-    def _pad(a: tuple, b: tuple) -> tuple[tuple, tuple]:
-        """Right-pad two version tuples with zeros so comparisons treat
-        `1.10` and `1.10.0` as equal."""
-        n = max(len(a), len(b))
-        return a + (0,) * (n - len(a)), b + (0,) * (n - len(b))
-
-    clause_re = re.compile(
-        r"^\s*(>=|<=|<|>|~>|!=|=)?\s*(\d+(?:\.\d+)*)\s*$"
-    )
-    for raw in constraint.split(","):
-        m = clause_re.match(raw)
-        if not m:
-            continue
-        op = m.group(1) or "="
-        v = tuple(int(x) for x in m.group(2).split("."))
-        a, b = _pad(min_v, v)
-        if op == "<":
-            # Excludes everything >= v. min_v reachable iff min_v < v.
-            if a >= b:
-                return False
-        elif op == "<=":
-            if a > b:
-                return False
-        elif op == "~>":
-            if len(v) < 2:
-                continue
-            # `~> X.Y` allows [X.Y, X+1.0). The constraint can reach
-            # `min_v` iff the upper bound is strictly above `min_v` —
-            # if `min_v >= upper`, every allowed version is below
-            # `min_v` and the rule must skip. The lower bound `v`
-            # being above `min_v` is irrelevant: `min_v` is a floor
-            # for "rule applies", not a required lower edge.
-            upper = list(v)
-            upper[-1] = 0
-            upper[-2] = upper[-2] + 1
-            upper_t = tuple(upper)
-            a_hi, b_hi = _pad(min_v, upper_t)
-            if a_hi >= b_hi:
-                return False
-        elif op == "=":
-            if a != b:
-                return False
-        elif op == "!=":
-            continue
-        # `>=` and `>` only set lower bounds — they never exclude
-        # min_v from the reachable set.
-    return True
-
-
-def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
-    """Walk every file's `terraform { required_providers {...} }` block
-    and return the per-provider version constraint string. Last-write-
-    wins is fine — most repos define `required_providers` in exactly
-    one file (versions.tf), and divergent declarations should be flagged
-    by ROB-VERSION-002 separately."""
-    constraints: dict[str, str] = {}
-    tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
-    rp_block_re = re.compile(r"required_providers\s*\{")
-    entry_re = re.compile(
-        r'(\w[\w-]*)\s*=\s*\{[^{}]*?version\s*=\s*"([^"]+)"',
-        re.DOTALL,
-    )
-    for text in all_files_text.values():
-        for m in tf_block_re.finditer(text):
-            depth = 0
-            i = m.end() - 1
-            end = None
-            for j in range(i, len(text)):
-                c = text[j]
-                if c == "{":
-                    depth += 1
-                elif c == "}":
-                    depth -= 1
-                    if depth == 0:
-                        end = j
-                        break
-            if end is None:
-                continue
-            tf_body = text[m.end():end]
-            rp = rp_block_re.search(tf_body)
-            if not rp:
-                continue
-            for em in entry_re.finditer(tf_body[rp.end():]):
-                constraints[em.group(1)] = em.group(2)
-    return constraints
-
-
-def _extract_terraform_version(all_files_text: dict) -> str:
-    """Pull the user's `terraform { required_version = "..." }` constraint
-    string. Last-write-wins across files; ROB-VERSION-002 already flags
-    inconsistent declarations separately."""
-    rv_re = re.compile(
-        r'(?ms)^\s*terraform\s*\{[^}]*?required_version\s*=\s*"([^"]+)"'
-    )
-    for text in all_files_text.values():
-        m = rv_re.search(text)
-        if m:
-            return m.group(1)
-    return ""
-
-
-def _entry_applies_to_providers(
-    entry: dict,
-    provider_constraints: dict[str, str],
-    terraform_constraint: str = "",
-) -> bool:
-    """Gate a catalogue entry on its `applies_when:` clause.
-
-    Supported sub-fields:
-      * min_provider: { name: version }  — fires only if the user's
-        required_providers constraint allows any version >= the listed
-        minimum for the named provider.
-      * min_terraform: version           — fires only if the target's
-        terraform.required_version constraint allows any TF version
-        >= the listed minimum.
-
-    No `applies_when` (or unparseable constraint) means the entry runs.
-    Behaviour is permissive by design: false positives can be suppressed
-    inline; false negatives (skipped rule) are silent.
-    """
-    aw = entry.get("applies_when") or {}
-    mp = aw.get("min_provider") or {}
-    for name, min_ver in mp.items():
-        user_constraint = provider_constraints.get(name, "")
-        if not _provider_constraint_allows(user_constraint, str(min_ver)):
-            return False
-    min_tf = aw.get("min_terraform")
-    if min_tf:
-        if not _provider_constraint_allows(
-            terraform_constraint, str(min_tf)
-        ):
-            return False
-    return True
+# Provider/Terraform version-constraint helpers live in
+# `scripts/_versions.py`. Re-imported here under the legacy private
+# names so existing callers (and the truth-table tests in
+# tests/test_a1_improvements.py) continue working without migration.
+# Second seam in the modularisation, after `_mitre.py`.
+from _versions import (
+    _version_tuple,
+    _provider_constraint_allows,
+    _extract_provider_constraints,
+    _extract_terraform_version,
+    _entry_applies_to_providers,
+)
 
 
 def _read_normalized(path: Path) -> str:
@@ -5744,89 +5588,18 @@ _VALID_SECTIONS = {
 _URGENCY_TIERS: list[str] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 _VALID_URGENCIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
 
-# ---- Aggregate risk-score formula ---------------------------------------
-#
-# These constants are the SINGLE SOURCE OF TRUTH for the score and letter
-# grade documented in SKILL.md (search for "Risk Score"). The CLI emits
-# the same score that the LLM-driven markdown report computes, so two
-# runs against the same code always agree.
-#
-# `score = max(0, 100 - sum(weight * count for each urgency))`
-# Suppressed findings count at half weight (acknowledged but the
-# underlying risk still exists).
-#
-# Tagged with `_SCORING_VERSION` so downstream gates can pin to a
-# specific weighting; bump it whenever weights change.
-_SCORING_VERSION = 1
-_RISK_WEIGHTS: dict[str, int] = {
-    "CRITICAL": 15,
-    "HIGH":     7,
-    "MEDIUM":   3,
-    "LOW":      1,
-    "INFO":     0,
-}
-# (lower bound of score, letter grade) — first match wins; sorted descending.
-_GRADE_TIERS: list[tuple[int, str]] = [
-    (90, "A"),
-    (75, "B"),
-    (65, "B-"),
-    (50, "C"),
-    (30, "D"),
-    (0,  "F"),
-]
-
-
-def _grade_for_score(score: int) -> str:
-    for floor, grade in _GRADE_TIERS:
-        if score >= floor:
-            return grade
-    return "F"
-
-
-def _compute_summary(
-    findings: list[dict],
-    suppressed: list[dict] | None = None,
-    suppressed_by_baseline: list[dict] | None = None,
-) -> dict:
-    """Compute the always-emitted summary block.
-
-    Score formula: ``max(0, 100 - sum(weight * count))`` where suppressed
-    findings (both ignore-suppressed and baseline-suppressed) contribute
-    half weight. INFO findings carry weight 0 so they never affect the
-    score; their count is reported for context.
-
-    The dict returned is JSON-safe and stable: keys, types, and ordering
-    are part of the public contract pinned by ``scoring_version``.
-    """
-    counts: dict[str, int] = {u: 0 for u in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")}
-    for f in findings:
-        u = f.get("urgency", "MEDIUM")
-        counts[u] = counts.get(u, 0) + 1
-
-    # Half-weight contribution from suppressed/baselined findings.
-    suppressed_count = 0
-    half_penalty = 0.0
-    for bucket in (suppressed or [], suppressed_by_baseline or []):
-        for f in bucket:
-            suppressed_count += 1
-            u = f.get("urgency", "MEDIUM")
-            half_penalty += _RISK_WEIGHTS.get(u, 0) / 2
-
-    full_penalty = sum(_RISK_WEIGHTS.get(u, 0) * c for u, c in counts.items())
-    raw_score = 100 - full_penalty - half_penalty
-    score = max(0, int(round(raw_score)))
-    return {
-        "scoring_version": _SCORING_VERSION,
-        "score": score,
-        "grade": _grade_for_score(score),
-        "counts": counts,
-        "suppressed_count": suppressed_count,
-        "formula": (
-            "max(0, 100 - sum(weight * count)); "
-            "weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; "
-            "suppressed at half weight"
-        ),
-    }
+# Risk-score formula + letter-grade helpers live in `scripts/_scoring.py`.
+# Re-imported here under the legacy private names so existing callers
+# (and `tests/test_output_formats.py::TestComputeSummary`) keep working
+# without migration. Third seam in the modularisation, after
+# `_mitre.py` and `_versions.py`.
+from _scoring import (
+    _SCORING_VERSION,
+    _RISK_WEIGHTS,
+    _GRADE_TIERS,
+    _grade_for_score,
+    _compute_summary,
+)
 _VALID_BLAST_RADIUS = {
     "single-resource", "module", "environment", "infrastructure-wide",
 }

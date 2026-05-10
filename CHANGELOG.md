@@ -5,6 +5,57 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## detect.py modularisation — Session A (`_versions.py` + `_scoring.py`) — 2026-05-10
+
+**Second + third seams in the detect.py refactor. No behaviour change; same shape as the `_mitre.py` extraction in R30.0.5. Validates the seam pattern at three modules; future sessions extract HCL primitives, catalog, attack graph using the same shape.**
+
+### What moved
+
+- **`scripts/_versions.py` (new — 204 LOC).** Provider/Terraform version-constraint helpers: `_version_tuple`, `_provider_constraint_allows`, `_extract_provider_constraints`, `_extract_terraform_version`, `_entry_applies_to_providers`. Pure regex + arithmetic; no engine state. Test surface already locked by `tests/test_a1_improvements.py::test_provider_constraint_allows_truth_table` (the 10-case truth table).
+- **`scripts/_scoring.py` (new — 107 LOC).** Risk-score formula + letter-grade helpers: `_SCORING_VERSION`, `_RISK_WEIGHTS`, `_GRADE_TIERS`, `_grade_for_score`, `_compute_summary`. Pure functions over plain dicts. Test surface locked by `tests/test_output_formats.py::TestComputeSummary` (SKILL.md's worked examples).
+
+### Re-export shims
+
+`detect.py` keeps the legacy `_*` private names pointing at the new modules — every existing caller (production code, tests, helper scripts) keeps working without migration:
+
+```python
+# detect.py
+from _versions import (_version_tuple, _provider_constraint_allows,
+                      _extract_provider_constraints, _extract_terraform_version,
+                      _entry_applies_to_providers)
+from _scoring import (_SCORING_VERSION, _RISK_WEIGHTS, _GRADE_TIERS,
+                     _grade_for_score, _compute_summary)
+```
+
+Bindings are by-reference (verified by `is`-equality tests in `test_session_a_extracts.py`) so a future rename in either module flows through to detect.py automatically.
+
+### Bundle pipeline
+
+`vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists 4 files: `detect.py`, `_mitre.py`, `_versions.py`, `_scoring.py`. The post-bundle smoke test would catch any future detect.py addition that imports a sibling not in this array — verified by deliberately deleting `_versions.py` from the bundle and confirming the smoke test fails with the right diagnostic.
+
+### Counts
+
+- detect.py: **8,441 → 8,214 LOC** (-227, the largest single-session reduction so far)
+- New modules total: 311 LOC (204 + 107) — net file count grew, but each module is independently testable and importable
+- Pytest: 617 → **624** (+7 — `tests/test_session_a_extracts.py` covers seam contracts: module imports, re-export binding-not-copy identity, INFO-weight invariant, SKILL.md worked examples)
+- Self-test: 219/219 + 142/142 (unchanged)
+- Active rules: 217 (unchanged — refactor only)
+- Extension: v0.1.33 → **v0.1.34**
+
+### Why 7 new tests when the modules are already test-covered?
+
+The functional contracts are covered by the existing test files (truth table, worked examples). The new tests cover the **seam contract** — that the new modules expose the names callers expect, and that detect.py's re-export is a binding (not a copy). Without these, a future rename inside `_versions.py` or `_scoring.py` could silently fail to propagate to detect.py.
+
+### Why this order vs. the alternatives
+
+- `_mitre.py` was extracted in R30.0.5 because the data table had a clear external consumer (the drift-check script).
+- `_versions.py` chosen for Session A because the truth table from R30 (the `~> 3.50` bug-fix) gave the strongest test safety-net of any candidate extraction.
+- `_scoring.py` is small but proves the seam pattern works for *constants + functions together* (not just functions).
+
+The remaining sessions per [`PLAN.md`](PLAN.md): `_hcl.py` (HCL primitives — biggest reusable library), `_catalog.py` (load + validate, biggest external import surface), `_attack_graph.py` (heaviest single concern). Then renderers, then dispatch.
+
+---
+
 ## MITRE round-2: SARIF taxonomies + drift gate + first detect.py refactor — 2026-05-10
 
 **Closes the items the prior MITRE sweep deferred: proper SARIF taxonomies (vs. flat tags), an ATT&CK drift CI gate, and the first low-risk seam in the detect.py refactor.**

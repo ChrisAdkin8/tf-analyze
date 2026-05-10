@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.34] — 2026-05-10
+
+### Changed
+
+- **Bundle pipeline now ships 4 sibling Python files (was 2).** R30.0.6 extracted two more pure-function modules out of `detect.py`: `_versions.py` (provider-constraint helpers, 204 LOC) and `_scoring.py` (risk-score formula + grade tiers, 107 LOC). `vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists `['detect.py', '_mitre.py', '_versions.py', '_scoring.py']`; the `.vsix` ships all four siblings at `engine/scripts/`. No user-visible behaviour change — `detect.py`'s re-export shim preserves every legacy private name. The smoke test the v0.1.33 work added is doing exactly what it was designed to: deliberately removing `_versions.py` from the bundle output triggers a clean smoke-test failure with the correct diagnostic ("This usually means a Python file detect.py imports as a sibling is missing from ENGINE_SIBLING_FILES above. Add it.").
+
+  Verified the bundle inside `tf-analyze-0.1.34.vsix`:
+
+      extension/engine/scripts/_mitre.py        (6.3 KB)
+      extension/engine/scripts/_scoring.py      (3.7 KB)
+      extension/engine/scripts/_versions.py     (8.0 KB)
+      extension/engine/scripts/detect.py      (357 KB)
+
+---
+
 ## [0.1.33] — 2026-05-10
 
 ### Added
