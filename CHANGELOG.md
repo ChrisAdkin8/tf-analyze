@@ -5,6 +5,73 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## detect.py modularisation — Session C (`_catalog.py`) — 2026-05-10
+
+**Fifth seam in the detect.py refactor. Catalogue lifecycle — YAML loading, schema validation (including CWE / D3FEND / OWASP-IaC shape checks), `.tf-analyze.yaml` workspace config, `load_catalog` — split out so detect.py stops being the single place every catalogue change has to land. No behaviour change.**
+
+### What moved
+
+- **`scripts/_catalog.py` (new — 443 LOC).** 10 names:
+  - 6 validation-domain constants: `_VALID_SECTIONS`, `_VALID_URGENCIES`, `_VALID_BLAST_RADIUS`, `_VALID_STATUS`, `_VALID_FIX_DISRUPTIONS`, `_REQUIRED_FIELDS`.
+  - `load_yaml` — minimal stdlib YAML parser scoped to the catalogue's shallow structure (no PyYAML dependency).
+  - `validate_catalog_entry` — schema validation with CWE / D3FEND / OWASP-IaC shape checks (`CWE-732`, `D3-MFA`, `Develop and Distribute / Secrets Detection`).
+  - `_load_project_config` — `.tf-analyze.yaml` workspace config reader.
+  - `load_catalog` — walks `catalog/*.yaml`, validates, returns active entries; also pulls in `CUSTOM-*` rules from `extra_rules_dir`.
+
+### Scope rule
+
+Same purity criterion as Sessions A/B: pure functions + immutable constants only, file I/O allowed as a filesystem-to-Python-value gateway. `_catalog.py` depends on `_hcl._parse_scalar` (one cross-seam edge — `load_yaml` reuses the YAML-ish bareword coercion). No engine state; the runtime catalogue index and rule-id maps stay in `detect.py`.
+
+### Re-export shims
+
+`detect.py` keeps every legacy name pointing at `_catalog.py`. External callers (`tests/test_schema.py`, `tests/test_custom_rules.py`, `scripts/gen_rule_docs.py`, `scripts/self_test.py`, `scripts/check_attack_drift.py`, `scripts/stub-status.py`, `tests/helpers.py`) all reach `load_yaml` / `load_catalog` / `validate_catalog_entry` through the `detect` namespace today, and continue to work without migration:
+
+```python
+# detect.py
+from _catalog import (
+    _VALID_SECTIONS, _VALID_URGENCIES, _VALID_BLAST_RADIUS,
+    _VALID_STATUS, _VALID_FIX_DISRUPTIONS, _REQUIRED_FIELDS,
+    load_yaml, validate_catalog_entry, _load_project_config, load_catalog,
+)
+```
+
+Bindings are by-reference (verified by `is`-equality tests in `tests/test_session_c_extracts.py`).
+
+### Bundle pipeline
+
+`vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists **6 files**: `detect.py`, `_mitre.py`, `_versions.py`, `_scoring.py`, `_hcl.py`, `_catalog.py`. The post-bundle smoke test would catch a missing sibling — same pattern that caught `_hcl.py` in Session B.
+
+### Tests
+
+- **`tests/test_session_c_extracts.py` (new — 5 tests).**
+  - `test_module_imports_cleanly` — public surface (6 constants + 4 functions).
+  - `test_detect_re_exports_bindings_not_copies` — `is`-equality across all 10 names.
+  - `test_round_trip_load_real_catalog` — `detect.load_catalog(REPO_ROOT / "catalog")` returns ≥200 active entries through the shim and includes known rule IDs.
+  - `test_validate_catalog_entry_catches_typos` — locks the 4 most-common typo cases (`section`, `default_urgency`, `cwe`, `d3fend`).
+  - `test_load_yaml_round_trip` — locks the YAML loader's catalogue-subset contract (nested mappings, list items with inline mappings, block scalars, quote-stripping via the `_hcl._parse_scalar` cross-seam call).
+
+The functional contracts for the loader and validator are already covered by `tests/test_schema.py` and `tests/test_custom_rules.py`; Session C's tests cover the **seam contract**.
+
+### Counts
+
+| | before | after |
+|---|---:|---:|
+| `detect.py` | 7,991 LOC | 7,669 LOC (−322) |
+| extracted modules total | 741 LOC | 1,184 LOC (+443 for `_catalog.py`) |
+| pytest | 629 | 634 (+5) |
+| self-test | 219+142 | 219+142 (no change) |
+| active rules | 217 | 217 (no change — refactor only) |
+| extension version | 0.1.35 | 0.1.36 |
+
+### Cumulative across R30.0.5–R30.0.8
+
+| | start | now |
+|---|---:|---:|
+| `detect.py` | 8,441 LOC | 7,669 LOC (**−772**) |
+| Extracted modules | 0 | 5 (`_mitre`, `_versions`, `_scoring`, `_hcl`, `_catalog`) totalling 1,184 LOC |
+
+---
+
 ## detect.py modularisation — Session B (`_hcl.py`) — 2026-05-10
 
 **Fourth seam in the detect.py refactor. Pure HCL primitives — text normalisation, comment scrubbing, top-level block extraction, attribute-presence checks, dynamic-block expansion — split out so every later extract that touches resource bodies has a clean import to depend on instead of poking back into `detect.py`. No behaviour change; same shape as the prior three seams.**

@@ -35,7 +35,7 @@ const repoRoot = path.dirname(extensionRoot);                      // tf-analyze
 // detect.py imports as a sibling. Add a name here when extracting a
 // new module from detect.py — without it, `import _mitre` (or
 // whatever) blows up at extension load time inside a packaged .vsix.
-const ENGINE_SIBLING_FILES = ['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py'];
+const ENGINE_SIBLING_FILES = ['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py'];
 
 const sourceScriptsDir = path.join(repoRoot, 'scripts');
 const sourceCatalogDir = path.join(repoRoot, 'catalog');

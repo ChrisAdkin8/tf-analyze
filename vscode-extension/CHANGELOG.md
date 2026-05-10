@@ -5,6 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.36] — 2026-05-10
+
+### Changed
+
+- **Bundle pipeline now ships 6 sibling Python files (was 5).** R30.0.8 / Session C extracted a fifth pure-function module out of `detect.py`: `_catalog.py` (catalogue lifecycle — YAML loading, schema validation with CWE / D3FEND / OWASP-IaC shape checks, `.tf-analyze.yaml` workspace config reader, `load_catalog` — 443 LOC). `vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists `['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py']`; the `.vsix` ships all six siblings at `engine/scripts/`. No user-visible behaviour change — `detect.py`'s re-export shim preserves every legacy name including the workhorse `load_yaml`, `validate_catalog_entry`, and `load_catalog`.
+
+  Verified the bundle inside `tf-analyze-0.1.36.vsix`:
+
+      extension/engine/scripts/_catalog.py     (~16 KB)
+      extension/engine/scripts/_hcl.py         (11.6 KB)
+      extension/engine/scripts/_mitre.py        (6.3 KB)
+      extension/engine/scripts/_scoring.py      (3.7 KB)
+      extension/engine/scripts/_versions.py     (8.0 KB)
+      extension/engine/scripts/detect.py      (~328 KB)  ← shrank again with Session C
+
+  Cumulative across the 4 modularisation rounds: `detect.py` 8,441 → 7,669 LoC (−772); extracted modules now total 1,184 LoC of pure helpers.
+
+---
+
 ## [0.1.35] — 2026-05-10
 
 ### Changed
