@@ -174,4 +174,4 @@ This is an engine-developer scenario only. Set `tf-analyze.scriptPath` to your c
 
 ---
 
-<sub>Self-contained `.vsix`. 215 rules · AWS · GCP · Azure · stdlib-only Python. Built with the `tf-analyze` Claude Code skill.</sub>
+<sub>Self-contained `.vsix`. 217 rules · AWS · GCP · Azure · stdlib-only Python. Built with the `tf-analyze` Claude Code skill.</sub>

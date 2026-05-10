@@ -114,7 +114,7 @@ The HTML report (`tf-analyze: Show Report`) intentionally does *not* have a stat
 
 ### `vscode://` URI handler (4 verbs)
 
-The extension registers a `vscode.window.registerUriHandler` that routes browser-clicked `vscode://tfanalyze.tf-analyze/<verb>` links to the right panel. As of v0.1.29 the verb space is:
+The extension registers a `vscode.window.registerUriHandler` that routes browser-clicked `vscode://tfanalyze.tf-analyze/<verb>` links to the right panel. As of v0.1.30 the verb space is:
 
 | Verb | Shape | Behaviour |
 |---|---|---|

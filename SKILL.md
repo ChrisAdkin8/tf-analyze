@@ -119,7 +119,7 @@ The skill is **GCP-first**. Catalogue entries, CIS mappings, the IAM compatibili
 | **Kubernetes / Helm** | 5 | Helm release `set { }` overrides (`SEC-K8S-HELM-001`, `-002`); `kubernetes_*` resource hardening. |
 | **Multi-cloud** | 47 | Secrets in HCL/tfvars, provisioner usage, module pinning / supply-chain refs / staleness, `required_providers` version pinning, lifecycle controls (`ROB-DRIFT-001`, `-002`), `count`/`for_each` anti-patterns including `ROB-FOREACH-002` keyset stability, orphan modules (`MOD-UNUSED-001`), variable validation, sensitive outputs, provider aliases, backends, Vault data sources, `applies_when` provider-version gating. |
 
-Cloud-specific counts exclude multi-cloud rules. **Total: 215 active rules.** Re-run `python3 scripts/detect.py --list-rules` for the full live enumeration.
+Cloud-specific counts exclude multi-cloud rules. **Total: 217 active rules.** Re-run `python3 scripts/detect.py --list-rules` for the full live enumeration.
 
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.
 

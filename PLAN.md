@@ -111,7 +111,7 @@ State after Round 28 ships: 215 rules · 565 pytest + 24 `node:test` (was 500+24
 
 - [ ] **P2 · M — Compliance + trend composition.** `--mode trend` + `--compliance` should produce a "your CIS coverage moved 67% → 73% over 30 days" trendline. Currently the two flags are mutually exclusive.
 
-- [ ] **P2 · M — Catalog overlap audit.** Two rules with overlapping patterns can both fire on the same code (`ROB-AWS-RDS-001` and `ROB-AWS-RDS-002` both touch backup retention). With 215 rules, silent overlap is inflating finding counts. New script `scripts/audit_overlap.py` flags pattern-overlap candidates; not a CI gate but a maintenance tool.
+- [ ] **P2 · M — Catalog overlap audit.** Two rules with overlapping patterns can both fire on the same code (`ROB-AWS-RDS-001` and `ROB-AWS-RDS-002` both touch backup retention). With 217 rules, silent overlap is inflating finding counts. New script `scripts/audit_overlap.py` flags pattern-overlap candidates; not a CI gate but a maintenance tool.
 
 - [ ] **P2 · M — Provider-version `applies_when` annotations.** Engine support since Round 1, only 2 rules use it. Sweep the catalogue for rules that *only* apply to specific provider majors (anything mentioning `metadata_options`, `ssl_mode`, `default_tags`, …) and add `min_provider`. Half-day data-entry pass.
 

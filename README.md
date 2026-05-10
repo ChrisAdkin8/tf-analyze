@@ -107,9 +107,12 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Inline GitHub PR `suggestion` blocks | ✅ | ❌ | ❌ | n/a |
 | MITRE ATT&CK mapping in output | ✅ | ❌ | ⚠️ partial | ⚠️ via plugin |
 | OSCAL Assessment Results JSON output | ✅ | ❌ | ❌ | ❌ |
+| OWASP IaC Cheat Sheet compliance mapping | ✅ | ❌ | ❌ | ❌ |
 | Baseline ratcheting (`--baseline prior.json`) | ✅ | ⚠️ via filter | ✅ | ❌ |
 | LSP server for IDE diagnostics | ✅ | ❌ | ❌ | ❌ |
 | HCP Terraform Run Task integration | ✅ | ❌ | ❌ | ❌ |
+| Native Terraform provider (`data "tfanalyze_scan"`) | ✅ | ❌ | ❌ | ❌ |
+| MCP server for AI agents (Cursor / Claude Desktop / …) | ✅ | ❌ | ❌ | ❌ |
 | YAML custom rules | ✅ | ✅ (Rego) | ✅ (Python+YAML) | ✅ (Python) |
 | Stdlib-only core (optional fast-path) | ✅ | n/a | ❌ (pip) | ❌ (pip) |
 
@@ -142,7 +145,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Cross-resource | `INT-*`, `graph_check` | Intent–implementation gaps, KMS location parity, IAM breadth |
 | Module reuse (advisory) | `MOD-REUSE-*` | Hand-rolled scaffolding that mirrors a popular Terraform Registry module — INFO tier, never gates CI. Pass `--show-info` to render |
 
-**Per-cloud breakdown:** AWS 81 · GCP 42 · Azure 33 · Kubernetes/Helm 5 · cross-cloud 48.
+**Per-cloud breakdown:** AWS 86 · GCP 43 · Azure 34 · Kubernetes/Helm 5 · cross-cloud 49.
 
 ### Execution modes
 
@@ -314,7 +317,7 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (218 positive + 140 clea
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration
 ├── .github/workflows/          # CI (ci.yml, docker.yml)
-├── catalog/                    # 215 rule definitions (one YAML per rule)
+├── catalog/                    # 217 rule definitions (one YAML per rule)
 │   └── README.md               # Schema reference
 ├── fixtures/                   # 218 positive + 140 clean (negative) fixtures
 ├── examples/                   # Showcase corpora
@@ -368,7 +371,7 @@ CI gate (`.github/workflows/ci.yml`) runs the pytest suite, the schema validator
 
 ## Provenance
 
-Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design and runs across AWS (86 rules), GCP (43 rules), Azure (34 rules), Kubernetes/Helm (5), and 47 cross-cloud rules — total 215 active. Full CIS Foundations Benchmark coverage on GCP; growing parity on AWS and Azure.
+Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design and runs across AWS (86 rules), GCP (43 rules), Azure (34 rules), Kubernetes/Helm (5), and 49 cross-cloud rules — total 217 active. Full CIS Foundations Benchmark coverage on GCP; growing parity on AWS and Azure. Compliance output covers CIS, PCI-DSS v4.0, SOC 2 Trust Services Criteria, and the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html).
 
 ---
 
