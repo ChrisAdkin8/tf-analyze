@@ -5,6 +5,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.38] — 2026-05-10
+
+### Changed
+
+- **Bundle pipeline now ships 8 sibling Python files (was 7).** R30.0.11 / Session E extracted the largest seam yet — the **entire** output-formatter block (SARIF v2.1 + HTML reports + MITRE + compliance + PR summary + `_ATTACK_NARRATIVES` data table) — out of `detect.py` into `_output.py` (1,619 LOC; 23 names). `vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists `['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py', '_attack_graph.py', '_output.py']`. No user-visible behaviour change — `detect.py`'s re-export shim preserves every legacy name including the workhorses `to_sarif`, `to_html`, `_render_pr_summary`, `_render_compliance_html`, `_compliance_to_oscal` consumed by the extension's HTML report viewer + the GitHub Action's PR-comment block.
+
+  Verified the bundle inside `tf-analyze-0.1.38.vsix`:
+
+      extension/engine/scripts/_attack_graph.py (~30 KB)
+      extension/engine/scripts/_catalog.py     (~16 KB)
+      extension/engine/scripts/_hcl.py         (11.6 KB)
+      extension/engine/scripts/_mitre.py        (6.3 KB)
+      extension/engine/scripts/_output.py      (~60 KB)
+      extension/engine/scripts/_scoring.py      (~4 KB)
+      extension/engine/scripts/_versions.py     (8.0 KB)
+      extension/engine/scripts/detect.py      (~238 KB)  ← below 250 KB for the first time since R12
+
+  Cumulative across the 6 modularisation rounds: `detect.py` 8,441 → 5,528 LoC (**−2,913 / 34.5% reduction**); extracted modules now total 3,615 LoC of pure helpers across 7 files. The monolith is below 6,000 LoC for the first time since Round 12.
+
+  Combined with R30.0.10's `--strict-catalog` smoke test fix, the build now actually fails on a bad YAML — both improvements landed in the same Markdown-week.
+
+---
+
 ## [0.1.37] — 2026-05-10
 
 ### Changed

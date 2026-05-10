@@ -5,6 +5,96 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## detect.py modularisation — Session E (`_output.py`) — 2026-05-10
+
+**Seventh seam in the detect.py refactor — and the largest single extraction by a wide margin.** The entire output-formatter block (SARIF v2.1 emission, HTML reports, MITRE / compliance / PR-summary / adversarial-narrative renderers) lifts into `scripts/_output.py`. No behaviour change; the existing `tests/test_output_formats.py` + `tests/test_sarif_taxonomies_and_refactor.py` + `tests/test_pr_summary.py` + `tests/test_compliance_owasp_iac.py` suites continue to pass through the re-export shim.
+
+### What moved
+
+- **`scripts/_output.py` (new — 1,619 LOC).** 23 names:
+  - **Canonical URL constants** — `RULE_DOCS_URL_BASE`, `SARIF_HELP_URI_BASE` (single source of truth: SARIF helpUri, HTML compliance panel, text compliance, Findings panel headers, VS Code hover all switch host with one edit).
+  - **Data tables** — `_ATTACK_NARRATIVES` (190 LOC of curated breach references — Capital One 2019 SSRF, SolarWinds 2020, Tesla 2020, etc., keyed by 19 rule IDs); `_FIX_DISRUPTION_LABELS` (HTML label + colour for each `fix_disruption` value).
+  - **SARIF** — `_sarif_fingerprint`, `_sarif_taxonomies`, `_sarif_rule_relationships`, `to_sarif`.
+  - **Per-finding helpers** — `_effective_urgency`, `_enrich_findings_for_output`, `_narrative_for_finding`, `_disruption_badge`.
+  - **HTML** — `_render_executive_view`, `_render_fix_priority_html`, `to_html`.
+  - **Compliance** — `_infer_cis_framework`, `_compliance_gap_report`, `_render_compliance_text`, `_render_compliance_html`, `_compliance_to_oscal`.
+  - **MITRE + PR summary** — `_render_mitre`, `_append_attack_graph_block`, `_render_pr_summary`.
+
+### Cross-seam edges (3)
+
+Three imports tie `_output.py` to prior seams — every other module the formatters needed was already extracted:
+
+* `_attack_graph` — `build_attack_graph`, `graph_to_mermaid`, `_render_graph_html`. `to_html` embeds the attack-graph view when an `attack_graph` block is present in the report.
+* `_mitre` — `MITRE_ATTACK_VERSION`, plus the technique-info table and tactic-order list (locally aliased to `_MITRE_TECHNIQUE_INFO` / `_MITRE_TACTIC_ORDER` to match the pre-extraction names; `detect.py` re-exports those legacy aliases for `tests/test_sarif_taxonomies_and_refactor.py::TestMitreModule`).
+* `_catalog` — `validate_catalog_entry`. `to_sarif` runs the validator so any schema regression surfaces as a SARIF warning at output time.
+
+Zero references to engine-state globals (`_USE_HCL2`, `sys.exit`, environment) — verified by `grep` over the extracted slice. Pure functions only, same purity criterion as Sessions A–D.
+
+### Re-export shims
+
+`detect.py` keeps every legacy name pointing at `_output.py`. External callers (the `--format` dispatch in `main()`, the GitHub Action's `--format pr-summary` builder, the VS Code extension's HTML report viewer, `tests/test_output_formats.py`, etc.) keep working unchanged:
+
+```python
+# detect.py
+from _output import (
+    RULE_DOCS_URL_BASE, SARIF_HELP_URI_BASE,
+    _ATTACK_NARRATIVES, _FIX_DISRUPTION_LABELS,
+    _sarif_fingerprint, _effective_urgency, _enrich_findings_for_output,
+    _sarif_taxonomies, _sarif_rule_relationships, to_sarif,
+    _narrative_for_finding, _render_executive_view, _disruption_badge,
+    _infer_cis_framework, _compliance_gap_report,
+    _render_mitre, _append_attack_graph_block, _render_pr_summary,
+    _render_compliance_text, _render_compliance_html, _compliance_to_oscal,
+    _render_fix_priority_html, to_html,
+)
+from _mitre import (
+    MITRE_ATTACK_VERSION,
+    MITRE_TECHNIQUE_INFO as _MITRE_TECHNIQUE_INFO,
+    MITRE_TACTIC_ORDER as _MITRE_TACTIC_ORDER,
+    mitre_technique_name as _mitre_technique_name,
+    mitre_technique_tactics as _mitre_technique_tactics,
+)
+```
+
+Bindings are by-reference; binding identity locked by `is`-equality tests in `tests/test_session_e_extracts.py` (covers 14 names: 4 constants + 10 workhorse formatters) and the existing `tests/test_sarif_taxonomies_and_refactor.py::TestMitreModule::test_detect_re_exports_from_mitre` (which surfaced a missed alias during initial extraction — fixed by adding the underscore-renamed `from _mitre import …` block back to detect.py's shim).
+
+### Bundle pipeline
+
+`vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists **8 files**: `detect.py`, `_mitre.py`, `_versions.py`, `_scoring.py`, `_hcl.py`, `_catalog.py`, `_attack_graph.py`, `_output.py`. Combined with R30.0.10's `--strict-catalog` smoke test, the build now actually fails on a bad YAML — verified.
+
+### Tests
+
+- **`tests/test_session_e_extracts.py` (new — 5 tests).**
+  - `test_module_imports_cleanly` — public surface (23 names).
+  - `test_detect_re_exports_bindings_not_copies` — `is`-equality across 14 workhorse names.
+  - `test_cross_seam_imports_resolve` — `_output.build_attack_graph` is `_attack_graph.build_attack_graph` etc. — locks the 3 cross-seam edges as bindings, not copies.
+  - `test_round_trip_sarif_through_shim` — `detect.to_sarif` on a tiny findings + entries fixture; asserts SARIF v2.1 envelope shape and `helpUri` resolution (`/rules/<id>/`).
+  - `test_pr_summary_renders_through_shim` — `detect._render_pr_summary` produces markdown beginning with a `##` header (the GitHub Action's dedupe key).
+
+Behavioural contracts for the formatters are already covered by the four pre-existing output-test files; Session E's tests cover the **seam contract**.
+
+### Counts
+
+| | before | after |
+|---|---:|---:|
+| `detect.py` | 6,985 LOC | 5,528 LOC (**−1,457**) |
+| extracted modules total | 1,996 LOC | 3,615 LOC (+1,619 for `_output.py`) |
+| pytest | 639 | 644 (+5) |
+| self-test | 219+142 | 219+142 (no change) |
+| active rules | 217 | 217 (no change — refactor only) |
+| extension version | 0.1.37 | 0.1.38 |
+
+### Cumulative across R30.0.5–R30.0.11
+
+| | start | now |
+|---|---:|---:|
+| `detect.py` | 8,441 LOC | 5,528 LOC (**−2,913**, 34.5% reduction) |
+| Extracted modules | 0 | **7** (`_mitre`, `_versions`, `_scoring`, `_hcl`, `_catalog`, `_attack_graph`, `_output`) totalling 3,615 LOC |
+
+The monolith is below 6k LoC for the first time since Round 12.
+
+---
+
 ## fix(bundle): smoke test now actually catches catalogue parse errors — 2026-05-10 (R30.0.10)
 
 **Bug fix.** The bundle smoke test's docstring has claimed since v0.1.33 that it catches *"Catalogue YAML parse error introduced in this build"*. It doesn't — verified by deliberately corrupting `catalog/CI-TEST-001.yaml`'s `default_urgency` to `BOGUS` and watching the smoke test report `OK (216 rules)` instead of failing.
