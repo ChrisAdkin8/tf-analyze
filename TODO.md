@@ -10,11 +10,11 @@ question can be answered in 30 seconds without reading prose.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State at last sync (2026-05-10): 217 rules · 603 tests + 24 node:test · ext v0.1.32 · `action.yml` posts `--format pr-summary` blocks (R28.1 actually wired in R30.0.2; was claim-only before) · `v0.1.0` tagged · per-rule docs site live (now with dedicated pages for all ten surfaces, R30.0.3) · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service · MCP server (**hardened** against agent-side abuse, R30.0) · Terraform provider (registry docs + compliance-gate example) · HCP Run Task (R29 framework parity) · GitHub Action (clone-URL fix + R29 framework parity + R26/R27 inputs) · **OWASP IaC** + **MITRE ATT&CK v17** (69%) + **CWE** (53%) + **MITRE D3FEND** (40%) all tagged in catalogue.
+State at last sync (2026-05-10): 217 rules · 617 tests + 24 node:test · ext v0.1.33 · `action.yml` posts `--format pr-summary` blocks (R28.1 actually wired in R30.0.2; was claim-only before) · `v0.1.0` tagged · per-rule docs site live (now with dedicated pages for all ten surfaces, R30.0.3) · Module Reuse Advisor (ROI) · `vscode://` URI handler with `/scan`, `/explain`, `/suppress` verbs · status-bar score+grade badge · badge service · MCP server (**hardened** against agent-side abuse, R30.0) · Terraform provider (registry docs + compliance-gate example) · HCP Run Task (R29 framework parity) · GitHub Action (clone-URL fix + R29 framework parity + R26/R27 inputs) · **OWASP IaC** + **MITRE ATT&CK v17** (69%) + **CWE** (53%) + **MITRE D3FEND** (40%) all tagged in catalogue · SARIF v2.1 emits structured `taxonomies` + per-rule `relationships` (R30.0.5).
 
 ---
 
-## Round 30 sprint — OWASP + multi-framework coverage — sub-rounds 0–0.4 ✅ shipped, 1–5 queued
+## Round 30 sprint — OWASP + multi-framework coverage — sub-rounds 0–0.5 ✅ shipped, 1–5 queued
 
 ### Shipped
 
@@ -23,6 +23,7 @@ State at last sync (2026-05-10): 217 rules · 603 tests + 24 node:test · ext v0
 - [x] **P0 · S** **R30.0.2** GitHub Action sweep — *critical clone-URL fix* (pointed at `anthropics/claude-code-skills`, would have failed on every external user's CI); R28.1 properly wired (`--format pr-summary` is now the comment source); new inputs `compliance-framework` / `attack-graph` / `show-info` / `ref`; 17 drift gates in `tests/test_github_action.py`
 - [x] **P1 · S** **R30.0.3** GitHub Pages site coverage — three new pages (`docs/mcp-server.md`, `docs/github-action.md`, `docs/terraform-provider.md`); `docs/index.md` reorganised into Rule reference / Surfaces (10) / Authoring
 - [x] **P1 · L** **R30.0.4** MITRE / CWE / D3FEND coverage sweep — 27% → 69% mitre (+91 rules), +114 cwe rules (53%), +87 d3fend rules (40%); ATT&CK pinned to v17 via new `scripts/_mitre.py`; `--format mitre` tactic-grouped + `--mitre-tactic <tactic>` filter; SARIF emits `cwe:` + `d3fend:` tags; per-rule docs render both; 16 tests in `tests/test_mitre_cwe_d3fend.py`; VS Code ext v0.1.30 → v0.1.32
+- [x] **P1 · M** **R30.0.5** MITRE round-2 — SARIF v2.1 `taxonomies` + per-rule `relationships` (4 supportedTaxonomies, 131 taxa, 168 rules carry relationships against TerraGoat); D3FEND uses `kinds: ["incomparable"]` so consumers can distinguish "indicates ATT&CK" from "implements D3FEND"; flat tags preserved on properties for backward compat. `--explain` now emits MITRE / CWE / D3FEND lines alongside CIS. New `scripts/check_attack_drift.py` walks the catalogue + verifies every `mitre:` technique exists in `MITRE_TECHNIQUE_INFO`; wired into `.github/workflows/ci.yml`. Extension v0.1.32 → v0.1.33: `bundle-engine.js` drives off `ENGINE_SIBLING_FILES` array + post-bundle smoke test.
 
 ### Queued (Phases 1–5)
 
