@@ -59,7 +59,27 @@ python3 scripts/detect.py --explain SEC-AWS-IAM-POLICY-005
 /tf-analyze mode:verify-fixed              # confirm prior fixes
 ```
 
-### 4. GitHub Action
+### 4. VS Code extension
+
+Live diagnostics, Quick Fix, attack graph, Module Reuse Advisor, and a `vscode://` URI handler — all from a self-contained `.vsix` (the engine and rule catalogue are bundled; no companion repo to clone).
+
+```sh
+# Marketplace (preferred, once the listing is live)
+code --install-extension tfanalyze.tf-analyze
+
+# Or from a downloaded .vsix (current path until the Marketplace listing publishes)
+code --install-extension tf-analyze-0.1.29.vsix
+```
+
+Open any Terraform workspace and the six status-bar shortcuts appear bottom-left:
+
+```
+🛡 tf-analyze: 82 (B) · 7 findings   🛤 Attack Graph   🔀 Delta   ✅ Compliance   🪄 Remediate   📦 Module Reuse
+```
+
+To see the deeper panels render against rich input, open one of the showcase corpora in [`examples/`](examples/) — `examples/module-reuse-demo/` (📦) or `examples/attack-graph-demo/` (🛤). Full reference: [`docs/vscode-extension.md`](docs/vscode-extension.md).
+
+### 5. GitHub Action
 
 ```yaml
 - uses: ChrisAdkin8/tf-analyze@v1
