@@ -113,7 +113,7 @@ State after Round 28 ships: 215 rules · 565 pytest + 24 `node:test` (was 500+24
 - [ ] **P1 · M — `--mode diff` + `--baseline` composition.** When CI runs in diff mode, baseline still applies workspace-wide; should narrow to changed files. Source of false "regression" failures today.
   - Files: `scripts/detect.py:apply_baseline` accepts an optional `diff_files: set[Path]` parameter.
 
-- [ ] **P1 · L — `detect.py` modularization.** 7,500+ LoC monolith. The 469 passing tests are the safety net — a no-behaviour-change refactor is increasingly tractable. Extract:
+- [~] **P1 · L — `detect.py` modularization.** 8,400+ LoC monolith. The 617 passing tests are the safety net — a no-behaviour-change refactor is increasingly tractable. **First seam shipped in R30.0.5** (`scripts/_mitre.py`, ~110 LoC of MITRE data + helpers extracted with a re-export shim in `detect.py` for backward compat). Pattern is established — future extractions inherit the shim shape. Remaining splits to do:
   - `engine/` — pattern dispatch (kinds), variable resolution, `find_blocks`
   - `output/` — JSON, SARIF, HTML, MITRE, compliance, text formatters
   - `attack_graph.py` — graph build, fix centrality, edge inference
@@ -124,6 +124,10 @@ State after Round 28 ships: 215 rules · 565 pytest + 24 `node:test` (was 500+24
   - `cli.py` — argparse + `main`
 
   Bonus: each module gets independent test coverage that can be run in isolation.
+
+- [ ] **P2 · M — Vendor an ATT&CK STIX bundle for richer per-rule docs.** R30.0.5 deferred this. Fetch `mitre/cti` `enterprise-attack.json` (~10 MB) once; cache at `scripts/_attack_v17.json`. Use it to populate platform / data-source / parent-technique blocks on per-rule docs pages — currently the docs pages only render the bare technique-ID link. Adds genuine reference content to the per-rule pages, compounds the C6 SEO investment. Defer until per-rule pages need richer content for SEO traction.
+
+- [ ] **P2 · M — Procedure-example linking for adversarial narratives.** Depends on the STIX bundle above. The `_ATTACK_NARRATIVES` table in `detect.py` already cites real breaches (Capital One, SolarWinds, Tesla 2020) on 14+ rules; ATT&CK's procedure-examples tables list those same procedures. Wire the per-rule docs page to render both — curated narrative as the lead, ATT&CK's procedures as the appendix. Auto-populates "named adversary uses" for every mapped rule, not just the 14 hand-curated ones.
 
 ### a.2 Tier 2 — moderate leverage
 

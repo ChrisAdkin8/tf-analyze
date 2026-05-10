@@ -70,7 +70,9 @@ The five items from the 2026-05-09 deep analysis that compound *with* publicatio
 - [ ] **P1 · M** `fix_hcl_minimal:` catalogue field for machine-applicable patches → `PLAN.md§a.1`
 - [ ] **P1 · M** `--apply-fixes` + `--baseline` composition (skip baselined findings) → `PLAN.md§a.1`
 - [ ] **P1 · M** `--mode diff` + `--baseline` composition (narrow to changed files) → `PLAN.md§a.1`
-- [ ] **P1 · L** `detect.py` modularization (split 7,500-LoC monolith) → `PLAN.md§a.1`
+- [~] **P1 · L** `detect.py` modularization (split 8,400-LoC monolith — first seam `_mitre.py` shipped in R30.0.5; pattern established for remaining extracts) → `PLAN.md§a.1`
+- [ ] **P2 · M** Vendor ATT&CK STIX bundle for richer per-rule docs (R30.0.5-deferred) → `PLAN.md§a.1`
+- [ ] **P2 · M** ATT&CK procedure-example linking on per-rule docs pages (depends on STIX bundle) → `PLAN.md§a.1`
 
 #### a.2 Tier 2 — moderate leverage
 
