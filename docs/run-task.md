@@ -79,6 +79,7 @@ Environment variables (server side):
 |----------------------------|---------|--------------------------------------------------------------|
 | `TFA_RUN_TASK_HMAC_KEY`    | _empty_ | HMAC-SHA512 key. **Required** in production.                 |
 | `TFA_RUN_TASK_FAIL_ON`     | `HIGH`  | Minimum urgency that returns `failed` to HCP.                |
+| `TFA_RUN_TASK_FRAMEWORK`   | _empty_ | Optional. One of `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`. When set, the engine renders a compliance gap report alongside its findings and the run-task message gains a `compliance: <fw> <fail>/<total> controls failing.` line. Invalid values are logged and ignored. |
 | `TFA_LOG_LEVEL`            | `INFO`  | Standard logging levels.                                     |
 
 ## Security

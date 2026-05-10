@@ -54,6 +54,20 @@ DETECT_PY = REPO_ROOT / "scripts" / "detect.py"
 HMAC_KEY = os.environ.get("TFA_RUN_TASK_HMAC_KEY", "").encode()
 FAIL_ON = os.environ.get("TFA_RUN_TASK_FAIL_ON", "HIGH")
 
+# Optional compliance-framework gating. When set the engine renders a
+# compliance gap report against the named framework alongside its
+# findings; the callback message gains a compact `compliance: …` line so
+# the operator sees the framework posture in the run-task UI without
+# digging into the engine's JSON.
+_VALID_FRAMEWORKS = {"cis", "pci_dss", "soc2", "owasp_iac", "all"}
+COMPLIANCE_FRAMEWORK = os.environ.get("TFA_RUN_TASK_FRAMEWORK", "").strip()
+if COMPLIANCE_FRAMEWORK and COMPLIANCE_FRAMEWORK not in _VALID_FRAMEWORKS:
+    LOG.error(
+        "ignoring TFA_RUN_TASK_FRAMEWORK=%r; expected one of %s",
+        COMPLIANCE_FRAMEWORK, sorted(_VALID_FRAMEWORKS),
+    )
+    COMPLIANCE_FRAMEWORK = ""
+
 app = FastAPI(title="tf-analyze HCP Terraform Run Task")
 
 URGENCY_RANK = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
@@ -73,10 +87,12 @@ def _verify_hmac(body: bytes, header: str | None) -> bool:
     return hmac.compare_digest(expected, header[7:])
 
 
-def _run_detect(plan_json_path: Path) -> tuple[list[dict], int]:
+def _run_detect(plan_json_path: Path) -> tuple[dict, int]:
     """Invoke detect.py in plan-aware mode against the downloaded plan.
 
-    Returns (findings, exit_code). exit_code 0 = clean, 1 = fail-on hit.
+    Returns (engine_payload, exit_code). exit_code 0 = clean, 1 = fail-on
+    hit. The full engine JSON is returned so the callback message can
+    include compliance-framework counts when one is configured.
     """
     cmd = [
         sys.executable, str(DETECT_PY),
@@ -86,20 +102,47 @@ def _run_detect(plan_json_path: Path) -> tuple[list[dict], int]:
         "--fail-on", FAIL_ON,
         "--no-hcl2",  # plan path doesn't need heredoc parser
     ]
+    if COMPLIANCE_FRAMEWORK:
+        cmd.extend(["--compliance-framework", COMPLIANCE_FRAMEWORK])
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if res.stderr:
         LOG.info("detect.py stderr: %s", res.stderr.strip())
     try:
         data = json.loads(res.stdout)
-        findings = data.get("findings", [])
     except json.JSONDecodeError:
         LOG.error("detect.py did not return JSON: %s", res.stdout[:500])
-        findings = []
-    return findings, res.returncode
+        data = {}
+    return data, res.returncode
 
 
-def _format_status_body(findings: list[dict], threshold: str) -> dict:
-    """Build the HCP Run Task callback payload."""
+def _compliance_summary(data: dict, framework: str) -> str:
+    """Render `compliance: <fw> <fail>/<total> failing` from engine JSON.
+
+    Returns the empty string when no compliance section is present (e.g.
+    framework unset, or an older engine). Walks `data["compliance"]`
+    which is the engine's per-framework gap report — same shape used by
+    the text/HTML/OSCAL emitters.
+    """
+    section = data.get("compliance") or {}
+    if not section:
+        return ""
+    total = 0
+    failing = 0
+    for _fw, controls in section.items():
+        if not isinstance(controls, list):
+            continue
+        for ctrl in controls:
+            total += 1
+            if ctrl.get("status") == "FAIL":
+                failing += 1
+    if total == 0:
+        return ""
+    return f"compliance: {framework} {failing}/{total} controls failing."
+
+
+def _format_status_body(data: dict, threshold: str) -> dict:
+    """Build the HCP Run Task callback payload from the engine JSON."""
+    findings = data.get("findings") or []
     breach = [
         f for f in findings
         if URGENCY_RANK.get(f.get("urgency", "LOW"), 0)
@@ -107,18 +150,22 @@ def _format_status_body(findings: list[dict], threshold: str) -> dict:
     ]
     status = "failed" if breach else "passed"
     counts = {u: sum(1 for f in findings if f.get("urgency") == u) for u in URGENCY_RANK}
-    summary = (
+    parts = [
         f"tf-analyze: {len(findings)} finding(s) "
         f"(C:{counts['CRITICAL']} H:{counts['HIGH']} "
         f"M:{counts['MEDIUM']} L:{counts['LOW']}). "
-        f"{'Blocked' if breach else 'No'} {threshold}+ findings."
-    )
+        f"{'Blocked' if breach else 'No'} {threshold}+ findings.",
+    ]
+    if COMPLIANCE_FRAMEWORK:
+        compliance_line = _compliance_summary(data, COMPLIANCE_FRAMEWORK)
+        if compliance_line:
+            parts.append(compliance_line)
     return {
         "data": {
             "type": "task-results",
             "attributes": {
                 "status": status,
-                "message": summary,
+                "message": " ".join(parts),
                 "url": "",  # add a public report URL once HTML hosting is wired
             },
         },
@@ -158,9 +205,10 @@ async def run_task(request: Request) -> JSONResponse:
     with tempfile.TemporaryDirectory() as td:
         plan_path = Path(td) / "plan.json"
         plan_path.write_bytes(plan_resp.content)
-        findings, _ = _run_detect(plan_path)
+        data, _ = _run_detect(plan_path)
 
-    callback_body = _format_status_body(findings, FAIL_ON)
+    findings = data.get("findings") or []
+    callback_body = _format_status_body(data, FAIL_ON)
     cb = requests.patch(
         callback_url,
         headers={**headers, "Content-Type": "application/vnd.api+json"},

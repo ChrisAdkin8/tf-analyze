@@ -16,7 +16,7 @@
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 217](https://img.shields.io/badge/rules-217-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
-![Tests: 568](https://img.shields.io/badge/tests-568%20passing-brightgreen)
+![Tests: 570](https://img.shields.io/badge/tests-570%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-217%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 

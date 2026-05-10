@@ -19,7 +19,7 @@ the subject of this plan.
 **Complexity:** `S` = 1–2 hrs · `M` = half day · `L` = 1–2 days · `XL` = 3–5 days
 **Status:** `[ ]` not started · `[~]` in progress · `[x]` done
 
-State of the world at time of writing (2026-05-10): 217 rules · 568 pytest cases + 24 `node:test` cases · extension v0.1.30 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live with JSON-LD + family backlinks + 4-verb `vscode://` URI handler + OWASP IaC references · Module Reuse Advisor with ROI signal · status-bar grade badge · **ten surfaces** (MCP server hardened against agent-side abuse) + four compliance frameworks (CIS, PCI-DSS, SOC 2, OWASP IaC).
+State of the world at time of writing (2026-05-10): 217 rules · 570 pytest cases + 24 `node:test` cases · extension v0.1.30 · `action.yml` posts `--format pr-summary` blocks · `v0.1.0` tagged · per-rule docs site live with JSON-LD + family backlinks + 4-verb `vscode://` URI handler + OWASP IaC references · Module Reuse Advisor with ROI signal · status-bar grade badge · **ten surfaces** (MCP server hardened against agent-side abuse; HCP Run Task + TF provider gain Round 29 framework parity) + four compliance frameworks (CIS, PCI-DSS, SOC 2, OWASP IaC).
 
 Round 30 is the OWASP coverage sweep — Phase 0 (MCP hardening) shipped first because the gaps were exploitable on the just-shipped surface; Phases 1–4 (`owasp:` unified field, ASVS framework, 13 new rules, 6 enhancements) are sequenced as separate PRs against this branch's successor.
 
@@ -31,13 +31,14 @@ Five-PR sweep. Phase 0 closes the agent-side abuse boundary on the Round 28 MCP 
 
 | # | Item | Status | Acceptance |
 |---|------|--------|------------|
-| **R30.0** | MCP server hardening — LLM06 containment + LLM01/05 envelope + LLM10 truncation caps | ✅ | `_resolve_target` enforces `TFA_REPO_ROOT` containment with `TFA_MCP_ALLOW_OUTSIDE_ROOT=1` escape hatch; symlinks at workspace root rejected. Every tool wraps its return value (`<tf-analyze-output>` envelope + `_treat_as: data` preamble). `MAX_FINDINGS_RETURNED` (default 500, env `TFA_MCP_MAX_FINDINGS`) and `MAX_OUTPUT_BYTES` (default 1 MB, env `TFA_MCP_MAX_OUTPUT_BYTES`) cap output. Subprocess timeouts env-tunable (`TFA_MCP_TIMEOUT`, `TFA_MCP_APPLY_TIMEOUT`). 22 hardening tests in `tests/test_mcp_server_hardening.py`; `tests/test_mcp_server.py` gets an autouse fixture so its tmp_path tests survive the new containment gate. 568 pytest passing. |
+| **R30.0** | MCP server hardening — LLM06 containment + LLM01/05 envelope + LLM10 truncation caps | ✅ | `_resolve_target` enforces `TFA_REPO_ROOT` containment with `TFA_MCP_ALLOW_OUTSIDE_ROOT=1` escape hatch; symlinks at workspace root rejected. Every tool wraps its return value (`<tf-analyze-output>` envelope + `_treat_as: data` preamble). `MAX_FINDINGS_RETURNED` (default 500, env `TFA_MCP_MAX_FINDINGS`) and `MAX_OUTPUT_BYTES` (default 1 MB, env `TFA_MCP_MAX_OUTPUT_BYTES`) cap output. Subprocess timeouts env-tunable (`TFA_MCP_TIMEOUT`, `TFA_MCP_APPLY_TIMEOUT`). 22 hardening tests in `tests/test_mcp_server_hardening.py`; `tests/test_mcp_server.py` gets an autouse fixture so its tmp_path tests survive the new containment gate. 570 pytest passing. |
+| **R30.0.1** | R29 integration cleanup — Run Task framework, TF provider registry docs, compliance-gate example | ✅ | `TFA_RUN_TASK_FRAMEWORK` env on `integrations/run-task/server.py` closes the R29 gap (engine + MCP + provider had it; run-task didn't). `terraform-provider/docs/{index,data-sources/scan}.md` populates the registry-page surface. `compliance-gate.tf` example shows `compliance_framework` + `compliance_report` driving a `precondition`. 2 new drift gates in `tests/test_terraform_provider.py`. |
 | **R30.1** | Unified `owasp:` catalogue field + new compliance modes | 🟡 queued | Additive `owasp:` peer to `mitre:` accepting namespaced strings (`A01`–`A10`, `API1`–`API10`, `CICD-SEC-1`–`-10`, `LLM01`–`LLM10`, `K01`–`K10`, `ASVS-V<x>.<y>.<z>`). Auto-derives five new `--compliance-framework` modes from prefix. `owasp_iac:` (Round 29) stays unchanged. |
 | **R30.2** | New rules — supply-chain / CICD / OIDC | 🟡 queued | `SEC-SUPPLY-001`, `SEC-CICD-001`, `SEC-PROVISIONER-002`, `SEC-DATASOURCE-003`, `SEC-AWS-IAM-OIDC-001`. |
 | **R30.3** | New rules — user-data, logging, TLS, throttling, K8s version | 🟡 queued | `SEC-USERDATA-001/002`, `SEC-AWS-LOG-RETENTION-001`, `SEC-LOG-CROSS-ACCOUNT-001`, `SEC-AWS-LB-LISTENER-002`, `SEC-AWS-APIGW-002`, `SEC-AWS-WAF-002`, `STK-K8S-VERSION-001`. |
 | **R30.4** | Enhancements — Confused Deputy / RBAC verbs / helm PSA / ASG-ECS IMDS / `>=` drift / templatefile + SSM | 🟡 queued | Extensions to `SEC-AWS-IAM-POLICY-*`, `SEC-K8S-RBAC-001`, `SEC-K8S-PSA-001`, `SEC-AWS-SSRF-001` + `STK-AWS-LAUNCH-TEMPLATE-001`, `MOD-SUPPLY-001/002/003`, `SEC-SECRETS-001` + `SEC-SENSITIVE-*`. |
 
-State after R30.0 ships: 217 rules · 568 pytest + 24 `node:test` · ten surfaces, MCP server hardened.
+State after R30.0 + R30.0.1 ship: 217 rules · 570 pytest + 24 `node:test` · ten surfaces, MCP server hardened, Run Task + TF provider on R29 parity.
 
 ---
 

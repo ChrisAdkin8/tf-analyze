@@ -25,7 +25,17 @@ Self-test fixture counts are cumulative.
 
 - **`integrations/mcp-server/README.md`** — new *Hardening* section with the threat-model table and the full env-var matrix.
 
-568 pytest cases passing post-Phase-0 (529 base + 17 existing MCP tests + 22 new hardening tests). No changes to the engine, catalogue, rule docs site, or rule count (still 217). Phases 1–4 of the OWASP coverage sweep are queued separately.
+### Integration cleanup (Round 29 follow-up)
+
+Three integration gaps surfaced by the Phase 0 audit; closed alongside the hardening commit so the Round 29 surface ships consistently across all four agent-facing channels (engine, MCP, Terraform provider, Run Task).
+
+- **HCP Terraform Run Task — `compliance_framework` support.** R29 wired the framework through the engine, MCP, and Terraform provider, but `integrations/run-task/server.py` was missed. New env var `TFA_RUN_TASK_FRAMEWORK` (one of `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`); when set, the engine renders a compliance gap report alongside its findings and the run-task callback message gains a `compliance: <fw> <fail>/<total> controls failing.` line. Default unset → identical behaviour to before.
+- **Terraform provider registry docs.** `terraform-provider/docs/` was an empty directory — registry pages would have rendered with no body. Hand-written `docs/index.md` + `docs/data-sources/scan.md` matching the schema, with example-usage blocks for both the basic score gate and the compliance gate.
+- **Compliance-gate worked example.** New `terraform-provider/examples/data-sources/tfanalyze_scan/compliance-gate.tf` showing `compliance_framework = "owasp_iac"` driving a `precondition` with `compliance_report` pasted into `error_message`. The headline R29 feature is now copy-pasteable.
+
+Two new drift-gate tests in `tests/test_terraform_provider.py` cover the docs and compliance-gate example, so the registry-readiness contract is enforced going forward.
+
+570 pytest cases passing post-Phase-0 (529 base + 17 existing MCP tests + 22 new hardening tests + 2 new TF provider drift gates). No changes to the engine, catalogue, rule docs site, or rule count (still 217). Phases 1–4 of the OWASP coverage sweep are queued separately.
 
 ---
 
