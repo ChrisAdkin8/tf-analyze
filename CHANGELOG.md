@@ -5,6 +5,86 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## detect.py modularisation — Session D (`_attack_graph.py`) — 2026-05-10
+
+**Sixth seam in the detect.py refactor. Largest single extraction yet — the attack-graph build + render block (constants `_CROWN_JEWEL_TYPES` + `_NODE_TYPE_MAP` + 10 `_INET_*` reachability regexes + 15 `_EDGE_*` cross-resource regexes + 7 functions including the 280-LoC `_render_graph_html` body) lifts into `scripts/_attack_graph.py`. No behaviour change; `tests/test_attack_graph.py` continues to pass through the re-export shim.**
+
+### What moved
+
+- **`scripts/_attack_graph.py` (new — 812 LOC).** 34 names:
+  - 2 data constants: `_CROWN_JEWEL_TYPES` (21 resource types across AWS/GCP/Azure), `_NODE_TYPE_MAP` (resource-type → display category).
+  - 10 internet-reachability regexes (`_INET_EC2_PUBLIC_IP_RE`, `_INET_RDS_PUBLIC_RE`, `_INET_SQL_PUBLIC_IP_RE`, `_INET_SG_CIDR_RE`, `_INET_SG_IPV6_RE`, `_INET_CLOUDRUN_ALL_RE`, `_INET_ALB_FACING_RE`, `_INET_GCE_ACCESS_CFG_RE`, `_INET_GKE_PRIVATE_RE`, `_INET_AZ_IP_RESTRICTION_RE`).
+  - 15 edge-inference regexes (`_EDGE_IAM_PROFILE_RE`, `_EDGE_PROFILE_ROLE_RE`, `_EDGE_KMS_*`, `_EDGE_SECRET_ARN_RE`, `_EDGE_SG_REF_RE`, `_EDGE_GCP_SA_*`, `_EDGE_GCS_BUCKET_RE`, Azure `_EDGE_AZ_*`).
+  - 7 functions: `_is_internet_reachable`, `build_attack_graph`, `_score_fix_centrality`, `_apply_reachability_urgency`, `_mermaid_id`, `graph_to_mermaid`, `_render_graph_html`.
+
+### Cross-seam edge
+
+`_attack_graph._apply_reachability_urgency` needs the ordered urgency-tier list (LOW < MEDIUM < HIGH < CRITICAL) to promote critical-path findings by one tier and demote unreachable-resource findings by one tier. Session D moves `_URGENCY_TIERS` from `detect.py` into **`scripts/_scoring.py`** (it pairs with `_RISK_WEIGHTS`, the tier-to-points map) and `_attack_graph` imports it cross-seam. `detect.py`'s `from _scoring import …` line picks up the new name; existing callers keep working — `tests/test_session_d_extracts.py::test_urgency_tiers_lives_in_scoring` locks the binding chain.
+
+### Scope rule
+
+Same purity criterion as Sessions A–C: pure functions + immutable regex/data constants only. The detection-side `_graph_*` helpers (`_graph_logging_target_public`, `_graph_gke_nodepool_secure_boot`, `_graph_kms_location_parity`, etc.) at the top of the attack-graph section deliberately **stayed in `detect.py`** — they produce findings (a detection concern) rather than a graph (a render/analysis concern). A later session can extract them into `_cross_resource.py` if the pattern keeps growing.
+
+### Re-export shims
+
+`detect.py` keeps every legacy name pointing at `_attack_graph.py`. External callers (`tests/test_attack_graph.py`, the HTML report renderer, the VS Code extension's `Show Attack Graph` command) reach `detect.build_attack_graph`, `detect.graph_to_mermaid`, and `detect._render_graph_html` and keep working unchanged:
+
+```python
+# detect.py
+from _attack_graph import (
+    _CROWN_JEWEL_TYPES, _NODE_TYPE_MAP,
+    _INET_EC2_PUBLIC_IP_RE, _INET_RDS_PUBLIC_RE, _INET_SQL_PUBLIC_IP_RE,
+    _INET_SG_CIDR_RE, _INET_SG_IPV6_RE, _INET_CLOUDRUN_ALL_RE,
+    _INET_ALB_FACING_RE, _INET_GCE_ACCESS_CFG_RE, _INET_GKE_PRIVATE_RE,
+    _INET_AZ_IP_RESTRICTION_RE,
+    _EDGE_IAM_PROFILE_RE, _EDGE_PROFILE_ROLE_RE, _EDGE_KMS_KEY_ID_RE,
+    _EDGE_KMS_KEY_NAME_RE, _EDGE_KMS_MASTER_RE, _EDGE_SECRET_ARN_RE,
+    _EDGE_SG_REF_RE, _EDGE_GCP_SA_RE, _EDGE_GCS_BUCKET_RE,
+    _EDGE_AZ_MI_RE, _EDGE_AZ_KV_RE, _EDGE_AZ_STORAGE_RE, _EDGE_AZ_SQL_RE,
+    _EDGE_GCP_SA_EMAIL_RE, _EDGE_GCP_SA_NAME_RE,
+    _is_internet_reachable, build_attack_graph, _score_fix_centrality,
+    _apply_reachability_urgency, _mermaid_id, graph_to_mermaid,
+    _render_graph_html,
+)
+```
+
+Bindings are by-reference (verified by `is`-equality tests in `tests/test_session_d_extracts.py`).
+
+### Bundle pipeline
+
+`vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists **7 files**: `detect.py`, `_mitre.py`, `_versions.py`, `_scoring.py`, `_hcl.py`, `_catalog.py`, `_attack_graph.py`. Smoke test still passing — bundled engine lists 217 rules.
+
+### Tests
+
+- **`tests/test_session_d_extracts.py` (new — 5 tests).**
+  - `test_module_imports_cleanly` — public surface (27 regex constants + 2 data maps + 7 funcs = 36 names).
+  - `test_detect_re_exports_bindings_not_copies` — `is`-equality across a representative sample of 13 names.
+  - `test_urgency_tiers_lives_in_scoring` — locks the cross-seam binding chain (`_attack_graph._URGENCY_TIERS` is `_scoring._URGENCY_TIERS` is `detect._URGENCY_TIERS`).
+  - `test_round_trip_through_shim` — `detect.build_attack_graph` on a SG → DB fixture, then `detect.graph_to_mermaid` + `detect._render_graph_html`. Verifies reachability propagation (SG with `0.0.0.0/0` marks downstream DB internet-reachable) and self-contained HTML output (no external `<script src=…>`).
+  - `test_apply_reachability_urgency_promotes_and_demotes` — locks the promote/demote contract: MEDIUM finding on critical path → HIGH; MEDIUM finding on unreachable resource → LOW.
+
+The functional contracts for the build + render are already covered by `tests/test_attack_graph.py`; Session D's tests cover the **seam contract**.
+
+### Counts
+
+| | before | after |
+|---|---:|---:|
+| `detect.py` | 7,669 LOC | 6,985 LOC (−684) |
+| extracted modules total | 1,184 LOC | 1,996 LOC (+812 for `_attack_graph.py`) |
+| pytest | 634 | 639 (+5) |
+| self-test | 219+142 | 219+142 (no change) |
+| active rules | 217 | 217 (no change — refactor only) |
+| extension version | 0.1.36 | 0.1.37 |
+
+### Cumulative across R30.0.5–R30.0.9
+
+| | start | now |
+|---|---:|---:|
+| `detect.py` | 8,441 LOC | 6,985 LOC (**−1,456**, 17.2% reduction) |
+| Extracted modules | 0 | **6** (`_mitre`, `_versions`, `_scoring`, `_hcl`, `_catalog`, `_attack_graph`) totalling 1,996 LOC |
+
+---
+
 ## detect.py modularisation — Session C (`_catalog.py`) — 2026-05-10
 
 **Fifth seam in the detect.py refactor. Catalogue lifecycle — YAML loading, schema validation (including CWE / D3FEND / OWASP-IaC shape checks), `.tf-analyze.yaml` workspace config, `load_catalog` — split out so detect.py stops being the single place every catalogue change has to land. No behaviour change.**

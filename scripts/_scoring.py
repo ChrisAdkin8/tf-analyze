@@ -43,6 +43,13 @@ _RISK_WEIGHTS: dict[str, int] = {
     "INFO":     0,
 }
 
+# Ordered urgency tiers — LOW < MEDIUM < HIGH < CRITICAL — used by the
+# attack-graph's `_apply_reachability_urgency` to promote findings on
+# critical-path resources by one tier and demote findings on
+# unreachable resources by one tier. INFO is deliberately omitted: it
+# is a zero-weight tag, not a position on this ordered axis.
+_URGENCY_TIERS: list[str] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+
 # (lower bound of score, letter grade) — first match wins; sorted descending.
 _GRADE_TIERS: list[tuple[int, str]] = [
     (90, "A"),

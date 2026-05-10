@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.37] — 2026-05-10
+
+### Changed
+
+- **Bundle pipeline now ships 7 sibling Python files (was 6).** R30.0.9 / Session D extracted the largest seam yet — the entire attack-graph build + render block — out of `detect.py`: `_attack_graph.py` (812 LOC; 27 regex constants + 2 data maps + 7 functions including the 280-LoC `_render_graph_html` interactive force-directed SVG renderer). `vscode-extension/scripts/bundle-engine.js`'s `ENGINE_SIBLING_FILES` array now lists `['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py', '_attack_graph.py']`; the `.vsix` ships all seven siblings at `engine/scripts/`. No user-visible behaviour change — `detect.py`'s re-export shim preserves every legacy name including the workhorses `build_attack_graph`, `graph_to_mermaid`, `_render_graph_html` consumed by the extension's `Show Attack Graph` command.
+
+  Verified the bundle inside `tf-analyze-0.1.37.vsix`:
+
+      extension/engine/scripts/_attack_graph.py (~30 KB)
+      extension/engine/scripts/_catalog.py     (~16 KB)
+      extension/engine/scripts/_hcl.py         (11.6 KB)
+      extension/engine/scripts/_mitre.py        (6.3 KB)
+      extension/engine/scripts/_scoring.py      (~4 KB)
+      extension/engine/scripts/_versions.py     (8.0 KB)
+      extension/engine/scripts/detect.py      (~298 KB)  ← shrank again
+
+  Cumulative across the 5 modularisation rounds: `detect.py` 8,441 → 6,985 LoC (**−1,456**, 17.2% reduction); extracted modules now total 1,996 LoC of pure helpers across 6 files.
+
+---
+
 ## [0.1.36] — 2026-05-10
 
 ### Changed
