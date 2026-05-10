@@ -110,6 +110,12 @@ provisioner is documented with a justification comment or suppression.
 **Source**
   - [`catalog/SEC-PROVISIONER-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-PROVISIONER-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-PROVISIONER-*` family:
+
+- [`SEC-PROVISIONER-002`](./SEC-PROVISIONER-002.md) — local-exec or remote-exec uses `curl \| bash` or unverified-pipe pattern
+
 ---
 
 ## Run this check

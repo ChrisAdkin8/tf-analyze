@@ -77,70 +77,11 @@ import sys
 from pathlib import Path
 
 # ---- Optional python-hcl2 fast-path -------------------------------------
-#
-# The skill's default contract is stdlib-only — no pip install required to
-# run a scan. python-hcl2 (when installed) provides heredoc-aware
-# attribute extraction that the regex path can't match. Off by default,
-# enabled per-run via `--use-hcl2` or `TF_ANALYZE_USE_HCL2=1`.
-try:
-    import hcl2 as _hcl2  # type: ignore
-    _HAS_HCL2 = True
-except Exception:
-    _hcl2 = None  # type: ignore
-    _HAS_HCL2 = False
-
-_USE_HCL2 = False  # toggled by main() after argparse
-
-
-def _enable_hcl2_or_warn() -> None:
-    """[legacy] Old explicit-opt-in path. Kept as a thin wrapper around
-    `_enable_hcl2_default()` so any caller using --use-hcl2 still works.
-    """
-    _enable_hcl2_default()
-
-
-def _enable_hcl2_default() -> None:
-    """Enable the python-hcl2 fast-path. Silent no-op when the dependency
-    isn't present — the caller already decided whether to print a notice."""
-    global _USE_HCL2
-    if _HAS_HCL2:
-        _USE_HCL2 = True
-
-
-def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
-    """Heredoc-aware attribute extraction. Wraps the body in a synthetic
-    block so hcl2 will parse it, then walks the parse tree for `arg`.
-    Returns None on any error so callers fall back to the regex path.
-    """
-    if not (_USE_HCL2 and _HAS_HCL2):
-        return None
-    try:
-        # hcl2.load expects a top-level construct; wrap the bare body.
-        wrapped = f'_arg_extract {{\n{body}\n}}'
-        parsed = _hcl2.load(io.StringIO(wrapped))
-    except Exception:
-        return None
-    try:
-        block_list = parsed.get("_arg_extract", [])
-        if not isinstance(block_list, list) or not block_list:
-            return None
-        block = block_list[0] if isinstance(block_list[0], dict) else None
-        if not block:
-            return None
-        val = block.get(arg)
-    except Exception:
-        return None
-    if val is None:
-        return None
-    if isinstance(val, list) and val:
-        val = val[0]
-    if isinstance(val, str):
-        # hcl2 strips heredoc markers; return the literal content.
-        return val
-    return str(val)
-
-# ---- Minimal YAML loader -------------------------------------------------
-# Avoid PyYAML dependency. Catalogue YAML is shallow and well-formed.
+# Moved into `scripts/_hcl.py` in Session F so `_cross_resource.py` and
+# any other sibling module can reach `block_arg_value` without
+# circular-importing back through `detect`. The toggle (`_USE_HCL2`)
+# and detection wrappers are re-imported below alongside the other
+# pure HCL primitives.
 
 # Provider/Terraform version-constraint helpers live in
 # `scripts/_versions.py`. Re-imported here under the legacy private
@@ -156,25 +97,29 @@ from _versions import (
 )
 
 
-# Pure HCL primitives (text normalisation, comment scrubbing, block
-# extraction, attribute-presence checks, dynamic-block expansion) live
-# in `scripts/_hcl.py`. Fourth seam in the modularisation, after
-# `_mitre.py`, `_versions.py`, and `_scoring.py`. State-touching
-# wrappers (`_USE_HCL2`-aware `block_arg_value`, the var-resolution
-# layer) intentionally stay in this file — `_hcl.py` is pure-only.
+# HCL primitives + `_USE_HCL2` toggle + `block_arg_value` wrapper all
+# live in `scripts/_hcl.py`. Fourth seam in the modularisation; Session
+# F (R30.0.12) brought the toggle + `block_arg_value` into `_hcl.py` so
+# `_cross_resource.py` could import them cleanly without a circular
+# import back through `detect`.
 from _hcl import (
     _LINE_COMMENT_RE,
     _BLOCK_COMMENT_RE,
     _DYNAMIC_BLOCK_START_RE,
+    _HAS_HCL2,
     _read_normalized,
     _parse_scalar,
     strip_hcl_context,
     find_blocks,
     find_simple_blocks,
     block_has_arg,
+    block_arg_value,
     _hcl_object_to_json,
     block_has_nested_path,
     _expand_dynamic_blocks,
+    _hcl2_block_arg_value,
+    _enable_hcl2_or_warn,
+    _enable_hcl2_default,
 )
 
 
@@ -235,45 +180,6 @@ BOOL_COUNT_RE = re.compile(
     r'^\s*count\s*=\s*.*\?\s*1\s*:\s*0\s*$', re.MULTILINE
 )
 COUNT_GUARD_RE = re.compile(r'\?|try\s*\(|length\s*\(|one\s*\(')
-
-
-def block_arg_value(body: str, arg: str) -> str | None:
-    """Return the literal value of a top-level argument, stripped of quotes/comments.
-
-    Heredoc-bearing values (`arg = <<-EOF\n...\nEOF`) are not handled by the
-    regex path — the trailing `<<-EOF` is returned verbatim, which is rarely
-    useful. When the optional hcl2 fast-path is enabled
-    (`--use-hcl2` or `TF_ANALYZE_USE_HCL2=1`), heredoc bodies are extracted
-    structurally so callers see the actual string value.
-    """
-    if _USE_HCL2 and "<<" in body:
-        v = _hcl2_block_arg_value(body, arg)
-        if v is not None:
-            return v
-    m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*=\s*(.+?)\s*$', body)
-    if not m:
-        return None
-    val = m.group(1).strip()
-    if '"' in val or "'" in val:
-        in_dq = in_sq = False
-        cut = None
-        for idx, ch in enumerate(val):
-            if ch == '"' and not in_sq:
-                in_dq = not in_dq
-            elif ch == "'" and not in_dq:
-                in_sq = not in_sq
-            elif ch == "#" and not in_dq and not in_sq:
-                cut = idx
-                break
-        if cut is not None:
-            val = val[:cut].rstrip()
-    else:
-        cut = val.find("#")
-        if cut >= 0:
-            val = val[:cut].rstrip()
-    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-        return val[1:-1]
-    return val
 
 
 def _resolve_var_ref(val: str, var_defaults: dict) -> str:
@@ -2117,352 +2023,24 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
     return findings
 
 
-# ---- Graph-based checks ---------------------------------------------------
-#
-# A graph check is a function that takes a resource index plus the raw file
-# map and yields zero or more partial findings (id is filled in by the
-# caller). Graph checks are how we express conditions that span multiple
-# resources, e.g. "logging target bucket is itself private".
-#
-# To add a new graph check:
-#   1. Write the function below (signature: index, files -> list[finding]).
-#   2. Register it in _GRAPH_CHECKS.
-#   3. Reference it from a catalogue YAML via `kind: graph_check, function: <name>`.
-
-def _build_resource_index(all_files_text: dict) -> dict:
-    """Index every resource block by `<type>.<name>` → {file, line, body}."""
-    idx: dict[str, dict] = {}
-    for fp, text in all_files_text.items():
-        for blk in find_blocks(text, RESOURCE_START):
-            btype, bname = blk["groups"]
-            idx[f"{btype}.{bname}"] = {
-                "file": str(fp),
-                "line": blk["start_line"],
-                "body": blk["body"],
-                "type": btype,
-                "name": bname,
-            }
-    return idx
-
-
-_LOG_BUCKET_REF = re.compile(
-    r'log_bucket\s*=\s*google_storage_bucket\.([\w-]+)\.name',
+# ---- Graph-based checks (cross-resource detection helpers) -------------
+# `_build_resource_index` + the 8 `_graph_*` helpers (logging-target,
+# GKE node pools, KMS location parity, IAM breadth, Azure UAMI orphan,
+# DynamoDB PITR / SSE) — plus the `_GRAPH_CHECKS` registry — live in
+# `scripts/_cross_resource.py`. Eighth seam in the modularisation.
+# Re-imported here so the `detect_corpus` dispatch + the catalogue's
+# `graph_check` kind keep working without migration.
+from _cross_resource import (
+    _build_resource_index,
+    _graph_logging_target_public,
+    _graph_gke_nodepool_secure_boot,
+    _graph_kms_location_parity,
+    _graph_iam_member_breadth,
+    _graph_azure_uami_orphan,
+    _graph_dynamodb_pitr,
+    _graph_dynamodb_sse,
+    _GRAPH_CHECKS,
 )
-
-
-def _graph_logging_target_public(index: dict, all_files_text: dict) -> list[dict]:
-    """A bucket's logging.log_bucket references a bucket lacking
-    public_access_prevention = "enforced". The target accumulates audit logs
-    for the source — leaking it via public access is a high-blast-radius bug.
-    """
-    out: list[dict] = []
-    for addr, src in index.items():
-        if src["type"] != "google_storage_bucket":
-            continue
-        m = _LOG_BUCKET_REF.search(src["body"])
-        if not m:
-            continue
-        target_addr = f"google_storage_bucket.{m.group(1)}"
-        target = index.get(target_addr)
-        if not target:
-            continue
-        pap = block_arg_value(target["body"], "public_access_prevention")
-        if pap != "enforced":
-            out.append({
-                "file": target["file"],
-                "line": target["line"],
-                "resource": target_addr,
-                "context": (
-                    f"logging target of {addr} (in {src['file']}:{src['line']}) "
-                    f"is missing public_access_prevention=enforced"
-                ),
-            })
-    return out
-
-
-_NODEPOOL_CLUSTER_REF = re.compile(
-    r'cluster\s*=\s*google_container_cluster\.([\w-]+)(?:\.\w+)?',
-)
-_SECURE_BOOT_RE = re.compile(r'enable_secure_boot\s*=\s*true')
-_INTEGRITY_MON_RE = re.compile(r'enable_integrity_monitoring\s*=\s*true')
-
-
-def _graph_gke_nodepool_secure_boot(index: dict, all_files_text: dict) -> list[dict]:
-    """Every google_container_node_pool attached to a cluster must set
-    `node_config.shielded_instance_config.enable_secure_boot = true` AND
-    `enable_integrity_monitoring = true`. CIS GKE 6.5.5 requires both on
-    every pool — leaving any pool unhardened nullifies the cluster-wide
-    posture, since pods schedule across pools.
-    """
-    out: list[dict] = []
-    for addr, np in index.items():
-        if np["type"] != "google_container_node_pool":
-            continue
-        m = _NODEPOOL_CLUSTER_REF.search(np["body"])
-        if not m:
-            continue  # ambient/data-source cluster reference — out of scope
-        body = np["body"]
-        missing = []
-        if not _SECURE_BOOT_RE.search(body):
-            missing.append("enable_secure_boot")
-        if not _INTEGRITY_MON_RE.search(body):
-            missing.append("enable_integrity_monitoring")
-        if missing:
-            out.append({
-                "file": np["file"],
-                "line": np["line"],
-                "resource": addr,
-                "context": (
-                    f"node pool attached to google_container_cluster.{m.group(1)} "
-                    f"is missing: {', '.join(missing)}"
-                ),
-            })
-    return out
-
-
-_KEY_RING_REF = re.compile(
-    r'key_ring\s*=\s*google_kms_key_ring\.([\w-]+)(?:\.\w+)?',
-)
-_KMS_KEY_REF = re.compile(
-    r'kms_key_name\s*=\s*google_kms_crypto_key\.([\w-]+)(?:\.\w+)?',
-)
-
-
-def _graph_kms_location_parity(index: dict, all_files_text: dict) -> list[dict]:
-    """A KMS-encrypted resource's location must match the key ring's
-    location. KMS keys inherit `location` from the key ring; if the
-    consuming resource (bucket, SQL instance, etc.) lives in a different
-    region, the encrypt/decrypt path crosses regions, breaks regional
-    durability guarantees, and quietly degrades to multi-region pricing.
-    """
-    out: list[dict] = []
-    # First pass: for each crypto key, find the location of its key ring.
-    key_ring_loc: dict[str, str | None] = {}
-    for addr, blk in index.items():
-        if blk["type"] != "google_kms_crypto_key":
-            continue
-        m = _KEY_RING_REF.search(blk["body"])
-        if not m:
-            continue
-        ring_addr = f"google_kms_key_ring.{m.group(1)}"
-        ring = index.get(ring_addr)
-        if not ring:
-            continue
-        key_ring_loc[addr] = block_arg_value(ring["body"], "location")
-    # Second pass: any resource referencing a crypto key must match.
-    for addr, consumer in index.items():
-        if consumer["type"] in {"google_kms_crypto_key", "google_kms_key_ring"}:
-            continue
-        m = _KMS_KEY_REF.search(consumer["body"])
-        if not m:
-            continue
-        key_addr = f"google_kms_crypto_key.{m.group(1)}"
-        ring_loc = key_ring_loc.get(key_addr)
-        if not ring_loc:
-            continue
-        consumer_loc = (
-            block_arg_value(consumer["body"], "location")
-            or block_arg_value(consumer["body"], "region")
-        )
-        if not consumer_loc:
-            continue
-        if consumer_loc.lower() != ring_loc.lower():
-            out.append({
-                "file": consumer["file"],
-                "line": consumer["line"],
-                "resource": addr,
-                "context": (
-                    f"location {consumer_loc!r} does not match KMS key ring "
-                    f"location {ring_loc!r} (via {key_addr})"
-                ),
-            })
-    return out
-
-
-_PROJECT_IAM_TYPES = {
-    "google_project_iam_member",
-    "google_project_iam_binding",
-}
-_RESOURCE_LEVEL_TYPES = {
-    "google_storage_bucket_iam_member",
-    "google_storage_bucket_iam_binding",
-    "google_pubsub_topic_iam_member",
-    "google_pubsub_subscription_iam_member",
-    "google_secret_manager_secret_iam_member",
-    "google_kms_crypto_key_iam_member",
-    "google_bigquery_dataset_iam_member",
-}
-
-
-def _graph_iam_member_breadth(index: dict, all_files_text: dict) -> list[dict]:
-    """A service account that already has resource-level IAM (e.g. on a
-    specific bucket / topic) and ALSO has a project-level IAM binding is
-    almost certainly over-privileged: the project-level grant supersedes
-    the resource-level scoping, making the latter pointless. Either
-    remove the project grant or remove the resource-level one.
-    """
-    out: list[dict] = []
-    member_re = re.compile(r'member\s*=\s*"([^"]+)"')
-    members_re = re.compile(r'members\s*=\s*\[([^\]]+)\]')
-    project_grants: dict[str, list[dict]] = {}
-    resource_grants: dict[str, list[dict]] = {}
-    for addr, blk in index.items():
-        members: set[str] = set()
-        m = member_re.search(blk["body"])
-        if m:
-            members.add(m.group(1))
-        m = members_re.search(blk["body"])
-        if m:
-            for tok in m.group(1).split(","):
-                tok = tok.strip().strip('"')
-                if tok:
-                    members.add(tok)
-        if blk["type"] in _PROJECT_IAM_TYPES:
-            for mem in members:
-                project_grants.setdefault(mem, []).append({"addr": addr, "blk": blk})
-        elif blk["type"] in _RESOURCE_LEVEL_TYPES:
-            for mem in members:
-                resource_grants.setdefault(mem, []).append({"addr": addr, "blk": blk})
-    for mem, project_list in project_grants.items():
-        resource_list = resource_grants.get(mem)
-        if not resource_list:
-            continue
-        for pg in project_list:
-            out.append({
-                "file": pg["blk"]["file"],
-                "line": pg["blk"]["line"],
-                "resource": pg["addr"],
-                "context": (
-                    f"member {mem} also has resource-level IAM at "
-                    f"{', '.join(g['addr'] for g in resource_list)} — "
-                    f"the project-level grant makes those redundant"
-                ),
-            })
-    return out
-
-
-_UAMI_PRINCIPAL_REF = re.compile(
-    r'azurerm_user_assigned_identity\.([\w-]+)\.principal_id'
-)
-
-
-def _graph_azure_uami_orphan(index: dict, all_files_text: dict) -> list[dict]:
-    """Detect azurerm_user_assigned_identity resources with no
-    azurerm_role_assignment referencing their principal_id — an orphan
-    identity that grants no permissions yet still widens the blast radius
-    of a tenant compromise (an attacker who can assign roles can weaponise it).
-    """
-    out: list[dict] = []
-    uamis = {k: v for k, v in index.items()
-             if v["type"] == "azurerm_user_assigned_identity"}
-    if not uamis:
-        return out
-    referenced: set[str] = set()
-    for addr, res in index.items():
-        if res["type"] != "azurerm_role_assignment":
-            continue
-        for m in _UAMI_PRINCIPAL_REF.finditer(res["body"]):
-            referenced.add(m.group(1))
-    for addr, res in uamis.items():
-        if res["name"] not in referenced:
-            out.append(
-                {
-                    "file": res["file"],
-                    "line": res["line"],
-                    "resource": addr,
-                    "context": (
-                        "UAMI has no azurerm_role_assignment binding — "
-                        "orphan identity widens blast radius without granting intent"
-                    ),
-                }
-            )
-    return out
-
-
-def _graph_dynamodb_pitr(index: dict, all_files_text: dict) -> list[dict]:
-    """aws_dynamodb_table without point_in_time_recovery { enabled = true }.
-
-    DynamoDB's PITR default is disabled. A table with no
-    point_in_time_recovery block (or enabled = false) cannot be restored
-    to an arbitrary second within the last 35 days, leaving accidental
-    writes or deletes unrecoverable.
-    """
-    out: list[dict] = []
-    for addr, res in index.items():
-        if res["type"] != "aws_dynamodb_table":
-            continue
-        body = res["body"]
-        pitr_m = re.search(r'(?m)^\s*point_in_time_recovery\s*\{', body)
-        if not pitr_m:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
-            continue
-        depth, k, end = 0, pitr_m.end() - 1, None
-        while k < len(body):
-            c = body[k]
-            if c == '{':
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    end = k
-                    break
-            k += 1
-        if end is None:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
-            continue
-        pitr_body = body[pitr_m.end():end]
-        enabled = block_arg_value(pitr_body, "enabled")
-        if not enabled or enabled.lower() != "true":
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
-    return out
-
-
-def _graph_dynamodb_sse(index: dict, all_files_text: dict) -> list[dict]:
-    """aws_dynamodb_table without a customer-managed KMS key for SSE.
-
-    DynamoDB encrypts at rest by default using Amazon-owned keys, which
-    cannot be audited, rotated, or revoked. Tables that lack a
-    server_side_encryption block with kms_key_arn rely on these default
-    keys instead of a customer-managed key (CMK).
-    """
-    out: list[dict] = []
-    for addr, res in index.items():
-        if res["type"] != "aws_dynamodb_table":
-            continue
-        body = res["body"]
-        sse_m = re.search(r'(?m)^\s*server_side_encryption\s*\{', body)
-        if not sse_m:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
-            continue
-        depth, k, end = 0, sse_m.end() - 1, None
-        while k < len(body):
-            c = body[k]
-            if c == '{':
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    end = k
-                    break
-            k += 1
-        if end is None:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
-            continue
-        sse_body = body[sse_m.end():end]
-        if not block_has_arg(sse_body, "kms_key_arn"):
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
-    return out
-
-
-_GRAPH_CHECKS = {
-    "logging_target_public": _graph_logging_target_public,
-    "gke_nodepool_secure_boot": _graph_gke_nodepool_secure_boot,
-    "kms_location_parity": _graph_kms_location_parity,
-    "iam_member_breadth": _graph_iam_member_breadth,
-    "azure_uami_orphan": _graph_azure_uami_orphan,
-    "dynamodb_pitr": _graph_dynamodb_pitr,
-    "dynamodb_sse": _graph_dynamodb_sse,
-}
 
 
 # ---- Registry-module fingerprint detector --------------------------------
@@ -4521,15 +4099,24 @@ def main():
     ap.add_argument(
         "--compliance-framework",
         default="cis",
-        choices=["cis", "pci_dss", "soc2", "owasp_iac", "all"],
+        choices=[
+            "cis", "pci_dss", "soc2", "owasp_iac",
+            # R30.1 — multi-framework taxonomy sweep
+            "nist_csf", "nist_800_53", "csa_ccm", "slsa",
+            "owasp_top10", "owasp_api", "owasp_cicd",
+            "owasp_llm", "owasp_k8s", "owasp_asvs",
+            "all",
+        ],
         metavar="FRAMEWORK",
         help=(
-            "Compliance framework to map against. Choices: cis (default), "
-            "pci_dss, soc2, owasp_iac, all. 'all' combines every framework "
-            "in one report. owasp_iac maps against the OWASP IaC Security "
-            "Cheat Sheet (Develop and Distribute / Deploy / Runtime sections; "
-            "static-analysable items only). Requires --compliance or --format "
-            "compliance."
+            "Compliance framework to map against. Choices: "
+            "cis (default), pci_dss, soc2, owasp_iac, "
+            "nist_csf, nist_800_53, csa_ccm, slsa, "
+            "owasp_top10, owasp_api, owasp_cicd, owasp_llm, owasp_k8s, owasp_asvs, "
+            "all. 'all' combines every framework in one report. "
+            "OWASP sub-modes filter against the namespaced `owasp:` "
+            "catalogue field by prefix (e.g. owasp_top10 → items A01..A10). "
+            "Requires --compliance or --format compliance."
         ),
     )
     ap.add_argument(

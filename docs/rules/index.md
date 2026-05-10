@@ -6,14 +6,17 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**217 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**237 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
-## cicd (1)
+## cicd (4)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
+| [`SEC-CICD-003`](./SEC-CICD-003.md) | CRITICAL | Apply job missing `environment:` with required_reviewers for production |
+| [`SEC-CICD-001`](./SEC-CICD-001.md) | HIGH | Workflow file applies Terraform without required-reviewers gate |
+| [`SEC-CICD-002`](./SEC-CICD-002.md) | HIGH | Workflow uses `permissions: write-all` or omits minimum scopes |
 | [`CI-TEST-001`](./CI-TEST-001.md) | LOW | Module has no Terraform test files |
 
 ## dry (1)
@@ -22,13 +25,14 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 |------|---------|-------|
 | [`MOD-STALE-001`](./MOD-STALE-001.md) | LOW | Registry module is significantly behind latest version |
 
-## module (5)
+## module (6)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
 | [`MOD-PIN-001`](./MOD-PIN-001.md) | HIGH | Module source not pinned |
 | [`MOD-SUPPLY-001`](./MOD-SUPPLY-001.md) | HIGH | Module pinned to mutable git ref (main or master) |
 | [`MOD-SUPPLY-003`](./MOD-SUPPLY-003.md) | HIGH | Registry module missing version constraint |
+| [`MOD-SUPPLY-004`](./MOD-SUPPLY-004.md) | MEDIUM | Module version constraint uses `>=` with no upper bound |
 | [`MOD-SUPPLY-002`](./MOD-SUPPLY-002.md) | LOW | Module uses raw git source instead of registry |
 | [`MOD-UNUSED-001`](./MOD-UNUSED-001.md) | LOW | Local module directory is not called from any scenario |
 
@@ -100,7 +104,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-UNUSED-002`](./ROB-UNUSED-002.md) | LOW | Declared output is never consumed by any caller |
 | [`ROB-VERSION-002`](./ROB-VERSION-002.md) | LOW | Submodule directory has no required_version |
 
-## security (117)
+## security (129)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -109,6 +113,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-IAM-JSON-002`](./SEC-AWS-IAM-JSON-002.md) | CRITICAL | Inline IAM policy JSON grants wildcard `iam:*` action |
 | [`SEC-AWS-IAM-JSON-003`](./SEC-AWS-IAM-JSON-003.md) | CRITICAL | Inline IAM policy JSON grants `Action: \"*\"` AND `Resource: \"*\"` |
 | [`SEC-AWS-IAM-JSON-004`](./SEC-AWS-IAM-JSON-004.md) | CRITICAL | Inline IAM policy JSON has public principal (`Principal: \"*\"`) |
+| [`SEC-AWS-IAM-OIDC-001`](./SEC-AWS-IAM-OIDC-001.md) | CRITICAL | GitHub OIDC trust policy accepts wildcard `repo:*` or `sub: *` claims |
 | [`SEC-AWS-IAM-POLICY-002`](./SEC-AWS-IAM-POLICY-002.md) | CRITICAL | IAM policy document grants wildcard `iam:*` actions |
 | [`SEC-AWS-IAM-POLICY-004`](./SEC-AWS-IAM-POLICY-004.md) | CRITICAL | IAM policy document grants principal `identifiers = [\"*\"]` (public) |
 | [`SEC-AWS-IAM-POLICY-005`](./SEC-AWS-IAM-POLICY-005.md) | CRITICAL | IAM policy grants both `actions = [\"*\"]` and `resources = [\"*\"]` |
@@ -117,7 +122,8 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-GCP-NETWORK-002`](./SEC-GCP-NETWORK-002.md) | CRITICAL | RDP (tcp:3389) exposed to 0.0.0.0/0 |
 | [`SEC-GCP-NETWORK-004`](./SEC-GCP-NETWORK-004.md) | CRITICAL | GCP firewall rule exposes database or cache port to 0.0.0.0/0 |
 | [`SEC-K8S-HELM-002`](./SEC-K8S-HELM-002.md) | CRITICAL | helm_release sets `securityContext.privileged=true` |
-| [`SEC-K8S-RBAC-001`](./SEC-K8S-RBAC-001.md) | CRITICAL | ClusterRoleBinding grants cluster-admin |
+| [`SEC-K8S-RBAC-001`](./SEC-K8S-RBAC-001.md) | CRITICAL | ClusterRoleBinding grants cluster-admin OR uses wildcard verbs / system:authenticated |
+| [`SEC-PROVISIONER-002`](./SEC-PROVISIONER-002.md) | CRITICAL | local-exec or remote-exec uses `curl \| bash` or unverified-pipe pattern |
 | [`SEC-SECRETS-001`](./SEC-SECRETS-001.md) | CRITICAL | Hardcoded credential or API key in Terraform source |
 | [`SEC-STATE-001`](./SEC-STATE-001.md) | CRITICAL | .tfstate file committed to the repository |
 | [`INT-INTENT-003`](./INT-INTENT-003.md) | HIGH | Prod-tagged resource has deletion_protection=false |
@@ -142,6 +148,8 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-IAM-POLICY-003`](./SEC-AWS-IAM-POLICY-003.md) | HIGH | IAM policy document grants wildcard `resources = [\"*\"]` |
 | [`SEC-AWS-KMS-001`](./SEC-AWS-KMS-001.md) | HIGH | KMS key rotation disabled |
 | [`SEC-AWS-LB-LISTENER-001`](./SEC-AWS-LB-LISTENER-001.md) | HIGH | ALB listener serves plain HTTP without redirect |
+| [`SEC-AWS-LB-LISTENER-002`](./SEC-AWS-LB-LISTENER-002.md) | HIGH | Load balancer HTTPS listener allows TLS < 1.2 |
+| [`SEC-AWS-LOG-RETENTION-001`](./SEC-AWS-LOG-RETENTION-001.md) | HIGH | Log bucket missing object_lock_configuration with retention >= 90 days |
 | [`SEC-AWS-MSK-001`](./SEC-AWS-MSK-001.md) | HIGH | MSK cluster allows unencrypted client-broker traffic |
 | [`SEC-AWS-NEPTUNE-001`](./SEC-AWS-NEPTUNE-001.md) | HIGH | Neptune cluster storage not encrypted |
 | [`SEC-AWS-RDS-001`](./SEC-AWS-RDS-001.md) | HIGH | RDS instance or Aurora cluster publicly accessible |
@@ -171,6 +179,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AZURE-VM-001`](./SEC-AZURE-VM-001.md) | HIGH | Linux VM allows SSH password authentication |
 | [`SEC-AZURE-WEBAPP-002`](./SEC-AZURE-WEBAPP-002.md) | HIGH | App Service / Function App HTTPS not enforced |
 | [`SEC-DATASOURCE-002`](./SEC-DATASOURCE-002.md) | HIGH | data.external program takes user-controlled input |
+| [`SEC-DATASOURCE-003`](./SEC-DATASOURCE-003.md) | HIGH | `data \"external\"` or `data \"http\"` runs at plan time |
 | [`SEC-GCP-BUCKET-001`](./SEC-GCP-BUCKET-001.md) | HIGH | GCS bucket missing public_access_prevention=enforced |
 | [`SEC-GCP-CLOUDRUN-001`](./SEC-GCP-CLOUDRUN-001.md) | HIGH | Cloud Run service allows all ingress traffic |
 | [`SEC-GCP-COMPUTE-PUBLIC-IP-001`](./SEC-GCP-COMPUTE-PUBLIC-IP-001.md) | HIGH | Compute instance has a public IP via access_config |
@@ -186,16 +195,20 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-GCP-SQL-PUBLIC-001`](./SEC-GCP-SQL-PUBLIC-001.md) | HIGH | Cloud SQL instance permits public IPv4 |
 | [`SEC-K8S-HELM-001`](./SEC-K8S-HELM-001.md) | HIGH | helm_release sets `service.type=LoadBalancer` (publicly exposed) |
 | [`SEC-K8S-NETPOL-001`](./SEC-K8S-NETPOL-001.md) | HIGH | kubernetes_network_policy absent for the corpus |
-| [`SEC-K8S-PSA-001`](./SEC-K8S-PSA-001.md) | HIGH | kubernetes_namespace missing Pod Security Admission label |
+| [`SEC-K8S-PSA-001`](./SEC-K8S-PSA-001.md) | HIGH | kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop |
 | [`SEC-PROVISIONER-001`](./SEC-PROVISIONER-001.md) | HIGH | Provisioner block used for shell execution |
+| [`SEC-SECRETS-002`](./SEC-SECRETS-002.md) | HIGH | aws_ssm_parameter stores a sensitive value as plain `String` (not `SecureString`) |
 | [`SEC-SENSITIVE-001`](./SEC-SENSITIVE-001.md) | HIGH | Sensitive output not marked sensitive=true |
 | [`SEC-SENSITIVE-002`](./SEC-SENSITIVE-002.md) | HIGH | Sensitive marker dropped at module boundary |
 | [`SEC-SENSITIVE-003`](./SEC-SENSITIVE-003.md) | HIGH | Sensitive variable passed to templatefile() |
 | [`SEC-SENSITIVE-PATTERN-001`](./SEC-SENSITIVE-PATTERN-001.md) | HIGH | Credential-shaped variable not marked sensitive=true |
+| [`SEC-SUPPLY-001`](./SEC-SUPPLY-001.md) | HIGH | Module source not pinned to an immutable digest or signed tag |
+| [`SEC-USERDATA-001`](./SEC-USERDATA-001.md) | HIGH | user_data templates a sensitive var or contains a curl\|bash pattern |
 | [`INT-INTENT-001`](./INT-INTENT-001.md) | MEDIUM | Security-intent variable defaults to false/null/0 |
 | [`INT-INTENT-002`](./INT-INTENT-002.md) | MEDIUM | Variable description says 'must be true' but has no validation block |
 | [`SEC-AWS-ALB-001`](./SEC-AWS-ALB-001.md) | MEDIUM | Load balancer access logs disabled |
 | [`SEC-AWS-APIGW-001`](./SEC-AWS-APIGW-001.md) | MEDIUM | API Gateway stage missing access log destination |
+| [`SEC-AWS-APIGW-002`](./SEC-AWS-APIGW-002.md) | MEDIUM | API Gateway stage has throttling burst/rate at the SDK default (no limit) |
 | [`SEC-AWS-ATHENA-001`](./SEC-AWS-ATHENA-001.md) | MEDIUM | Athena workgroup results not encrypted |
 | [`SEC-AWS-BACKUP-001`](./SEC-AWS-BACKUP-001.md) | MEDIUM | Backup vault uses AWS-managed key (no CMK) |
 | [`SEC-AWS-CLOUDFRONT-002`](./SEC-AWS-CLOUDFRONT-002.md) | MEDIUM | CloudFront distribution missing access logging |
@@ -210,6 +223,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-SECRETSMANAGER-001`](./SEC-AWS-SECRETSMANAGER-001.md) | MEDIUM | Secrets Manager secret uses AWS-managed key (no CMK) |
 | [`SEC-AWS-SECURITYHUB-001`](./SEC-AWS-SECURITYHUB-001.md) | MEDIUM | Security Hub not enabled |
 | [`SEC-AWS-WAF-001`](./SEC-AWS-WAF-001.md) | MEDIUM | WAFv2 web ACL missing logging configuration |
+| [`SEC-AWS-WAF-002`](./SEC-AWS-WAF-002.md) | MEDIUM | ALB/CloudFront/API-Gateway has WAF associated but no rate-based rule |
 | [`SEC-AZURE-EVENTHUB-001`](./SEC-AZURE-EVENTHUB-001.md) | MEDIUM | Event Hub namespace does not use CMK encryption |
 | [`SEC-AZURE-KV-003`](./SEC-AZURE-KV-003.md) | MEDIUM | Azure Key Vault key missing rotation policy |
 | [`SEC-AZURE-MI-001`](./SEC-AZURE-MI-001.md) | MEDIUM | Azure user-assigned identity with no role assignment (orphan UAMI) |
@@ -220,9 +234,11 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-GCP-BUCKET-002`](./SEC-GCP-BUCKET-002.md) | MEDIUM | GCS bucket missing uniform_bucket_level_access |
 | [`SEC-GCP-COMPUTE-DISK-001`](./SEC-GCP-COMPUTE-DISK-001.md) | MEDIUM | GCP compute disk not encrypted with CSEK/CMEK |
 | [`SEC-GCP-COMPUTE-SHIELDED-001`](./SEC-GCP-COMPUTE-SHIELDED-001.md) | MEDIUM | GCP Compute instance missing shielded instance configuration |
+| [`SEC-LOG-CROSS-ACCOUNT-001`](./SEC-LOG-CROSS-ACCOUNT-001.md) | MEDIUM | Audit log destination is in the same AWS account (no cross-account isolation) |
 | [`SEC-PROVIDER-001`](./SEC-PROVIDER-001.md) | MEDIUM | Provider version constraint missing upper bound |
+| [`SEC-USERDATA-002`](./SEC-USERDATA-002.md) | MEDIUM | user_data passes a sensitive var unencoded (base64encode missing) |
 
-## stack (39)
+## stack (43)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -254,16 +270,20 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-GCP-GKE-NODEPOOL-001`](./STK-GCP-GKE-NODEPOOL-001.md) | HIGH | GKE node pool missing shielded-instance hardening |
 | [`STK-GCP-KMS-001`](./STK-GCP-KMS-001.md) | HIGH | KMS crypto key missing rotation period |
 | [`STK-GCP-KMS-LOCATION-001`](./STK-GCP-KMS-LOCATION-001.md) | HIGH | CMEK consumer location mismatches KMS key ring location |
+| [`STK-K8S-IMAGE-SIGNED-001`](./STK-K8S-IMAGE-SIGNED-001.md) | HIGH | Kubernetes pod or container references an image without a signature/digest pin |
+| [`STK-K8S-VERSION-001`](./STK-K8S-VERSION-001.md) | HIGH | EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2 |
 | [`STK-AWS-ECS-001`](./STK-AWS-ECS-001.md) | MEDIUM | ECS cluster Container Insights not configured |
 | [`STK-AWS-EKS-004`](./STK-AWS-EKS-004.md) | MEDIUM | EKS cluster missing OIDC provider for IRSA |
 | [`STK-AWS-LAMBDA-002`](./STK-AWS-LAMBDA-002.md) | MEDIUM | Lambda function missing dead-letter queue configuration |
 | [`STK-AWS-ROUTE53-001`](./STK-AWS-ROUTE53-001.md) | MEDIUM | Route 53 hosted zone missing DNSSEC signing |
 | [`STK-AZURE-AKS-005`](./STK-AZURE-AKS-005.md) | MEDIUM | AKS cluster API server missing authorized IP ranges |
 | [`STK-AZURE-STORAGE-001`](./STK-AZURE-STORAGE-001.md) | MEDIUM | Azure storage account missing blob versioning |
+| [`STK-DEFAULTS-001`](./STK-DEFAULTS-001.md) | MEDIUM | Module lacks `terraform { required_version, required_providers }` block |
 | [`STK-DEPRECATION-002`](./STK-DEPRECATION-002.md) | MEDIUM | Deprecated data source: data.template_file |
 | [`STK-GCP-ARTIFACT-001`](./STK-GCP-ARTIFACT-001.md) | MEDIUM | Artifact Registry repository missing customer-managed encryption key |
 | [`STK-GCP-BUCKET-001`](./STK-GCP-BUCKET-001.md) | MEDIUM | GCS bucket missing versioning |
 | [`STK-GCP-PUBSUB-001`](./STK-GCP-PUBSUB-001.md) | MEDIUM | Pub/Sub topic missing customer-managed encryption key |
+| [`STK-K8S-AUDIT-POLICY-001`](./STK-K8S-AUDIT-POLICY-001.md) | MEDIUM | Managed Kubernetes control plane has no audit-log configuration |
 | [`STK-AWS-LAMBDA-003`](./STK-AWS-LAMBDA-003.md) | LOW | Lambda function active X-Ray tracing not configured |
 
 ## style (1)

@@ -1,0 +1,49 @@
+id: STK-K8S-IMAGE-SIGNED-001
+title: "Kubernetes pod or container references an image without a signature/digest pin"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: stub
+mitre:
+  - "T1525"
+  - "T1574.002"
+cwe:
+  - "CWE-345"
+  - "CWE-1357"
+nist_csf:
+  - "PR.DS-6"
+  - "ID.SC-2"
+nist_800_53:
+  - "SI-7"
+  - "SR-4"
+csa_ccm:
+  - "STA-04"
+slsa:
+  - "L2"
+  - "build"
+owasp:
+  - "K04"
+# NSA Kubernetes Hardening Guidance — `Container Image Hardening`
+# Container images SHOULD use signed registries (cosign / Notation /
+# Sigstore) and reference images by content digest rather than tag.
+# Stubbed pending k8s_manifest-style pattern kind — see
+# fixtures/k8s_image_unpinned/main.tf for the contract we'll detect
+# against once the engine grows a `kubernetes_manifest` walker.
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'image\s*=\s*"(?!.*@sha256:)[^"]+:latest"'
+    description: K8s container image with `:latest` tag, no SHA pin
+recommendation: |
+  Pin every image to a SHA256 digest:
+
+      image = "ghcr.io/my-org/api@sha256:c97da1b6...c8a3"
+
+  And verify upstream with cosign at build time so the image's
+  signature appears in your registry. NSA Kubernetes Hardening
+  Guidance + SLSA L2 both require digest-pinned, signed images.
+verification: |
+  `kubectl get pods -A -o json | jq -r '.items[].spec.containers[].image' | grep -v '@sha256:'`
+  Empty output = compliant.
+fix_disruption: plan_required
+# fixtures: deferred until kubernetes_manifest walker

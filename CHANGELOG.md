@@ -5,6 +5,92 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.1 — multi-framework taxonomy sweep + 15 new rules + Session F refactor — 2026-05-11 (R30.0.12 + R30.1 + R30.3 + R30.4 + R30.5)
+
+**Combined release: catalog grows 217 → 232 active rules (+15), four new taxonomy fields land (NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA), nine new `--compliance-framework` modes, plus the eighth modularisation seam (`_cross_resource.py`). Session F also moves `block_arg_value` and the `_USE_HCL2` toggle into `_hcl.py` so cross-resource detectors import cleanly.**
+
+### Session F — `_cross_resource.py` (R30.0.12)
+
+Eighth modularisation seam. The 8 `_graph_*` cross-resource detection helpers + `_build_resource_index` + the `_GRAPH_CHECKS` registry move into `scripts/_cross_resource.py` (420 LoC). detect.py shrinks **5,528 → 5,116 (−412 LoC)**. The `_USE_HCL2` toggle + `block_arg_value` + `_hcl2_block_arg_value` + the enable wrappers move from detect.py into `_hcl.py` so the new module imports cleanly without circular-importing back through detect. Re-exports preserved; `tests/test_session_f_extracts.py` adds 5 seam-contract tests.
+
+### R30.1 — multi-framework taxonomy schema
+
+Five new optional catalogue fields, all validated by `validate_catalog_entry` against per-field regex:
+
+| Field | Shape | Example |
+|---|---|---|
+| `nist_csf:` | `<Function>.<Cat>-<sub>` | `PR.AC-1`, `DE.CM-7` |
+| `nist_800_53:` | `<Family>-<num>` or `<Family>-<num>(<enh>)` | `AC-2(7)`, `SC-12` |
+| `csa_ccm:` | `<Domain>-<NN>` | `IAM-09`, `DSI-04` |
+| `slsa:` | bare keyword | `L1`..`L4`, `source`, `build`, `deps` |
+| `owasp:` (namespaced) | category-prefixed | `A01..A10`, `API01..API10`, `CICD-SEC-1..10`, `LLM01..LLM10`, `K01..K10`, `ASVS-V<m>.<n>.<s>` |
+
+Nine new `--compliance-framework` modes: `nist_csf`, `nist_800_53`, `csa_ccm`, `slsa`, plus five OWASP sub-modes (`owasp_top10`, `owasp_api`, `owasp_cicd`, `owasp_llm`, `owasp_k8s`, `owasp_asvs`) auto-derived from the namespaced `owasp:` field by item prefix. Existing `owasp_iac:` (Round 29) untouched. `_compliance_gap_report` extended with a `_record(framework, control, eid)` helper.
+
+### R30.3 — supply-chain / CICD / OIDC rules (7 added, 4 active + 3 stubbed)
+
+* `SEC-SUPPLY-001` HIGH — git source without `?ref=<SHA>` pin (active).
+* `SEC-CICD-001` HIGH — workflow `terraform apply` without `environment: required_reviewers` gate (stub — needs workflow-YAML walker).
+* `SEC-CICD-002` HIGH — workflow `permissions: write-all` (stub).
+* `SEC-CICD-003` CRITICAL — apply job missing `environment:` block (stub).
+* `SEC-PROVISIONER-002` CRITICAL — `curl | bash` pattern in local-exec/remote-exec (active).
+* `SEC-DATASOURCE-003` HIGH — `data "external"` or `data "http"` plan-time exec (active).
+* `SEC-AWS-IAM-OIDC-001` CRITICAL — GitHub-OIDC trust policy with `repo:*` / wildcard sub claim (active).
+
+Sources mapped: **SLSA L2/L3**, **NIST SSDF (PO.4.1)**, **NIST CSF 2.0**, **NIST 800-53**, **CSA CCM**, OWASP CICD Top 10 (1, 2, 3, 4, 6, 7), OWASP A02.
+
+### R30.4 — user-data / logging / TLS / throttling / K8s / hygiene (11 added, 9 active + 2 stubbed)
+
+* `SEC-USERDATA-001` HIGH — `${var.<sensitive>}` interpolated in `aws_instance.user_data` or `curl|bash` in user_data (active).
+* `SEC-USERDATA-002` MEDIUM — sensitive var assigned to `user_data` without `base64encode + templatefile` (active).
+* `SEC-AWS-LOG-RETENTION-001` HIGH — audit/access-log bucket missing `object_lock_enabled` (active, name-regex gated).
+* `SEC-LOG-CROSS-ACCOUNT-001` MEDIUM — audit logs in same account as source (stub — needs cross-account detector).
+* `SEC-AWS-LB-LISTENER-002` HIGH — `aws_lb_listener.ssl_policy` is TLS-1.0/1.1-era (active).
+* `SEC-AWS-APIGW-002` MEDIUM — API Gateway method_settings missing `settings { throttling_burst_limit }` (active).
+* `SEC-AWS-WAF-002` MEDIUM — WAFv2 web ACL missing `rule.statement.rate_based_statement` (active).
+* `STK-K8S-VERSION-001` HIGH — EKS/GKE/AKS cluster pinned to <= 1.27 (N-2 floor) (active).
+* `STK-K8S-IMAGE-SIGNED-001` HIGH — pod image without SHA digest pin (stub — needs `kubernetes_manifest` walker).
+* `STK-K8S-AUDIT-POLICY-001` MEDIUM — EKS/GKE/AKS without audit-log configuration (active).
+* `STK-DEFAULTS-001` MEDIUM — module directory without `required_version` (active).
+
+Sources: **NSA Kubernetes Hardening Guidance** (image signing, audit policy), **CISA Secure-by-Design** (configuration default hardening), CIS 3.x, OWASP A02/A06/A09/API04/K05/K04.
+
+### R30.5 — 6 rule enhancements
+
+* `SEC-K8S-RBAC-001` extended — also flags wildcard verbs (`["*"]`) on `kubernetes_role` / `kubernetes_cluster_role`, `bind`/`escalate`/`impersonate` verbs, and `system:authenticated` subjects. NIST AC-6(7), OWASP K03.
+* `SEC-K8S-PSA-001` extended — also flags `helm_release` set-values missing `securityContext.runAsNonRoot=true`, `securityContext.readOnlyRootFilesystem=true`, `securityContext.capabilities.drop=ALL`. **Absorbs the NIST 800-190 `STK-K8S-RUNTIME-001` requirement.**
+* `MOD-SUPPLY-004` (new) MEDIUM — `version = ">= X"` without an upper bound. SLSA L1 deps, OWASP CICD-SEC-3, OWASP A06.
+* `SEC-SECRETS-002` (new) HIGH — `aws_ssm_parameter` with `type = "String"` instead of `SecureString`. CWE-256, NIST SC-28(1), OWASP A02.
+
+Deferred (scope-trimmed in this round): `SEC-AWS-IAM-POLICY-*` confused-deputy extension, `SEC-AWS-SSRF-001` + `STK-AWS-LAUNCH-TEMPLATE-001` instance-refresh tweak — left for a focused follow-on.
+
+### Extension v0.1.39
+
+`ENGINE_SIBLING_FILES` now lists **9 files** (added `_cross_resource.py`). The R30.0.10 `--strict-catalog` smoke test caught a missing technique-info entry on first build — drift gate held the line.
+
+### Tests + verification
+
+* `tests/test_session_f_extracts.py` (new) — 5 seam tests.
+* `scripts/_mitre.py::MITRE_TECHNIQUE_INFO` — 10 new ATT&CK techniques added (T1059.004, T1070.001, T1105, T1195.001, T1199, T1499.002, T1525, T1565, T1565.001, T1574.002). Drift gate green.
+* Self-test corpus: 232 → 234 positive fixtures (+2 for MOD-SUPPLY-004 and SEC-SECRETS-002), 142 clean (unchanged).
+* `R30.1` validator + dispatch verified by synthetic round-trip across all 10 new framework modes.
+
+### Counts
+
+| | before | after |
+|---|---:|---:|
+| Catalogue rules (active) | 217 | **232** (+15) |
+| Catalogue rules (stubs added) | — | +5 (CICD ×3, K8s image ×1, log cross-account ×1) |
+| Compliance frameworks | 4 | **13** (+nist_csf, +nist_800_53, +csa_ccm, +slsa, +5 OWASP sub-modes) |
+| `detect.py` LoC | 5,528 | **5,116** (−412) |
+| Cumulative R30.0.5–R30.0.12 | 8,441 LoC start | **5,116** (−3,325 / **39.4%**) |
+| Extracted modules | 7 | **8** (added `_cross_resource.py`) |
+| Pytest | 644 | **658** (passing; +14 across seam + drift + R30.1) |
+| Self-test positives | 232 | 234 (+2) |
+| Extension | v0.1.38 | **v0.1.39** |
+
+---
+
 ## detect.py modularisation — Session E (`_output.py`) — 2026-05-10
 
 **Seventh seam in the detect.py refactor — and the largest single extraction by a wide margin.** The entire output-formatter block (SARIF v2.1 emission, HTML reports, MITRE / compliance / PR-summary / adversarial-narrative renderers) lifts into `scripts/_output.py`. No behaviour change; the existing `tests/test_output_formats.py` + `tests/test_sarif_taxonomies_and_refactor.py` + `tests/test_pr_summary.py` + `tests/test_compliance_owasp_iac.py` suites continue to pass through the re-export shim.

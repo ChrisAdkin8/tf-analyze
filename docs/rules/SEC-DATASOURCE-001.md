@@ -107,6 +107,7 @@ documented with a justification or replaced with a native alternative.
 See also rules in the `SEC-DATASOURCE-*` family:
 
 - [`SEC-DATASOURCE-002`](./SEC-DATASOURCE-002.md) — data.external program takes user-controlled input
+- [`SEC-DATASOURCE-003`](./SEC-DATASOURCE-003.md) — `data \"external\"` or `data \"http\"` runs at plan time
 
 ---
 

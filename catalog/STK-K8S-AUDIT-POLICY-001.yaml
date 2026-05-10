@@ -1,0 +1,75 @@
+id: STK-K8S-AUDIT-POLICY-001
+title: "Managed Kubernetes control plane has no audit-log configuration"
+section: stack
+default_urgency: MEDIUM
+blast_radius: environment
+status: active
+mitre:
+  - "T1562.008"
+  - "T1530"
+cwe:
+  - "CWE-778"
+  - "CWE-223"
+nist_csf:
+  - "DE.CM-1"
+  - "DE.CM-7"
+  - "PR.PT-1"
+nist_800_53:
+  - "AU-2"
+  - "AU-3"
+  - "AU-12"
+csa_ccm:
+  - "LOG-02"
+  - "LOG-08"
+owasp:
+  - "A09"
+  - "K05"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_eks_cluster
+    arg: enabled_cluster_log_types
+    description: |
+      `aws_eks_cluster` without `enabled_cluster_log_types` ships
+      with NO control-plane audit logging — api, audit, authenticator,
+      controllerManager, scheduler are all off by default. NSA
+      Kubernetes Hardening (Sec 5) + OWASP K05 require at least
+      `api` and `audit` for incident response.
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    arg: logging_service
+    description: GKE cluster without `logging_service` configured
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: oms_agent
+    description: AKS cluster without `oms_agent` block (Log Analytics)
+recommendation: |
+      # EKS
+      resource "aws_eks_cluster" "app" {
+        name = "primary"
+        enabled_cluster_log_types = [
+          "api", "audit", "authenticator",
+          "controllerManager", "scheduler",
+        ]
+        # …
+      }
+
+      # GKE
+      resource "google_container_cluster" "app" {
+        logging_service    = "logging.googleapis.com/kubernetes"
+        monitoring_service = "monitoring.googleapis.com/kubernetes"
+        # …
+      }
+
+      # AKS
+      resource "azurerm_kubernetes_cluster" "app" {
+        oms_agent {
+          log_analytics_workspace_id = azurerm_log_analytics_workspace.app.id
+        }
+        # …
+      }
+verification: |
+  `aws eks describe-cluster --name <c> --query 'cluster.logging.clusterLogging'`
+  — each desired type should show `enabled: true`.
+fix_disruption: none
+fixtures:
+  - k8s_audit_logging_missing

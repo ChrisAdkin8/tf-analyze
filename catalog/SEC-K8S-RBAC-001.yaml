@@ -1,11 +1,12 @@
 id: SEC-K8S-RBAC-001
-title: "ClusterRoleBinding grants cluster-admin"
+title: "ClusterRoleBinding grants cluster-admin OR uses wildcard verbs / system:authenticated"
 section: security
 default_urgency: CRITICAL
 blast_radius: infrastructure-wide
 status: active
 cis:
   - "5.1.1"
+  - "5.1.3"
 pci_dss:
   - "Req-7.2.2"
 soc2_cc:
@@ -13,6 +14,20 @@ soc2_cc:
 mitre:
   - "T1078.004"
   - "T1098.001"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+  - "AC-6(1)"
+  - "AC-6(7)"
+csa_ccm:
+  - "IAM-09"
+  - "IAM-15"
+owasp:
+  - "K03"
 patterns:
   - kind: resource_body_contains
     resource: kubernetes_cluster_role_binding
@@ -24,6 +39,30 @@ patterns:
       every API across every namespace — equivalent to root on every
       node. Compromise of any pod or token bound through this binding
       yields full cluster takeover.
+  - kind: resource_body_contains
+    resource: kubernetes_role
+    regex: 'verbs\s*=\s*\[[^\]]*"\*"'
+    description: |
+      R30.5 extension — wildcard verbs (`verbs = ["*"]`). Same risk
+      as cluster-admin at the namespace scope. NIST AC-6(7) +
+      OWASP K03.
+  - kind: resource_body_contains
+    resource: kubernetes_cluster_role
+    regex: 'verbs\s*=\s*\[[^\]]*"\*"'
+    description: cluster-wide wildcard verbs
+  - kind: resource_body_contains
+    resource: kubernetes_role
+    regex: 'verbs\s*=\s*\[[^\]]*"(?:bind|escalate|impersonate)"'
+    description: |
+      R30.5 extension — `bind` / `escalate` / `impersonate` verbs
+      allow privilege escalation outside the role's normal scope.
+  - kind: resource_body_contains
+    resource: kubernetes_cluster_role_binding
+    regex: 'name\s*=\s*"system:authenticated"'
+    description: |
+      R30.5 extension — binding to `system:authenticated` includes
+      every pod with a service-account token, which is effectively
+      every pod in the cluster. Same effect as binding to "everyone".
 recommendation: |
   Replace the cluster-admin reference with a scoped ClusterRole or a
   namespaced RoleBinding. If absolute-power access is genuinely

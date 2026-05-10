@@ -1,0 +1,68 @@
+id: SEC-SUPPLY-001
+title: "Module source not pinned to an immutable digest or signed tag"
+section: security
+default_urgency: HIGH
+blast_radius: infrastructure-wide
+status: active
+mitre:
+  - "T1195.001"
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+nist_csf:
+  - "ID.SC-2"
+  - "PR.DS-6"
+nist_800_53:
+  - "SA-12"
+  - "CM-7"
+csa_ccm:
+  - "STA-04"
+slsa:
+  - "L2"
+  - "deps"
+owasp:
+  - "CICD-SEC-1"
+  - "CICD-SEC-9"
+patterns:
+  - kind: module_block_missing_arg
+    file_glob: "**/*.tf"
+    source_regex: '^(?:github\.com|git::ssh://|git::https://)'
+    arg: ref
+    description: |
+      Git source without a ref= pin lands on the default branch (`HEAD`).
+      Without a commit SHA or signed tag the module body can change under
+      you between plans — supply-chain compromise of the upstream repo
+      reaches every consumer at the next `terraform init`. Pin to a
+      40-char commit SHA, a verified tag, or a content digest.
+recommendation: |
+  Replace mutable refs with a content-addressed pin:
+
+  * **Git over HTTPS/SSH** — use `?ref=<40-char-commit-SHA>` rather than
+    `?ref=main` or unversioned. Signed tags via `?ref=v1.2.3` are
+    acceptable when paired with `terraform init -backend-verify-tag`.
+  * **Terraform Registry** — always set `version = "= X.Y.Z"` (or a
+    tight range; never `>=` alone).
+  * **GitHub Actions, when consumed from Terraform via `data "external"` —
+    pin to a SHA, not a tag. Tags are mutable on GitHub.
+
+  Pinning is the cheapest hardening against the 2024 GitHub Actions
+  tj-actions/changed-files attack — the same risk applies to any
+  source mounted via `source = "github.com/..."`.
+verification: |
+  Run `grep -rE 'source\s*=\s*"github\.com|git::' .` and confirm
+  every match carries a `?ref=` query string with a 40-char hex SHA
+  or a verified release tag. Re-running tf-analyze should report zero
+  SEC-SUPPLY-001 findings.
+fix_hcl: |
+  module "vpc" {
+    # 40-char SHA pin — module body is content-addressed
+    source = "github.com/terraform-aws-modules/terraform-aws-vpc?ref=4f3d8b6c9a2e1f70d8b4c6e2a1f93d7c0b5e8f44"
+    name   = "primary"
+  }
+fix_disruption: plan_required
+fix_disruption_note: |
+  Pinning to a new SHA may surface latent compatibility issues that
+  the previous mutable ref was masking. Review `terraform plan` after
+  re-init.
+fixtures:
+  - supply_module_unpinned

@@ -5,6 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.39] — 2026-05-11
+
+### Changed
+
+- **Bundle pipeline now ships 9 sibling Python files (was 8).** R30.0.12 / Session F extracted the cross-resource detection helpers (`_build_resource_index` + 8 `_graph_*` finding-producers + the `_GRAPH_CHECKS` registry) out of `detect.py` into `_cross_resource.py` (420 LoC). Session F also relocated `block_arg_value` + the `_USE_HCL2` toggle from detect.py into `_hcl.py` so the new module could import cleanly without circular-importing through detect.
+- **`ENGINE_SIBLING_FILES`** now lists `['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py', '_attack_graph.py', '_output.py', '_cross_resource.py']`.
+
+### Added (catalogue)
+
+15 new active rules covering supply-chain (1), CICD/OIDC (1), user-data (2), audit logging (1), TLS / throttling / WAF (3), Kubernetes (3), and module hygiene (1) + 2 secrets/SSM. Plus 5 stubbed rules for surfaces (workflow YAML, Kubernetes manifests, cross-account) where the engine needs a walker extension first. **Source frameworks:** NSA Kubernetes Hardening Guidance, CISA Secure-by-Design, NIST 800-190 (Application Container Security), NIST SSDF, SLSA L2/L3, OWASP CICD Top 10.
+
+- **R30.1** four new optional catalogue fields (`nist_csf`, `nist_800_53`, `csa_ccm`, `slsa`) + namespaced `owasp:` field. Schema validators in `validate_catalog_entry`. Nine new `--compliance-framework` modes (`nist_csf`, `nist_800_53`, `csa_ccm`, `slsa`, `owasp_top10`, `owasp_api`, `owasp_cicd`, `owasp_llm`, `owasp_k8s`, `owasp_asvs`) — the OWASP sub-modes filter the namespaced `owasp:` field by item prefix.
+
+### Counts
+
+- 217 → **232 active rules** (+15), plus 5 new stubbed rules
+- 4 → **13 active `--compliance-framework` modes**
+- `detect.py` 5,528 → **5,116 LoC** (−412 in this release; **−3,325** cumulative across R30.0.5–R30.0.12, **39.4%** reduction from the R30.0.4 start)
+- Extracted modules total: 3,615 → **4,035 LoC** across **8** files
+- Self-test: 232 → 234 positive fixtures (+2); 142 clean (unchanged)
+- Extension: v0.1.38 → **v0.1.39**
+
+---
+
 ## [0.1.38] — 2026-05-10
 
 ### Changed

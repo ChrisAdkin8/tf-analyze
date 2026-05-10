@@ -318,6 +318,94 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
                         f"section {section!r}; expected one of "
                         f"{sorted(valid_sections)}"
                     )
+    # ---- R30.1 multi-framework taxonomy fields ----
+    # Five new optional list-of-string fields with per-field regex
+    # validators. Catalogue YAMLs add the fields opportunistically;
+    # `_compliance_gap_report` dispatches against them when
+    # `--compliance-framework <name>` selects the corresponding mode.
+    # First-pass shape rules:
+    #   * nist_csf — `<Function>.<Category>-<sub#>`, e.g. PR.AC-1.
+    #     Functions: GV, ID, PR, DE, RS, RC.
+    #   * nist_800_53 — `<Family>-<n>` or `<Family>-<n>(<enh>)`, e.g.
+    #     AC-2(7), SC-12, IA-5(1). Family is 2 uppercase letters.
+    #   * csa_ccm — `<Domain>-<nn>`, e.g. IAM-09 or DSI-04. Domain is
+    #     2-4 uppercase letters.
+    #   * slsa — bare keyword: L1, L2, L3, L4, source, build, deps.
+    #   * owasp (namespaced) — items use category-prefix form so a
+    #     single field can serve 5 OWASP sub-modes. Accepted prefixes:
+    #     A01..A10 (Top 10), API01..API10 (API Top 10), CICD-SEC-1..10
+    #     (OWASP CICD), LLM01..LLM10 (LLM Top 10), K01..K10 (Kubernetes
+    #     Top 10), ASVS-V<major>.<minor>.<sub> (ASVS controls).
+    nist_csf = data.get("nist_csf")
+    if nist_csf is not None:
+        if not isinstance(nist_csf, list) or not all(isinstance(x, str) for x in nist_csf):
+            errs.append(f"{source}: 'nist_csf' must be a list of strings if present")
+        else:
+            for item in nist_csf:
+                if not re.fullmatch(r"(GV|ID|PR|DE|RS|RC)\.[A-Z]{2}-\d+", item):
+                    errs.append(
+                        f"{source}: nist_csf item {item!r} must match the form "
+                        f"'<Function>.<Category>-<sub>' where Function ∈ "
+                        f"{{GV,ID,PR,DE,RS,RC}} (e.g. PR.AC-1, DE.CM-1)"
+                    )
+    nist_800_53 = data.get("nist_800_53")
+    if nist_800_53 is not None:
+        if not isinstance(nist_800_53, list) or not all(isinstance(x, str) for x in nist_800_53):
+            errs.append(f"{source}: 'nist_800_53' must be a list of strings if present")
+        else:
+            for item in nist_800_53:
+                if not re.fullmatch(r"[A-Z]{2}-\d+(?:\(\d+\))?", item):
+                    errs.append(
+                        f"{source}: nist_800_53 item {item!r} must match the form "
+                        f"'<Family>-<num>' or '<Family>-<num>(<enh>)' "
+                        f"(e.g. AC-2, AC-2(7), SC-12)"
+                    )
+    csa_ccm = data.get("csa_ccm")
+    if csa_ccm is not None:
+        if not isinstance(csa_ccm, list) or not all(isinstance(x, str) for x in csa_ccm):
+            errs.append(f"{source}: 'csa_ccm' must be a list of strings if present")
+        else:
+            for item in csa_ccm:
+                if not re.fullmatch(r"[A-Z]{2,4}-\d{2}", item):
+                    errs.append(
+                        f"{source}: csa_ccm item {item!r} must match the form "
+                        f"'<Domain>-<NN>' where Domain is 2-4 uppercase letters "
+                        f"(e.g. IAM-09, DSI-04)"
+                    )
+    slsa = data.get("slsa")
+    if slsa is not None:
+        if not isinstance(slsa, list) or not all(isinstance(x, str) for x in slsa):
+            errs.append(f"{source}: 'slsa' must be a list of strings if present")
+        else:
+            for item in slsa:
+                if not re.fullmatch(r"L[1-4]|source|build|deps", item):
+                    errs.append(
+                        f"{source}: slsa item {item!r} must be one of "
+                        f"L1..L4, 'source', 'build', or 'deps'"
+                    )
+    owasp = data.get("owasp")
+    if owasp is not None:
+        if not isinstance(owasp, list) or not all(isinstance(x, str) for x in owasp):
+            errs.append(f"{source}: 'owasp' must be a list of strings if present")
+        else:
+            # Namespaced — first match wins. ASVS items are versioned.
+            _OWASP_ITEM_RE = re.compile(
+                r"^(?:"
+                r"A(?:0[1-9]|10)"                         # A01..A10
+                r"|API(?:0[1-9]|10)"                       # API01..API10
+                r"|CICD-SEC-(?:[1-9]|10)"                  # CICD-SEC-1..10
+                r"|LLM(?:0[1-9]|10)"                       # LLM01..LLM10
+                r"|K(?:0[1-9]|10)"                         # K01..K10
+                r"|ASVS-V\d+\.\d+\.\d+"                    # ASVS-V<m>.<n>.<sub>
+                r")$"
+            )
+            for item in owasp:
+                if not _OWASP_ITEM_RE.match(item):
+                    errs.append(
+                        f"{source}: owasp item {item!r} must match one of "
+                        f"A01..A10, API01..API10, CICD-SEC-1..10, "
+                        f"LLM01..LLM10, K01..K10, or ASVS-V<m>.<n>.<s>"
+                    )
     fid = data.get("id")
     fname = Path(source).stem
     if fid and fid != fname:

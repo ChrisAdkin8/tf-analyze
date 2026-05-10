@@ -105,6 +105,7 @@ See also rules in the `MOD-SUPPLY-*` family:
 
 - [`MOD-SUPPLY-001`](./MOD-SUPPLY-001.md) — Module pinned to mutable git ref (main or master)
 - [`MOD-SUPPLY-003`](./MOD-SUPPLY-003.md) — Registry module missing version constraint
+- [`MOD-SUPPLY-004`](./MOD-SUPPLY-004.md) — Module version constraint uses `>=` with no upper bound
 
 ---
 

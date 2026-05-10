@@ -1,17 +1,39 @@
 id: SEC-K8S-PSA-001
-title: "kubernetes_namespace missing Pod Security Admission label"
+title: "kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
 section: security
 default_urgency: HIGH
 blast_radius: environment
 status: active
 cis:
   - "5.2.1"
+  - "5.7.3"
 pci_dss:
   - "Req-2.2"
 soc2_cc:
   - "CC6.6"
 mitre:
   - "T1611"
+cwe:
+  - "CWE-269"
+  - "CWE-250"
+nist_csf:
+  - "PR.AC-4"
+  - "PR.IP-1"
+nist_800_53:
+  - "AC-6"
+  - "CM-7"
+  - "SI-7"
+csa_ccm:
+  - "IAM-15"
+  - "TVM-04"
+owasp:
+  - "K01"
+  - "K04"
+# Absorbs the NIST 800-190 (Application Container Security)
+# `STK-K8S-RUNTIME-001` requirement: pods must run with
+# `runAsNonRoot=true`, `readOnlyRootFilesystem=true`, and
+# `capabilities.drop=[ALL]`. The helm_set_value pattern below catches
+# the most common helm-chart values that fail to set these.
 patterns:
   - kind: resource_missing_arg
     resource: kubernetes_namespace
@@ -22,6 +44,30 @@ patterns:
       Security Admission level, the namespace defaults to no enforcement
       — privileged pods, hostPath mounts, and host-network pods are all
       permitted. PSA replaced the deprecated PodSecurityPolicy in 1.25.
+  - kind: helm_set_value
+    resource: helm_release
+    name: securityContext.runAsNonRoot
+    expected: 'true'
+    description: |
+      R30.5 / NIST 800-190 — helm_release must set
+      `securityContext.runAsNonRoot = true`. Containers running as
+      uid 0 inside the pod expose the host to capability escalations.
+  - kind: helm_set_value
+    resource: helm_release
+    name: securityContext.readOnlyRootFilesystem
+    expected: 'true'
+    description: |
+      R30.5 / NIST 800-190 — helm_release must set
+      `securityContext.readOnlyRootFilesystem = true`. A writable
+      rootfs lets attackers persist tooling across pod restarts.
+  - kind: helm_set_value
+    resource: helm_release
+    name: securityContext.capabilities.drop
+    expected: 'ALL'
+    description: |
+      R30.5 / NIST 800-190 — drop ALL kernel capabilities and add back
+      only what the app needs. Default Linux capabilities (CAP_NET_RAW
+      etc.) give a compromised pod meaningful escalation surface.
 recommendation: |
   Add the PSA enforcement label to every namespace, scoped to the
   least-privileged level the workload tolerates:

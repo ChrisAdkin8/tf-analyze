@@ -103,6 +103,7 @@ whose contents are reviewed alongside the Terraform.
 See also rules in the `SEC-DATASOURCE-*` family:
 
 - [`SEC-DATASOURCE-001`](./SEC-DATASOURCE-001.md) — External or HTTP data source executes at plan time
+- [`SEC-DATASOURCE-003`](./SEC-DATASOURCE-003.md) — `data \"external\"` or `data \"http\"` runs at plan time
 
 ---
 

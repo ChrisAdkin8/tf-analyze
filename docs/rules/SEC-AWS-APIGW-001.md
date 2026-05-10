@@ -121,6 +121,12 @@ must return a non-null CloudWatch log group ARN.
 **Source**
   - [`catalog/SEC-AWS-APIGW-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-APIGW-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-AWS-APIGW-*` family:
+
+- [`SEC-AWS-APIGW-002`](./SEC-AWS-APIGW-002.md) — API Gateway stage has throttling burst/rate at the SDK default (no limit)
+
 ---
 
 ## Run this check

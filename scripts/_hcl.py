@@ -66,9 +66,78 @@ existing call sites and tests need no migration.
 
 from __future__ import annotations
 
+import io
 import json
 import re
 from pathlib import Path
+
+
+# ---- Optional python-hcl2 fast-path -------------------------------------
+#
+# The skill's default contract is stdlib-only — no pip install required to
+# run a scan. python-hcl2 (when installed) provides heredoc-aware
+# attribute extraction that the regex path can't match. Off by default,
+# enabled per-run via `--use-hcl2` or `TF_ANALYZE_USE_HCL2=1`.
+#
+# Lives here (rather than in detect.py) as of Session F so that callers
+# from other seamed modules (`_cross_resource.py`) can reach
+# `block_arg_value` without circular imports back into detect.
+try:
+    import hcl2 as _hcl2  # type: ignore
+    _HAS_HCL2 = True
+except Exception:
+    _hcl2 = None  # type: ignore
+    _HAS_HCL2 = False
+
+_USE_HCL2 = False  # toggled by main() in detect.py after argparse
+
+
+def _enable_hcl2_or_warn() -> None:
+    """[legacy] Old explicit-opt-in path. Kept as a thin wrapper around
+    `_enable_hcl2_default()` so any caller using --use-hcl2 still works.
+    """
+    _enable_hcl2_default()
+
+
+def _enable_hcl2_default() -> None:
+    """Enable the python-hcl2 fast-path. Silent no-op when the dependency
+    isn't present — the caller already decided whether to print a notice."""
+    global _USE_HCL2
+    if _HAS_HCL2:
+        _USE_HCL2 = True
+
+
+def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
+    """Heredoc-aware attribute extraction. Wraps the body in a synthetic
+    block so hcl2 will parse it, then walks the parse tree for `arg`.
+    Returns None on any error so callers fall back to the regex path.
+    """
+    if not (_USE_HCL2 and _HAS_HCL2):
+        return None
+    try:
+        # hcl2.load expects a top-level construct; wrap the bare body.
+        wrapped = f'_arg_extract {{\n{body}\n}}'
+        parsed = _hcl2.load(io.StringIO(wrapped))
+    except Exception:
+        return None
+    try:
+        block_list = parsed.get("_arg_extract", [])
+        if not isinstance(block_list, list) or not block_list:
+            return None
+        block = block_list[0] if isinstance(block_list[0], dict) else None
+        if not block:
+            return None
+        val = block.get(arg)
+    except Exception:
+        return None
+    if val is None:
+        return None
+    if isinstance(val, list) and val:
+        val = val[0]
+    if isinstance(val, str):
+        # hcl2 strips heredoc markers; return the literal content.
+        return val
+    return str(val)
 
 
 # ---- Text normalisation -------------------------------------------------
@@ -219,6 +288,49 @@ def _hcl_object_to_json(text: str) -> dict | None:
         return json.loads(s)
     except (json.JSONDecodeError, ValueError):
         return None
+
+
+def block_arg_value(body: str, arg: str) -> str | None:
+    """Return the literal value of a top-level argument, stripped of quotes/comments.
+
+    Heredoc-bearing values (`arg = <<-EOF\\n...\\nEOF`) are not handled by the
+    regex path — the trailing `<<-EOF` is returned verbatim, which is rarely
+    useful. When the optional hcl2 fast-path is enabled
+    (`--use-hcl2` or `TF_ANALYZE_USE_HCL2=1`), heredoc bodies are extracted
+    structurally so callers see the actual string value.
+
+    Moved from detect.py into `_hcl.py` in Session F so that
+    `_cross_resource.py` can call this without a circular import back
+    into detect.
+    """
+    if _USE_HCL2 and "<<" in body:
+        v = _hcl2_block_arg_value(body, arg)
+        if v is not None:
+            return v
+    m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*=\s*(.+?)\s*$', body)
+    if not m:
+        return None
+    val = m.group(1).strip()
+    if '"' in val or "'" in val:
+        in_dq = in_sq = False
+        cut = None
+        for idx, ch in enumerate(val):
+            if ch == '"' and not in_sq:
+                in_dq = not in_dq
+            elif ch == "'" and not in_dq:
+                in_sq = not in_sq
+            elif ch == "#" and not in_dq and not in_sq:
+                cut = idx
+                break
+        if cut is not None:
+            val = val[:cut].rstrip()
+    else:
+        cut = val.find("#")
+        if cut >= 0:
+            val = val[:cut].rstrip()
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        return val[1:-1]
+    return val
 
 
 def block_has_nested_path(body: str, path: str) -> bool:

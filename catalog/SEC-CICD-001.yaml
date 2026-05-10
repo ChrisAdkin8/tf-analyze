@@ -1,0 +1,61 @@
+id: SEC-CICD-001
+title: "Workflow file applies Terraform without required-reviewers gate"
+section: cicd
+default_urgency: HIGH
+blast_radius: environment
+# stub until the engine's file walker is extended to scan .github/workflows/*.yml
+# alongside *.tf files (the regex pattern below is correct; nothing in
+# `all_files_text` matches the glob until the walker is widened).
+status: stub
+mitre:
+  - "T1199"
+  - "T1078.004"
+cwe:
+  - "CWE-732"
+nist_csf:
+  - "PR.AC-4"
+  - "GV.PO-1"
+nist_800_53:
+  - "AC-3"
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
+slsa:
+  - "L3"
+owasp:
+  - "CICD-SEC-1"
+  - "CICD-SEC-3"
+patterns:
+  - kind: grep
+    file_glob: ".github/workflows/*.yml"
+    regex: 'terraform\s+apply'
+    scope: file
+    description: |
+      `terraform apply` without an `environment:` block gating
+      `required_reviewers` lets a compromised PAT or workflow file
+      push infrastructure changes without human review.
+recommendation: |
+  Wrap the apply job in a GitHub `environment:` declaring
+  `required_reviewers`:
+
+      jobs:
+        apply:
+          environment:
+            name: production
+            url: ${{ vars.STATE_URL }}
+          steps:
+            - run: terraform apply -auto-approve
+
+  Configure the protected `production` environment under
+  Repository → Settings → Environments to require at least one
+  reviewer, with a wait timer if your release cadence allows.
+
+  SLSA L3 expects every `apply` to be hermetic and reviewer-gated;
+  NIST SSDF PO.4.1 requires an authorisation trail before
+  production changes.
+verification: |
+  Open the workflow YAML and confirm the apply job declares an
+  `environment:` block with a `name:` pointing at a protected
+  environment.
+fix_disruption: plan_required
+# fixtures: deferred — rule is `status: stub` until walker extension

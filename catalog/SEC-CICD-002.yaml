@@ -1,0 +1,54 @@
+id: SEC-CICD-002
+title: "Workflow uses `permissions: write-all` or omits minimum scopes"
+section: cicd
+default_urgency: HIGH
+blast_radius: environment
+# stub — see SEC-CICD-001 for walker-extension note
+status: stub
+mitre:
+  - "T1078.004"
+  - "T1098.001"
+cwe:
+  - "CWE-269"
+  - "CWE-250"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+  - "AC-6(1)"
+csa_ccm:
+  - "IAM-09"
+slsa:
+  - "L2"
+  - "build"
+owasp:
+  - "CICD-SEC-1"
+  - "CICD-SEC-2"
+patterns:
+  - kind: grep
+    file_glob: ".github/workflows/*.yml"
+    regex: 'permissions\s*:\s*write-all'
+    scope: file
+    description: |
+      `permissions: write-all` grants the runner's GITHUB_TOKEN every
+      scope. A workflow that only needs `contents: read` and
+      `id-token: write` should declare exactly that. The blanket form
+      is what gives a compromised dependency the keys to your registry.
+recommendation: |
+  Replace blanket scopes with explicit minimums:
+
+      permissions:
+        contents: read
+        id-token: write   # only if exchanging for OIDC
+        pull-requests: write  # only if commenting on PRs
+
+  SLSA L2 (Provenance) and OWASP CICD-SEC-1 (Insufficient Flow Control
+  Mechanisms) both require declared minimum scopes; the default
+  permissions for new repos are `read` only, so most workflows can
+  drop the block entirely.
+verification: |
+  `grep -rn "permissions:" .github/workflows/`. Confirm no workflow
+  uses `write-all` and that every `terraform apply` workflow declares
+  `id-token: write` plus the specific writes it needs.
+fix_disruption: plan_required
+# fixtures: deferred — rule is `status: stub` until walker extension

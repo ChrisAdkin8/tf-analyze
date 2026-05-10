@@ -157,7 +157,7 @@ Add a compliance gap report tab to HTML output, or (with --format compliance) ou
 
 ### `--compliance-framework`
 
-Compliance framework to map against. Choices: cis (default), pci_dss, soc2, owasp_iac, all. 'all' combines every framework in one report. owasp_iac maps against the OWASP IaC Security Cheat Sheet (Develop and Distribute / Deploy / Runtime sections; static-analysable items only). Requires --compliance or --format compliance.
+Compliance framework to map against. Choices: cis (default), pci_dss, soc2, owasp_iac, nist_csf, nist_800_53, csa_ccm, slsa, owasp_top10, owasp_api, owasp_cicd, owasp_llm, owasp_k8s, owasp_asvs, all. 'all' combines every framework in one report. OWASP sub-modes filter against the namespaced `owasp:` catalogue field by prefix (e.g. owasp_top10 → items A01..A10). Requires --compliance or --format compliance.
 
 ### `--oscal`
 

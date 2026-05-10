@@ -155,6 +155,12 @@ does not appear in `terraform show` output (it will be marked
 **Source**
   - [`catalog/SEC-SECRETS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SECRETS-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-SECRETS-*` family:
+
+- [`SEC-SECRETS-002`](./SEC-SECRETS-002.md) — aws_ssm_parameter stores a sensitive value as plain `String` (not `SecureString`)
+
 ---
 
 ## Run this check

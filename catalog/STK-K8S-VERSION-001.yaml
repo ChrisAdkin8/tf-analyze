@@ -1,0 +1,55 @@
+id: STK-K8S-VERSION-001
+title: "EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+mitre:
+  - "T1190"
+  - "T1068"
+cwe:
+  - "CWE-1395"
+  - "CWE-1104"
+nist_csf:
+  - "ID.RA-1"
+  - "PR.IP-12"
+nist_800_53:
+  - "SI-2"
+  - "RA-5"
+csa_ccm:
+  - "TVM-04"
+  - "TVM-05"
+owasp:
+  - "A06"
+  - "K05"
+patterns:
+  - kind: resource_arg
+    resource: aws_eks_cluster
+    arg: version
+    regex: '^(?:1\.(?:1[0-9]|2[0-7]))$'
+    description: EKS pinned to <= 1.27 (N-2 floor at time of writing)
+  - kind: resource_arg
+    resource: google_container_cluster
+    arg: min_master_version
+    regex: '^(?:1\.(?:1[0-9]|2[0-7]))'
+    description: GKE pinned to <= 1.27
+  - kind: resource_arg
+    resource: azurerm_kubernetes_cluster
+    arg: kubernetes_version
+    regex: '^(?:1\.(?:1[0-9]|2[0-7]))'
+    description: AKS pinned to <= 1.27
+recommendation: |
+  Bump to a supported Kubernetes minor (N-2 floor). EKS/GKE/AKS each
+  publish a support matrix — running below N-2 means no security
+  patches and increasingly large CVE backlog. OWASP K05 (Inadequate
+  Logging and Monitoring) compounds when the platform itself is past
+  EOL because admission-controller + audit-log features arrive
+  per-minor.
+
+  Plan rolling upgrades; node pools must be drained and recreated.
+verification: |
+  `aws eks describe-cluster --name <c> --query 'cluster.version'`
+  → confirm >= current N-2.
+fix_disruption: plan_required
+fixtures:
+  - eks_old_version

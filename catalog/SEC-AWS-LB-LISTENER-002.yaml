@@ -1,0 +1,50 @@
+id: SEC-AWS-LB-LISTENER-002
+title: "Load balancer HTTPS listener allows TLS < 1.2"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+mitre:
+  - "T1565.001"
+cwe:
+  - "CWE-326"
+  - "CWE-327"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+  - "SC-8(1)"
+  - "SC-13"
+csa_ccm:
+  - "EKM-04"
+  - "DSI-03"
+owasp:
+  - "A02"
+patterns:
+  - kind: resource_arg
+    resource: aws_lb_listener
+    arg: ssl_policy
+    regex: '^(?:ELBSecurityPolicy-2016-08|ELBSecurityPolicy-FS-2018-06|ELBSecurityPolicy-TLS-1-(?:0|1)-2017-01)$'
+    description: |
+      ssl_policy values that pre-date the TLS-1.2-floor era (the 2016
+      and TLS-1-0/1-1 policies) accept TLS 1.0 / 1.1 connections —
+      both deprecated and broken by PCI-DSS 4.0 and most modern
+      regulators. The 2019 + 2021 policy generations require TLS 1.2;
+      `ELBSecurityPolicy-TLS13-1-2-2021-06` adds 1.3 support.
+recommendation: |
+  resource "aws_lb_listener" "https" {
+    load_balancer_arn = aws_lb.app.arn
+    port              = 443
+    protocol          = "HTTPS"
+    ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    # ...
+  }
+
+  Pair with a redirect on the HTTP (`port = 80`) listener so plain
+  HTTP can't reach the backend at all.
+verification: |
+  `aws elbv2 describe-listeners --load-balancer-arn <arn> --query 'Listeners[?Protocol==`HTTPS`].SslPolicy'`
+  Confirm each listed policy contains `TLS13-1-2` or `TLS-1-2-Ext`.
+fix_disruption: plan_required
+fixtures:
+  - aws_alb_tls_1_0

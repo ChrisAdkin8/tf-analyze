@@ -101,6 +101,7 @@ See also rules in the `MOD-SUPPLY-*` family:
 
 - [`MOD-SUPPLY-002`](./MOD-SUPPLY-002.md) — Module uses raw git source instead of registry
 - [`MOD-SUPPLY-003`](./MOD-SUPPLY-003.md) — Registry module missing version constraint
+- [`MOD-SUPPLY-004`](./MOD-SUPPLY-004.md) — Module version constraint uses `>=` with no upper bound
 
 ---
 

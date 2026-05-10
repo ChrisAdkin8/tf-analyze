@@ -1,0 +1,58 @@
+id: SEC-PROVISIONER-002
+title: "local-exec or remote-exec uses `curl | bash` or unverified-pipe pattern"
+section: security
+default_urgency: CRITICAL
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1059.004"
+  - "T1105"
+cwe:
+  - "CWE-494"
+  - "CWE-78"
+nist_csf:
+  - "PR.DS-6"
+  - "PR.IP-1"
+nist_800_53:
+  - "SI-7"
+  - "CM-7"
+csa_ccm:
+  - "TVM-04"
+slsa:
+  - "L2"
+  - "deps"
+owasp:
+  - "CICD-SEC-4"
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'command\s*=\s*"[^"]*curl[^"]*\|\s*(?:bash|sh|zsh)'
+    description: |
+      `curl URL | bash` (or `| sh`) inside a provisioner downloads
+      and executes whatever the URL serves at apply time. No
+      integrity check, no version pinning — the upstream owner can
+      flip the script body between plan and apply. This is the same
+      attack vector as the 2024 XZ Utils backdoor delivery.
+recommendation: |
+  Replace the pipe with a content-addressed download + verify
+  sequence:
+
+      command = <<-EOT
+        curl -fsSL --proto '=https' --tlsv1.2 -o /tmp/install.sh \
+          https://example.com/install.sh
+        echo "<sha256>  /tmp/install.sh" | sha256sum -c -
+        bash /tmp/install.sh
+      EOT
+
+  Better: bake the install into a Packer image and reference an AMI
+  by digest, eliminating the apply-time fetch entirely.
+
+  OWASP CICD-SEC-4 (Insufficient Pipeline-Based Access Controls) and
+  SLSA L2 (Provenance + deps) both call out this pattern.
+verification: |
+  `grep -rE 'curl.*\|\s*(bash|sh)' --include="*.tf"`. Each remaining
+  match must be paired with a SHA256 verification step or replaced
+  with a pre-baked image.
+fix_disruption: plan_required
+fixtures:
+  - provisioner_curl_pipe_bash

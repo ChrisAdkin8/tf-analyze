@@ -1,0 +1,61 @@
+id: SEC-CICD-003
+title: "Apply job missing `environment:` with required_reviewers for production"
+section: cicd
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+# stub — see SEC-CICD-001 for walker-extension note
+status: stub
+mitre:
+  - "T1199"
+cwe:
+  - "CWE-732"
+  - "CWE-862"
+nist_csf:
+  - "PR.AC-4"
+  - "PR.IP-3"
+nist_800_53:
+  - "CM-3"
+  - "CM-5"
+  - "AC-3"
+csa_ccm:
+  - "CCC-04"
+  - "IAM-09"
+slsa:
+  - "L3"
+owasp:
+  - "CICD-SEC-1"
+  - "CICD-SEC-7"
+patterns:
+  - kind: grep
+    file_glob: ".github/workflows/*.yml"
+    regex: 'terraform\s+(apply|destroy)\s+(?:-auto-approve|.*plan\.binary)'
+    scope: file
+    description: |
+      `terraform apply -auto-approve` (or `apply tfplan.binary`) in a
+      workflow that does NOT also declare an `environment:` block
+      means the job can run on a forked-PR fork-bomb or a compromised
+      branch protection bypass without any human-in-the-loop gate.
+      SLSA L3 + NIST SSDF PO.4 both require this gate for change
+      approval; OWASP CICD-SEC-1/-7 enumerate it as the canonical
+      Insufficient Flow Control example.
+recommendation: |
+  Pair every auto-approve apply with an `environment:` block on the
+  job:
+
+      jobs:
+        apply:
+          if: github.ref == 'refs/heads/main'
+          environment:
+            name: production
+          steps:
+            - run: terraform apply -auto-approve tfplan.binary
+
+  Configure the protected environment with `required_reviewers` and a
+  wait timer in repository settings. Without this, a compromised
+  workflow file pushed to `main` reaches production with zero review.
+verification: |
+  Open every workflow that runs `terraform apply` and confirm an
+  `environment:` block is present. Cross-check repository
+  Settings → Environments → production for required reviewers.
+fix_disruption: plan_required
+# fixtures: deferred — rule is `status: stub` until walker extension

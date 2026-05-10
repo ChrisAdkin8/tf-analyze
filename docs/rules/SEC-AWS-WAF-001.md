@@ -116,6 +116,12 @@ must return a logging configuration with at least one destination.
 **Source**
   - [`catalog/SEC-AWS-WAF-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-WAF-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-AWS-WAF-*` family:
+
+- [`SEC-AWS-WAF-002`](./SEC-AWS-WAF-002.md) — ALB/CloudFront/API-Gateway has WAF associated but no rate-based rule
+
 ---
 
 ## Run this check

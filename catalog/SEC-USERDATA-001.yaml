@@ -1,0 +1,66 @@
+id: SEC-USERDATA-001
+title: "user_data templates a sensitive var or contains a curl|bash pattern"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1552.001"
+  - "T1059.004"
+cwe:
+  - "CWE-200"
+  - "CWE-78"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-28"
+  - "SI-3"
+csa_ccm:
+  - "DSI-04"
+owasp:
+  - "A02"
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: '\$\{var\.(password|secret|token|api_key|private_key|access_key)\b'
+    scope: resource_body
+    resource: aws_instance
+    description: |
+      user_data templates that interpolate `${var.<sensitive>}` either
+      leak the secret to anyone with `ec2:DescribeInstanceAttribute`
+      (the user_data is base64-stored on the instance metadata and is
+      readable indefinitely) or — worse — print it to cloud-init logs
+      on every boot. Bake secrets into Parameter Store / Secrets
+      Manager and pull at runtime via instance role.
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'curl[^\n]*\|\s*(?:bash|sh)'
+    scope: resource_body
+    resource: aws_instance
+    description: |
+      curl-pipe-bash inside user_data downloads + runs whatever the
+      URL serves at boot. No version, no checksum — see SEC-PROVISIONER-002
+      for the same anti-pattern on a different surface.
+recommendation: |
+  * Secret leak — replace `user_data = <<-EOF\n... ${var.password} ...`
+    with a `data "aws_secretsmanager_secret_version"` block plus an
+    IAM role on the instance, and pull the secret at runtime:
+
+        user_data = templatefile("${path.module}/init.sh.tpl", {
+          secret_arn = aws_secretsmanager_secret.app.arn
+        })
+
+  * curl|bash — bake the install into an AMI (Packer) and reference
+    by digest. If a runtime fetch is unavoidable, verify checksums.
+verification: |
+  Decode every instance's user_data:
+      aws ec2 describe-instance-attribute --instance-id <id> \
+        --attribute userData --output text --query 'UserData.Value' \
+        | base64 -d
+  Confirm no secrets and no unverified pipes.
+fix_disruption: forces_replacement
+fix_disruption_note: |
+  Changing user_data forces instance replacement in most contexts.
+  Plan for an ASG instance-refresh or blue/green rollover.
+fixtures:
+  - aws_user_data_secret_leak

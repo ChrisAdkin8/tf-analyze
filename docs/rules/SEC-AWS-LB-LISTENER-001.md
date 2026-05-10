@@ -143,6 +143,12 @@ must return `["redirect"]`, not `["forward"]`.
 **Source**
   - [`catalog/SEC-AWS-LB-LISTENER-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-LB-LISTENER-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-AWS-LB-LISTENER-*` family:
+
+- [`SEC-AWS-LB-LISTENER-002`](./SEC-AWS-LB-LISTENER-002.md) — Load balancer HTTPS listener allows TLS < 1.2
+
 ---
 
 ## Run this check

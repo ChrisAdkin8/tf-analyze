@@ -1,14 +1,14 @@
 ---
-title: "SEC-K8S-PSA-001 — kubernetes_namespace missing Pod Security Admission label"
-description: "tf-analyze rule SEC-K8S-PSA-001 (HIGH · security): kubernetes_namespace missing Pod Security Admission label"
-keywords: "security, high, terraform, iac, cis-5.2.1, mitre-T1611"
+title: "SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
+description: "tf-analyze rule SEC-K8S-PSA-001 (HIGH · security): kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / cap…"
+keywords: "security, high, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, cwe-269, cwe-250"
 ---
 
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "SEC-K8S-PSA-001 \u2014 kubernetes_namespace missing Pod Security Admission label",
+  "headline": "SEC-K8S-PSA-001 \u2014 kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop",
   "description": "Add the PSA enforcement label to every namespace, scoped to the\nleast-privileged level the workload tolerates:",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-K8S-PSA-001/",
   "mainEntityOfPage": {
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, cis-5.2.1, mitre-T1611"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.2.1, MITRE T1611",
+  "keywords": "security, high, terraform, CIS 5.2.1, CIS 5.7.3, MITRE T1611, CWE-269, CWE-250",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-K8S-PSA-001 — kubernetes_namespace missing Pod Security Admission label
+# ⚠️ SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-PSA-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-K8S-PSA-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-K8S-PSA-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **kubernetes_namespace missing Pod Security Admission label.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
 
 ## What this checks
 
@@ -47,6 +47,18 @@ without `pod-security.kubernetes.io/enforce`). Without a Pod
 Security Admission level, the namespace defaults to no enforcement
 — privileged pods, hostPath mounts, and host-network pods are all
 permitted. PSA replaced the deprecated PodSecurityPolicy in 1.25.
+2. **`helm_set_value`** on `helm_release` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
+  R30.5 / NIST 800-190 — helm_release must set
+`securityContext.runAsNonRoot = true`. Containers running as
+uid 0 inside the pod expose the host to capability escalations.
+3. **`helm_set_value`** on `helm_release` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
+  R30.5 / NIST 800-190 — helm_release must set
+`securityContext.readOnlyRootFilesystem = true`. A writable
+rootfs lets attackers persist tooling across pod restarts.
+4. **`helm_set_value`** on `helm_release` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
+  R30.5 / NIST 800-190 — drop ALL kernel capabilities and add back
+only what the app needs. Default Linux capabilities (CAP_NET_RAW
+etc.) give a compromised pod meaningful escalation surface.
 
 ## Why it likely fired
 
@@ -55,6 +67,18 @@ without `pod-security.kubernetes.io/enforce`). Without a Pod
 Security Admission level, the namespace defaults to no enforcement
 — privileged pods, hostPath mounts, and host-network pods are all
 permitted. PSA replaced the deprecated PodSecurityPolicy in 1.25.
+
+R30.5 / NIST 800-190 — helm_release must set
+`securityContext.runAsNonRoot = true`. Containers running as
+uid 0 inside the pod expose the host to capability escalations.
+
+R30.5 / NIST 800-190 — helm_release must set
+`securityContext.readOnlyRootFilesystem = true`. A writable
+rootfs lets attackers persist tooling across pod restarts.
+
+R30.5 / NIST 800-190 — drop ALL kernel capabilities and add back
+only what the app needs. Default Linux capabilities (CAP_NET_RAW
+etc.) give a compromised pod meaningful escalation surface.
 
 ## Adversarial scenario
 
@@ -109,6 +133,7 @@ must list a level for every non-system namespace.
 
 **CIS Benchmark**
   - `CIS 5.2.1`
+  - `CIS 5.7.3`
 
 **PCI-DSS**
   - `Req-2.2`
@@ -118,6 +143,10 @@ must list a level for every non-system namespace.
 
 **MITRE ATT&CK**
   - [`T1611`](https://attack.mitre.org/techniques/T1611/)
+
+**CWE**
+  - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+  - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
 
 **Source**
   - [`catalog/SEC-K8S-PSA-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-PSA-001.yaml) — canonical YAML

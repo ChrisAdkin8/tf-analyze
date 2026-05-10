@@ -1,0 +1,53 @@
+id: SEC-LOG-CROSS-ACCOUNT-001
+title: "Audit log destination is in the same AWS account (no cross-account isolation)"
+section: security
+default_urgency: MEDIUM
+blast_radius: environment
+status: stub
+mitre:
+  - "T1070.001"
+  - "T1565"
+cwe:
+  - "CWE-778"
+nist_csf:
+  - "PR.PT-1"
+  - "DE.AE-3"
+nist_800_53:
+  - "AU-9(2)"
+  - "AU-11"
+csa_ccm:
+  - "LOG-08"
+owasp:
+  - "A09"
+# Detection requires cross-resource analysis of the log destination's
+# account vs the source's account, plus access to the workspace's
+# `data "aws_caller_identity"` resolution at plan time. Stubbed until
+# the cross-resource detector at _cross_resource.py grows an
+# `account-pair` walker.
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: 'cloudtrail.*\bs3_bucket_name\s*=\s*"(?!arn:aws:s3:::audit-logs-)[^"]*"'
+    description: |
+      Audit logs (CloudTrail / VPC Flow Logs / GuardDuty) should ship
+      to a bucket in a *different* AWS account dedicated to security
+      operations. An attacker who compromises the production account
+      can otherwise erase or tamper with the very logs that would
+      reveal their presence (NIST AU-9(2) — "Audit Information Off
+      System"; OWASP A09).
+recommendation: |
+  Create a dedicated `security-logs` AWS account; ship every
+  account's audit output to a bucket in that account via cross-account
+  bucket policy + replication. CloudTrail organization trail is the
+  canonical pattern:
+
+      resource "aws_cloudtrail" "org" {
+        name           = "org-trail"
+        s3_bucket_name = "arn:aws:s3:::audit-logs-${var.security_account_id}"
+        is_organization_trail = true
+      }
+verification: |
+  `aws cloudtrail describe-trails --query 'trailList[*].S3BucketName'` —
+  every entry should point at the security-account bucket.
+fix_disruption: plan_required
+# fixtures: deferred — see catalog comment block above

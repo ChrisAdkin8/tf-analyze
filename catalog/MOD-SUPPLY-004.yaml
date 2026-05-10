@@ -1,0 +1,52 @@
+id: MOD-SUPPLY-004
+title: "Module version constraint uses `>=` with no upper bound"
+section: module
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+  - "CWE-1104"
+nist_csf:
+  - "ID.SC-2"
+  - "PR.IP-3"
+nist_800_53:
+  - "CM-7"
+  - "SA-12"
+csa_ccm:
+  - "STA-04"
+slsa:
+  - "L1"
+  - "deps"
+owasp:
+  - "CICD-SEC-3"
+  - "A06"
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: '^\s*version\s*=\s*"\s*>=\s*[0-9]+\.[0-9]+'
+    description: |
+      A version constraint of the shape `version = ">= 5.40"` (or
+      `version = ">= 5.40.0"`) has no upper bound — `terraform init`
+      pulls in any future major (6.x, 7.x). When a provider or module
+      ships a breaking change, this constraint promotes it without
+      review.
+recommendation: |
+  version = "~> 5.40"            # caret-style, allows 5.x
+  # OR
+  version = ">= 5.40, < 6.0"     # explicit range
+  # OR
+  version = "= 5.42.1"           # pinned (most defensive)
+
+  OWASP CICD-SEC-3 (Dependency Chain Abuse) and SLSA L1 deps both
+  call out open upper bounds as the canonical
+  "ship a malicious patch on a Friday and it lands in every plan
+  the following Monday" pattern.
+verification: |
+  `grep -rEn 'version\s*=\s*">=' --include="*.tf"`. Every match should
+  also include `<` to cap the upper bound.
+fix_disruption: plan_required
+fixtures:
+  - module_open_upper_bound

@@ -71,6 +71,17 @@ MITRE_TECHNIQUE_INFO: dict[str, tuple[str, list[str]]] = {
     "T1562.008":  ("Impair Defenses: Disable or Modify Cloud Logs",                 ["Defense Evasion"]),
     "T1583.002":  ("Acquire Infrastructure: DNS Server",                            ["Resource Development"]),
     "T1611":      ("Escape to Host",                                                ["Privilege Escalation"]),
+    # ---- R30.3 / R30.4 / R30.5 additions (2026-05-11) ----
+    "T1059.004":  ("Command and Scripting Interpreter: Unix Shell",                 ["Execution"]),
+    "T1070.001":  ("Indicator Removal: Clear Windows Event Logs",                   ["Defense Evasion"]),
+    "T1105":      ("Ingress Tool Transfer",                                         ["Command and Control"]),
+    "T1195.001":  ("Supply Chain Compromise: Compromise Software Dependencies and Development Tools", ["Initial Access"]),
+    "T1199":      ("Trusted Relationship",                                          ["Initial Access"]),
+    "T1499.002":  ("Endpoint Denial of Service: Service Exhaustion Flood",          ["Impact"]),
+    "T1525":      ("Implant Internal Image",                                        ["Persistence"]),
+    "T1565":      ("Data Manipulation",                                             ["Impact"]),
+    "T1565.001":  ("Data Manipulation: Stored Data Manipulation",                   ["Impact"]),
+    "T1574.002":  ("Hijack Execution Flow: DLL Side-Loading",                       ["Persistence", "Privilege Escalation", "Defense Evasion"]),
 }
 
 

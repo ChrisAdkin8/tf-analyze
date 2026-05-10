@@ -1,0 +1,66 @@
+id: SEC-AWS-IAM-OIDC-001
+title: "GitHub OIDC trust policy accepts wildcard `repo:*` or `sub: *` claims"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+mitre:
+  - "T1199"
+  - "T1078.004"
+cwe:
+  - "CWE-287"
+  - "CWE-862"
+nist_csf:
+  - "PR.AC-1"
+  - "PR.AC-7"
+nist_800_53:
+  - "IA-5"
+  - "IA-5(1)"
+  - "AC-6"
+csa_ccm:
+  - "IAM-04"
+  - "IAM-09"
+owasp:
+  - "CICD-SEC-6"
+  - "API01"
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: '"token\.actions\.githubusercontent\.com:sub"\s*=\s*"(?:\*|repo:\*|repo:[^"/]+/\*|repo:[^"]*:ref:refs/heads/\*)"'
+    description: |
+      A GitHub OIDC IAM-role trust policy whose `sub` claim is
+      `repo:*`, `repo:<org>/*`, or `:ref:refs/heads/*` lets any
+      workflow in the matching scope assume the role. The 2024
+      Microsoft VS Code OIDC mishap and the Codecov 2021 compromise
+      both turned on this pattern — a less-trusted repo or branch
+      gets to mint cloud credentials.
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: '"token\.actions\.githubusercontent\.com:sub"\s*=\s*"\*"'
+    description: bare wildcard `sub`
+recommendation: |
+  Pin the `sub` claim to the exact repo + branch (or environment)
+  that needs the role:
+
+      "token.actions.githubusercontent.com:sub" =
+        "repo:my-org/infra:ref:refs/heads/main"
+
+  Or pin to a protected environment:
+
+      "token.actions.githubusercontent.com:sub" =
+        "repo:my-org/infra:environment:production"
+
+  For multi-repo orgs use `StringLike` with explicit repo names
+  rather than a wildcard org match. Combine with the audience claim
+  (`token.actions.githubusercontent.com:aud = "sts.amazonaws.com"`)
+  for defence in depth.
+verification: |
+  Query IAM for every role trust policy:
+
+      aws iam list-roles --query 'Roles[?AssumeRolePolicyDocument]' \
+        | jq '.[] | select(.AssumeRolePolicyDocument | tostring | contains("token.actions.githubusercontent.com"))'
+
+  Confirm no `sub` value is `*`, `repo:*`, or ends in `:ref:refs/heads/*`.
+fix_disruption: plan_required
+fixtures:
+  - aws_iam_oidc_wildcard_sub

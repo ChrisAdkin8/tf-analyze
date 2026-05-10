@@ -1,0 +1,49 @@
+id: SEC-DATASOURCE-003
+title: "`data \"external\"` or `data \"http\"` runs at plan time"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+mitre:
+  - "T1059"
+  - "T1071.001"
+cwe:
+  - "CWE-829"
+  - "CWE-78"
+nist_csf:
+  - "PR.DS-6"
+nist_800_53:
+  - "SI-3"
+  - "CM-7"
+csa_ccm:
+  - "TVM-04"
+owasp:
+  - "CICD-SEC-4"
+patterns:
+  - kind: grep
+    file_glob: "**/*.tf"
+    regex: '^\s*data\s+"(?:external|http)"\s+'
+    description: |
+      `data "external"` runs an external program at plan AND apply
+      time; `data "http"` fetches a URL whose body shapes downstream
+      resources. Both lift remote, mutable input into the plan
+      graph — a compromised endpoint or interpreter changes infra
+      under you with no audit trail. Common consumers of `data "http"`:
+      pulling latest AMIs, fetching SAML metadata, retrieving CIDR
+      lists — every one of which has a static or version-pinned
+      alternative.
+recommendation: |
+  * **`data "external"`** — replace with `data "aws_ami"`, a Terraform
+    provider data source, or pre-computed values stored in the
+    workspace's variables. If you genuinely need a shell-out, gate
+    it behind a `terraform_data` resource and CI-controlled checksums.
+  * **`data "http"`** — replace with provider data sources (most
+    cloud providers expose what you need); if you must fetch, pin
+    via `checksum_sha256` once Terraform adds it, or use a versioned
+    artifact registry.
+verification: |
+  `grep -rE 'data\s+"(external|http)"' --include="*.tf"`. Each match
+  needs a justification comment or a replacement.
+fix_disruption: plan_required
+fixtures:
+  - datasource_external_http

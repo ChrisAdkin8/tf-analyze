@@ -1,0 +1,58 @@
+id: STK-DEFAULTS-001
+title: "Module lacks `terraform { required_version, required_providers }` block"
+section: stack
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+mitre:
+  - "T1195.001"
+cwe:
+  - "CWE-1357"
+  - "CWE-1395"
+nist_csf:
+  - "ID.SC-2"
+  - "PR.IP-3"
+nist_800_53:
+  - "CM-2"
+  - "CM-6"
+  - "SA-12"
+csa_ccm:
+  - "CCC-04"
+  - "STA-04"
+slsa:
+  - "L1"
+  - "deps"
+owasp:
+  - "A06"
+  - "CICD-SEC-1"
+# CISA Secure-by-Design — Configuration Default Hardening
+# Every Terraform module SHOULD pin its own provider version floor so
+# downstream consumers don't accidentally drift to an incompatible
+# provider major. Implements CISA's "Make memory-safe defaults the only
+# option" principle adapted to IaC.
+patterns:
+  - kind: submodule_version_missing
+    description: |
+      Module directory contains *.tf files but no top-level
+      `terraform { required_version = ">= ..." }` block. Without this
+      pin, `terraform init` falls back to "any installed version" —
+      which means consumers' Terraform major could be older than the
+      provider syntax this module uses, producing late-stage failures
+      on apply.
+recommendation: |
+      # In versions.tf (one per module)
+      terraform {
+        required_version = ">= 1.6.0"
+        required_providers {
+          aws = {
+            source  = "hashicorp/aws"
+            version = ">= 5.40, < 6.0"
+          }
+        }
+      }
+verification: |
+  `find . -name '*.tf' -execdir grep -l 'required_version' {} \; | sort -u`
+  should list every module root.
+fix_disruption: none
+fixtures:
+  - module_no_required_version

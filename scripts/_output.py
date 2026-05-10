@@ -822,6 +822,28 @@ def _compliance_gap_report(
     want_pci    = framework in ("pci_dss", "all")
     want_soc2   = framework in ("soc2", "all")
     want_owasp  = framework in ("owasp_iac", "all")
+    # R30.1 — multi-framework taxonomy sweep
+    want_csf    = framework in ("nist_csf", "all")
+    want_853    = framework in ("nist_800_53", "all")
+    want_ccm    = framework in ("csa_ccm", "all")
+    want_slsa   = framework in ("slsa", "all")
+    # OWASP sub-modes — each filters against the namespaced `owasp:`
+    # field by item prefix. `all` includes every prefix.
+    want_owasp_top10 = framework in ("owasp_top10", "all")
+    want_owasp_api   = framework in ("owasp_api", "all")
+    want_owasp_cicd  = framework in ("owasp_cicd", "all")
+    want_owasp_llm   = framework in ("owasp_llm", "all")
+    want_owasp_k8s   = framework in ("owasp_k8s", "all")
+    want_owasp_asvs  = framework in ("owasp_asvs", "all")
+
+    def _record(framework_name: str, control: str, eid: str) -> None:
+        key = f"{framework_name}::{control}"
+        if key not in control_map:
+            control_map[key] = {
+                "framework": framework_name, "control": str(control),
+                "rules": [], "failed_rules": [], "status": "PASS",
+            }
+        control_map[key]["rules"].append(eid)
 
     for entry in entries:
         eid = entry.get("id", "")
@@ -881,6 +903,43 @@ def _compliance_gap_report(
                         "rules": [], "failed_rules": [], "status": "PASS",
                     }
                 control_map[key]["rules"].append(eid)
+
+        # ---- R30.1 multi-framework taxonomy dispatch ----
+        if want_csf:
+            for ctrl in entry.get("nist_csf", []) or []:
+                if isinstance(ctrl, str):
+                    _record("NIST CSF 2.0", ctrl, eid)
+        if want_853:
+            for ctrl in entry.get("nist_800_53", []) or []:
+                if isinstance(ctrl, str):
+                    _record("NIST SP 800-53 Rev. 5", ctrl, eid)
+        if want_ccm:
+            for ctrl in entry.get("csa_ccm", []) or []:
+                if isinstance(ctrl, str):
+                    _record("CSA CCM v4", ctrl, eid)
+        if want_slsa:
+            for ctrl in entry.get("slsa", []) or []:
+                if isinstance(ctrl, str):
+                    _record("SLSA v1.0", ctrl, eid)
+        # OWASP sub-modes — filter the namespaced `owasp:` field by
+        # item prefix so a single field powers five separate frameworks.
+        owasp_namespaced = entry.get("owasp", []) or []
+        if isinstance(owasp_namespaced, list):
+            for ctrl in owasp_namespaced:
+                if not isinstance(ctrl, str):
+                    continue
+                if want_owasp_top10 and re.fullmatch(r"A(?:0[1-9]|10)", ctrl):
+                    _record("OWASP Top 10 (2021)", ctrl, eid)
+                elif want_owasp_api and re.fullmatch(r"API(?:0[1-9]|10)", ctrl):
+                    _record("OWASP API Top 10 (2023)", ctrl, eid)
+                elif want_owasp_cicd and ctrl.startswith("CICD-SEC-"):
+                    _record("OWASP CICD Top 10", ctrl, eid)
+                elif want_owasp_llm and re.fullmatch(r"LLM(?:0[1-9]|10)", ctrl):
+                    _record("OWASP LLM Top 10 (2025)", ctrl, eid)
+                elif want_owasp_k8s and re.fullmatch(r"K(?:0[1-9]|10)", ctrl):
+                    _record("OWASP Kubernetes Top 10", ctrl, eid)
+                elif want_owasp_asvs and ctrl.startswith("ASVS-"):
+                    _record("OWASP ASVS v4", ctrl, eid)
 
     for item in control_map.values():
         failed = [r for r in item["rules"] if r in fired_ids]

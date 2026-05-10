@@ -1,0 +1,50 @@
+id: SEC-AWS-APIGW-002
+title: "API Gateway stage has throttling burst/rate at the SDK default (no limit)"
+section: security
+default_urgency: MEDIUM
+blast_radius: environment
+status: active
+mitre:
+  - "T1499.002"
+cwe:
+  - "CWE-770"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-5"
+  - "SC-5(2)"
+csa_ccm:
+  - "IVS-08"
+owasp:
+  - "API04"
+patterns:
+  - kind: resource_missing_arg
+    resource: aws_api_gateway_method_settings
+    arg: settings
+    description: |
+      `aws_api_gateway_method_settings` without an explicit `settings { throttling_burst_limit / throttling_rate_limit }`
+      inherits the account default (10k rps burst). OWASP API4
+      (Unrestricted Resource Consumption) and NIST SC-5(2) require
+      per-endpoint rate limiting so a single noisy client can't
+      consume the whole quota.
+recommendation: |
+  resource "aws_api_gateway_method_settings" "all" {
+    rest_api_id = aws_api_gateway_rest_api.app.id
+    stage_name  = aws_api_gateway_stage.prod.stage_name
+    method_path = "*/*"
+    settings {
+      throttling_burst_limit = 100
+      throttling_rate_limit  = 50
+      # ... metrics, logging
+    }
+  }
+
+  Choose limits aligned with your SLO; review with the Resilience
+  channel before raising defaults.
+verification: |
+  `aws apigateway get-method-settings --rest-api-id <id> --stage-name <stage> --resource-id <id>`
+  — confirm throttlingBurstLimit + throttlingRateLimit are set
+  (non-zero, finite).
+fix_disruption: none
+fixtures:
+  - aws_apigw_no_throttling
