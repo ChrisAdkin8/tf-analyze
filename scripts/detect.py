@@ -4835,10 +4835,20 @@ _RULE_ID_RE = re.compile(r'^[A-Z]+(?:-[A-Z]+)+-\d{3}$')
 
 
 def _cmd_list_rules(
-    catalog_dir: Path, focus: str | None, include_stubs: bool
+    catalog_dir: Path,
+    focus: str | None,
+    include_stubs: bool,
+    strict: bool = False,
 ) -> None:
-    """Print every catalogue ID with title + urgency, grouped by domain."""
-    entries = load_catalog(catalog_dir, include_stubs=include_stubs)
+    """Print every catalogue ID with title + urgency, grouped by domain.
+
+    `strict` forwards `--strict-catalog` into `load_catalog` so any
+    YAML parse OR schema-validation error aborts via sys.exit(2)
+    instead of being silently logged. The VS Code extension's
+    bundle smoke test relies on this — see
+    `vscode-extension/scripts/bundle-engine.js`.
+    """
+    entries = load_catalog(catalog_dir, include_stubs=include_stubs, strict=strict)
     if focus:
         entries = [e for e in entries if e.get("section") == focus]
     if not entries:
@@ -6398,7 +6408,7 @@ def main():
 
     # Meta-commands run on the catalogue alone — no target needed.
     if args.list_rules:
-        _cmd_list_rules(catalog_dir, args.focus, args.include_stubs)
+        _cmd_list_rules(catalog_dir, args.focus, args.include_stubs, strict=args.strict_catalog)
         sys.exit(0)
     if args.explain:
         sys.exit(_cmd_explain(catalog_dir, args.explain))

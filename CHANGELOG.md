@@ -5,6 +5,47 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## fix(bundle): smoke test now actually catches catalogue parse errors — 2026-05-10 (R30.0.10)
+
+**Bug fix.** The bundle smoke test's docstring has claimed since v0.1.33 that it catches *"Catalogue YAML parse error introduced in this build"*. It doesn't — verified by deliberately corrupting `catalog/CI-TEST-001.yaml`'s `default_urgency` to `BOGUS` and watching the smoke test report `OK (216 rules)` instead of failing.
+
+Two-part fix:
+
+### `scripts/detect.py`
+
+`--list-rules` mode silently ignored `--strict-catalog`. `_cmd_list_rules` called `load_catalog(catalog_dir, include_stubs=include_stubs)` without the `strict=` parameter, so even when the user passed `--strict-catalog`, parse + schema errors were logged to stderr but the engine still exited 0.
+
+Now `_cmd_list_rules` accepts a `strict` keyword and forwards it; the dispatcher at the `--list-rules` branch passes `args.strict_catalog`. With this fix, `python3 detect.py --strict-catalog --list-rules` exits 2 on any catalogue error — the documented contract.
+
+### `vscode-extension/scripts/bundle-engine.js`
+
+* Smoke test now spawns the engine with `--strict-catalog --list-rules` instead of bare `--list-rules`. Any parse or schema error in the bundled catalogue exits 2 → smoke test fails.
+* Added `MIN_RULE_COUNT = 200` floor. If the engine exits cleanly but lists fewer than 200 rules, the bundle fails. Catches the silent-drop case where a sibling-import miss filters every entry but the engine still exits 0.
+* New diagnostic branch: when exit code is `2` AND stderr mentions "catalogue error", the FATAL output prints `CAUSE: catalogue YAML parse OR schema-validation error in this build.` instead of the generic "sibling-import miss" hint. Makes the right cause visible at build time.
+
+### Verification
+
+Reproduction: changed `default_urgency: LOW` to `default_urgency: BOGUS` in `catalog/CI-TEST-001.yaml`, ran `npm run package`. **Before** the fix: bundle reports `[bundle-engine] smoke test OK (python3 listed 216 rules from the bundled engine)`. **After** the fix:
+
+```
+[bundle-engine] FATAL: bundled engine smoke test failed (exit 2).
+[bundle-engine] stderr from the bundled engine:
+  | FATAL: 1 catalogue error(s); aborting (--strict-catalog)
+[bundle-engine] CAUSE: catalogue YAML parse OR schema-validation error in this build.
+```
+
+### Counts
+
+| | before | after |
+|---|---|---|
+| Bundle catches catalogue parse error | NO (silent) | YES (FATAL exit 1) |
+| Bundle catches catalogue schema error | NO (silent) | YES (FATAL exit 1) |
+| Bundle catches silent-drop to empty catalogue | NO (`OK (0 rules)`) | YES (`FATAL: listed only X rules`) |
+
+No other behavioural changes; pytest unchanged (639 passing).
+
+---
+
 ## detect.py modularisation — Session D (`_attack_graph.py`) — 2026-05-10
 
 **Sixth seam in the detect.py refactor. Largest single extraction yet — the attack-graph build + render block (constants `_CROWN_JEWEL_TYPES` + `_NODE_TYPE_MAP` + 10 `_INET_*` reachability regexes + 15 `_EDGE_*` cross-resource regexes + 7 functions including the 280-LoC `_render_graph_html` body) lifts into `scripts/_attack_graph.py`. No behaviour change; `tests/test_attack_graph.py` continues to pass through the re-export shim.**

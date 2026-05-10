@@ -103,12 +103,26 @@ console.log(`[bundle-engine] catalog: ${catalogCount} entries, ${(catalogBytes /
 // shipping a broken engine in a .vsix is the only failure that's
 // invisible to regular tests.
 
+// `--strict-catalog` turns every YAML parse error OR schema-validation
+// failure in the bundled catalog into a non-zero engine exit, so the
+// smoke test below catches them. Without this flag, `load_catalog`
+// prints `ERROR:` lines to stderr but continues with N-1 entries, and
+// the (still non-empty) rule list slipped through this check before
+// R30.0.10 — defeating the "Catalogue YAML parse error introduced in
+// this build" promise this script's docstring claims to enforce.
 const python = process.env.PYTHON || 'python3';
-const probe = spawnSync(python, [targetEngineFile, '--list-rules'], {
+const probe = spawnSync(python, [targetEngineFile, '--strict-catalog', '--list-rules'], {
   cwd: engineRoot,
   env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' },
   encoding: 'utf8',
 });
+
+// Minimum rule count we accept from the bundled engine. Locked above
+// 200 because the catalogue has been over 200 active rules since R27;
+// a drop below this threshold means either a sibling-import miss
+// silently filtered every entry, or someone gutted the catalogue by
+// accident. Either way, fail the build.
+const MIN_RULE_COUNT = 200;
 
 if (probe.error) {
   if (probe.error.code === 'ENOENT') {
@@ -122,8 +136,15 @@ if (probe.error) {
   console.error(`[bundle-engine] FATAL: bundled engine smoke test failed (exit ${probe.status}).`);
   console.error('[bundle-engine] stderr from the bundled engine:');
   console.error((probe.stderr || '').replace(/^/gm, '  | '));
-  console.error('[bundle-engine] This usually means a Python file detect.py imports as a sibling');
-  console.error('[bundle-engine] is missing from ENGINE_SIBLING_FILES above. Add it.');
+  // `--strict-catalog` makes detect.py exit 2 specifically on catalogue
+  // parse / schema failures; surface that diagnosis when it's the cause.
+  if (probe.status === 2 && /catalogue error/i.test(probe.stderr || '')) {
+    console.error('[bundle-engine] CAUSE: catalogue YAML parse OR schema-validation error in this build.');
+    console.error('[bundle-engine] Inspect the offending `catalog/*.yaml` file(s) listed above.');
+  } else {
+    console.error('[bundle-engine] This usually means a Python file detect.py imports as a sibling');
+    console.error('[bundle-engine] is missing from ENGINE_SIBLING_FILES above. Add it.');
+  }
   process.exit(1);
 } else {
   // --list-rules emits lines like '  SEC-AWS-IAM-001       HIGH     <title>'.
@@ -131,5 +152,14 @@ if (probe.error) {
   // and the python-hcl2 stderr note are ignored.
   const ruleCount = (probe.stdout || '').split('\n')
     .filter(l => /^\s+[A-Z]+(?:-[A-Z0-9-]+)+\s/.test(l)).length;
+  if (ruleCount < MIN_RULE_COUNT) {
+    console.error(`[bundle-engine] FATAL: bundled engine listed only ${ruleCount} rules `
+      + `(minimum ${MIN_RULE_COUNT}). The engine exited cleanly, but the catalogue is too thin.`);
+    console.error('[bundle-engine] stderr from the bundled engine:');
+    console.error((probe.stderr || '').replace(/^/gm, '  | '));
+    console.error('[bundle-engine] Likely cause: silent drops in load_catalog (which `--strict-catalog`');
+    console.error('[bundle-engine] should have promoted to a non-zero exit — investigate before shipping).');
+    process.exit(1);
+  }
   console.log(`[bundle-engine] smoke test OK (${python} listed ${ruleCount} rules from the bundled engine).`);
 }
