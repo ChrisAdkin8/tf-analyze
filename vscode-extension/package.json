@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.43",
+  "version": "0.1.45",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -29,6 +29,7 @@
   "activationEvents": [
     "onLanguage:terraform",
     "onView:tfAnalyzeFindings",
+    "onView:tfAnalyzeBlastRadius",
     "workspaceContains:**/*.tf"
   ],
   "main": "./out/extension.js",
@@ -176,6 +177,16 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "tfAnalyzeBlastRadius",
+        "contents": "Blast radius identifies resources whose destruction or recreation would cascade to the most downstream dependents — the resources to handle with care on apply.\n\n[Run Scan](command:tf-analyze.runScan)\n\nThe list populates after a scan. If you've already scanned and this view is empty, your workspace's dependency graph has no resource with a downstream count above zero — try `examples/attack-graph-demo/` from the tf-analyze repo for a worked example."
+      },
+      {
+        "view": "tfAnalyzeFindings",
+        "contents": "[Run Scan](command:tf-analyze.runScan)\n\nFindings populate after a scan. Save a `.tf` file to auto-scan (configurable via `tf-analyze.runOnSave`)."
+      }
+    ],
     "menus": {
       "editor/title": [
         {

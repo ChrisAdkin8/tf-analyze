@@ -19,7 +19,7 @@
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
-![Tests: 710](https://img.shields.io/badge/tests-710%20passing-brightgreen)
+![Tests: 822](https://img.shields.io/badge/tests-822%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-235%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
@@ -232,7 +232,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | | Path | Doc |
 |---|------|-----|
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks + engine-rendered PR summary (`--format pr-summary`); optional `compliance-framework` / `attack-graph` / `show-info` inputs; pin via `ref` for reproducible CI |
-| VS Code extension (v0.1.43) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine; ships 19 sibling Python files including `_lsp.py`, `_threat_intel.py`, `_blast_radius.py`, plus the eight R30.19 seams: `_cache`, `_diff`, `_registry`, `_plan_state`, `_apply_fixes`, `_baseline`, `_modes`, `_verify`), LSP-driven real-time diagnostics with blast-radius severity uplift + `🌊 blast: N` hover, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse / **🌊 blast-radius** shortcuts, **🌊 Blast Radius tree view** (top-N expandable to downstream), **🌊 CodeLens above high-blast resources**, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
+| VS Code extension (v0.1.44) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine; ships 19 sibling Python files including `_lsp.py`, `_threat_intel.py`, `_blast_radius.py`, plus the eight R30.19 seams: `_cache`, `_diff`, `_registry`, `_plan_state`, `_apply_fixes`, `_baseline`, `_modes`, `_verify`), LSP-driven real-time diagnostics with blast-radius severity uplift + `🌊 blast: N` hover, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse / **🌊 blast-radius** shortcuts, **🌊 Blast Radius tree view** (top-N expandable to downstream), **🌊 CodeLens above high-blast resources**, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |

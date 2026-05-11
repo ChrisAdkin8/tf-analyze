@@ -33,9 +33,18 @@ def find_latest_prior(reports_dir: Path, suffix: str = ".md") -> Path | None:
     """Most-recent ``tf-analysis-YYYY-MM-DD<suffix>`` under ``reports_dir``."""
     if not reports_dir.is_dir():
         return None
+    # Audit item 8 — `glob()` returns a snapshot but `stat()` is called
+    # later; a concurrent unlink between the two raises
+    # `FileNotFoundError`. Tolerate it by skipping the missing entry
+    # instead of crashing the whole scan.
+    def _mtime_safe(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return -1.0
     candidates = sorted(
-        reports_dir.glob(f"tf-analysis-*{suffix}"),
-        key=lambda p: p.stat().st_mtime,
+        (p for p in reports_dir.glob(f"tf-analysis-*{suffix}") if _mtime_safe(p) >= 0),
+        key=_mtime_safe,
         reverse=True,
     )
     return candidates[0] if candidates else None

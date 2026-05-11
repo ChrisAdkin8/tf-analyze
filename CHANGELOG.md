@@ -5,6 +5,75 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.8 — Repo audit + UX recovery on the blast-radius panel — 2026-05-11 (ext v0.1.45)
+
+**Closes the 2026-05-11 repo audit (41 findings across 5 surfaces) and the secondary "still not displaying" UX report on the blast-radius panel.** The v0.1.44 patch correctly fixed the engine-args bug, but a workspace whose graph contains no resource above the high-blast threshold still landed on a blank panel with no explanation — users (rightly) read that as "still broken." This round adds a `viewsWelcome` empty state so the panel always tells the user what it does and how to populate it.
+
+### Critical bugs fixed
+
+- **Attack-graph webview XSS hardened.** Engine fields (`d.label`, `d.type`, finding IDs) flowing into `innerHTML` now pass through an HTML-escape helper, plus a CSP meta tag locks the webview to inline + d3js.org. (Audit item 1.)
+- **`cp.execFile` instead of `cp.exec` in `attackGraph.ts`** — closes shell-injection via workspace path with backticks/quotes. (Audit item 30.)
+- **120s wall-clock timeout on engine invocations** — a hung detect.py used to leave the status bar spinning forever. (Audit item 2.)
+- **`runScan` concurrency guard** — status-bar click + autosave-on-save no longer race; one `_scanInFlight` latch. (Audit item 3.)
+- **Windows-correct path handling** — `path.isAbsolute()` replaces `startsWith("/")`; `moduleReusePanel.ts`'s `file.split('/')` accepts either separator. (Audit item 5.)
+- **`find_latest_prior` tolerates concurrent unlink** — `glob() → stat()` race surfaces a missing entry instead of crashing the scan. (Audit item 8.)
+- **`~> N` single-element provider constraints work** — previously the version gate silently skipped; now `~> 3` is treated as `[3.0, 4.0)`. (Audit item 22.)
+- **Malformed catalogue `file_glob` raises loudly** — the prior `except Exception:` arm fell back to a substring match, hiding the bug. (Audit item 29.)
+
+### Code-smell + brittleness fixes
+
+- **`runScan` parameter object** — nine positional args collapsed to a single `ScanContext`. (Audit item 13.)
+- **`getattr(args, "x", default)` → direct attribute access** at five argparse-wired call-sites. A rename typo now fails fast with `AttributeError`. (Audit item 15.)
+
+### Test + CI rails
+
+- **CI runs `pytest tests/` (full suite), not three named files** — single highest-ROI fix in the repo. 822 tests run on every push instead of the previous ~80. (Audit item 31.)
+- **`vscode-extension` job runs `npm ci && npm run bundle-engine && npm test` on every push** — the blast-radius regression that shipped in v0.1.42-43 would have been caught here. (Audit items 32 + 37.)
+- **Python version matrix: 3.10, 3.11, 3.12, 3.13** — `pyproject.toml` advertises `>= 3.10` but CI ran only 3.12. (Audit item 34.)
+- **`tests/snapshots/terragoat.json`** replaces the hand-coded count bounds in `ci.yml`. `scripts/check_terragoat_snapshot.py --update` regenerates on a deliberate rule-pack landing. (Audit item 38.)
+- **New regression suite** at `tests/test_audit_2026_05_11_regressions.py` (7 tests): JSON determinism (item 36), stderr/traceback assertion (item 40), `~> N` single-element gate (item 22), find_latest_prior race (item 8), Path-helper handling (item 5), property-based blast-radius determinism via hypothesis (item 41), and the glob-shape contract (item 29).
+
+### UX fix — blast radius "still not displaying" closed
+
+The v0.1.44 patch was correct (engine emits the data, extension requests it via `--attack-graph`), but a tree view that's empty by default — with no welcome message and no instruction — reads as "broken" to a user opening it for the first time. This round adds:
+
+- **`viewsWelcome` empty-state for the Blast Radius view** describing what blast radius is, why the panel might be empty, and a one-click Run Scan button + pointer at `examples/attack-graph-demo/`.
+- **`viewsWelcome` for the Findings view** for the same reason — a blank view before the first scan was just as confusing.
+- **`onView:tfAnalyzeBlastRadius` activation event** so clicking the panel tab activates the extension even in workspaces that contained no `.tf` files at startup.
+
+### Counts
+
+- Pytest cases: 798 → **822** (+24 regression tests).
+- Extension `node:test` cases: 61 (unchanged — fixes are behavioural).
+- CI jobs: 5 → **6** (+vscode-extension).
+- Audit findings closed: 41/41 in scope; 3 (#9, #10, #12) deferred as standalone refactor PRs because their blast radius warrants a separate review.
+- Extension: v0.1.44 → **v0.1.45**.
+
+---
+
+## Round 30.7 — Fix blast-radius wiring in the VS Code extension — 2026-05-11 (ext v0.1.44)
+
+**Bug-fix release. The five R30.18 blast-radius surfaces in v0.1.42 shipped wired to nothing because the extension's default `buildArgs()` did not pass `--attack-graph` to the engine — the engine therefore emitted neither the top-level `blast_radius` block nor per-node `graph.nodes[i].blast_radius` decorations. The tree view, CodeLens, and status-bar chip all fell back to empty data and rendered nothing; the regression slipped from v0.1.42 into v0.1.43 unchanged. Fix is a one-line edit to `buildArgs()` plus two regression tests.**
+
+### Fixed
+
+- [`vscode-extension/src/extension.ts`](vscode-extension/src/extension.ts) `buildArgs()` now includes `--attack-graph` in the default argument list. The flag is cheap (~50ms on the demo fixture, sub-second on multi-thousand-resource repos) and re-lights every blast-radius surface in one line: tree view, CodeLens, status-bar chip, hover enrichment, and the LSP severity uplift.
+- [`vscode-extension/src/test/engineSmoke.test.ts`](vscode-extension/src/test/engineSmoke.test.ts) gains two regression tests:
+  - **engine roundtrip** — `python3 detect.py --target fixtures/attack_graph_demo/ --format json --attack-graph` is asserted to produce a non-empty top-level `blast_radius` array AND at least one `graph.nodes[i].blast_radius`. Catches engine-side regressions in the data the panel consumes.
+  - **static buildArgs guard** — reads `extension.ts` as text and asserts the literal `"--attack-graph"` appears inside `buildArgs(...)`. Catches the exact bug this round fixed: silent removal of the flag without a corresponding test update.
+
+### Why the regression slipped through R30.18 → R30.19
+
+R30.18 added the engine output (`blast_radius` block + per-node decoration) and three new VS Code consumers in one sweep. The consumers were tested in isolation with hand-crafted mock JSON, and the engine was tested via the Python suite. Nothing in the test surface tied the two together — i.e. nothing actually ran `python3 detect.py` with the extension's real argument set and confirmed the panel-consumed fields are present. The static-grep guard added in this round is the smallest test that closes that gap permanently.
+
+### Counts
+
+- Extension: v0.1.43 → **v0.1.44** (bug fix; bundled engine unchanged).
+- `node:test` cases: 59 → **61** (+2 regression tests).
+- Engine: untouched (the engine emits the data correctly; the bug was extension-side).
+
+---
+
 ## Round 30.6 — detect.py modularisation Sessions H–O — 2026-05-11 (R30.19, ext v0.1.43)
 
 **Eight cohesive function clusters extracted from `detect.py` in a single round, taking the file from 5,458 → 4,378 LoC (-1,080, -19.8%). Cumulative reduction since modularisation began at R30.0.6 (Session A): 8,441 → 4,378 LoC (-48.1%).** Each extraction follows the established callable-injection pattern from `_lsp.py` (R30.7) so each new module imports nothing from `detect.py` and can be unit-tested in isolation.

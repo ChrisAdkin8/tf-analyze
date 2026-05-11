@@ -199,6 +199,10 @@ Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. 
 
 Surface the top-5 findings ranked by score contribution, showing the projected score and grade if each is fixed. Tells the user which fix is worth most. Renders as a header block in text / pr-summary output; surfaces as a structured `score_explanation` object in JSON output.
 
+### `--blast-radius`
+
+Surface the top-N resources sorted by downstream blast radius — 'what would a single terraform apply destroy?'. Implied by --attack-graph; this flag adds a dedicated text table when --format text. JSON output always carries the `blast_radius` block when the attack graph is built. Findings on high-blast-radius resources also carry a per-finding `blast_radius` integer.
+
 ### `--rank-by`
 
 Ordering mode for findings (R30.2 — exploitability prioritisation). `urgency` (default) keeps the legacy CRITICAL-first ordering. `exploitability` promotes findings whose rule touches a CWE currently in CISA KEV one urgency tier and sorts KEV hits first. `hybrid` keeps urgency-first ordering with the KEV promotion applied. CISA KEV + FIRST.org EPSS feeds are cached daily at ~/.cache/tf-analyze/. No comparable OSS IaC scanner integrates KEV today.

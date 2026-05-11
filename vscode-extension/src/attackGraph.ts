@@ -72,8 +72,13 @@ export class AttackGraphPanel {
       return;
     }
 
-    cp.exec(
-      `python3 "${absScript}" --target "${wsFolder}" --format json --attack-graph`,
+    // Audit item 30 — `cp.exec` with a template-literal command lets a
+    // workspace path containing backticks or double-quotes inject
+    // arbitrary shell. `execFile` passes argv directly to the kernel:
+    // no shell, no interpolation, no escape gymnastics.
+    cp.execFile(
+      'python3',
+      [absScript, '--target', wsFolder, '--format', 'json', '--attack-graph'],
       { maxBuffer: 20 * 1024 * 1024 },
       (err, stdout, stderr) => {
         // exit 1 = findings exist (expected); exit > 1 = real error.
@@ -178,12 +183,25 @@ export class AttackGraphPanel {
   }
 
   private _getHtml(graph: AttackGraph): string {
-    const nodesJson = JSON.stringify(graph.nodes);
-    const edgesJson = JSON.stringify(graph.edges);
+    // Audit item 1 — also defend against a `</script>` sequence inside
+    // a JSON string field (label, finding ID, etc.) breaking out of
+    // the inline script tag. JSON.stringify does not escape `/`; we
+    // replace `</` with `<\/` so the bytes are still valid JSON-as-JS
+    // but cannot terminate the surrounding <script>…</script>.
+    const safeJson = (v: unknown): string =>
+      JSON.stringify(v).replace(/<\/(script)/gi, '<\\/$1');
+    const nodesJson = safeJson(graph.nodes);
+    const edgesJson = safeJson(graph.edges);
     return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<!-- Audit item 1 (defence-in-depth): CSP narrows what the webview can
+     execute even if the field-escape regression returns. d3 lives on
+     d3js.org over HTTPS so we allow that origin explicitly; everything
+     else falls back to the webview's own origin. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline' https://d3js.org; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none';">
 <style>
   body { margin: 0; background: #1e1e1e; color: #ccc; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
   #container { display: flex; height: 100vh; }
@@ -303,17 +321,30 @@ sim.on('tick', () => {
   node.attr('transform', d => \`translate(\${d.x},\${d.y})\`);
 });
 
+// Audit item 1 — every engine-supplied field flowing into innerHTML
+// must round-trip through HTML-escape, otherwise a Terraform resource
+// named  <img src=x onerror=alert(1)> (or any unescaped label, type,
+// finding ID, etc.) executes JS in the webview (enableScripts: true).
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function showDetail(d) {
   const badges = [
     d.is_crown_jewel ? '<span class="badge badge-cj">Crown Jewel</span>' : '',
     d.internet_reachable ? '<span class="badge badge-inet">Internet-reachable</span>' : '',
   ].join('');
   const findings = d.findings?.length
-    ? d.findings.map(f => \`<span class="finding-chip">\${f}</span>\`).join('')
+    ? d.findings.map(f => \`<span class="finding-chip">\${esc(f)}</span>\`).join('')
     : '<span style="color:#888">No findings</span>';
   document.getElementById('node-detail').innerHTML = \`
-    <h3>\${d.label}\${badges}</h3>
-    <p><strong>Type:</strong> \${d.type}</p>
+    <h3>\${esc(d.label)}\${badges}</h3>
+    <p><strong>Type:</strong> \${esc(d.type)}</p>
     <p><strong>Findings:</strong><br>\${findings}</p>
   \`;
 }

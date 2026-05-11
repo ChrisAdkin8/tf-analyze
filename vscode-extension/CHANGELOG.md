@@ -5,6 +5,100 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.45] — 2026-05-11
+
+**Audit pass — security, robustness, Windows correctness, UX.** This release
+closes the eight critical bugs flagged in the 2026-05-11 repo audit
+(`tasks/repo-audit-2026-05-11.md`) plus the structural UX gap that made
+v0.1.44's blast-radius surfaces *look* empty on a workspace where every
+resource's downstream count sat below the high-blast threshold.
+
+### Security
+
+- **Attack-graph webview XSS hardened.** Every engine field flowing into
+  `innerHTML` (`d.label`, `d.type`, finding IDs) now passes through an
+  HTML-escape helper; a `</script>` sequence inside a node-string field
+  can no longer break out of the inline script tag. A Content-Security-
+  Policy meta tag locks the webview down to inline script + d3js.org as
+  defence in depth. Audit item 1.
+- **`cp.exec` → `cp.execFile` in `attackGraph.ts`.** The template-literal
+  command let a workspace path containing backticks/quotes inject shell;
+  `execFile` passes argv to the kernel directly. Audit item 30.
+
+### Robustness
+
+- **120s wall-clock timeout on engine invocations.** A hung detect.py
+  (Windows filesystem stall, infinite-loop bug, multi-thousand-file repo)
+  used to leave the status bar spinning forever — now it terminates,
+  surfaces the timeout, and resets state. Audit item 2.
+- **`runScan` concurrency guard.** Status-bar click + autosave-on-save
+  could spawn two engines whose `findingsMap.clear()` calls raced.
+  A single `_scanInFlight` latch serialises invocations. Audit item 3.
+- **Windows-correct path handling.** `f.file.startsWith("/")` was POSIX-
+  only; Windows engine output (`C:\repo\main.tf`) failed the absolute-
+  detection and got re-rooted under the workspace. `path.isAbsolute`
+  handles both POSIX and Win32 forms. `moduleReusePanel.ts`'s
+  `file.split('/')` now splits on `[\\/]`. Audit item 5.
+- **`runScan` parameter object.** The function previously took nine
+  positional args; six call-sites had to retype the order. A single
+  `ScanContext` removes the transposition foot-gun. Audit item 13.
+
+### UX — blast radius now visible by default
+
+- **`viewsWelcome` empty-state for the Blast Radius view.** Before this
+  release, a workspace whose graph had no resource above the high-blast
+  threshold would land on a blank panel with no explanation. The empty
+  state now describes what blast radius means, offers a one-click Run
+  Scan, and points at `examples/attack-graph-demo/` for a worked
+  reference. The same welcome block lights up the Findings view when
+  no scan has run yet.
+- **`onView:tfAnalyzeBlastRadius` activation event.** Opening the
+  Blast Radius view in the activity bar now activates the extension if
+  the workspace contained no `.tf` file at startup.
+
+### Counts
+
+- Extension: v0.1.44 → **v0.1.45**.
+- Bundled engine: unchanged sibling count (19 Python files).
+- `node:test` cases: 61 (unchanged — no new tests; XSS/timeout/race
+  guards are behavioural, exercised under the same scan path).
+
+---
+
+## [0.1.44] — 2026-05-11
+
+**Bug fix: the R30.18 blast-radius surfaces render data.** v0.1.42 shipped
+five blast-radius surfaces (tree view, CodeLens, status-bar chip, hover
+enrichment, severity uplift) but the extension's default `buildArgs()` did
+not pass `--attack-graph` to the engine — so the engine emitted neither
+the top-level `blast_radius` block nor per-node `blast_radius` decorations
+on `graph.nodes`. All three on-screen surfaces fell back to empty data
+and rendered nothing. v0.1.43 inherited the regression unchanged.
+
+### Fixed
+
+- `extension.ts` `buildArgs()` now includes `--attack-graph` in the default
+  argument list. The flag is cheap (a single DAG traversal that the engine
+  already needs for attack-graph reasoning) and re-lights the entire R30.18
+  surface set in one line: blast-radius tree view, CodeLens above high-blast
+  resources, `🌊 N high-blast` status-bar chip, `🌊 blast: N` hover
+  enrichment, and the severity uplift in `_lsp.py`.
+- New regression tests in `src/test/engineSmoke.test.ts`:
+  - `engine: --attack-graph populates a non-empty blast_radius block` —
+    spawns `python3 detect.py` against `fixtures/attack_graph_demo/` and
+    asserts the JSON output carries both a non-empty top-level
+    `blast_radius` array and at least one `graph.nodes[i].blast_radius`.
+  - `extension: buildArgs default includes --attack-graph` — static guard
+    that greps the source so removing the flag fails CI immediately.
+
+### Counts
+
+- Extension: v0.1.43 → **v0.1.44**.
+- Bundled engine: unchanged (same 19 sibling Python files as v0.1.43).
+- `node:test` cases: 59 → **61** (+2 regression tests).
+
+---
+
 ## [0.1.43] — 2026-05-11
 
 Engine refresh only — no extension UI changes. The bundled engine inside

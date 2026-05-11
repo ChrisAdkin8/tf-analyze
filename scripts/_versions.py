@@ -93,8 +93,15 @@ def _provider_constraint_allows(constraint: str, min_version: str) -> bool:
             if a > b:
                 return False
         elif op == "~>":
+            # Audit item 22 — single-element form `~> 3` was previously
+            # `continue`d (silent skip), producing a false-negative on
+            # any version-gated rule. The Terraform spec treats `~> N`
+            # as `>= N.0, < (N+1).0`, the same shape as `~> N.M` with
+            # one less precision digit; pad `v` to length-2 before the
+            # upper-bound calculation so both forms go through the same
+            # branch.
             if len(v) < 2:
-                continue
+                v = v + (0,)
             # `~> X.Y` allows [X.Y, X+1.0). The constraint can reach
             # `min_v` iff the upper bound is strictly above `min_v` —
             # if `min_v >= upper`, every allowed version is below

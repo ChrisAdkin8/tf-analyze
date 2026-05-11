@@ -186,8 +186,16 @@ same shape as the engine HTML report.
 
 ### VS Code extension
 
-✅ *Shipped in v0.1.42 (R30.18).* Five surfaces, all derived from the
-engine's blast-radius JSON:
+✅ *Shipped in v0.1.42 (R30.18); engine-args fixed in v0.1.44 (R30.7);
+empty-state UX added in v0.1.45 (R30.8).* Five surfaces, all derived
+from the engine's blast-radius JSON. v0.1.42–v0.1.43 forgot to pass
+`--attack-graph` to the engine — fixed in v0.1.44 with two regression
+tests in `engineSmoke.test.ts`. But the panel still *looked* empty on
+workspaces where every resource's downstream count sat below the
+high-blast threshold, with no message explaining why; **v0.1.45 adds
+a `viewsWelcome` entry that always tells the user what the panel does
+and offers a one-click Run Scan + pointer at the
+`examples/attack-graph-demo/` reference workspace.**
 
 - **🌊 Blast Radius tree view** in the activity bar — top-N
   high-blast resources, expandable to show downstream dependents

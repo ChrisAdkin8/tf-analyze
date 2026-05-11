@@ -180,6 +180,44 @@ const skipReason = !py ? 'python3 not on PATH' : !engine ? 'detect.py not locate
         fs.rmSync(target, { recursive: true, force: true });
     }
 });
+(0, node_test_1.test)('engine: --attack-graph populates a non-empty blast_radius block (regression for v0.1.42-43 empty panel)', { skip: skip && skipReason }, () => {
+    const repo = path.dirname(path.dirname(engine));
+    const fixture = path.join(repo, 'fixtures', 'attack_graph_demo');
+    if (!fs.existsSync(fixture))
+        return;
+    let stdout = '';
+    try {
+        stdout = (0, node_child_process_1.execFileSync)('python3', [engine, '--target', fixture, '--format', 'json', '--attack-graph'], {
+            encoding: 'utf8',
+            maxBuffer: 50 * 1024 * 1024,
+        });
+    }
+    catch (e) {
+        const err = e;
+        if ((err.status ?? 0) > 1)
+            throw new Error(`engine crashed (exit ${err.status}): ${err.stderr ?? ''}`);
+        stdout = err.stdout ?? '';
+    }
+    const parsed = JSON.parse(stdout);
+    assert.ok(Array.isArray(parsed.blast_radius) && parsed.blast_radius.length > 0, 'JSON output should include a non-empty top-level blast_radius array when --attack-graph is passed');
+    const nodes = parsed.graph?.nodes ?? [];
+    assert.ok(nodes.length > 0, 'graph.nodes should be present');
+    assert.ok(nodes.some(n => typeof n.blast_radius === 'number'), 'at least one graph node should carry a numeric blast_radius field');
+});
+(0, node_test_1.test)('extension: buildArgs default includes --attack-graph (regression for v0.1.42-43 empty panel)', () => {
+    // Static source check: if someone removes --attack-graph from the
+    // default buildArgs the blast-radius panel/CodeLens/status-bar chip
+    // all render empty silently — no diagnostic, no error, just nothing.
+    // The engine roundtrip test above proves the engine still emits the
+    // data; this one proves the extension still asks for it.
+    const srcPath = path.join(__dirname, '..', '..', 'src', 'extension.ts');
+    if (!fs.existsSync(srcPath))
+        return;
+    const src = fs.readFileSync(srcPath, 'utf8');
+    const m = src.match(/function buildArgs\([\s\S]*?\)\s*:\s*string\[\]\s*\{([\s\S]*?)\n\}/);
+    assert.ok(m, 'buildArgs function should be discoverable in extension.ts');
+    assert.ok(m[1].includes('"--attack-graph"'), 'buildArgs must include "--attack-graph" in its default args — otherwise the blast-radius surfaces go dark');
+});
 (0, node_test_1.test)('engine: --format compliance runs without TypeError on str/int sort (regression for _ctrl_sort_key)', { skip: skip && skipReason }, () => {
     const repo = path.dirname(path.dirname(engine));
     const target = path.join(repo, 'examples', 'terragoat', 'aws');

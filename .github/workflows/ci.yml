@@ -9,41 +9,78 @@ permissions:
   contents: read
 
 jobs:
-  self-test:
-    name: self-test (catalogue ↔ fixtures)
+  unit-tests:
+    name: pytest (full suite, py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `pyproject.toml` advertises `python_requires >= 3.10`, so every
+        # supported minor must actually be exercised. Previously this job
+        # ran on 3.12 only — a regression that needed a `match` statement
+        # or `tomllib` quirk to surface would have slipped through.
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # stub-status.py needs git history for ages
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install pytest
-        run: pip install pytest pytest-xdist --quiet
-      - name: Run pytest (unit + clean fixtures)
-        run: pytest tests/test_detection_core.py tests/test_attack_graph.py tests/test_clean_fixtures.py --tb=short -q --junitxml=test-results-unit.xml
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest + hypothesis
+        # hypothesis enables the property-based tests added for
+        # `_blast_radius` cycle handling.
+        run: pip install pytest pytest-xdist hypothesis --quiet
+      - name: Run full pytest suite
+        # Audit item 31 — previously this step ran three named files,
+        # leaving 43 test modules unexercised in CI. The full suite is
+        # the single highest-ROI guard in the repo.
+        run: pytest tests/ --tb=short -q --junitxml=test-results-py${{ matrix.python-version }}.xml
       - name: Run fixture self-test
         run: python3 scripts/self_test.py
       - name: Run schema validator regression
         run: python3 scripts/test_schema.py
       - name: Catalogue strict-load (fail on any malformed YAML)
-        # Pointing --target at the repo itself works because there are
-        # no .tf files at the root — detect.py is happy with an empty
-        # corpus, so this just exercises the strict-catalog path.
         run: python3 scripts/detect.py --target . --strict-catalog --list-rules > /dev/null
       - name: ATT&CK drift check (catalogue ↔ scripts/_mitre.py)
-        # Fails the run if any rule cites a `mitre:` technique not in
-        # MITRE_TECHNIQUE_INFO. Action on failure: add the technique
-        # to the table with its human name and tactics.
         run: python3 scripts/check_attack_drift.py
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-unit
-          path: test-results-unit.xml
+          name: test-results-py${{ matrix.python-version }}
+          path: test-results-py${{ matrix.python-version }}.xml
           retention-days: 14
+
+  extension-tests:
+    # Audit item 32 — `vscode-extension/` has its own `node:test` suite
+    # (61 cases as of v0.1.44) that previously never ran in CI. The
+    # blast-radius regression that shipped in v0.1.42-43 would have
+    # been caught here; without this job, the next regression of the
+    # same shape ships too.
+    name: vscode-extension (npm test + bundle smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install extension deps
+        working-directory: vscode-extension
+        run: npm ci
+      - name: Bundle engine (smoke-tests strict catalog + sibling imports)
+        # Audit item 37 — the bundle script's smoke test only ran at
+        # release. Running it on every push catches "added a new
+        # `scripts/_foo.py` import but forgot to add it to
+        # ENGINE_SIBLING_FILES" before it ships in a .vsix.
+        working-directory: vscode-extension
+        run: npm run bundle-engine
+      - name: Run node:test
+        working-directory: vscode-extension
+        run: npm test
 
   cli-docs:
     name: docs/cli.md is up to date
@@ -63,11 +100,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # The per-rule docs site (https://chrisadkin8.github.io/tf-analyze/rules/)
-      # is generated from catalog/*.yaml. Drift is a public contract bug —
-      # SARIF helpUri, compliance panel links, IDE hover all 404 if the
-      # site is missing a page. Fail the build when the docs are stale
-      # so the catalogue PR also touches the docs.
       - run: python3 scripts/gen_rule_docs.py --check
 
   stubs:
@@ -80,48 +112,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Non-zero exit if any stub is older than 180 days. The threshold
-      # is deliberately generous — half a year is enough time to either
-      # promote a sketched-out rule to active or formally deprecate it.
       - run: python3 scripts/stub-status.py --age 180d
 
   terragoat:
-    name: demo corpus produces expected finding count
+    name: demo corpus matches checked-in snapshot
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Smoke-test that the catalogue still produces *roughly* the
-      # expected number of findings on a known-vulnerable corpus.
-      # Tolerance is wide because the catalogue grows ~10 rules/round;
-      # the bounds catch (a) catastrophic regressions where a new
-      # change accidentally suppresses dozens of findings, or (b) a
-      # rule that's wildly more aggressive than intended. Bumping
-      # bounds is appropriate when a deliberate rule-pack lands;
-      # update both the lower and the upper bound to current ± 20%.
-      #
-      # Last calibrated 2026-05-09 against catalogue at 209 rules:
-      #   aws=118, gcp=79, azure=90, total=287
-      - name: Count findings per cloud
-        run: |
-          set -euo pipefail
-          for c in gcp aws azure; do
-            N=$(
-              python3 scripts/detect.py --target "examples/terragoat/$c" --format json \
-                | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))'
-            )
-            echo "$c: $N findings"
-            case "$c" in
-              gcp)   test "$N" -ge 60  -a "$N" -le 110 ;;
-              aws)   test "$N" -ge 90  -a "$N" -le 150 ;;
-              azure) test "$N" -ge 70  -a "$N" -le 120 ;;
-            esac
-          done
-          TOTAL=$(
-            python3 scripts/detect.py --target examples/terragoat --format json \
-              | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))'
-          )
-          echo "total: $TOTAL findings"
-          test "$TOTAL" -ge 230 -a "$TOTAL" -le 360
+      # Audit item 38 — the hand-coded bounds (gcp 60-110, aws 90-150,
+      # azure 70-120, total 230-360) drift every ~10 rules. Replace
+      # with a checked-in snapshot regenerated on each release. CI
+      # asserts current counts match the snapshot; bumping the
+      # snapshot is the deliberate "I added rules" gate.
+      - name: Compare against snapshot
+        run: python3 scripts/check_terragoat_snapshot.py

@@ -418,10 +418,22 @@ def detect_in_file(
                     # Path.match handles `.github/workflows/*.yml`-style
                     # directory-anchored globs that the legacy `endswith`
                     # check could not (R30.6 workflow-YAML walker).
+                    #
+                    # Audit item 29 — the prior `except Exception:` arm
+                    # silently absorbed a malformed glob like `**/*.tf[`
+                    # by falling back to a substring match, hiding the
+                    # catalogue bug from the operator. Narrow to the
+                    # specific `ValueError` that `Path.match` raises on
+                    # an invalid pattern and surface it loudly; a real
+                    # syntax error in a catalogue file should fail the
+                    # scan, not silently match nothing.
                     try:
                         matched = file_path.match(glob)
-                    except Exception:
-                        matched = str(file_path).endswith(glob.lstrip("*/"))
+                    except ValueError as e:
+                        raise ValueError(
+                            f"catalogue rule has malformed file_glob "
+                            f"{glob!r}: {e}"
+                        ) from e
                     if not matched:
                         continue
                 if not_regex_grep is not None and not_regex_grep.search(text):
@@ -2761,8 +2773,11 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
         print("ERROR: GITHUB_TOKEN environment variable is not set", file=sys.stderr)
         sys.exit(2)
 
-    repo = getattr(args, "repo", None)
-    pr_number = getattr(args, "pr_number", None)
+    # Audit item 15 — argparse wires `--repo` and `--pr-number`
+    # unconditionally, so direct attribute access fails fast on a
+    # rename typo instead of silently returning None.
+    repo = args.repo
+    pr_number = args.pr_number
     if not repo or not pr_number:
         print(
             "ERROR: --repo and --pr-number are required for --mode pr-review",
@@ -3828,7 +3843,10 @@ def main():
     # state.tfstate` output. R30.12 — closes the gap between HCL intent
     # and actual deployed values for oncalls who need to spot drift
     # without re-running plan.
-    state_json_arg = getattr(args, "state_json", None)
+    # Audit item 15 — argparse wires `--state-json` via dest="state_json"
+    # unconditionally; direct access surfaces a rename typo as
+    # AttributeError instead of a silent None.
+    state_json_arg = args.state_json
     if args.mode == "drift" and not state_json_arg:
         print(
             "ERROR: --mode drift requires --state-json PATH",
@@ -3868,8 +3886,11 @@ def main():
         if _cache_path and _corpus_hash_val:
             _save_scan_cache(_cache_path, _corpus_hash_val, findings)
 
-    # Registry staleness check (opt-in; requires network access)
-    if getattr(args, "check_registry", False):
+    # Registry staleness check (opt-in; requires network access).
+    # Audit item 15 — direct attribute access; argparse boolean-flag
+    # always defaults to False so a typo would crash here instead of
+    # silently disabling the check.
+    if args.check_registry:
         registry_findings = _check_module_registry_staleness(all_text)
         print(
             f"# registry check: {len(registry_findings)} stale module(s) found",
@@ -3879,14 +3900,15 @@ def main():
 
     # Auto-fix application — runs before suppression so the patched file
     # re-scan (if the user re-runs) won't report those findings.
-    if getattr(args, "apply_fixes", None):
+    # Audit item 15 — direct access on argparse-wired flags.
+    if args.apply_fixes:
         # `--apply-fixes` × `--baseline` (R30.11): when a baseline is set,
         # findings already present in the baseline are not auto-patched.
         # Closes the "snapshot today, fix only new stuff" UX. The full
         # finding list is still emitted in the report; only the patcher
         # input is narrowed.
         fixable_findings = findings
-        if getattr(args, "baseline", None):
+        if args.baseline:
             _baseline_path = Path(args.baseline)
             if _baseline_path.exists():
                 _retained, _suppressed_b = apply_baseline(findings, _baseline_path)

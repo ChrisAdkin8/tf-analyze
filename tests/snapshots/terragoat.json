@@ -1,0 +1,13 @@
+{
+  "_meta": {
+    "purpose": "Pinned finding counts for examples/terragoat/{aws,gcp,azure}. CI fails when current counts differ by more than the per-cloud tolerance. Regenerate when a deliberate rule-pack lands by running `python3 scripts/check_terragoat_snapshot.py --update` and committing the result.",
+    "calibrated": "2026-05-11",
+    "tolerance_pct": 15
+  },
+  "counts": {
+    "gcp": 85,
+    "aws": 125,
+    "azure": 93,
+    "total": 306
+  }
+}

@@ -116,7 +116,10 @@ class ModuleReusePanel {
             const docsUrl = (0, urls_1.ruleDocsUrl)(ruleId);
             const rows = hits.map(h => {
                 const conf = (h.confidence ?? 'medium').toLowerCase();
-                const fileShort = h.file.split('/').slice(-2).join('/');
+                // Audit item 5 — engine emits backslashes on Windows. Split on
+                // either separator, then re-join with forward slashes for the
+                // panel (display only — never used as a real filesystem path).
+                const fileShort = h.file.split(/[\\/]/).slice(-2).join('/');
                 const roiCell = h.roi && h.roi.lines_saved > 0
                     ? `<span class="roi" title="${h.roi.bespoke_lines} bespoke lines vs. ~${h.roi.replacement_lines} for a module call">~${h.roi.lines_saved} lines (${h.roi.pct_saved}%)</span>`
                     : '<span class="roi-none">—</span>';

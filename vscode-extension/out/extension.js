@@ -58,6 +58,21 @@ const blastRadiusLens_1 = require("./blastRadiusLens");
 // surfaces a chip; high-blast adds a second-level warning colour.
 const BLAST_SMALL_THRESHOLD = 5;
 const BLAST_LARGE_THRESHOLD = 10;
+// Audit item 2 — wall-clock cap on a single engine invocation. The
+// engine has no internal timeout; on a hung detect.py (Windows file
+// system stall, infinite-loop bug, multi-thousand-file repo) the
+// status bar would spin forever. 120s is generous for any realistic
+// workspace (the demo fixtures complete in <2s) and still bounded so
+// the user never loses the panel.
+const SCAN_TIMEOUT_MS = 120000;
+// Audit item 5 — engine emits paths with the host OS's separator.
+// `f.file.startsWith("/")` was Unix-only; on Windows the engine
+// returns `C:\repo\main.tf` and the absolute-detection failed,
+// re-rooting findings against the workspace path twice. `path.isAbsolute`
+// handles both POSIX and Win32 forms.
+function _resolveFindingPath(file, target) {
+    return path.isAbsolute(file) ? file : path.join(target, file);
+}
 // ─── Tree view ────────────────────────────────────────────────────────────────
 class FindingItem extends vscode.TreeItem {
     constructor(finding, collapsibleState) {
@@ -164,7 +179,7 @@ function applyDiagnostics(diagnosticCollection, findings) {
     diagnosticCollection.clear();
     const byFile = new Map();
     for (const f of findings) {
-        const absPath = f.file.startsWith("/") ? f.file : path.join(workspacePath(), f.file);
+        const absPath = _resolveFindingPath(f.file, workspacePath());
         const uri = vscode.Uri.file(absPath);
         const lineIdx = Math.max(0, f.line - 1);
         const colIdx = Math.max(0, (f.column ?? 1) - 1);
@@ -245,7 +260,12 @@ function resolveScriptPath() {
 }
 function buildArgs(target) {
     const cfg = vscode.workspace.getConfiguration("tf-analyze");
-    const args = ["--target", target, "--format", "json"];
+    // `--attack-graph` gates the engine's graph build, which is the upstream
+    // dependency for the blast-radius surfaces (tree view, CodeLens,
+    // status-bar chip) and for `graph.nodes[].blast_radius`. Without this
+    // flag the engine emits no `blast_radius` block and no `graph`, so the
+    // R30.18 panels render empty. See engineSmoke.test.ts for the guard.
+    const args = ["--target", target, "--format", "json", "--attack-graph"];
     const section = cfg.get("section") ?? "";
     if (section)
         args.push("--section", section);
@@ -345,7 +365,17 @@ function _gradeColor(grade) {
         return new vscode.ThemeColor("charts.red");
     return undefined;
 }
-async function runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel) {
+// Audit item 3 — concurrency guard. status-bar click + autosave-on-save
+// can fire runScan twice; without this latch, `findingsMap.clear()`
+// races with the prior scan's writes and the panel ends up showing
+// some subset of findings from each. One in-flight at a time.
+let _scanInFlight = false;
+async function runScan(ctx) {
+    const { diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel, } = ctx;
+    if (_scanInFlight) {
+        outputChannel.appendLine("[tf-analyze] Scan already in flight — skipping duplicate request.");
+        return;
+    }
     const scriptPath = resolveScriptPath();
     if (!scriptPath) {
         vscode.window.showErrorMessage("tf-analyze: detect.py not found. Set tf-analyze.scriptPath in settings.");
@@ -353,6 +383,7 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, b
     }
     const target = workspacePath();
     const args = buildArgs(target);
+    _scanInFlight = true;
     provider.setScanRunning(true);
     statusBar.text = "$(sync~spin) tf-analyze scanning…";
     statusBar.color = undefined;
@@ -363,9 +394,21 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, b
             let stdout = "";
             let stderr = "";
             const proc = cp.spawn("python3", [scriptPath, ...args], { cwd: target });
+            // Audit item 2 — wall-clock timeout. SIGTERM the engine and
+            // reject the promise so the status bar and panels return to
+            // a known state instead of spinning forever.
+            const timer = setTimeout(() => {
+                try {
+                    proc.kill("SIGTERM");
+                }
+                catch { /* already gone */ }
+                reject(new Error(`tf-analyze: scan exceeded ${SCAN_TIMEOUT_MS / 1000}s and was cancelled. ` +
+                    `Re-run from a smaller workspace or open the Output panel for the engine command.`));
+            }, SCAN_TIMEOUT_MS);
             proc.stdout.on("data", (d) => (stdout += d));
             proc.stderr.on("data", (d) => (stderr += d));
             proc.on("close", (code) => {
+                clearTimeout(timer);
                 if (stderr)
                     outputChannel.appendLine(`[tf-analyze] stderr: ${stderr}`);
                 // exit 1 = findings found, exit 0 = clean — both are valid
@@ -376,7 +419,10 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, b
                     resolve(stdout);
                 }
             });
-            proc.on("error", reject);
+            proc.on("error", (err) => {
+                clearTimeout(timer);
+                reject(err);
+            });
         });
         let parsed;
         try {
@@ -390,7 +436,7 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, b
         const findings = parsed.findings ?? [];
         findingsMap.clear();
         for (const f of findings) {
-            const key = f.file.startsWith("/") ? f.file : path.join(target, f.file);
+            const key = _resolveFindingPath(f.file, target);
             if (!findingsMap.has(key))
                 findingsMap.set(key, []);
             findingsMap.get(key).push(f);
@@ -447,6 +493,7 @@ async function runScan(diagnosticCollection, provider, findingsMap, statusBar, b
         outputChannel.appendLine(`[tf-analyze] Error: ${msg}`);
     }
     finally {
+        _scanInFlight = false;
         provider.setScanRunning(false);
     }
 }
@@ -534,7 +581,20 @@ function activate(context) {
     const blastLensProvider = new blastRadiusLens_1.BlastRadiusCodeLensProvider();
     const blastLensRegistration = vscode.languages.registerCodeLensProvider({ language: "terraform", scheme: "file" }, blastLensProvider);
     const codeActionProvider = new TfAnalyzeCodeActionProvider(findingsMap);
-    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, deltaStatusBar, complianceStatusBar, remediateStatusBar, moduleReuseStatusBar, blastStatusBar, treeView, blastTreeView, blastLensRegistration, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
+    // Audit item 13 — single source of truth for runScan's dependency
+    // surface. Mutating any of these handles re-bound a positional
+    // parameter at six call-sites; the bag of refs binds once here.
+    const scanCtx = {
+        diagnosticCollection,
+        provider,
+        findingsMap,
+        statusBar,
+        blastStatusBar,
+        blastProvider,
+        blastLensProvider,
+        outputChannel,
+    };
+    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, deltaStatusBar, complianceStatusBar, remediateStatusBar, moduleReuseStatusBar, blastStatusBar, treeView, blastTreeView, blastLensRegistration, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(scanCtx)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
         diagnosticCollection.clear();
         findingsMap.clear();
         provider.clear();
@@ -612,7 +672,7 @@ function activate(context) {
             (0, uriHandler_1.dispatchUri)({ path: uri.path, query: uri.query, toString: () => uri.toString() }, {
                 openRule: (ruleId) => ruleExplainer_1.RuleExplainerPanel.createOrShow(context, ruleId),
                 runScan: () => {
-                    void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
+                    void runScan(scanCtx);
                 },
                 openLocation: (file, line) => {
                     void vscode.workspace.openTextDocument(file).then(doc => vscode.window.showTextDocument(doc, {
@@ -628,7 +688,7 @@ function activate(context) {
                         ? `tf-analyze: suppressed ${ruleId} at ${path.basename(file)}:${line}. Re-run scan to refresh.`
                         : `tf-analyze: ${ruleId} was already in the baseline.`);
                     if (added) {
-                        void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
+                        void runScan(scanCtx);
                     }
                 },
                 suppressRuleWorkspaceWide: (ruleId) => {
@@ -644,7 +704,7 @@ function activate(context) {
                             ? `tf-analyze: added ${ruleId} to .tf-analyze.yaml's ignore_rules. Re-run scan to refresh.`
                             : `tf-analyze: ${ruleId} was already in ignore_rules.`);
                         if (added) {
-                            void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
+                            void runScan(scanCtx);
                         }
                     });
                 },
@@ -673,7 +733,7 @@ function activate(context) {
             ? `tf-analyze: suppressed ${finding.id} at ${path.basename(finding.file)}:${finding.line}. Re-run scan to refresh.`
             : `tf-analyze: ${finding.id} was already in the baseline.`);
         // Trigger a fresh scan so the tree refreshes with the suppression applied.
-        void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
+        void runScan(scanCtx);
     }), vscode.commands.registerCommand("tf-analyze.unsuppressFinding", async (item) => {
         const finding = item?.finding ?? (await pickFindingFromMap(findingsMap));
         if (!finding)
@@ -688,7 +748,7 @@ function activate(context) {
         void vscode.window.showInformationMessage(removed
             ? `tf-analyze: removed ${finding.id} from baseline. Re-run scan to refresh.`
             : `tf-analyze: ${finding.id} was not in the baseline.`);
-        void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
+        void runScan(scanCtx);
     }), vscode.commands.registerCommand("tf-analyze.openBaseline", async () => {
         const file = (0, baseline_1.ensureBaselineFile)(workspacePath());
         const doc = await vscode.workspace.openTextDocument(file);
@@ -711,7 +771,7 @@ function activate(context) {
             outputChannel.appendLine(`[tf-analyze] LSP active; skipping exec-on-save for ${doc.fileName}`);
             return;
         }
-        runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
+        runScan(scanCtx);
     }));
     // Best-effort start the LSP language server. If detect.py isn't
     // present or the server crashes on init, we silently fall back to
