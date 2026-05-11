@@ -1566,6 +1566,43 @@ def _build_module_dirs(all_files_text: dict) -> set[str]:
     return dirs
 
 
+@dataclass
+class CorpusCtx:
+    """Per-(entry × pat) state for corpus-level detector handlers.
+
+    Built once per (entry, pat) tuple inside :func:`detect_corpus`'s
+    loop, then passed to the handler registered under the pat's
+    ``kind`` key. Same shape as :class:`InFileCtx` but for the
+    workspace-wide passes (cross-module references, unused-output
+    detection, backend consistency, etc.).
+    """
+    target: Path
+    all_files_text: dict
+    sensitive_vars: dict
+    module_dirs: set[str]
+    var_refs_by_dir: dict[str, set[str]]
+    output_refs: set
+    module_sources: dict[str, str]
+    entry: dict
+    eid: str
+    pat: dict
+
+
+_CORPUS_HANDLERS: dict[str, _Callable[["CorpusCtx"], list[dict]]] = {}
+
+
+def _register_corpus(kind: str):
+    """Register a handler for the given corpus-level pattern ``kind``."""
+    def deco(fn):
+        if kind in _CORPUS_HANDLERS:
+            raise RuntimeError(
+                f"duplicate corpus handler registration for kind={kind!r}"
+            )
+        _CORPUS_HANDLERS[kind] = fn
+        return fn
+    return deco
+
+
 def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
     """Patterns that need a global view: resource_absent, output_sensitive_leak,
     cross_module, variable_unused, output_unused, module_missing_tests."""
@@ -1605,6 +1642,24 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
         eid = entry["id"]
         for pat in entry.get("patterns", []) or []:
             kind = pat.get("kind", "")
+            # Round 30.14 — registry dispatch FIRST. Falls through to
+            # the legacy elif chain for kinds not yet migrated.
+            _handler = _CORPUS_HANDLERS.get(kind)
+            if _handler is not None:
+                _ctx = CorpusCtx(
+                    target=target,
+                    all_files_text=all_files_text,
+                    sensitive_vars=sensitive_vars,
+                    module_dirs=module_dirs,
+                    var_refs_by_dir=var_refs_by_dir,
+                    output_refs=output_refs,
+                    module_sources=module_sources,
+                    entry=entry,
+                    eid=eid,
+                    pat=pat,
+                )
+                findings.extend(_handler(_ctx))
+                continue
             if kind == "resource_absent":
                 if "resource" not in pat:
                     continue
