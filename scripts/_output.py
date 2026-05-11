@@ -1216,6 +1216,40 @@ def _render_pr_summary(
         )
     parts.append("")
 
+    # R30.18 — Blast-radius callout. Surfaces high-blast findings as a
+    # dedicated SRE/oncall block: "even before scoring, these are the
+    # ones whose merge would touch the most downstream resources". Only
+    # rendered when the engine ran with --attack-graph; threshold is
+    # the same `_BLAST_UPLIFT_SMALL` constant the LSP uses (5+) so the
+    # two surfaces agree on what counts as "high blast".
+    high_blast = [
+        f for f in ranked
+        if int(f.get("blast_radius") or 0) >= 5
+    ]
+    if high_blast:
+        parts.append("### 🌊 High blast radius — review on-call impact")
+        parts.append("")
+        parts.append(
+            "Findings on resources whose destruction or recreation "
+            "would cascade to many dependents. Treat as high-care-on-apply."
+        )
+        parts.append("")
+        parts.append("| Downstream | Rule | Resource |")
+        parts.append("|---:|---|---|")
+        for f in high_blast[:5]:
+            rid = f["id"]
+            br = int(f.get("blast_radius") or 0)
+            resource = f.get("resource") or f.get("file", "?")
+            rule_link = f"[`{rid}`]({RULE_DOCS_URL_BASE.format(id=rid)})"
+            parts.append(f"| **{br}** | {rule_link} | `{resource}` |")
+        if len(high_blast) > 5:
+            parts.append("")
+            parts.append(
+                f"<sub>+{len(high_blast) - 5} more — full table in "
+                f"`--format json` `blast_radius` block</sub>"
+            )
+        parts.append("")
+
     # Top fix — first ranked finding whose catalogue entry carries a fix_hcl.
     top_fix = next(
         (f for f in ranked

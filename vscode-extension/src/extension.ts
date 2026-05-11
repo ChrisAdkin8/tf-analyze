@@ -15,6 +15,8 @@ import { resolveScriptPath as sharedResolve } from "./scriptResolver";
 import { startLspClient, isLspRunning } from "./lspClient";
 import { baselineExists, baselinePath, ensureBaselineFile, suppress, unsuppress } from "./baseline";
 import { dispatchUri } from "./uriHandler";
+import { BlastRadiusProvider } from "./blastRadiusView";
+import { BlastRadiusCodeLensProvider } from "./blastRadiusLens";
 
 interface Finding {
   id: string;
@@ -30,6 +32,39 @@ interface Finding {
   fix_disruption?: string;
   narrative?: string;
   mitre?: string[];
+  resource?: string;
+  // R30.18 — populated when --attack-graph ran; downstream count for
+  // this finding's resource. The status bar surfaces a high-blast
+  // count, the diagnostic message appends `🌊 blast: N`, the tree
+  // view sorts by it, and the LSP severity uplift uses it.
+  blast_radius?: number;
+}
+
+// R30.17 — top-N high-blast resources, sorted by `blast_radius` desc.
+// Independent of `findings`: a resource can be high-blast even if it
+// has no findings on it — that's the whole point of blast radius
+// being orthogonal to urgency.
+interface BlastEntry {
+  resource: string;
+  type: string;
+  file: string;
+  line: number;
+  blast_radius: number;
+  is_crown_jewel: boolean;
+  internet_reachable: boolean;
+}
+
+interface GraphNode {
+  id: string;
+  type: string;
+  label: string;
+  file: string;
+  line: number;
+  findings: string[];
+  internet_reachable: boolean;
+  is_crown_jewel: boolean;
+  on_critical_path: boolean;
+  blast_radius?: number;
 }
 
 interface ScanResult {
@@ -46,7 +81,17 @@ interface ScanResult {
     };
     suppressed_count?: number;
   };
+  blast_radius?: BlastEntry[];
+  graph?: {
+    nodes: GraphNode[];
+    edges: { from: string; to: string; label: string }[];
+  };
 }
+
+// Same thresholds the engine uses in _lsp.py / _output.py. Mid-blast
+// surfaces a chip; high-blast adds a second-level warning colour.
+const BLAST_SMALL_THRESHOLD = 5;
+const BLAST_LARGE_THRESHOLD = 10;
 
 // ─── Tree view ────────────────────────────────────────────────────────────────
 
@@ -158,6 +203,22 @@ function urgencyToDiagnosticSeverity(urgency: string): vscode.DiagnosticSeverity
   return vscode.DiagnosticSeverity.Information;
 }
 
+// R30.18 — mirror the LSP-side uplift formula from scripts/_lsp.py so
+// the squiggle colour matches in both the bundled-engine and LSP
+// code paths. Each tier up = one severity rank closer to Error (1).
+function upliftSeverityByBlast(
+  base: vscode.DiagnosticSeverity,
+  blast: number,
+): vscode.DiagnosticSeverity {
+  if (blast >= BLAST_LARGE_THRESHOLD) {
+    return Math.max(vscode.DiagnosticSeverity.Error, base - 2);
+  }
+  if (blast >= BLAST_SMALL_THRESHOLD) {
+    return Math.max(vscode.DiagnosticSeverity.Error, base - 1);
+  }
+  return base;
+}
+
 function applyDiagnostics(
   diagnosticCollection: vscode.DiagnosticCollection,
   findings: Finding[]
@@ -172,10 +233,19 @@ function applyDiagnostics(
     const lineIdx = Math.max(0, f.line - 1);
     const colIdx = Math.max(0, (f.column ?? 1) - 1);
     const range = new vscode.Range(lineIdx, colIdx, lineIdx, colIdx + 1);
+    // R30.18 — Blast-radius hover enrichment. Appends `🌊 blast: N`
+    // when the resource cited by this finding has non-zero downstream
+    // count. Surfaces in both the squiggle hover and the Problems
+    // pane so the user sees operational impact alongside the rule
+    // text — no need to open the attack-graph view.
+    const blast = f.blast_radius ?? 0;
+    const blastSuffix = blast >= 1 ? `  🌊 blast: ${blast}` : "";
+    const baseSeverity = urgencyToDiagnosticSeverity(f.urgency);
+    const severity = upliftSeverityByBlast(baseSeverity, blast);
     const diag = new vscode.Diagnostic(
       range,
-      `[${f.id}] ${f.title}`,
-      urgencyToDiagnosticSeverity(f.urgency)
+      `[${f.id}] ${f.title}${blastSuffix}`,
+      severity
     );
     diag.source = "tf-analyze";
     // VS Code renders the `code.value` as a clickable link in the
@@ -364,6 +434,9 @@ async function runScan(
   provider: FindingsProvider,
   findingsMap: Map<string, Finding[]>,
   statusBar: vscode.StatusBarItem,
+  blastStatusBar: vscode.StatusBarItem,
+  blastProvider: BlastRadiusProvider,
+  blastLensProvider: BlastRadiusCodeLensProvider,
   outputChannel: vscode.OutputChannel
 ): Promise<void> {
   const scriptPath = resolveScriptPath();
@@ -421,6 +494,29 @@ async function runScan(
 
     applyDiagnostics(diagnosticCollection, findings);
     provider.setFindings(findings);
+
+    // R30.18 — Feed the blast-radius surfaces: the tree view + the
+    // CodeLens provider + the status-bar chip. All three derive from
+    // the same JSON the scan returned, so a single setter call keeps
+    // them in lock-step. The chip is hidden when no resource crosses
+    // the high-blast threshold (5).
+    blastProvider.setScanData({
+      blast_radius: parsed.blast_radius,
+      graph: parsed.graph,
+    });
+    blastLensProvider.setGraphNodes(parsed.graph?.nodes ?? []);
+    const highBlastCount = blastProvider.highBlastCount(BLAST_SMALL_THRESHOLD);
+    if (highBlastCount > 0) {
+      blastStatusBar.text = `$(flame) ${highBlastCount} high-blast`;
+      blastStatusBar.color = new vscode.ThemeColor(
+        highBlastCount >= 3 ? "errorForeground" : "problemsWarningIcon.foreground",
+      );
+      blastStatusBar.tooltip =
+        `${highBlastCount} resource${highBlastCount === 1 ? "" : "s"} with blast radius ≥ ${BLAST_SMALL_THRESHOLD} — click to open the Blast Radius view`;
+      blastStatusBar.show();
+    } else {
+      blastStatusBar.hide();
+    }
 
     const counts = parsed.summary?.counts ?? { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
     const total = findings.length;
@@ -512,6 +608,15 @@ export function activate(context: vscode.ExtensionContext): void {
   moduleReuseStatusBar.text = "$(package) Module Reuse";
   moduleReuseStatusBar.tooltip = "tf-analyze: surface directories that could be replaced by a public-registry module (AWS VPC, GCP network, Azure AKS, …)";
 
+  // R30.18 — Blast-radius chip. Priority 94 — appears immediately to
+  // the right of Module Reuse. Hidden until a scan turns up at least
+  // one resource with blast >= BLAST_SMALL_THRESHOLD. Click opens the
+  // dedicated tree view.
+  const blastStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 94);
+  blastStatusBar.command = "tf-analyze.showBlastRadius";
+  blastStatusBar.tooltip = "tf-analyze: resources whose destruction or recreation would cascade to many dependents";
+  // Stays hidden until the next scan populates it.
+
   // Only surface the shortcuts when there's something to scan.
   void vscode.workspace.findFiles("**/*.tf", "**/node_modules/**", 1).then((found) => {
     if (found.length > 0) {
@@ -520,6 +625,7 @@ export function activate(context: vscode.ExtensionContext): void {
       complianceStatusBar.show();
       remediateStatusBar.show();
       moduleReuseStatusBar.show();
+      // blastStatusBar shows itself once data lands in runScan
     }
   });
 
@@ -527,6 +633,21 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: provider,
     showCollapseAll: true,
   });
+
+  // R30.18 — Blast-radius tree (top-N high-blast resources, expandable
+  // to downstream dependents) and CodeLens (per-resource inline
+  // annotation). Both providers receive their data via setters from
+  // `runScan`; neither re-invokes the engine.
+  const blastProvider = new BlastRadiusProvider();
+  const blastTreeView = vscode.window.createTreeView("tfAnalyzeBlastRadius", {
+    treeDataProvider: blastProvider,
+    showCollapseAll: true,
+  });
+  const blastLensProvider = new BlastRadiusCodeLensProvider();
+  const blastLensRegistration = vscode.languages.registerCodeLensProvider(
+    { language: "terraform", scheme: "file" },
+    blastLensProvider,
+  );
 
   const codeActionProvider = new TfAnalyzeCodeActionProvider(findingsMap);
 
@@ -539,7 +660,10 @@ export function activate(context: vscode.ExtensionContext): void {
     complianceStatusBar,
     remediateStatusBar,
     moduleReuseStatusBar,
+    blastStatusBar,
     treeView,
+    blastTreeView,
+    blastLensRegistration,
 
     vscode.languages.registerCodeActionsProvider(
       { language: "terraform", scheme: "file" },
@@ -548,14 +672,32 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
 
     vscode.commands.registerCommand("tf-analyze.runScan", () =>
-      runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel)
+      runScan(
+        diagnosticCollection,
+        provider,
+        findingsMap,
+        statusBar,
+        blastStatusBar,
+        blastProvider,
+        blastLensProvider,
+        outputChannel,
+      )
     ),
 
     vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
       diagnosticCollection.clear();
       findingsMap.clear();
       provider.clear();
+      blastProvider.clear();
+      blastLensProvider.clear();
+      blastStatusBar.hide();
       statusBar.text = "$(shield) tf-analyze";
+    }),
+
+    // R30.18 — Show the Blast Radius tree view. Activity bar tab is
+    // permanent (registered via package.json) so this just focuses it.
+    vscode.commands.registerCommand("tf-analyze.showBlastRadius", async () => {
+      await vscode.commands.executeCommand("tfAnalyzeBlastRadius.focus");
     }),
 
     vscode.commands.registerCommand("tf-analyze.openFinding", (finding: Finding) => {
@@ -653,7 +795,7 @@ export function activate(context: vscode.ExtensionContext): void {
           {
             openRule: (ruleId) => RuleExplainerPanel.createOrShow(context, ruleId),
             runScan: () => {
-              void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+              void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
             },
             openLocation: (file, line) => {
               void vscode.workspace.openTextDocument(file).then(
@@ -676,7 +818,7 @@ export function activate(context: vscode.ExtensionContext): void {
                   : `tf-analyze: ${ruleId} was already in the baseline.`,
               );
               if (added) {
-                void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+                void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
               }
             },
             suppressRuleWorkspaceWide: (ruleId) => {
@@ -697,7 +839,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     : `tf-analyze: ${ruleId} was already in ignore_rules.`,
                 );
                 if (added) {
-                  void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+                  void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
                 }
               });
             },
@@ -729,7 +871,7 @@ export function activate(context: vscode.ExtensionContext): void {
           : `tf-analyze: ${finding.id} was already in the baseline.`
       );
       // Trigger a fresh scan so the tree refreshes with the suppression applied.
-      void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+      void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
     }),
 
     vscode.commands.registerCommand("tf-analyze.unsuppressFinding", async (item: FindingItem | undefined) => {
@@ -747,7 +889,7 @@ export function activate(context: vscode.ExtensionContext): void {
           ? `tf-analyze: removed ${finding.id} from baseline. Re-run scan to refresh.`
           : `tf-analyze: ${finding.id} was not in the baseline.`
       );
-      void runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+      void runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
     }),
 
     vscode.commands.registerCommand("tf-analyze.openBaseline", async () => {
@@ -772,7 +914,7 @@ export function activate(context: vscode.ExtensionContext): void {
         outputChannel.appendLine(`[tf-analyze] LSP active; skipping exec-on-save for ${doc.fileName}`);
         return;
       }
-      runScan(diagnosticCollection, provider, findingsMap, statusBar, outputChannel);
+      runScan(diagnosticCollection, provider, findingsMap, statusBar, blastStatusBar, blastProvider, blastLensProvider, outputChannel);
     })
   );
 

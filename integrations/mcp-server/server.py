@@ -2,7 +2,7 @@
 
 Exposes the engine to any [Model Context Protocol]-aware client (Claude
 Desktop, Cursor, Continue.dev, GitHub Copilot Chat with MCP support,
-etc.) through four tools:
+etc.) through six tools:
 
   * ``scan_workspace(path, mode='static', show_info=False, attack_graph=False)``
     Run a tf-analyze scan and return summary + findings.
@@ -14,6 +14,11 @@ etc.) through four tools:
   * ``attack_graph(path)``
     Build the internet → crown-jewels graph and return the JSON shape
     + a Mermaid rendering of the graph.
+  * ``compliance_report(path, framework='cis')``
+    Render a compliance gap report against a named framework.
+  * ``blast_radius_report(path, top_n=10)`` — R30.18
+    Top-N resources sorted by downstream blast radius. SRE-shaped
+    answer to "what could one apply destroy?".
 
 Why MCP: the Claude-specific skill (`/tf-analyze`) hits Claude Code
 only. MCP standardises the tool-shape so the engine becomes addressable
@@ -399,6 +404,56 @@ def compliance_report(path: str, framework: str = "cis") -> str:
         "--compliance-framework", framework,
     ])
     return _envelope_string(out, kind=f"compliance-{framework}")
+
+
+@mcp.tool(
+    description=(
+        "Blast-radius report for a workspace — 'what could one "
+        "terraform apply destroy?'. Returns the top-N resources sorted "
+        "by downstream blast (BFS over the attack-graph DAG). For each: "
+        "resource address, file:line, downstream count, and "
+        "crown-jewel / internet-reachable flags. SRE/oncall-shaped: the "
+        "answer to 'what should I care about before merging?' that no "
+        "PR-review-style scanner gives you. Pair with `attack_graph` to "
+        "visualise; pair with `scan_workspace` to see the findings on "
+        "each high-blast resource."
+    ),
+)
+def blast_radius_report(path: str, top_n: int = 10) -> dict[str, Any]:
+    """Top-N resources by downstream blast radius for a workspace.
+
+    Args:
+        path: Absolute path to the workspace directory.
+        top_n: Maximum number of resources to return. Default 10.
+               Clamped to [1, 100].
+    """
+    target = _resolve_target(path)
+    top_n = max(1, min(100, int(top_n)))
+    out = _run_engine([
+        "--target", str(target), "--format", "json", "--attack-graph",
+    ])
+    payload = json.loads(out)
+    blast = (payload.get("blast_radius") or [])[:top_n]
+    # Score is useful context for the agent ("is this even a problematic
+    # repo at all?"). Findings count signals whether to chain into the
+    # scan_workspace tool for full enumeration.
+    return _envelope_dict(
+        {
+            "summary": payload.get("summary", {}),
+            "blast_radius": blast,
+            "explanation": (
+                "Each entry's `blast_radius` is the count of distinct "
+                "downstream resources via the attack-graph DAG. Same edge "
+                "direction works for both compromise propagation and "
+                "destroy propagation — if aws_subnet references "
+                "aws_vpc.id, destroying the VPC breaks the subnet AND "
+                "compromising the VPC reaches the subnet."
+            ),
+            "top_n": top_n,
+            "total_returned": len(blast),
+        },
+        kind="blast-radius",
+    )
 
 
 @mcp.resource("tfanalyze://catalogue")

@@ -5,6 +5,38 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.5 — Blast-radius reaches every integration — 2026-05-11 (R30.18 + ext v0.1.42)
+
+**Six integration surfaces ship together so blast radius — the SRE-shaped answer to "what could one `terraform apply` destroy?" — reaches every consumer of the engine: not just the CLI / JSON / HTML, but the LSP squiggle, the PR-summary callout, the public-scanner permalink, the MCP server, and the VS Code extension (five surfaces in one release).**
+
+### R30.18 — Integration surfaces
+
+* **LSP severity uplift** ([`scripts/_lsp.py`](scripts/_lsp.py)) — `findings_to_diagnostics` now reads `f.blast_radius` and bumps severity one tier at `≥5` downstream, two tiers at `≥10` (capped at Error). The diagnostic message gets `🌊 blast: N` appended so the hover tooltip carries the operational signal. Skips entirely when the field is absent — LSP works identically with or without `--attack-graph`. Same thresholds as the PR-summary block + the VS Code-side uplift, so the three surfaces agree on what counts as "high blast".
+* **PR-summary callout** ([`scripts/_output.py`](scripts/_output.py) `_render_pr_summary`) — new "🌊 High blast radius — review on-call impact" block lists findings whose `blast_radius ≥ 5`, ranked descending. Resource address + downstream count + rule-docs link. SRE persona lands on exactly the section they care about even when the PR has 50+ findings.
+* **Public scanner permalink** ([`demo/app.py`](demo/app.py) `_render_public_report`) — `/scan/<owner>/<repo>` HTML pages now render a "🌊 Blast radius — what one `terraform apply` could touch" section with heat-bar visualisation + crown-jewel / internet-reachable chips. Same shape as the engine HTML report.
+* **MCP server tool** ([`integrations/mcp-server/server.py`](integrations/mcp-server/server.py)) — new `blast_radius_report(path, top_n=10)` tool returning the standard `_envelope_dict` shape (`_kind: blast-radius`, `_treat_as: data`). The LLM gets a deterministic answer to "what is the riskiest single change?" without re-deriving the DAG.
+* **VS Code extension v0.1.42** — five new surfaces in a single release (the first one targeted at the SRE / oncall persona rather than appsec):
+  * 🌊 Blast Radius tree view in the activity bar (top-N expandable to downstream).
+  * Status-bar `🌊 N high-blast` chip (hidden on clean repos).
+  * CodeLens above resource declarations whose blast is ≥3.
+  * Diagnostic hover annotation `🌊 blast: N`.
+  * Severity uplift on the squiggle colour (matches the LSP uplift constants exactly).
+  * Bundle fix: `_blast_radius.py` is now in `ENGINE_SIBLING_FILES` so the packaged `.vsix` carries it. **The prior `.vsix` would have crashed on any attack-graph use.**
+
+### Numbers
+
+| Metric                          | Pre-R30.5 | Post-R30.5 | Δ |
+|---------------------------------|-----------|------------|----|
+| Pytest cases                    | 811       | **818**    | +7 (LSP uplift × 5 + PR-summary × 2) |
+| MCP server tools                | 5         | **6**      | +1 (`blast_radius_report`) |
+| VS Code activity-bar views      | 1         | **2**      | +1 (Blast Radius) |
+| VS Code status-bar items        | 5         | **6**      | +1 (🌊 chip) |
+| VS Code source files (`src/*`)  | 15        | **17**     | +2 (`blastRadiusView.ts`, `blastRadiusLens.ts`) |
+| Bundled engine siblings (.vsix) | 11        | **12**     | +1 (`_blast_radius.py`) |
+| Integration surfaces using blast | 4 (CLI text/JSON/SARIF/HTML + demo paste-and-scan) | **9** (+ LSP, PR-summary, permalink, MCP, VS Code-stack-of-five) | +5 |
+
+---
+
 ## Round 30.4 — Blast-radius analysis + renumber-risk rule — 2026-05-11 (R30.15 + R30.16 + R30.17)
 
 **Three changes that compound: the unified score badge route at `tfanalyze.com/badge/<owner>/<repo>.svg` (R30.15, prior commit), the paste-and-scan demo UI surfacing score + top-fixes + module-reuse alongside the attack graph (R30.16, prior commit), and blast-radius analysis + a new producer-side count.index rule that together answer the SRE question no other static IaC scanner answers: "what could a single `terraform apply` destroy?"**

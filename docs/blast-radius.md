@@ -151,28 +151,29 @@ integration's user is trying to do.
 
 ### CLI (`text`, `json`, `sarif`, `html`, `pr-summary`)
 
-- **text** — opt-in via `--blast-radius` (avoids cluttering CI logs).
-- **json** — top-level `blast_radius` block + per-finding + per-node.
+- **text** ✅ — opt-in via `--blast-radius` (avoids cluttering CI logs).
+- **json** ✅ — top-level `blast_radius` block + per-finding + per-node.
   Always emitted with `--attack-graph`. No flag gating: downstream
   consumers should be the ones who decide to use it.
-- **sarif** — `properties.blastRadius` on each result. GitHub Code
+- **sarif** ✅ — `properties.blastRadius` on each result. GitHub Code
   Scanning surfaces it in the result-detail panel; ranking/filtering
   by integer property is a built-in capability.
-- **html** — table appended to the Attack Graph tab. Heat-coloured
+- **html** ✅ — table appended to the Attack Graph tab. Heat-coloured
   cells (pale yellow → red) so the eye lands on the highest-risk
   resources. Crown-jewel / internet-reachable chips for context.
-- **pr-summary** — *future*: callout block after the score banner
-  flagging findings whose `blast_radius > some_threshold`. Worth
-  doing when the surface launches publicly.
+- **pr-summary** ✅ — *Shipped in R30.18.* "🌊 High blast radius —
+  review on-call impact" callout block lists findings whose
+  `blast_radius ≥ 5` (same threshold as the LSP uplift). Resource
+  address + downstream count + rule-docs link; SRE persona lands on
+  exactly the section they care about even when the PR has 50+ findings.
 
 ### Public web scanner (`tfanalyze.com/scan/<owner>/<repo>`)
 
-The HTML permalink at `/scan/<owner>/<repo>` should grow a "Blast
-radius" section between the score banner and the findings table.
-Render the same shape as the engine HTML report. **Pending: 30-min
-follow-up** — `_render_public_report` in `demo/app.py` reads the
-same JSON; just thread `result.get("blast_radius", [])` into a
-small HTML fragment.
+✅ *Shipped in R30.18.* The HTML permalink at `/scan/<owner>/<repo>`
+now renders a "🌊 Blast radius — what one `terraform apply` could
+touch" section between the top-fixes block and the run-locally CTA.
+Heat-bar visualisation + crown-jewel / internet-reachable chips,
+same shape as the engine HTML report.
 
 ### Paste-and-scan demo (`tfanalyze.com/`)
 
@@ -185,46 +186,52 @@ small HTML fragment.
 
 ### VS Code extension
 
-*Future, separate release.* Recommended shape:
+✅ *Shipped in v0.1.42 (R30.18).* Five surfaces, all derived from the
+engine's blast-radius JSON:
 
-- New "🌊 Blast radius" tree view in the activity bar (priority
-  between Findings and Attack Graph, ~85). Tree rooted at the highest-
-  blast resource; expand to see the resources it would cascade to.
-- Status bar segment when the workspace has any resource with
-  `blast_radius >= 5`: `⚠ blast: aws_vpc.main → 12 downstream`.
-- The bundled engine already emits the data — extension only needs
-  to read `data.blast_radius` and `data.graph.nodes[i].blast_radius`.
-  Estimate: 1 day of TypeScript + a CHANGELOG entry on the
-  extension side.
+- **🌊 Blast Radius tree view** in the activity bar — top-N
+  high-blast resources, expandable to show downstream dependents
+  (capped at 25 per parent to stay readable). Click jumps to the
+  declaration line. See [`vscode-extension/src/blastRadiusView.ts`](../vscode-extension/src/blastRadiusView.ts).
+- **Status-bar `🌊 N high-blast` chip** — visible only when at least
+  one resource crosses the high-blast threshold (≥5). Click opens
+  the tree view. Colour-coded amber at 1–2 / red at 3+.
+- **CodeLens above resource declarations** — inline
+  `🌊 12 downstream — destroying this would touch 12 other resources`
+  appears above any `resource "..."` block whose blast is ≥3.
+  See [`vscode-extension/src/blastRadiusLens.ts`](../vscode-extension/src/blastRadiusLens.ts).
+- **Diagnostic hover enrichment** — messages append `🌊 blast: N`
+  when the resource has non-zero downstream count.
+- **Diagnostic severity uplift** — a HIGH finding on a leaf S3 stays
+  HIGH; a MEDIUM on a 12-downstream VPC bumps to ERROR. The squiggle
+  colour reflects operational impact, not just rule urgency.
+  Thresholds match the LSP and PR-summary in `scripts/_lsp.py`
+  (≥5 = +1 tier, ≥10 = +2 tiers, capped at ERROR).
 
 ### MCP server (`integrations/mcp-server/`)
 
-*Future.* Add a new tool:
-
-```
-blast_radius_report(path: str, top_n: int = 10) -> dict
-```
-
-Returns the `blast_radius` block as a hardened dict (envelope
-metadata, `_treat_as: data`). Useful for the
-*"what is the riskiest single change?"* MCP prompt — the LLM gets
-a deterministic answer without re-deriving the DAG.
+✅ *Shipped in R30.18.* New `blast_radius_report(path, top_n=10)`
+tool. Runs the engine with `--attack-graph`, extracts the top-N block,
+wraps in the standard `_envelope_dict` (`_kind: blast-radius`,
+`_treat_as: data`). Useful for the *"what is the riskiest single
+change?"* MCP prompt — the LLM gets a deterministic answer without
+re-deriving the DAG.
 
 ### LSP server (`scripts/_lsp.py`)
 
-*Future.* Currently diagnostic urgency tracks rule `default_urgency`.
-Recommended uplift:
+✅ *Shipped in R30.18.* `findings_to_diagnostics` now reads
+`f.blast_radius` and applies a severity uplift:
 
 ```
-effective_urgency = max(rule.default_urgency, urgency_from_blast(blast))
-where urgency_from_blast: 0 → unchanged; 1–4 → no uplift;
-                          5–9 → +1 tier; 10+ → +2 tiers.
+effective_severity = base
+if blast >= 5:  effective_severity -= 1
+if blast >= 10: effective_severity -= 2     (capped at Error)
 ```
 
-A HIGH finding on `aws_vpc.main` (blast=12) becomes CRITICAL in the
-editor; the same rule on a leaf bucket stays HIGH. Lets editors
-surface "this is the one to fix first" without the user reading the
-attack-graph view. ~50 LoC change in `_lsp.py`.
+Also appends `🌊 blast: N` to the message text so the hover tooltip
+carries the operational signal alongside the rule text. Skips
+entirely when the field is absent or zero — LSP works identically
+whether the engine was invoked with `--attack-graph` or not.
 
 ### Badge service (`tfanalyze.com/badge/...`)
 

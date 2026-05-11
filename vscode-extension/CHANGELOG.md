@@ -5,6 +5,69 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.42] — 2026-05-11
+
+The first release whose UI surface speaks to **SRE / oncall**, not just appsec.
+Five new surfaces all derive from the engine's R30.17 blast-radius
+analysis — the "what could one `terraform apply` destroy?" answer
+nobody else's static IaC scanner gives you.
+
+### Added
+
+- **🌊 Blast Radius tree view** — new permanent entry in the
+  tf-analyze activity-bar sidebar. Top-N high-blast resources sorted
+  by downstream count; expand a row to see the resources that would
+  cascade if the parent is destroyed or recreated. Click any row to
+  jump to the resource declaration in the editor. Each row carries
+  context flags (🌐 internet-reachable, 💎 crown jewel) so you can
+  see at a glance which load-bearing infrastructure also sits on the
+  attack-surface boundary.
+  See [`blastRadiusView.ts`](src/blastRadiusView.ts).
+- **Status-bar `🌊 N high-blast` chip** — appears only when at least
+  one resource crosses the high-blast threshold (5+ downstream).
+  Click → opens the new tree view. Hidden on clean repos so it
+  doesn't burn screen real estate. Coloured by severity: amber at
+  1–2 high-blast resources, red at 3+.
+- **CodeLens above high-blast resource declarations** — inline
+  `🌊 12 downstream — destroying this would touch 12 other resources`
+  appears above any `resource "..."` block whose blast radius is ≥3.
+  Click → opens the Blast Radius view. Visible while editing without
+  needing to keep a panel open.
+  See [`blastRadiusLens.ts`](src/blastRadiusLens.ts).
+- **Diagnostic hover enrichment** — finding messages now append
+  `🌊 blast: N` when the resource has non-zero downstream count.
+  Shows up in both the squiggle hover and the Problems pane so you
+  see operational impact alongside the rule text — no need to open
+  the attack-graph view.
+- **Blast-radius severity uplift on the diagnostic squiggle.**
+  A HIGH finding on a leaf S3 bucket stays HIGH. A MEDIUM finding on
+  a 12-downstream VPC bumps to ERROR. The squiggle colour now
+  reflects operational impact, not just the rule's catalogue urgency.
+  Thresholds match the LSP and PR-summary uplift in
+  [`scripts/_lsp.py`](../scripts/_lsp.py) so all surfaces agree on
+  what counts as "high blast" (`≥5` = +1 tier, `≥10` = +2 tiers,
+  capped at ERROR).
+
+### Fixed
+
+- **`_blast_radius.py` is now in the bundled engine.** The previous
+  build silently shipped a `.vsix` whose bundled engine didn't include
+  the new module, which would have crashed any attempt to use the
+  attack-graph view on R30.17 engine builds. `ENGINE_SIBLING_FILES`
+  in [`scripts/bundle-engine.js`](scripts/bundle-engine.js) now lists
+  all 12 sibling Python files.
+
+### Counts
+
+- Extension: v0.1.41 → **v0.1.42**
+- New files: `src/blastRadiusView.ts`, `src/blastRadiusLens.ts`
+- Bundled engine siblings: 11 → **12** (`_blast_radius.py`)
+- New activity-bar views: 1 → **2** (Findings, **Blast Radius**)
+- New status-bar items: 5 → **6** (high-blast chip)
+- New commands: `tf-analyze.showBlastRadius`
+
+---
+
 ## [0.1.41] — 2026-05-11
 
 ### Fixed

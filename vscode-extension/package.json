@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.41",
+  "version": "0.1.42",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -98,6 +98,11 @@
       {
         "command": "tf-analyze.openFinding",
         "title": "tf-analyze: Open Finding"
+      },
+      {
+        "command": "tf-analyze.showBlastRadius",
+        "title": "tf-analyze: Show Blast Radius",
+        "icon": "$(flame)"
       }
     ],
     "configuration": {
@@ -162,6 +167,11 @@
         {
           "id": "tfAnalyzeFindings",
           "name": "Findings",
+          "contextualTitle": "tf-analyze"
+        },
+        {
+          "id": "tfAnalyzeBlastRadius",
+          "name": "Blast Radius",
           "contextualTitle": "tf-analyze"
         }
       ]

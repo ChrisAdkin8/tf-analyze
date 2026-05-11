@@ -268,6 +268,42 @@ def _render_public_report(result: dict) -> str:
         if explain_rows else ""
     )
 
+    # R30.18 — Blast-radius surface on the permalink. SRE/oncall persona
+    # lands here from a Slack share and wants "what could one apply touch?"
+    # in one glance. Heat-coloured bar; click on resource opens the
+    # canonical attack-graph view (future enhancement).
+    blast_top = result.get("blast_radius") or []
+    blast_rows = []
+    blast_max = max((r.get("blast_radius", 0) for r in blast_top), default=0)
+    for r in blast_top[:5]:
+        addr = html.escape(r.get("resource", "?"))
+        radius = int(r.get("blast_radius") or 0)
+        pct = round((radius / blast_max) * 100) if blast_max else 0
+        flag_chips = []
+        if r.get("is_crown_jewel"):
+            flag_chips.append('<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-size:11px">crown jewel</span>')
+        if r.get("internet_reachable"):
+            flag_chips.append('<span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:3px;font-size:11px">internet-reachable</span>')
+        flags = " ".join(flag_chips)
+        bar = (
+            f'<div style="background:#eee;border-radius:3px;height:18px;width:120px;display:inline-block;vertical-align:middle;overflow:hidden">'
+            f'<div style="background:linear-gradient(90deg,#fef3c7,#fb923c,#ef4444);height:100%;width:{pct}%"></div>'
+            f'</div>'
+        )
+        blast_rows.append(
+            f"<tr><td><code>{addr}</code></td>"
+            f"<td style='text-align:right;font-weight:600'>{radius}</td>"
+            f"<td>{bar}</td>"
+            f"<td>{flags}</td></tr>"
+        )
+    blast_block = (
+        '<section><h2>🌊 Blast radius — what one <code>terraform apply</code> could touch</h2>'
+        '<p style="color:#555;font-size:14px;margin-bottom:8px">Resources whose destruction or recreation would cascade to the most dependents. Treat as high-care-on-apply.</p>'
+        '<table><thead><tr><th>Resource</th><th style="text-align:right">Downstream</th><th>Impact</th><th>Flags</th></tr></thead>'
+        f"<tbody>{''.join(blast_rows)}</tbody></table></section>"
+        if blast_rows else ""
+    )
+
     permalink = html.escape(f"https://tfanalyze.com/scan/{meta.get('owner','?')}/{meta.get('repo','?')}")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -322,6 +358,8 @@ footer{{font-size:12px;color:#888;text-align:center;padding:18px 0}}
 </section>
 
 {f'<section>{explain_block}</section>' if explain_block else ''}
+
+{blast_block}
 
 <section>
 <h3>Run locally</h3>

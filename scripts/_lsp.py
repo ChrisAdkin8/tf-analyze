@@ -43,6 +43,41 @@ _SEVERITY_MAP: dict[str, int] = {
 }
 
 
+# R30.18 — Blast-radius drives an editor-time urgency uplift. A HIGH
+# finding on a leaf-resource S3 bucket is less load-bearing than a
+# MEDIUM finding on a 12-downstream VPC. The LSP severity is what the
+# editor renders as squiggle colour; uplifting it surfaces the
+# load-bearing finding *visually* without the user needing to read
+# the attack-graph view.
+#
+# Thresholds tuned for the SRE persona: small blasts (1–4) are below
+# noise; mid (5–9) bumps one tier; large (10+) bumps two tiers (cap at
+# severity 1 = Error). Easy to dial; thresholds are constants so a
+# future telemetry pass can A/B them.
+_BLAST_UPLIFT_SMALL = 5
+_BLAST_UPLIFT_LARGE = 10
+
+
+def _uplift_severity(base_severity: int, blast: int) -> int:
+    """Compute the LSP severity after blast-radius uplift.
+
+    Args:
+        base_severity: severity from the rule's default urgency (1..4,
+            with 1 = Error and 4 = Hint per the LSP spec).
+        blast: downstream blast radius for the resource this finding
+            cites; 0 when --attack-graph wasn't requested or the
+            resource is a leaf.
+
+    Returns:
+        Effective severity, capped at 1 (Error).
+    """
+    if blast >= _BLAST_UPLIFT_LARGE:
+        return max(1, base_severity - 2)
+    if blast >= _BLAST_UPLIFT_SMALL:
+        return max(1, base_severity - 1)
+    return base_severity
+
+
 def findings_to_diagnostics(
     findings: list[dict],
     id_map: dict[str, dict],
@@ -53,18 +88,39 @@ def findings_to_diagnostics(
     `source` ("tf-analyze"), and `message`. The range character span is
     a sentinel 0..9999 because the engine returns line-granular hits
     only; the LSP client trims to the visible line.
+
+    When a finding carries a ``blast_radius`` field (populated when the
+    scan ran with ``--attack-graph``), two enrichments fire:
+
+    * **Severity uplift** — large blasts bump severity up one or two
+      tiers (mid → high, etc.), so the editor's squiggle colour
+      reflects operational impact, not just rule urgency.
+    * **Message annotation** — appends ``🌊 blast: N`` to the hover
+      tooltip so the user sees the downstream count without opening
+      the attack-graph view.
+
+    Both enrichments are no-ops when ``blast_radius`` is absent or
+    zero, so the LSP works identically whether the engine was invoked
+    with ``--attack-graph`` or not.
     """
     diags: list[dict] = []
     for f in findings:
         line = max(0, f["line"] - 1)
         urgency = id_map.get(f["id"], {}).get("default_urgency", "LOW")
+        base_severity = _SEVERITY_MAP.get(urgency, 3)
+        blast = int(f.get("blast_radius") or 0)
+        severity = _uplift_severity(base_severity, blast)
+        title = id_map.get(f["id"], {}).get("title", "")
+        message = f"{f['id']}: {title}"
+        if blast >= 1:
+            message += f"  🌊 blast: {blast}"
         diags.append({
             "range": {"start": {"line": line, "character": 0},
                       "end":   {"line": line, "character": 9999}},
-            "severity": _SEVERITY_MAP.get(urgency, 3),
+            "severity": severity,
             "code": f["id"],
             "source": "tf-analyze",
-            "message": f"{f['id']}: {id_map.get(f['id'], {}).get('title', '')}",
+            "message": message,
         })
     return diags
 
