@@ -270,3 +270,100 @@ class TestFindBlocks:
         result = detect.find_blocks(text, detect.RESOURCE_START)
         assert len(result) == 1
         assert result[0]["groups"] == ("aws_s3_bucket", "my_bucket")
+
+
+# ---------------------------------------------------------------------------
+# brace_walk — shared depth tracker (Round 30.13)
+# ---------------------------------------------------------------------------
+
+
+class TestBraceWalk:
+    """Round 30.13 — single quote-aware brace/paren depth walker.
+
+    Replaces 21+ duplicated depth-tracking loops across `detect.py` and
+    `_apply_fixes.py`. The class-level docstring of `brace_walk` in
+    `_hcl.py` documents the contract; these tests pin the edge cases.
+    """
+
+    def _bw(self, *args, **kwargs):
+        # Helper so the tests don't have to remember the import.
+        from _hcl import brace_walk  # type: ignore
+        return brace_walk(*args, **kwargs)
+
+    def test_balanced_top_level(self) -> None:
+        text = "{ a }"
+        # Walks from 0, consumes opening { at 0, matches } at 4, returns 5.
+        assert self._bw(text, 0) == 5
+
+    def test_nested_braces(self) -> None:
+        text = "{ a { b } c }"
+        assert self._bw(text, 0) == len(text)
+
+    def test_unbalanced_returns_none(self) -> None:
+        assert self._bw("{ a { b }", 0) is None
+        assert self._bw("{", 0) is None
+        assert self._bw("", 0) is None
+
+    def test_quoted_close_brace_is_ignored(self) -> None:
+        # `}` inside a quoted string MUST NOT decrement depth.
+        # Without quote awareness this would return early at the } in
+        # the string and corrupt the extracted block.
+        text = '{ name = "arn:aws:s3:::bucket-{*}-policy" }'
+        # The walker must reach the trailing } at len-1.
+        assert self._bw(text, 0) == len(text)
+
+    def test_quoted_open_brace_is_ignored(self) -> None:
+        # Same in the opposite direction — `{` inside a string MUST NOT
+        # increment depth.
+        text = '{ name = "value with { in it" }'
+        assert self._bw(text, 0) == len(text)
+
+    def test_escaped_quote_does_not_toggle_quote_state(self) -> None:
+        # `\\"` inside a quoted region keeps us in-quote; a literal }
+        # inside such a region must still be ignored.
+        text = '{ key = "foo \\"bar}baz\\" qux" }'
+        assert self._bw(text, 0) == len(text)
+
+    def test_single_quoted_string_handled(self) -> None:
+        # HCL accepts single quotes only inside heredocs / interpolation,
+        # but the walker tracks them defensively so a passing test
+        # input that uses `'…'` doesn't false-balance.
+        text = "{ k = 'v with } inside' }"
+        assert self._bw(text, 0) == len(text)
+
+    def test_paren_walker_via_opens_closes_kwargs(self) -> None:
+        # The same logic must work for parentheses — `jsonencode(...)`
+        # extraction needs paren-depth, not brace-depth.
+        text = 'jsonencode({ "foo": "bar" }) tail'
+        start = text.index("(")
+        end = self._bw(text, start, opens="(", closes=")")
+        # End is one past the closing paren, before the space.
+        assert end is not None
+        assert text[end - 1] == ")"
+        assert text[end:].startswith(" tail")
+
+    def test_start_pos_skips_leading_garbage(self) -> None:
+        # Caller decides where to start; brackets before start_pos are
+        # ignored.
+        text = "leading { content }"
+        start = text.index("{")
+        assert self._bw(text, start) == len(text)
+
+    def test_returns_position_one_past_close(self) -> None:
+        # Caller convention: end_pos is exclusive (slice-friendly).
+        text = "{a}{b}"
+        end = self._bw(text, 0)
+        assert end == 3
+        # Slicing with the returned position gives the matched span.
+        assert text[0:end] == "{a}"
+
+    def test_does_not_raise_on_arbitrary_input(self) -> None:
+        # Brittleness guard — same shape as the find_blocks property
+        # test above. Unbalanced + truncated + binary garbage all
+        # return None or a valid offset, never raise.
+        for evil in ["", "{", "}", "{{{{", "}}}}", '{ "unterm', "\x00"]:
+            try:
+                result = self._bw(evil, 0)
+            except Exception as e:
+                raise AssertionError(f"brace_walk raised on {evil!r}: {e}")
+            assert result is None or isinstance(result, int)

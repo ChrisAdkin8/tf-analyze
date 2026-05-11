@@ -208,6 +208,106 @@ def strip_hcl_context(text: str) -> str:
     return out
 
 
+# ---- Quote-aware depth walker ------------------------------------------
+#
+# Round 30.13 structural fix — every prior audit recommended pulling
+# this helper out so the 12+ duplicated brace-tracking loops in
+# `detect_in_file` (plus the 2 in `_apply_fixes`) share one
+# implementation. The existing `find_blocks` / `find_simple_blocks`
+# walkers above don't track quotes — they work on top-level HCL scopes
+# where `}` inside a string is rare in practice. The inline detector
+# branches DO see quoted braces (IAM policy ARNs like
+# ``arn:aws:s3:::bucket-{*}-policy``, Helm `set` map values with
+# brace-bearing strings, heredoc bodies) so they need a quote-aware
+# walker.
+#
+# The helper is parameterised on `opens` / `closes` so the same logic
+# powers paren-depth tracking (`jsonencode(...)` extraction in the
+# `iam_json_policy_analysis` detector) too.
+
+
+def brace_walk(
+    text: str,
+    start_pos: int = 0,
+    *,
+    opens: str = "{",
+    closes: str = "}",
+) -> int | None:
+    """Walk ``text`` from ``start_pos``, tracking quote-aware bracket depth.
+
+    Returns the position **immediately after** the closing bracket that
+    matches the first opening bracket encountered — i.e. the position
+    where the cumulative depth returns to 0. Returns ``None`` on
+    unbalanced input.
+
+    Quote state is tracked with backslash awareness:
+
+    * Double quotes (``"``) and single quotes (``'``) each toggle their
+      own state flag.
+    * A backslash immediately before a quote (``\\"``) prevents the
+      toggle, so a value like ``key = "with \\"quoted\\" inside"`` is
+      treated as a single string literal.
+    * Brackets inside any active string literal do **not** affect depth.
+
+    Customise ``opens`` / ``closes`` to walk other balanced delimiters:
+
+        >>> brace_walk('foo(bar(baz)quux)tail', text.index('('), opens='(', closes=')')
+        17
+
+    Notes:
+
+    * Heredoc bodies (``<<-EOF ... EOF``) are NOT specially handled here.
+      Callers that need heredoc-aware extraction should use
+      ``block_arg_value`` (which delegates to the hcl2 parser when
+      available) instead of building on this walker. In practice the
+      detector branches don't encounter raw heredoc text — the regex
+      pattern that triggers each branch matches HCL keywords
+      (``statement``, ``set``, etc.) that don't appear inside heredoc
+      content.
+    * The walker is linear in the length of the text walked; no
+      look-ahead.
+
+    Args:
+        text: The text to walk. The caller passes whatever they've
+            already extracted (typically a block body or the text from
+            a regex match start).
+        start_pos: Index to start walking from. Default 0.
+        opens: Opening bracket character. Default ``"{"``.
+        closes: Closing bracket character. Default ``"}"``.
+
+    Returns:
+        The index one past the matching closing bracket, or ``None`` if
+        the input ran out before depth returned to 0.
+    """
+    depth = 0
+    in_dq = False
+    in_sq = False
+    seen_open = False
+    prev = ""
+    for i in range(start_pos, len(text)):
+        ch = text[i]
+        # `\\<char>` neutralises the next character's quote-toggling
+        # effect. Tracking only the immediate prior byte is sufficient
+        # for HCL: there's no `\\\\\\\"` ambiguity because a literal
+        # backslash is `\\\\` and the backslash run is consumed
+        # left-to-right by this same flag.
+        escaped = prev == "\\"
+        if ch == '"' and not in_sq and not escaped:
+            in_dq = not in_dq
+        elif ch == "'" and not in_dq and not escaped:
+            in_sq = not in_sq
+        elif not in_dq and not in_sq:
+            if ch == opens:
+                depth += 1
+                seen_open = True
+            elif ch == closes:
+                depth -= 1
+                if seen_open and depth == 0:
+                    return i + 1
+        prev = ch
+    return None
+
+
 # ---- Block extraction ---------------------------------------------------
 
 def find_blocks(text: str, regex: re.Pattern) -> list[dict]:

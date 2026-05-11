@@ -35,6 +35,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from _hcl import brace_walk
+
 
 def fix_hcl_body(fix_hcl: str) -> str:
     """Strip outer ``resource "x" "y" { ... }`` wrapper, returning just the body."""
@@ -56,56 +58,25 @@ def fix_line_for_arg(fix_hcl: str, arg: str) -> str | None:
     text = body[start_m.start():]
     newline_pos = text.find('\n')
     first_line = text if newline_pos == -1 else text[:newline_pos]
-    # Round-5 audit fix #5 — quote-aware brace depth. The previous
-    # `first_line.count('{') - first_line.count('}')` counted braces
-    # inside string literals as block-structure characters. A fix
-    # snippet like `value = "with { in string"` falsely registered as
-    # a multi-line map literal; one like `value = "with } in string"
-    # { real = 1 }` registered as already-balanced and got truncated.
-    # This is the same class the 12 `detect_in_file` detector branches
-    # share — pulling one site forward of the deferred `_brace_walk`
-    # extraction. The walker tracks `in_dq` / `in_sq` with backslash
-    # awareness, mirroring `_hcl.block_arg_value`.
-    def _quote_aware_brace_depth(s: str) -> int:
-        depth = 0
-        in_dq = in_sq = False
-        prev = ""
-        for ch in s:
-            escaped = prev == "\\"
-            if ch == '"' and not in_sq and not escaped:
-                in_dq = not in_dq
-            elif ch == "'" and not in_dq and not escaped:
-                in_sq = not in_sq
-            elif ch == '{' and not in_dq and not in_sq:
-                depth += 1
-            elif ch == '}' and not in_dq and not in_sq:
-                depth -= 1
-            prev = ch
-        return depth
-
-    # If the first line opens more braces than it closes (ignoring
-    # braces inside strings), this is a multi-line map literal —
-    # extend to the matching `}`.
-    if _quote_aware_brace_depth(first_line) <= 0:
+    # Round-30.13 — the in-line quote-aware walker that R30.12 added
+    # has moved to `_hcl.brace_walk`. Calling the shared helper here
+    # (a) deduplicates 4 sites that were doing the same thing, and
+    # (b) lets the `_hcl` unit tests cover the edge cases (quoted
+    # braces in IAM ARNs, escaped quotes, single-quoted strings) for
+    # every consumer at once.
+    #
+    # If the first line doesn't open a multi-line map literal, the
+    # whole value is on that line; return it. We detect "no multi-line
+    # follow-through" by walking just the first line — if `brace_walk`
+    # closes within it (or finds no opening brace), there's no need
+    # to extend.
+    first_line_end = brace_walk(first_line, 0)
+    if first_line_end is not None and first_line_end == len(first_line):
         return first_line.strip()
-    depth = 0
-    end_pos = None
-    in_dq = in_sq = False
-    prev = ""
-    for i, ch in enumerate(text):
-        escaped = prev == "\\"
-        if ch == '"' and not in_sq and not escaped:
-            in_dq = not in_dq
-        elif ch == "'" and not in_dq and not escaped:
-            in_sq = not in_sq
-        elif ch == '{' and not in_dq and not in_sq:
-            depth += 1
-        elif ch == '}' and not in_dq and not in_sq:
-            depth -= 1
-            if depth == 0:
-                end_pos = i + 1
-                break
-        prev = ch
+    if "{" not in first_line:
+        return first_line.strip()
+    # Otherwise extend through the full text to the matching `}`.
+    end_pos = brace_walk(text, 0)
     if end_pos is None:
         return first_line.strip()
     # Raw (unstripped) so reindent_fix_snippet has the first-line base_len.
@@ -124,16 +95,10 @@ def fix_block_for_nested_arg(fix_hcl: str, arg: str) -> str | None:
     if not start_m:
         return None
     text = body[start_m.start():]
-    depth = 0
-    end_pos = None
-    for i, ch in enumerate(text):
-        if ch == '{':
-            depth += 1
-        elif ch == '}':
-            depth -= 1
-            if depth == 0:
-                end_pos = i + 1
-                break
+    # Round-30.13 — shared helper. The old in-line walker wasn't quote-
+    # aware (any `}` inside a string would falsely close the block);
+    # the helper handles that automatically.
+    end_pos = brace_walk(text, 0)
     if end_pos is None:
         return None
     return text[:end_pos]

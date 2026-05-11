@@ -115,6 +115,7 @@ from _hcl import (
     find_simple_blocks,
     block_has_arg,
     block_arg_value,
+    brace_walk,
     _hcl_object_to_json,
     block_has_nested_path,
     _expand_dynamic_blocks,
@@ -339,21 +340,15 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
     PROVIDER_AWS = re.compile(r'^\s*provider\s+"aws"\s*\{', re.MULTILINE)
     for fp, text in all_files_text.items():
         for pm in PROVIDER_AWS.finditer(text):
-            depth = 0
-            i = pm.end() - 1
-            end = None
-            while i < len(text):
-                c = text[i]
-                if c == "{":
-                    depth += 1
-                elif c == "}":
-                    depth -= 1
-                    if depth == 0:
-                        end = i
-                        break
-                i += 1
-            if end is None:
+            # Round-30.13 — shared brace walker. The provider block
+            # extraction was previously quote-blind; an aws provider
+            # config with a `default_tags { tags = { ... } }` map whose
+            # value contained `"k = "v}"`` (rare but possible) would
+            # have closed the block prematurely.
+            end_after = brace_walk(text, pm.end() - 1)
+            if end_after is None:
                 continue
+            end = end_after - 1  # position of the matching `}` itself
             pbody = text[pm.end():end]
             if "default_tags" in pbody:
                 dirk = str(Path(fp).parent)
@@ -689,21 +684,14 @@ def detect_in_file(
                         continue
                     body = dblk["body"]
                     for sm in re.finditer(r'(?m)^\s*statement\s*\{', body):
-                        depth = 0
-                        i = sm.end() - 1
-                        s_end = None
-                        while i < len(body):
-                            c = body[i]
-                            if c == "{":
-                                depth += 1
-                            elif c == "}":
-                                depth -= 1
-                                if depth == 0:
-                                    s_end = i
-                                    break
-                            i += 1
-                        if s_end is None:
+                        # Round-30.13 — shared quote-aware brace walker.
+                        # An IAM policy statement containing
+                        # `actions = ["arn:aws:s3:::bucket-{*}-policy"]`
+                        # used to corrupt the depth count.
+                        s_end_after = brace_walk(body, sm.end() - 1)
+                        if s_end_after is None:
                             continue
+                        s_end = s_end_after - 1
                         sbody = body[sm.end():s_end]
                         # Skip statements explicitly Effect = "Deny".
                         eff = block_arg_value(sbody, "effect")
@@ -718,21 +706,11 @@ def detect_in_file(
                         has_iam_wild = bool(re.search(r'"iam:[^"]*\*"', actions))
                         has_public_principal = False
                         for pm in re.finditer(r'(?m)^\s*principals\s*\{', sbody):
-                            pdepth = 0
-                            j = pm.end() - 1
-                            p_end = None
-                            while j < len(sbody):
-                                cc = sbody[j]
-                                if cc == "{":
-                                    pdepth += 1
-                                elif cc == "}":
-                                    pdepth -= 1
-                                    if pdepth == 0:
-                                        p_end = j
-                                        break
-                                j += 1
-                            if p_end is None:
+                            # Round-30.13 — same shared walker.
+                            p_end_after = brace_walk(sbody, pm.end() - 1)
+                            if p_end_after is None:
                                 continue
+                            p_end = p_end_after - 1
                             pbody = sbody[pm.end():p_end]
                             ids = block_arg_value(pbody, "identifiers") or ""
                             if '"*"' in ids:
@@ -784,21 +762,14 @@ def detect_in_file(
                     # Find each `set { ... }` sub-block (helm_release uses
                     # `set` with no label).
                     for sm in re.finditer(r'(?m)^\s*set\s*\{', body):
-                        depth = 0
-                        i = sm.end() - 1
-                        end = None
-                        while i < len(body):
-                            c = body[i]
-                            if c == "{":
-                                depth += 1
-                            elif c == "}":
-                                depth -= 1
-                                if depth == 0:
-                                    end = i
-                                    break
-                            i += 1
-                        if end is None:
+                        # Round-30.13 — shared walker. A helm value
+                        # containing `}` in a quoted string (e.g.
+                        # `value = "with } inside"`) used to corrupt
+                        # this depth count.
+                        end_after = brace_walk(body, sm.end() - 1)
+                        if end_after is None:
                             continue
+                        end = end_after - 1
                         sbody = body[sm.end():end]
                         n = block_arg_value(sbody, "name") or ""
                         v = block_arg_value(sbody, "value") or ""
@@ -848,21 +819,18 @@ def detect_in_file(
                     )
                     if not pm:
                         continue
-                    depth = 1
-                    j = pm.end()
-                    end = None
-                    while j < len(body):
-                        c = body[j]
-                        if c == "(":
-                            depth += 1
-                        elif c == ")":
-                            depth -= 1
-                            if depth == 0:
-                                end = j
-                                break
-                        j += 1
-                    if end is None:
+                    # Round-30.13 — shared paren walker via the
+                    # `opens`/`closes` kwargs. A jsonencode body whose
+                    # string values contain `)` (rare but legal)
+                    # previously closed the call prematurely. The
+                    # walker starts AT the opening `(` so we pass
+                    # `pm.end() - 1`.
+                    end_after = brace_walk(
+                        body, pm.end() - 1, opens="(", closes=")"
+                    )
+                    if end_after is None:
                         continue
+                    end = end_after - 1
                     raw = body[pm.end():end].strip()
                     parsed = _hcl_object_to_json(raw)
                     if parsed is None:
@@ -947,21 +915,11 @@ def detect_in_file(
                     # Walk every allow{} block; fire if any has a matching port.
                     matched = False
                     for am in re.finditer(r'(?m)^\s*allow\s*\{', body):
-                        depth = 0
-                        i = am.end() - 1
-                        a_end = None
-                        while i < len(body):
-                            c = body[i]
-                            if c == "{":
-                                depth += 1
-                            elif c == "}":
-                                depth -= 1
-                                if depth == 0:
-                                    a_end = i
-                                    break
-                            i += 1
-                        if a_end is None:
+                        # Round-30.13 — shared walker.
+                        a_end_after = brace_walk(body, am.end() - 1)
+                        if a_end_after is None:
                             continue
+                        a_end = a_end_after - 1
                         allow_body = body[am.end():a_end]
                         # Match either `ports = ["22"]` or `ports = ["22","443"]`
                         # or a port range like `"22-22"`.
@@ -1040,22 +998,12 @@ def detect_in_file(
                         if not m:
                             parent_body = None
                             break
-                        depth = 0
-                        i = m.end() - 1
-                        end = None
-                        while i < len(parent_body):
-                            c = parent_body[i]
-                            if c == "{":
-                                depth += 1
-                            elif c == "}":
-                                depth -= 1
-                                if depth == 0:
-                                    end = i
-                                    break
-                            i += 1
-                        if end is None:
+                        # Round-30.13 — shared walker.
+                        end_after = brace_walk(parent_body, m.end() - 1)
+                        if end_after is None:
                             parent_body = None
                             break
+                        end = end_after - 1
                         parent_body = parent_body[m.end():end]
                     if parent_body is None:
                         continue
@@ -1169,21 +1117,11 @@ def detect_in_file(
                     r'(?m)^\s*(precondition|postcondition)\s*\{'
                 )
                 for m in pre_re.finditer(text):
-                    # Walk to matching close brace to extract the body.
-                    start = m.end() - 1
-                    depth = 0
-                    end = None
-                    for i in range(start, len(text)):
-                        c = text[i]
-                        if c == "{":
-                            depth += 1
-                        elif c == "}":
-                            depth -= 1
-                            if depth == 0:
-                                end = i
-                                break
-                    if end is None:
+                    # Round-30.13 — shared walker.
+                    end_after = brace_walk(text, m.end() - 1)
+                    if end_after is None:
                         continue
+                    end = end_after - 1
                     body = text[m.end():end]
                     if not re.search(r'(?m)^\s*error_message\s*=', body):
                         line_no = text.count("\n", 0, m.start()) + 1
@@ -1765,20 +1703,11 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                 arg_re = re.compile(r'\b' + re.escape(arg) + r'\s*=')
                 for fp, text in all_files_text.items():
                     for m in backend_re.finditer(text):
-                        # Extract block body via brace matching
-                        depth, i, end = 0, m.end() - 1, None
-                        while i < len(text):
-                            c = text[i]
-                            if c == "{":
-                                depth += 1
-                            elif c == "}":
-                                depth -= 1
-                                if depth == 0:
-                                    end = i
-                                    break
-                            i += 1
-                        if end is None:
+                        # Round-30.13 — shared walker.
+                        end_after = brace_walk(text, m.end() - 1)
+                        if end_after is None:
                             continue
+                        end = end_after - 1
                         body = text[m.end():end]
                         if not arg_re.search(body):
                             line = text.count("\n", 0, m.start()) + 1
@@ -2081,40 +2010,26 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                 )
                 for fp, text in all_files_text.items():
                     for tf_m in tf_block_re.finditer(text):
-                        depth = 0
-                        i = tf_m.end() - 1
-                        tf_end = None
-                        while i < len(text):
-                            if text[i] == "{":
-                                depth += 1
-                            elif text[i] == "}":
-                                depth -= 1
-                                if depth == 0:
-                                    tf_end = i
-                                    break
-                            i += 1
-                        if tf_end is None:
+                        # Round-30.13 — shared walker for both the
+                        # outer `terraform {}` block and the inner
+                        # `required_providers {}` block.
+                        tf_end_after = brace_walk(text, tf_m.end() - 1)
+                        if tf_end_after is None:
                             continue
+                        tf_end = tf_end_after - 1
                         tf_body = text[tf_m.end():tf_end]
                         rp = rp_block_re.search(tf_body)
                         if not rp:
                             continue
-                        # Extract only the required_providers inner block
+                        # `rp.end()` is one past the opening brace of
+                        # required_providers within tf_body. Convert to
+                        # an absolute offset in `text` and walk from
+                        # the brace itself (one before rp.end()).
                         rp_start = tf_m.end() + rp.end()
-                        depth = 1
-                        j = rp_start
-                        rp_end = None
-                        while j < len(text):
-                            if text[j] == "{":
-                                depth += 1
-                            elif text[j] == "}":
-                                depth -= 1
-                                if depth == 0:
-                                    rp_end = j
-                                    break
-                            j += 1
-                        if rp_end is None:
+                        rp_end_after = brace_walk(text, rp_start - 1)
+                        if rp_end_after is None:
                             continue
+                        rp_end = rp_end_after - 1
                         rp_body = text[rp_start:rp_end]
                         for em in entry_re.finditer(rp_body):
                             provider_name = em.group(1)

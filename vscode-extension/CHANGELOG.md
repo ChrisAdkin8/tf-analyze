@@ -5,6 +5,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.50] — 2026-05-11
+
+**Engine refresh — `_brace_walk` extraction.** Pulls the structural item
+that every prior audit round (1 through 5) recommended: one shared
+quote-aware brace/paren depth walker in `_hcl.py`, replacing 13 in-line
+duplications across the engine. No user-visible behaviour change beyond
+the latent edge-case fixes the consolidation enables (HCL with quoted
+braces in IAM ARNs, Helm value strings, jsonencode bodies).
+
+### Bundled engine refresh
+
+The extension's bundled engine picks up the structural change:
+
+- `scripts/_hcl.py:brace_walk()` — single source of truth for quote-
+  aware bracket-depth tracking. Backslash-aware, single-quote-aware,
+  parameterised on `opens`/`closes` (so the same function powers both
+  brace `{}` and paren `()` walking).
+- 13 in-line walkers migrated: `_apply_fixes.py:fix_line_for_arg`,
+  `fix_block_for_nested_arg`; `detect.py` `_extract_var_defaults_by_dir`
+  (default_tags), `iam_policy_analysis` (statement + principals),
+  `helm_set_value`, `iam_json_policy_analysis` (paren variant),
+  `firewall_open_port` (allow blocks), nested-path walker, validation-
+  block walker, backend-attribute walker, required-providers walker
+  (terraform + required_providers).
+- Edge-case correctness improvements that fall out of the
+  consolidation: every migrated site is now quote-aware, where most
+  were previously naive `count('{') - count('}')` style. An IAM
+  policy ARN containing `bucket-{*}-policy` no longer corrupts depth
+  tracking; a Helm value with `}` inside a quoted string no longer
+  closes the block prematurely.
+
+### Counts
+
+- Extension: v0.1.49 → **v0.1.50**.
+- `node:test` cases: 62/62 (unchanged).
+- Bundled engine pytest tests: 829 → **840** (+11 `TestBraceWalk` cases).
+- Bundle: 1.16 MB (unchanged).
+
+---
+
 ## [0.1.49] — 2026-05-11
 
 **Fifth audit pass — subprocess discipline + GitHub Action injection hardening.** The post-R30.11 audit (`tasks/repo-audit-2026-05-11-round5.md`) found a class of bugs that no prior round had hit: subprocess discipline across the integration layer. The `_diff.py` git helpers had no timeouts; the run-task server's `subprocess.run(timeout=)` didn't actually kill the child; the GitHub Action's `${{ inputs.fail-on }}` interpolation into a Python heredoc was a script-injection surface; `_cmd_explain` accepted any rule_id without validation. This release closes the security-critical surface in one PR plus engine-side robustness.

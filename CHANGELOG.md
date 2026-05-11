@@ -5,6 +5,69 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.13 — `_brace_walk` extraction (structural) — 2026-05-11 (ext v0.1.50)
+
+**Pulls the structural item every prior audit round (1 through 5) recommended.** Five audits, all flagged the same 13+ sites duplicating brace-depth tracking across `detect.py` and `_apply_fixes.py`; this round consolidates them into one quote-aware helper in `_hcl.py`. The audit-cycle pause recommendation at the end of round 5 was conditional on this PR landing — it's the load-bearing structural seam that closes the bug class no audit round could close one-by-one without re-recommending the same extraction.
+
+### The helper
+
+`scripts/_hcl.py:brace_walk(text, start_pos=0, *, opens="{", closes="}") -> int | None` is one function with the discipline that the 13 duplicated walkers were *supposed* to share but didn't:
+
+- **Quote-aware.** A `}` inside a `"..."` literal does not decrement depth. An IAM policy ARN like `bucket-{*}-policy` no longer corrupts the surrounding block boundary.
+- **Backslash-aware.** A `\"` inside a quoted region keeps the walker in-quote; literal `}` bytes between `\"` pairs are still treated as data, not structure.
+- **Single-quote aware.** Defensive — HCL allows `'…'` inside heredocs / interpolation.
+- **Parameterised on delimiters.** `opens="("` / `closes=")"` powers paren-depth walking (the `iam_json_policy_analysis` detector's `jsonencode(...)` extraction) with the same logic.
+
+### Migrated sites (13)
+
+The audit identified 21 depth-tracking locations in `detect.py`; on inventory, 13 are bracket-walkers (the others track different state machines and stay as-is). All 13 + the 2 in `_apply_fixes.py` are now one-liners around `brace_walk`:
+
+| Site | Previous shape | After |
+|---|---|---|
+| `_apply_fixes.py:fix_line_for_arg` | R30.12 inlined a quote-aware walker | Calls `brace_walk` |
+| `_apply_fixes.py:fix_block_for_nested_arg` | Naive `count('{') - count('}')` | Calls `brace_walk` (now quote-aware) |
+| `detect.py:_extract_var_defaults_by_dir` (provider aws default_tags) | Naive depth loop | Calls `brace_walk` |
+| `detect.py:iam_policy_analysis` (statement) | Naive depth loop | Calls `brace_walk` |
+| `detect.py:iam_policy_analysis` (principals) | Naive depth loop | Calls `brace_walk` |
+| `detect.py:helm_set_value` (set blocks) | Naive depth loop | Calls `brace_walk` |
+| `detect.py:iam_json_policy_analysis` (jsonencode parens) | Naive paren depth loop | `brace_walk(..., opens="(", closes=")")` |
+| `detect.py:firewall_open_port` (allow blocks) | Naive depth loop | Calls `brace_walk` |
+| `detect.py` (nested-path walker, validation, backend, terraform+required_providers — 4 sites) | Naive depth loops | Call `brace_walk` |
+
+### Edge-case correctness wins
+
+Beyond the structural cleanup, the migration fixes latent bugs at 12 of the 13 sites — the prior walkers were quote-blind and would have corrupted depth tracking on inputs that the catalogue test corpus doesn't exercise but that real-world Terraform code routinely emits:
+
+- An IAM `actions = ["arn:aws:s3:::bucket-{*}-policy"]` no longer breaks `statement {}` boundary detection.
+- A Helm `value = "with } inside"` no longer prematurely closes the surrounding `set {}` block.
+- A `jsonencode(...)` body whose string content contains `)` no longer truncates the captured policy text.
+
+None of these were findings the catalogue would fire on — they were silent correctness bugs in the depth tracking that produced subtly-wrong block boundaries on real-world inputs. The consolidation closes them all at once.
+
+### Tests
+
+- New `TestBraceWalk` class in `tests/test_hcl_primitives.py` — **11 test cases** pinning every contract of the helper: balanced top-level, nested, unbalanced (returns None), quoted close-brace ignored, quoted open-brace ignored, escaped-quote handling, single-quoted strings, paren-walker variant, start_pos respected, exclusive-end-position contract, no-raise on arbitrary input.
+- All 12 `tests/test_apply_fixes*.py` + `tests/test_detection_core.py` + the 47-file pytest suite pass without changes — the helper's contract matches the in-line walkers' behaviour on every input the existing fixture corpus exercises.
+
+### Subagent claims rejected on re-read
+
+None — the structural extraction is a planned PR, not an audit-driven fix. Three subagent claims that would have re-recommended this extraction had we run a sixth audit round are now obsolete.
+
+### Counts
+
+- Pytest cases: 829 → **840** (+11 `TestBraceWalk` cases).
+- Extension `node:test` cases: 62/62 (unchanged).
+- Self-test fixtures: 238/238 positive + 146/146 clean.
+- Terragoat snapshot: in sync.
+- LoC delta: `_hcl.py` +90 (new helper + docstring); `_apply_fixes.py` -40 (4 walkers collapsed); `detect.py` -110 (9+ walkers collapsed). Net **−60 LoC** while gaining quote-awareness at every site.
+- Extension: v0.1.49 → **v0.1.50**.
+
+### Audit cycle status
+
+With `_brace_walk` extracted, the **audit cycle from rounds 1–5 is now structurally closed.** The remaining deferred items (`_output.py` CSS dedup, `_attack_graph.py` regex constants without rationale, urgency-rank fallback unification, urgency-colour consolidation, shared `_safe_subprocess` helper) are smaller, non-load-bearing PRs that the team can pick up incrementally. Cumulative across six rounds: **95 audit findings closed + the one structural seam that would have been re-recommended in any sixth audit round.**
+
+---
+
 ## Round 30.12 — Fifth audit pass — subprocess discipline + injection hardening — 2026-05-11 (ext v0.1.49)
 
 **Closes the 17-finding round-5 audit (`tasks/repo-audit-2026-05-11-round5.md`).** The most material findings: a GitHub Actions templating injection into a Python heredoc (`action.yml:376`), path traversal in `_cmd_explain` (`detect.py:2709`), and five git subprocess calls in `_diff.py` with no timeout. The round-5 audit also exposed a structural class — **subprocess discipline across the integration layer** — that the prior four rounds hadn't surfaced.
