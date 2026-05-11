@@ -629,100 +629,9 @@ def detect_in_file(
                                     addr = f"data.{dblk['groups'][0]}.{dblk['groups'][1]}"
                                     break
                         findings.append({"id": eid, "file": str(file_path), "line": line, "resource": addr})
-            elif kind == "resource_arg":
-                has_regex = "regex" in pat
-                has_not_regex = "not_regex" in pat
-                fire_if_absent = pat.get("fire_if_absent", False)
-                if "resource" not in pat or "arg" not in pat:
-                    continue
-                if not has_regex and not has_not_regex:
-                    continue
-                rt = pat["resource"]
-                arg = pat["arg"]
-                regex = re.compile(pat["regex"]) if has_regex else None
-                not_regex = re.compile(pat["not_regex"]) if has_not_regex else None
-                suppress_body_contains = pat.get("suppress_if_body_contains")
-                for blk in resources:
-                    btype, bname = blk["groups"]
-                    if btype != rt:
-                        continue
-                    # Skip resources that are definitely not created (count = 0).
-                    if _resource_is_count_zero(blk["body"], _vd):
-                        continue
-                    if suppress_body_contains and suppress_body_contains in blk["body"]:
-                        continue
-                    val = block_arg_value(blk["body"], arg)
-                    if val is None:
-                        if fire_if_absent:
-                            hit = True
-                        else:
-                            continue
-                    else:
-                        val = _resolve_var_ref(val, _vd)
-                        hit = False
-                        if regex and regex.search(val):
-                            hit = True
-                        if not_regex and not not_regex.search(val):
-                            hit = True
-                    if hit:
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"{btype}.{bname}",
-                            }
-                        )
-            elif kind == "resource_missing_arg":
-                if "resource" not in pat:
-                    continue
-                rt = pat["resource"]
-                arg_path = pat.get("nested_path") or pat.get("arg") or ""
-                if not arg_path:
-                    continue
-                # AWS default_tags propagation: if the dir's AWS provider
-                # declares default_tags, suppress findings whose target
-                # arg is `tags` or any `tags.*` path on aws_* resources.
-                if (
-                    rt.startswith("aws_")
-                    and (arg_path == "tags" or arg_path.startswith("tags."))
-                    and _vd.get("__aws_default_tags__") == "true"
-                ):
-                    continue
-                suppress_if = pat.get("suppress_if")
-                suppress_body_contains = pat.get("suppress_if_body_contains")
-                for blk in resources:
-                    btype, bname = blk["groups"]
-                    if btype != rt:
-                        continue
-                    if _resource_is_count_zero(blk["body"], _vd):
-                        continue
-                    if suppress_body_contains and suppress_body_contains in blk["body"]:
-                        continue
-                    if "." in arg_path:
-                        present = block_has_nested_path(blk["body"], arg_path)
-                    else:
-                        present = block_has_arg(blk["body"], arg_path)
-                    if not present:
-                        if suppress_if:
-                            s_arg = suppress_if.get("arg", "")
-                            s_val = str(suppress_if.get("equals", "")).lower().strip("\"'")
-                            if s_arg and s_val:
-                                actual = block_arg_value(blk["body"], s_arg)
-                                if actual:
-                                    actual = _resolve_var_ref(actual, _vd)
-                                if actual and str(actual).lower().strip("\"'") == s_val:
-                                    continue
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"{btype}.{bname}",
-                            }
-                        )
-            # `resource_present` and `data_source_present` migrated to
-            # `_INFILE_HANDLERS`. See the registered handlers below.
+            # `resource_present`, `data_source_present`, `resource_arg`,
+            # `resource_missing_arg` migrated to `_INFILE_HANDLERS`. See
+            # the registered handlers below.
             elif kind == "iam_policy_analysis":
                 # Walk every `data "aws_iam_policy_document"` block, then each
                 # nested `statement { ... }`. The pattern's `check` field
@@ -1016,92 +925,8 @@ def detect_in_file(
                             "line": blk["start_line"],
                             "resource": f"{btype}.{bname}",
                         })
-            elif kind == "resource_body_contains":
-                # Fire for every resource of the named type whose body
-                # matches the regex. Unlike `grep`, this scopes to a
-                # specific resource type and respects block boundaries —
-                # the regex doesn't need to limit itself to `[^}]`.
-                if "resource" not in pat or "regex" not in pat:
-                    continue
-                rt = pat["resource"]
-                regex = re.compile(pat["regex"], re.MULTILINE | re.DOTALL)
-                for blk in resources:
-                    btype, bname = blk["groups"]
-                    if btype != rt:
-                        continue
-                    if regex.search(blk["body"]):
-                        findings.append({
-                            "id": eid,
-                            "file": str(file_path),
-                            "line": blk["start_line"],
-                            "resource": f"{btype}.{bname}",
-                        })
-            elif kind == "hcl_attr":
-                if "resource" not in pat or "path" not in pat:
-                    continue
-                rt = pat["resource"]
-                path = pat["path"]
-                not_equal = pat.get("not_equal")
-                suppress_body_contains = pat.get("suppress_if_body_contains")
-                for blk in resources:
-                    btype, bname = blk["groups"]
-                    if btype != rt:
-                        continue
-                    if suppress_body_contains and suppress_body_contains in blk["body"]:
-                        continue
-                    parts = path.split(".")
-                    parent_body = blk["body"]
-                    for p in parts[:-1]:
-                        m = re.search(rf'(?m)^\s*{re.escape(p)}\s*\{{', parent_body)
-                        if not m:
-                            parent_body = None
-                            break
-                        # Round-30.13 — shared walker.
-                        end_after = brace_walk(parent_body, m.end() - 1)
-                        if end_after is None:
-                            parent_body = None
-                            break
-                        end = end_after - 1
-                        parent_body = parent_body[m.end():end]
-                    if parent_body is None:
-                        continue
-                    val = block_arg_value(parent_body, parts[-1])
-                    if val is None:
-                        continue
-                    val = _resolve_var_ref(val, _vd)
-                    if not_equal is not None:
-                        # Both sides may carry surrounding quotes from HCL or
-                        # from YAML literal escaping. Compare on the unquoted
-                        # form so `not_equal: '"Deny"'` matches `arg = "Deny"`.
-                        v_norm = str(val).strip().strip('"').strip("'").lower()
-                        ne_norm = str(not_equal).strip().strip('"').strip("'").lower()
-                        if v_norm != ne_norm:
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(file_path),
-                                    "line": blk["start_line"],
-                                    "resource": f"{btype}.{bname}",
-                                }
-                            )
-            elif kind == "module_block_missing_arg":
-                if "arg" not in pat:
-                    continue
-                arg = pat["arg"]
-                source_re = re.compile(pat.get("source_regex", ".*"))
-                for blk in modules:
-                    src = block_arg_value(blk["body"], "source") or ""
-                    if not source_re.search(src):
-                        continue
-                    if not block_has_arg(blk["body"], arg):
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"module.{blk['groups'][0]}",
-                            }
-                        )
+            # `resource_body_contains`, `hcl_attr`, `module_block_missing_arg`
+            # migrated to `_INFILE_HANDLERS`. See the registered handlers below.
             elif kind == "variable_type":
                 rgx_str = pat.get("type_regex") or pat.get("regex")
                 if not rgx_str:
@@ -1132,28 +957,8 @@ def detect_in_file(
                                 "resource": f"var.{blk['groups'][0]}",
                             }
                         )
-            elif kind == "moved_block_present":
-                moved_blocks = find_simple_blocks(text, MOVED_START)
-                for mblk in moved_blocks:
-                    findings.append(
-                        {
-                            "id": eid,
-                            "file": str(file_path),
-                            "line": mblk["start_line"],
-                            "resource": "moved",
-                        }
-                    )
-            elif kind == "removed_block_present":
-                removed_blocks = find_simple_blocks(text, REMOVED_START)
-                for rblk in removed_blocks:
-                    findings.append(
-                        {
-                            "id": eid,
-                            "file": str(file_path),
-                            "line": rblk["start_line"],
-                            "resource": "removed",
-                        }
-                    )
+            # `moved_block_present`, `removed_block_present` migrated to
+            # `_INFILE_HANDLERS`. See the registered handlers below.
             elif kind == "check_block_missing_assert":
                 # TF 1.5+ check {} block must contain at least one assert {}.
                 # Without one the block is a no-op — usually a half-finished
@@ -1480,6 +1285,262 @@ def _detect_data_source_present(c: InFileCtx) -> list[dict]:
                 "line": blk["start_line"],
                 "resource": f"data.{blk['groups'][0]}.{blk['groups'][1]}",
             })
+    return out
+
+
+@_register_infile("resource_arg")
+def _detect_resource_arg(c: InFileCtx) -> list[dict]:
+    """``resource_arg`` — match a regex (or its negation) against the
+    value of an argument on every resource of the given type.
+
+    Supports ``regex`` (positive match), ``not_regex`` (negative match),
+    ``fire_if_absent`` (fire when the arg is missing entirely), and the
+    ``suppress_if_body_contains`` and ``count = 0`` (resource definitely
+    not created) escape hatches. Variable references in the value are
+    resolved via the directory-scoped var_defaults.
+    """
+    pat = c.pat
+    has_regex = "regex" in pat
+    has_not_regex = "not_regex" in pat
+    fire_if_absent = pat.get("fire_if_absent", False)
+    if "resource" not in pat or "arg" not in pat:
+        return []
+    if not has_regex and not has_not_regex:
+        return []
+    rt = pat["resource"]
+    arg = pat["arg"]
+    regex = re.compile(pat["regex"]) if has_regex else None
+    not_regex = re.compile(pat["not_regex"]) if has_not_regex else None
+    suppress_body_contains = pat.get("suppress_if_body_contains")
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        if btype != rt:
+            continue
+        if _resource_is_count_zero(blk["body"], c.var_defaults):
+            continue
+        if suppress_body_contains and suppress_body_contains in blk["body"]:
+            continue
+        val = block_arg_value(blk["body"], arg)
+        if val is None:
+            if fire_if_absent:
+                hit = True
+            else:
+                continue
+        else:
+            val = _resolve_var_ref(val, c.var_defaults)
+            hit = False
+            if regex and regex.search(val):
+                hit = True
+            if not_regex and not not_regex.search(val):
+                hit = True
+        if hit:
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+            })
+    return out
+
+
+@_register_infile("resource_missing_arg")
+def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
+    """``resource_missing_arg`` — fire when the named argument (or
+    dotted nested path) is absent from a resource body.
+
+    Honours ``suppress_if`` (don't fire when a sibling arg has a
+    specific value), ``suppress_if_body_contains``, the ``count = 0``
+    escape hatch, and the AWS ``default_tags`` propagation (R30.0.12 —
+    when the dir's AWS provider declares default_tags, ``tags`` /
+    ``tags.*`` paths on aws_* resources are silently provided).
+    """
+    pat = c.pat
+    if "resource" not in pat:
+        return []
+    rt = pat["resource"]
+    arg_path = pat.get("nested_path") or pat.get("arg") or ""
+    if not arg_path:
+        return []
+    if (
+        rt.startswith("aws_")
+        and (arg_path == "tags" or arg_path.startswith("tags."))
+        and c.var_defaults.get("__aws_default_tags__") == "true"
+    ):
+        return []
+    suppress_if = pat.get("suppress_if")
+    suppress_body_contains = pat.get("suppress_if_body_contains")
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        if btype != rt:
+            continue
+        if _resource_is_count_zero(blk["body"], c.var_defaults):
+            continue
+        if suppress_body_contains and suppress_body_contains in blk["body"]:
+            continue
+        if "." in arg_path:
+            present = block_has_nested_path(blk["body"], arg_path)
+        else:
+            present = block_has_arg(blk["body"], arg_path)
+        if not present:
+            if suppress_if:
+                s_arg = suppress_if.get("arg", "")
+                s_val = str(suppress_if.get("equals", "")).lower().strip("\"'")
+                if s_arg and s_val:
+                    actual = block_arg_value(blk["body"], s_arg)
+                    if actual:
+                        actual = _resolve_var_ref(actual, c.var_defaults)
+                    if actual and str(actual).lower().strip("\"'") == s_val:
+                        continue
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+            })
+    return out
+
+
+@_register_infile("resource_body_contains")
+def _detect_resource_body_contains(c: InFileCtx) -> list[dict]:
+    """``resource_body_contains`` — fire on every resource of the named
+    type whose body matches a regex. Unlike ``grep``, this scopes to a
+    specific resource type and respects block boundaries — the regex
+    doesn't need to limit itself to ``[^}]``.
+    """
+    pat = c.pat
+    if "resource" not in pat or "regex" not in pat:
+        return []
+    rt = pat["resource"]
+    regex = re.compile(pat["regex"], re.MULTILINE | re.DOTALL)
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        if btype != rt:
+            continue
+        if regex.search(blk["body"]):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+            })
+    return out
+
+
+@_register_infile("hcl_attr")
+def _detect_hcl_attr(c: InFileCtx) -> list[dict]:
+    """``hcl_attr`` — walk a dotted ``path`` of nested HCL blocks inside
+    a resource and compare the leaf value against ``not_equal``.
+
+    Used for rules like "the ``server_side_encryption_configuration.rule.apply_server_side_encryption_by_default.sse_algorithm`` must be ``aws:kms``". Honours ``suppress_if_body_contains``. Uses the shared ``brace_walk`` to descend through nested blocks.
+    """
+    pat = c.pat
+    if "resource" not in pat or "path" not in pat:
+        return []
+    rt = pat["resource"]
+    path = pat["path"]
+    not_equal = pat.get("not_equal")
+    suppress_body_contains = pat.get("suppress_if_body_contains")
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        if btype != rt:
+            continue
+        if suppress_body_contains and suppress_body_contains in blk["body"]:
+            continue
+        parts = path.split(".")
+        parent_body = blk["body"]
+        for p in parts[:-1]:
+            m = re.search(rf'(?m)^\s*{re.escape(p)}\s*\{{', parent_body)
+            if not m:
+                parent_body = None
+                break
+            end_after = brace_walk(parent_body, m.end() - 1)
+            if end_after is None:
+                parent_body = None
+                break
+            end = end_after - 1
+            parent_body = parent_body[m.end():end]
+        if parent_body is None:
+            continue
+        val = block_arg_value(parent_body, parts[-1])
+        if val is None:
+            continue
+        val = _resolve_var_ref(val, c.var_defaults)
+        if not_equal is not None:
+            v_norm = str(val).strip().strip('"').strip("'").lower()
+            ne_norm = str(not_equal).strip().strip('"').strip("'").lower()
+            if v_norm != ne_norm:
+                out.append({
+                    "id": c.eid,
+                    "file": str(c.file_path),
+                    "line": blk["start_line"],
+                    "resource": f"{btype}.{bname}",
+                })
+    return out
+
+
+@_register_infile("module_block_missing_arg")
+def _detect_module_block_missing_arg(c: InFileCtx) -> list[dict]:
+    """``module_block_missing_arg`` — fire when a ``module "..." { ... }``
+    block whose ``source`` matches ``source_regex`` lacks the named arg.
+    """
+    pat = c.pat
+    if "arg" not in pat:
+        return []
+    arg = pat["arg"]
+    source_re = re.compile(pat.get("source_regex", ".*"))
+    out: list[dict] = []
+    for blk in c.modules:
+        src = block_arg_value(blk["body"], "source") or ""
+        if not source_re.search(src):
+            continue
+        if not block_has_arg(blk["body"], arg):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"module.{blk['groups'][0]}",
+            })
+    return out
+
+
+@_register_infile("moved_block_present")
+def _detect_moved_block_present(c: InFileCtx) -> list[dict]:
+    """``moved_block_present`` — flag every ``moved { ... }`` block.
+
+    Used by rules that warn about stale ``moved`` declarations the
+    operator might have forgotten to delete after the state-move
+    landed.
+    """
+    out: list[dict] = []
+    for mblk in find_simple_blocks(c.text, MOVED_START):
+        out.append({
+            "id": c.eid,
+            "file": str(c.file_path),
+            "line": mblk["start_line"],
+            "resource": "moved",
+        })
+    return out
+
+
+@_register_infile("removed_block_present")
+def _detect_removed_block_present(c: InFileCtx) -> list[dict]:
+    """``removed_block_present`` — flag every TF 1.7+ ``removed`` block.
+
+    Same shape as ``moved_block_present``; used to surface stale
+    declarations.
+    """
+    out: list[dict] = []
+    for rblk in find_simple_blocks(c.text, REMOVED_START):
+        out.append({
+            "id": c.eid,
+            "file": str(c.file_path),
+            "line": rblk["start_line"],
+            "resource": "removed",
+        })
     return out
 
 
