@@ -5,6 +5,66 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.12 — Fifth audit pass — subprocess discipline + injection hardening — 2026-05-11 (ext v0.1.49)
+
+**Closes the 17-finding round-5 audit (`tasks/repo-audit-2026-05-11-round5.md`).** The most material findings: a GitHub Actions templating injection into a Python heredoc (`action.yml:376`), path traversal in `_cmd_explain` (`detect.py:2709`), and five git subprocess calls in `_diff.py` with no timeout. The round-5 audit also exposed a structural class — **subprocess discipline across the integration layer** — that the prior four rounds hadn't surfaced.
+
+### Security — injection + path-traversal closed
+
+- **`action.yml` GitHub Actions templating boundary.** The `fail-on` input was previously interpolated via `${{ inputs.fail-on }}` directly into a Python heredoc source — Actions templating runs BEFORE the shell sees the heredoc, so a malicious caller (e.g. a reusable workflow whose input was supplied by an upstream caller) could inject arbitrary Python. Moved through `env: TFA_FAIL_ON:` and read via `os.environ` so the value never reaches the parser. The same fix applied to `inputs.extra-args` + 5 other inputs in the args-build step; `read -ra` replaces the unquoted array literal so `$(curl evil)` in a user-supplied input is treated as a literal string. (Audit follow-up #1.)
+- **`detect.py:_cmd_explain` path-traversal closed.** `--explain ../../etc/passwd` previously resolved to `<catalog_dir>/../../etc/passwd.yaml` and read arbitrary `.yaml` files. Now validates rule_id against `_RULE_ID_RE` (same regex `_cmd_new_rule` uses), returning exit 2 on a mismatch. +2 regression tests in `tests/test_audit_2026_05_11_regressions.py`. (Audit follow-up #2.)
+
+### Subprocess discipline
+
+- **`scripts/_diff.py`** — every git subprocess call (`auto_detect_base_branch`, `get_diff_files`, the four `git diff` / `ls-files` / `rev-parse` calls) now runs through a centralised `_run_git` helper with a 30s timeout. A hung git (corrupted repo, NFS stall, lock file) used to freeze the engine indefinitely; now degrades to "empty diff → full scan" with a stderr WARN. Also surfaces a clear WARN when `auto_detect_base_branch` finds neither `main` nor `master`. (Audit follow-up #3, #17.)
+- **`integrations/run-task/server.py`** — `subprocess.run(..., timeout=120)` doesn't kill the child on Python ≤ 3.13; replaced with `Popen` + `communicate(timeout=…)` + explicit `kill()` in the timeout branch. Zombie `detect.py` processes on a busy HCP Run Task worker no longer accumulate. (Audit follow-up #8.)
+
+### Engine — robustness
+
+- **`scripts/_apply_fixes.py:fix_line_for_arg`** brace walker is now quote-aware via a backslash-tracking `in_dq`/`in_sq` state machine — pulls one site forward of the deferred `_brace_walk` extraction. A fix snippet like `value = "with { in string"` no longer corrupts the depth count. (Audit follow-up #5.)
+- **`scripts/_plan_state.py`** — `detect_in_plan` and `detect_in_state` split the prior broad `except Exception` into `FileNotFoundError` → "file not found" WARN; `OSError` → "OS error" WARN; `json.JSONDecodeError` → "malformed JSON" WARN with the offending bytes' first 200 chars. Operator running `--plan-json /missing.tfplan` no longer sees a generic "cannot read" message indistinguishable from a corrupted file. (Audit follow-up #7.)
+- **`scripts/detect.py:_collect_extra_files`** — the `(ValueError, OSError)` broad catch now splits and emits stderr WARN naming the offending glob (ValueError, catalogue authorship bug) or directory (OSError, operator-side issue). A rule with `file_glob: "**/*.tf["` no longer silently never fires. (Audit follow-up #15.)
+- **`scripts/_baseline.py`** date-format error includes the parser's complaint + explicit zero-padding hint. (Audit follow-up #13.)
+- **`scripts/_registry.py`** per-process `_REGISTRY_DOWN` latch — once a single registry call times out (5s), subsequent calls in the same scan short-circuit instead of each waiting another 5s. A 50-module workspace with the registry hard-down used to wait 250s; now degrades to 5s. (Audit follow-up #14.)
+- **`scripts/_verify.py`** distinguishes `BROKEN-SYMLINK` from `STALE-LOCATION` via `is_symlink()` check. (Audit follow-up #16.)
+- **`scripts/detect.py`** — two remaining `getattr(args, …)` sites converted to direct attribute access (`args.targets`, `args.lookback`). Closes the consistency gap left by R30.8's audit #15 fix. (Audit follow-up #11.)
+
+### Integrations
+
+- **`terraform-provider/internal/provider/scan_data_source.go`** `json.Marshal` error now surfaced as `resp.Diagnostics.AddError` instead of swallowed via `_` (audit #4). Also adds a distinct ctx-cancellation diagnostic so a `terraform plan` abort produces a clear "compliance gap report cancelled" message instead of a generic empty `compliance_report` (audit #9).
+- **`integrations/badge-service/server.py:/ingest`** validates each nested level of the request body (`scan` is a dict, `scan.summary` is a dict, …) and emits a clean 400 with the exact mismatch (audit #10).
+- **`action.yml` `Run tf-analyze`** step replaces `|| true` with a `run_scan` helper that captures the exit code per format and emits `::error::` annotations for exit ≥ 2 (engine crash) while still letting the workflow continue with zeroed defaults (audit #12).
+- **`demo/app.py`** size-cap loop short-circuits on `MAX_TF_FILES` or `MAX_CLONE_BYTES` overrun instead of stat()ing every file (audit #18).
+
+### Subagent claims rejected on re-read
+
+- **"`_threat_intel.py` cache JSON parsing unguarded"** — round 4 also rejected this; all four `json.loads(cache_path.read_text())` call-sites are wrapped in try/except.
+- **"MCP server has no message-size guard"** — `_envelope_string` truncates at `MAX_OUTPUT_BYTES` with UTF-8-safe decode; `_envelope_dict` does count-based truncation with `_truncated` sentinel. Already correctly implemented.
+- **"HMAC timing attack via early reject in badge service"** — `hmac.compare_digest` is constant-time; the early reject on missing `sha256=` prefix returns the same HTTP 401 with no information leak.
+
+### Counts
+
+- Pytest cases: 827 → **829** (+2 `_cmd_explain` path-traversal regression tests).
+- Extension `node:test` cases: 62/62 (unchanged).
+- Self-test fixtures: 238/238 positive + 146/146 clean.
+- Terragoat snapshot: in sync.
+- Audit follow-up findings closed: **15 of 17**; 3 rejected on re-read; 2 already-correct (`_modes.py` IndexError, MCP message-size guard).
+- Extension: v0.1.48 → **v0.1.49**.
+
+### Cumulative across five audit rounds
+
+| Round | Findings closed | Rejected | Cumulative |
+|---|---|---|---|
+| 1 (R30.8) | 23 | 1 | 23 |
+| 2 (R30.9) | 20 | 1 | 43 |
+| 3 (R30.10) | 20 | 3 | 63 |
+| 4 (R30.11) | 17 | 3 | 80 |
+| 5 (R30.12) | 15 | 3 | **95** |
+
+**95 audit findings closed in one day across five compounding rounds.** Diminishing-returns curve is clear (round 1 closed 41, round 5 closed 15) — the recommendation to stop the audit cycle and move to dedicated structural PRs (the deferred `_brace_walk` and `_output.py` CSS dedup) still stands.
+
+---
+
 ## Round 30.11 — Fourth audit pass — XSS hardening + engine correctness — 2026-05-11 (ext v0.1.48)
 
 **Closes the 21-finding round-4 audit (`tasks/repo-audit-2026-05-11-round4.md`).** The most material finding: the R30.8 round closed an XSS class in the VS Code extension's webview but missed the SAME class in two Python-emitted HTML surfaces (the main HTML report from `_output.py` and the standalone attack-graph HTML from `_attack_graph.py`). This round closes the class everywhere, plus six smaller engine-correctness items.

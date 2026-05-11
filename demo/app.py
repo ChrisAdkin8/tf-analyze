@@ -201,16 +201,33 @@ def _clone_and_scan(owner: str, repo: str, sha: str) -> dict:
         if clone.returncode != 0:
             raise HTTPException(status_code=404, detail="Could not clone repository")
         # Quick size guard. Refuse to scan anything ridiculous.
+        # Round-5 audit fix #18 — accumulate the file size DURING the
+        # rglob iteration so the race window between "discover" and
+        # "stat" is per-file, not per-glob. The previous shape was
+        # already correct (the loop computes size as it iterates); the
+        # only TOCTOU concern is files added mid-iteration that the
+        # lazy rglob doesn't see. That isn't fixable without a snapshot
+        # and is bounded by `MAX_TF_FILES` anyway, so the cap is safe.
+        # A file deleted between iteration and stat raises OSError and
+        # we skip it — already correct, documented here for clarity.
         total = 0
         tf_count = 0
         for p in Path(d).rglob("*.tf"):
             if ".terraform" in p.parts:
                 continue
             tf_count += 1
+            if tf_count > MAX_TF_FILES:
+                # Short-circuit: don't even bother stat()ing the rest.
+                # The HTTPException below will fire on the count alone.
+                break
             try:
                 total += p.stat().st_size
             except OSError:
                 continue
+            if total > MAX_CLONE_BYTES:
+                # Same short-circuit on byte cap — avoid additional
+                # stat() calls once we're over.
+                break
         if tf_count == 0:
             raise HTTPException(status_code=400, detail="No .tf files found in repository")
         if tf_count > MAX_TF_FILES:

@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import json
 import re
+import sys
+import urllib.error
 import urllib.request
 
 from _hcl import find_blocks, block_arg_value  # type: ignore
@@ -43,6 +45,9 @@ _REGISTRY_SOURCE_RE = re.compile(
 _MOD_VERSION_PIN_RE = re.compile(r'(?m)^\s*version\s*=\s*"([^"]+)"')
 
 
+_REGISTRY_DOWN = False  # Round-5 audit fix #14 — per-process latch.
+
+
 def query_registry_latest(namespace: str, name: str, provider: str) -> str | None:
     """Latest published version string from the Terraform Registry, or None.
 
@@ -50,13 +55,34 @@ def query_registry_latest(namespace: str, name: str, provider: str) -> str | Non
     None as "unknown" and skip the staleness check rather than erroring
     out. The 5-second timeout keeps a slow registry from stalling a
     whole scan.
+
+    Round-5 audit fix #14 — once a single registry call has timed out,
+    short-circuit subsequent calls within the same scan via the
+    module-level `_REGISTRY_DOWN` latch. A 50-module workspace with
+    the registry hard-down previously waited 50 × 5 = 250 seconds; now
+    it waits 5 seconds total and degrades cleanly. The latch resets
+    when the module is re-imported, so a follow-up scan will retry.
     """
+    global _REGISTRY_DOWN
+    if _REGISTRY_DOWN:
+        return None
     url = f"https://registry.terraform.io/v1/modules/{namespace}/{name}/{provider}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "tf-analyze/1.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())
         return data.get("version") or None
+    except (urllib.error.URLError, TimeoutError) as e:
+        # Network-class error → trip the latch so we don't waste 5s
+        # per remaining module. Other exceptions (JSONDecodeError,
+        # unexpected response shape) are per-module and shouldn't
+        # disable the whole check.
+        _REGISTRY_DOWN = True
+        sys.stderr.write(
+            f"WARN: Terraform Registry unreachable ({e}); skipping "
+            f"staleness checks for the remainder of this scan.\n"
+        )
+        return None
     except Exception:
         return None
 

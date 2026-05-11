@@ -104,7 +104,37 @@ def _run_detect(plan_json_path: Path) -> tuple[dict, int]:
     ]
     if COMPLIANCE_FRAMEWORK:
         cmd.extend(["--compliance-framework", COMPLIANCE_FRAMEWORK])
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    # Round-5 audit fix #8 — `subprocess.run(..., timeout=120)` raises
+    # `TimeoutExpired` but does NOT kill the child on Python ≤ 3.13;
+    # the engine process is left running and accumulates as a zombie
+    # holding file handles. On a heavily-loaded HCP Run Task worker
+    # this leaks resources. Switch to `Popen` + explicit `kill()` in
+    # the timeout branch so the child is reaped reliably.
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=120)
+        returncode = proc.returncode
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        # Drain any remaining bytes so the file descriptors are
+        # released. communicate() with no further timeout is safe
+        # after kill() because the process is gone.
+        try:
+            stdout, stderr = proc.communicate()
+        except Exception:
+            stdout, stderr = "", "killed by timeout"
+        returncode = proc.returncode if proc.returncode is not None else 124
+        LOG.error(
+            "detect.py exceeded 120s timeout and was killed (exit %d)",
+            returncode,
+        )
+    # Adapt the existing `res` shape so the downstream branches below
+    # (stderr handling, JSON parse, synthetic SYN-SCAN-FAILED) read
+    # unchanged.
+    from types import SimpleNamespace
+    res = SimpleNamespace(stdout=stdout, stderr=stderr, returncode=returncode)
     if res.stderr:
         # Audit follow-up #13 — escalate stderr containing a Python
         # traceback to ERROR level so it shows up in oncall logs

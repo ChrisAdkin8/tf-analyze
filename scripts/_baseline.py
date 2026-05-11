@@ -72,13 +72,19 @@ def load_suppressions(
                     if exp_date < datetime.date.today():
                         expired[sid] = entry
                         continue
-                except ValueError:
+                except ValueError as date_err:
                     # Malformed date — surface loudly rather than
                     # silently treating the suppression as active.
+                    # Round-5 audit fix #13 — include the parser's
+                    # error message so the operator sees both the
+                    # offending value AND the specific complaint
+                    # (e.g. "month out of range" vs "wrong format")
+                    # and an explicit hint about zero-padding.
                     print(
                         f"WARN: suppression {sid} has malformed "
-                        f"expires={expires!r}; treating as active. "
-                        f"Use ISO date YYYY-MM-DD.",
+                        f"expires={expires!r} ({date_err}); treating as active. "
+                        f"Use zero-padded ISO date YYYY-MM-DD "
+                        f"(e.g. 2026-05-11, not 2026-5-11).",
                         file=sys.stderr,
                     )
             active[sid] = entry

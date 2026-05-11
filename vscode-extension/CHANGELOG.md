@@ -5,6 +5,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.49] — 2026-05-11
+
+**Fifth audit pass — subprocess discipline + GitHub Action injection hardening.** The post-R30.11 audit (`tasks/repo-audit-2026-05-11-round5.md`) found a class of bugs that no prior round had hit: subprocess discipline across the integration layer. The `_diff.py` git helpers had no timeouts; the run-task server's `subprocess.run(timeout=)` didn't actually kill the child; the GitHub Action's `${{ inputs.fail-on }}` interpolation into a Python heredoc was a script-injection surface; `_cmd_explain` accepted any rule_id without validation. This release closes the security-critical surface in one PR plus engine-side robustness.
+
+### Bundled engine refresh
+
+The extension's bundled engine picks up all the engine-side fixes from this round:
+
+- `detect.py:_cmd_explain` validates rule_id against `_RULE_ID_RE` (no path traversal).
+- `_diff.py` all 5 git subprocess calls now run with a 30-second timeout.
+- `_apply_fixes.py:fix_line_for_arg` quote-aware brace walker — closes the same class as the 12 deferred `detect_in_file` branches at one site.
+- `_plan_state.py` differentiates `FileNotFoundError` / `OSError` / `JSONDecodeError`.
+- `_baseline.py` date-format error message includes the parser's complaint + an explicit hint about zero-padding.
+- `_registry.py` per-process `_REGISTRY_DOWN` latch — a single timeout short-circuits subsequent module-staleness checks, so a 50-module workspace no longer waits 250s when the registry is hard-down.
+- `_verify.py` distinguishes `BROKEN-SYMLINK` from `STALE-LOCATION`.
+- `detect.py:_collect_extra_files` glob exception split into `ValueError` (malformed pattern → loud WARN) and `OSError` (filesystem issue → loud WARN).
+
+### Counts
+
+- Extension: v0.1.48 → **v0.1.49**.
+- `node:test` cases: 62/62 (unchanged — fixes are behavioural).
+- Bundle: 1.16 MB (unchanged).
+
+---
+
 ## [0.1.48] — 2026-05-11
 
 **Fourth audit pass — XSS hardening + engine correctness.** The post-R30.10

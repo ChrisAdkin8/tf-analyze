@@ -337,13 +337,28 @@ async def ingest(request: Request) -> dict:
     except json.JSONDecodeError as e:
         raise HTTPException(400, f"invalid JSON body: {e}")
 
+    # Round-5 audit fix #10 — explicit shape validation. The prior
+    # code used optional chaining (`payload.get("scan") or {}`) which
+    # accepted any nested type (a `scan: "not a dict"` would have
+    # `summary.get(...)` fail at runtime, masked behind a generic
+    # 400 with a confusing message). Validate types at each level so
+    # the error response identifies the exact mismatch.
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "request body must be a JSON object")
+    scan = payload.get("scan")
+    if not isinstance(scan, dict):
+        raise HTTPException(400, "field `scan` must be an object (got "
+                                  f"{type(scan).__name__})")
+    summary = scan.get("summary")
+    if not isinstance(summary, dict):
+        raise HTTPException(400, "field `scan.summary` must be an object (got "
+                                  f"{type(summary).__name__})")
+
     owner = str(payload.get("owner") or "")
     repo = str(payload.get("repo") or "")
     branch = str(payload.get("branch") or "main")
     _validate_repo_path(owner, repo, branch)
 
-    scan = payload.get("scan") or {}
-    summary = scan.get("summary") or {}
     score = summary.get("score")
     grade = summary.get("grade")
     if not isinstance(score, int) or not isinstance(grade, str):

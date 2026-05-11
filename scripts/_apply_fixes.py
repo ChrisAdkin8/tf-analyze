@@ -56,21 +56,56 @@ def fix_line_for_arg(fix_hcl: str, arg: str) -> str | None:
     text = body[start_m.start():]
     newline_pos = text.find('\n')
     first_line = text if newline_pos == -1 else text[:newline_pos]
-    # If the first line opens more braces than it closes, this is a
-    # multi-line map literal — extend to the matching `}`.
-    brace_depth = first_line.count('{') - first_line.count('}')
-    if brace_depth <= 0:
+    # Round-5 audit fix #5 — quote-aware brace depth. The previous
+    # `first_line.count('{') - first_line.count('}')` counted braces
+    # inside string literals as block-structure characters. A fix
+    # snippet like `value = "with { in string"` falsely registered as
+    # a multi-line map literal; one like `value = "with } in string"
+    # { real = 1 }` registered as already-balanced and got truncated.
+    # This is the same class the 12 `detect_in_file` detector branches
+    # share — pulling one site forward of the deferred `_brace_walk`
+    # extraction. The walker tracks `in_dq` / `in_sq` with backslash
+    # awareness, mirroring `_hcl.block_arg_value`.
+    def _quote_aware_brace_depth(s: str) -> int:
+        depth = 0
+        in_dq = in_sq = False
+        prev = ""
+        for ch in s:
+            escaped = prev == "\\"
+            if ch == '"' and not in_sq and not escaped:
+                in_dq = not in_dq
+            elif ch == "'" and not in_dq and not escaped:
+                in_sq = not in_sq
+            elif ch == '{' and not in_dq and not in_sq:
+                depth += 1
+            elif ch == '}' and not in_dq and not in_sq:
+                depth -= 1
+            prev = ch
+        return depth
+
+    # If the first line opens more braces than it closes (ignoring
+    # braces inside strings), this is a multi-line map literal —
+    # extend to the matching `}`.
+    if _quote_aware_brace_depth(first_line) <= 0:
         return first_line.strip()
     depth = 0
     end_pos = None
+    in_dq = in_sq = False
+    prev = ""
     for i, ch in enumerate(text):
-        if ch == '{':
+        escaped = prev == "\\"
+        if ch == '"' and not in_sq and not escaped:
+            in_dq = not in_dq
+        elif ch == "'" and not in_dq and not escaped:
+            in_sq = not in_sq
+        elif ch == '{' and not in_dq and not in_sq:
             depth += 1
-        elif ch == '}':
+        elif ch == '}' and not in_dq and not in_sq:
             depth -= 1
             if depth == 0:
                 end_pos = i + 1
                 break
+        prev = ch
     if end_pos is None:
         return first_line.strip()
     # Raw (unstripped) so reindent_fix_snippet has the first-line base_len.

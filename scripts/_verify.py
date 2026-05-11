@@ -107,7 +107,16 @@ def reprobe_finding(
         return "MOVED"
     if hits:
         return "MOVED"
+    # Round-5 audit fix #16 — distinguish a broken symlink from a
+    # missing file. `Path.exists()` returns False for both, so an
+    # operator looking at a STALE-LOCATION finding couldn't tell
+    # whether the file was deleted or whether its symlink target
+    # was broken (which has a different remediation — fix the
+    # symlink, don't update the report). `is_symlink()` is True
+    # iff the path *itself* is a symlink, regardless of target.
     if not target_file.exists():
+        if target_file.is_symlink():
+            return "BROKEN-SYMLINK"
         return "STALE-LOCATION"
     return "RESOLVED"
 

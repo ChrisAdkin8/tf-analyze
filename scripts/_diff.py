@@ -16,16 +16,62 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Round-5 audit fix #3 — every git subprocess call now carries a
+# 30-second wall-clock cap. A hung git (corrupted repo, NFS stall, lock
+# file held by another process, network drive freeze) used to leave
+# the engine waiting forever. 30 s is generous for any realistic git
+# command on a real workspace (sub-second in practice) and short
+# enough that a freeze surfaces quickly with a clear stderr WARN
+# instead of an indefinite hang.
+_GIT_TIMEOUT_SEC = 30
+
+
+def _run_git(argv: list[str], target: Path, *, text: bool = False) -> subprocess.CompletedProcess | None:
+    """Run a git subprocess with a timeout. Returns None on hang.
+
+    Centralises the timeout + WARN-on-hang discipline so the four
+    call sites below share one error path. Callers that need the
+    `text=True` shape pass it through.
+    """
+    try:
+        return subprocess.run(
+            argv,
+            capture_output=True,
+            text=text,
+            cwd=str(target),
+            timeout=_GIT_TIMEOUT_SEC,
+        )
+    except subprocess.TimeoutExpired:
+        sys.stderr.write(
+            f"WARN: git command exceeded {_GIT_TIMEOUT_SEC}s and was killed: "
+            f"{' '.join(argv)}\n"
+        )
+        return None
+
 
 def auto_detect_base_branch(target: Path) -> str:
-    """Return 'main' or 'master' depending on which the repo uses, else 'main'."""
+    """Return 'main' or 'master' depending on which the repo uses, else 'main'.
+
+    Round-5 audit fix #17 — additionally surface a stderr WARN when
+    every probed branch fails (typical cause: not in a git repo, or
+    git is missing). Previously the function silently returned the
+    default `"main"`, so the operator running `--mode diff` outside a
+    git workspace saw "no findings" instead of a clear signal.
+    """
+    failures: list[str] = []
     for branch in ("main", "master"):
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", branch],
-            capture_output=True, cwd=str(target),
-        )
+        result = _run_git(["git", "rev-parse", "--verify", branch], target)
+        if result is None:
+            continue
         if result.returncode == 0:
             return branch
+        # Record the stderr for the final WARN if every probe failed.
+        failures.append((result.stderr or b"").decode("utf-8", "replace").strip())
+    if failures:
+        sys.stderr.write(
+            "WARN: git rev-parse failed for all probed base branches "
+            f"(main, master): {failures[0] or '(empty stderr)'}\n"
+        )
     return "main"
 
 
@@ -66,41 +112,49 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path]:
     whether to fall back to a full scan or bail).
     """
     try:
-        result = subprocess.run(
+        # All git calls below go through `_run_git`, which applies the
+        # 30-second timeout. A None return means the call hung past
+        # the cap — degrade gracefully (empty diff → full scan).
+        result = _run_git(
             ["git", "diff", "--name-only", f"{diff_base}...HEAD", "--", "*.tf"],
-            capture_output=True,
-            text=True,
-            cwd=str(target),
+            target, text=True,
         )
+        if result is None:
+            return set()
         if result.returncode != 0:
             # Fall back to diff against working tree
-            result = subprocess.run(
+            result = _run_git(
                 ["git", "diff", "--name-only", diff_base, "--", "*.tf"],
-                capture_output=True,
-                text=True,
-                cwd=str(target),
+                target, text=True,
             )
+            if result is None:
+                return set()
         # Also include untracked .tf files
-        untracked = subprocess.run(
+        untracked = _run_git(
             ["git", "ls-files", "--others", "--exclude-standard", "--", "*.tf"],
-            capture_output=True,
-            text=True,
-            cwd=str(target),
+            target, text=True,
         )
+        if untracked is None:
+            untracked_stdout = ""
+        else:
+            untracked_stdout = untracked.stdout or ""
 
         files: set[Path] = set()
-        git_root_result = subprocess.run(
+        git_root_result = _run_git(
             ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, cwd=str(target),
+            target, text=True,
         )
-        git_root = Path(git_root_result.stdout.strip()) if git_root_result.returncode == 0 else target
+        if git_root_result is None or git_root_result.returncode != 0:
+            git_root = target
+        else:
+            git_root = Path(git_root_result.stdout.strip())
 
-        for line in result.stdout.strip().splitlines():
+        for line in (result.stdout or "").strip().splitlines():
             if line:
                 fp = (git_root / line).resolve()
                 if fp.exists():
                     files.add(fp)
-        for line in (untracked.stdout or "").strip().splitlines():
+        for line in untracked_stdout.strip().splitlines():
             if line:
                 fp = (git_root / line).resolve()
                 if fp.exists():

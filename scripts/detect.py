@@ -212,9 +212,28 @@ def _collect_extra_files(target: Path, entries: list[dict]) -> list[Path]:
         # directly under `target/.github/workflows/`. Use `rglob` for
         # `**/...`-style patterns by routing them through `target.glob`,
         # which already supports the `**` wildcard.
+        # Round-5 audit fix #15 — narrow the exception handler. The
+        # broad `(ValueError, OSError)` previously caught BOTH "the
+        # glob pattern was malformed" (a catalogue authorship bug
+        # worth surfacing loudly) AND "the directory wasn't readable"
+        # (an operator-side issue, also worth surfacing). Split them:
+        # ValueError → emit a stderr WARN naming the offending glob;
+        # OSError → emit a stderr WARN naming the offending directory.
+        # Both still continue (preserving the existing graceful-
+        # degradation behaviour) but the operator sees a signal.
         try:
             matches = list(target.glob(glob_pat))
-        except (ValueError, OSError):
+        except ValueError as e:
+            sys.stderr.write(
+                f"WARN: catalogue glob {glob_pat!r} is malformed ({e}); "
+                f"the rule that owns this pattern will never fire.\n"
+            )
+            continue
+        except OSError as e:
+            sys.stderr.write(
+                f"WARN: cannot list {target} for glob {glob_pat!r} ({e}); "
+                f"skipping.\n"
+            )
             continue
         for p in matches:
             if ".terraform" in p.parts:
@@ -2706,6 +2725,20 @@ def _cmd_list_rules(
 
 def _cmd_explain(catalog_dir: Path, rule_id: str) -> int:
     """Print the full catalogue entry for `rule_id`. Returns exit code."""
+    # Round-5 audit fix #2 — validate rule_id against the same regex
+    # `_cmd_new_rule` uses (line 2759 below). Without this, `--explain
+    # ../../etc/passwd` would resolve to
+    # `<catalog_dir>/../../etc/passwd.yaml` — the `.yaml` suffix limits
+    # damage to read-only access to .yaml files, but a host that has
+    # `/etc/ssh/sshd_config.yaml` or `~/.aws/config.yaml` (uncommon
+    # but not unheard of) could be exfiltrated.
+    if not _RULE_ID_RE.match(rule_id):
+        print(
+            f"ERROR: --explain expects a rule ID matching "
+            f"{_RULE_ID_RE.pattern!r}; got {rule_id!r}.",
+            file=sys.stderr,
+        )
+        return 2
     yml = catalog_dir / f"{rule_id}.yaml"
     if not yml.exists():
         print(
@@ -2943,8 +2976,11 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
                 pos[cur_line] = position
         file_positions[fname] = pos
 
-    # Build inline comments
-    targets: list[str] = getattr(args, "targets", None) or []
+    # Build inline comments. Round-5 audit fix #11 — argparse's
+    # `--target` (action="append") guarantees `args.targets` is set
+    # (None when no flag passed, list otherwise), so direct attribute
+    # access is safe and fails fast on a rename typo.
+    targets: list[str] = args.targets or []
     comments: list[dict] = []
     for f in findings:
         entry = entry_map.get(f["id"], {})
@@ -3767,7 +3803,11 @@ def main():
         if not trend_target:
             print("ERROR: --mode trend requires --target <git-repo-dir>", file=sys.stderr)
             sys.exit(2)
-        lookback = getattr(args, "lookback", 30)
+        # Round-5 audit fix #11 — argparse defaults `--lookback` to 30
+        # so direct attribute access is safe and fails fast on a
+        # rename typo (consistent with the other 5 sites converted in
+        # R30.8 audit #15).
+        lookback = args.lookback
         print(f"# trend: analysing {lookback} days of git history in {trend_target}", file=sys.stderr)
         rows = run_trend(trend_target, entries, lookback)
         print(f"# trend: {len(rows)} commits analysed", file=sys.stderr)

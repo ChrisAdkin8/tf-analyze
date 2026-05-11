@@ -215,11 +215,33 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
     ``mode: plan`` so reports can disambiguate plan-time vs static-time
     triggers of the same rule ID.
     """
+    # Round-5 audit fix #7 — differentiate "file missing" from
+    # "file present but unparseable". The prior broad `except Exception`
+    # made both look the same in stderr; an operator running
+    # `--plan-json /missing/file.tfplan` saw the same "cannot read"
+    # message as one running it on a corrupted JSON, with no signal
+    # that the file simply wasn't there.
     try:
-        plan = json.loads(plan_json_path.read_text())
-    except Exception as e:
+        text = plan_json_path.read_text()
+    except FileNotFoundError:
         print(
-            f"ERROR: cannot read plan JSON {plan_json_path}: {e}",
+            f"ERROR: plan JSON not found: {plan_json_path}. "
+            f"Did `terraform show -json` run successfully?",
+            file=sys.stderr,
+        )
+        return []
+    except OSError as e:
+        print(
+            f"ERROR: cannot read plan JSON {plan_json_path} (OS error): {e}",
+            file=sys.stderr,
+        )
+        return []
+    try:
+        plan = json.loads(text)
+    except json.JSONDecodeError as e:
+        print(
+            f"ERROR: plan JSON at {plan_json_path} is malformed: {e}. "
+            f"First 200 chars: {text[:200]!r}",
             file=sys.stderr,
         )
         return []
@@ -245,11 +267,28 @@ def detect_in_state(state_json_path: Path, entries: list[dict]) -> list[dict]:
     requires re-running the catalogue against the state file the way
     plan-mode re-runs against the plan file.
     """
+    # Round-5 audit fix #7 — same split as `detect_in_plan` above.
     try:
-        state = json.loads(state_json_path.read_text())
-    except Exception as e:
+        text = state_json_path.read_text()
+    except FileNotFoundError:
         print(
-            f"ERROR: cannot read state JSON {state_json_path}: {e}",
+            f"ERROR: state JSON not found: {state_json_path}. "
+            f"Did `terraform show -json` run successfully?",
+            file=sys.stderr,
+        )
+        return []
+    except OSError as e:
+        print(
+            f"ERROR: cannot read state JSON {state_json_path} (OS error): {e}",
+            file=sys.stderr,
+        )
+        return []
+    try:
+        state = json.loads(text)
+    except json.JSONDecodeError as e:
+        print(
+            f"ERROR: state JSON at {state_json_path} is malformed: {e}. "
+            f"First 200 chars: {text[:200]!r}",
             file=sys.stderr,
         )
         return []

@@ -66,6 +66,40 @@ def test_engine_stderr_carries_no_traceback_on_clean_run() -> None:
     assert "ERROR:" not in (r.stderr or ""), r.stderr
 
 
+# ─── Round 5 audit — _cmd_explain rejects path-traversal rule IDs ───
+def test_cmd_explain_rejects_path_traversal() -> None:
+    """Round-5 audit fix #2 — `--explain ../../etc/passwd` was
+    previously joined to `catalog_dir` without validation, allowing
+    read access to any `*.yaml` file on the host. The new shape
+    validates against `_RULE_ID_RE` (same regex used by
+    `_cmd_new_rule`) and returns exit 2 on a mismatch.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(REPO / "scripts"))
+    import detect  # type: ignore
+    from pathlib import Path as _P
+    # Each of these is malformed for one of: lowercase, leading dash,
+    # path traversal, embedded slash, embedded null. All must reject.
+    for bad in ("../../etc/passwd", "sec-aws-s3-001", "SEC/AWS/X-001",
+                "SEC..AWS..X-001", "SEC\x00AWS-X-001"):
+        rc = detect._cmd_explain(_P("/tmp"), bad)
+        assert rc == 2, f"expected exit 2 for malformed rule_id {bad!r}, got {rc}"
+
+
+def test_cmd_explain_accepts_valid_rule_id_format() -> None:
+    """Negative space: a well-formed rule_id should NOT be rejected
+    by the validator. The follow-up `yml.exists()` check produces
+    exit 1 (not 2) for a non-existent but well-formed ID.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(REPO / "scripts"))
+    import detect  # type: ignore
+    from pathlib import Path as _P
+    # Well-formed but doesn't exist on disk → exit 1, not 2.
+    rc = detect._cmd_explain(_P("/tmp"), "SEC-FAKE-RULE-999")
+    assert rc == 1, f"valid rule_id should reach exists-check; got {rc}"
+
+
 # ─── Round 4 audit — HTML output escapes engine-supplied fields ─────
 def test_html_report_escapes_user_controlled_fields() -> None:
     """Round-4 audit fix #1 / #2 — every engine-supplied field rendered
