@@ -10,21 +10,16 @@ WORKDIR /app
 COPY demo/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Engine — ship every sibling Python file `detect.py` imports, not just
-# `detect.py` itself. The list mirrors `vscode-extension/scripts/bundle-engine.js
-# :ENGINE_SIBLING_FILES`. Adding a new helper module is a one-line update.
+# Engine — ship `detect.py` plus every `_*.py` sibling it imports by side
+# effect (R30.15 detector topic modules, R30.19 modular seams, the older
+# `_hcl` / `_mitre` / `_scoring` helpers). Using a glob instead of an
+# explicit per-file list so the next handler/seam extract is bundled
+# automatically — the VS Code extension's bundle-engine.js uses the same
+# pattern (`scripts/_*.py`) and has not drifted; this one had, which is
+# how `_verify` and a dozen other modules went missing from this image
+# until the public scanner started 500'ing.
 COPY scripts/detect.py scripts/detect.py
-COPY scripts/_mitre.py scripts/_mitre.py
-COPY scripts/_versions.py scripts/_versions.py
-COPY scripts/_scoring.py scripts/_scoring.py
-COPY scripts/_hcl.py scripts/_hcl.py
-COPY scripts/_catalog.py scripts/_catalog.py
-COPY scripts/_attack_graph.py scripts/_attack_graph.py
-COPY scripts/_output.py scripts/_output.py
-COPY scripts/_cross_resource.py scripts/_cross_resource.py
-COPY scripts/_lsp.py scripts/_lsp.py
-COPY scripts/_threat_intel.py scripts/_threat_intel.py
-COPY scripts/_blast_radius.py scripts/_blast_radius.py
+COPY scripts/_*.py scripts/
 COPY catalog/ catalog/
 
 # Web app — keep `demo/` layout so app.py's `Path(__file__).parent.parent`
