@@ -110,6 +110,56 @@ Run `flyctl ips list -a tf-analyze` to re-check IPs; the dedicated
 IPv6 is stable, the shared IPv4 belongs to Fly and may rotate
 (uncommon, but worth knowing).
 
+### CNAME-at-www variant (Cloudflare-idiomatic)
+
+If you use Cloudflare DNS, the cleaner shape at `www` is a CNAME that
+inherits from the apex instead of duplicating the IPs:
+
+| Type | Name | Target |
+|---|---|---|
+| `CNAME` | `www` | `tfanalyze.com` |
+
+Future IP changes are then a one-line edit at the apex. Cloudflare
+flattens this transparently — equivalent resolution, less drift risk.
+
+### Cloudflare proxy + cert renewal — the renewal wrinkle
+
+Fly auto-renews LE certs ~30 days before expiry by re-running an ACME
+challenge. The challenge type matters when Cloudflare's orange-cloud
+proxy is enabled:
+
+- **HTTP-01** — Cloudflare proxies HTTP through to origin, so this
+  *usually* works. Risk: Cloudflare caching `.well-known/acme-challenge/<token>`
+  responses and returning stale 404s to Let's Encrypt.
+- **TLS-ALPN-01** — Cloudflare terminates TLS at its edge, so this
+  challenge never reaches Fly. Always fails behind orange cloud.
+
+**Initial issuance:** the records must be DNS-only (grey cloud) until
+both `flyctl certs check tfanalyze.com -a tf-analyze` and
+`flyctl certs check www.tfanalyze.com -a tf-analyze` report
+`Status = Issued`. Then orange cloud is safe to enable.
+
+**Ongoing renewal:** if you keep orange cloud on, add one Cloudflare
+Configuration Rule once:
+
+- **Match:** `URI Path` matches `/.well-known/acme-challenge/*`
+- **Setting:** `Cache Level → Bypass`
+
+That bypasses Cloudflare's cache on the renewal challenge path so
+HTTP-01 always succeeds. Set this once at Cloudflare → Rules →
+Configuration Rules and forget about it.
+
+**Recovery path if a renewal does fail:** Fly will surface a renewal
+error in the dashboard / on `flyctl certs check`. Flip the record to
+DNS-only (grey cloud) for ~10 minutes, wait for `Status = Issued`,
+flip back to orange. Manual but rare.
+
+**Or skip Cloudflare proxy entirely.** Fly's edge already handles TLS
+termination, anycast routing, and L4 DDoS mitigation. The marginal
+value of Cloudflare in front of a scale-to-zero scanner is mostly bot
+filtering. If you don't need it, leave the records grey and avoid the
+renewal-wrinkle setup.
+
 ## Renaming the app
 
 Fly does not support in-place renames — the app name *is* the
