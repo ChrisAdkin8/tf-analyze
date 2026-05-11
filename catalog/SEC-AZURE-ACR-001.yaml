@@ -8,6 +8,12 @@ mitre:
   - "T1078.004"
 cwe:
   - "CWE-250"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 patterns:
   - kind: hcl_attr
     resource: azurerm_container_registry

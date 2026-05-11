@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-KV-003 — Azure Key Vault key missing rotation policy"
 description: "tf-analyze rule SEC-AZURE-KV-003 (MEDIUM · security): Azure Key Vault key missing rotation policy"
-keywords: "security, medium, terraform, iac, azure, cis-8.6, mitre-T1098.001, d3-ch"
+keywords: "security, medium, terraform, iac, azure, cis-8.6, mitre-T1098.001, d3-ch, nist-csf-pr.ac-1, nist-800-53-ia-5, nist-800-53-sc-12, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -125,6 +125,16 @@ Key Vault → Keys → <key> → Rotation policy.
 
 **MITRE D3FEND**
   - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5)
+  - [`SC-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-12)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AZURE-KV-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-KV-003.yaml) — canonical YAML

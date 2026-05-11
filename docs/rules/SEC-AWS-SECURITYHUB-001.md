@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-SECURITYHUB-001 — Security Hub not enabled"
 description: "tf-analyze rule SEC-AWS-SECURITYHUB-001 (MEDIUM · security): Security Hub not enabled"
-keywords: "security, medium, terraform, iac, aws, mitre-T1562.001, cwe-693"
+keywords: "security, medium, terraform, iac, aws, mitre-T1562.001, cwe-693, nist-csf-de.cm-7, nist-csf-de.ae-2, nist-800-53-si-4, csa-ccm-tvm-02"
 ---
 
 <script type="application/ld+json">
@@ -108,6 +108,16 @@ must return a Hub ARN (non-empty).
 
 **CWE**
   - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
+
+**NIST CSF 2.0**
+  - [`DE.CM-7`](https://www.nist.gov/cyberframework)
+  - [`DE.AE-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-4`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-4)
+
+**CSA CCM v4**
+  - [`TVM-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-SECURITYHUB-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-SECURITYHUB-001.yaml) — canonical YAML

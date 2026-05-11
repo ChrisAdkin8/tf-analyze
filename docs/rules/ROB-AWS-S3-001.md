@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-S3-001 — S3 bucket versioning disabled or suspended"
 description: "tf-analyze rule ROB-AWS-S3-001 (MEDIUM · robustness): S3 bucket versioning disabled or suspended"
-keywords: "robustness, medium, terraform, iac, aws, cis-2.1.2, mitre-T1490"
+keywords: "robustness, medium, terraform, iac, aws, cis-2.1.2, mitre-T1490, nist-csf-pr.ip-4, nist-800-53-cp-9, nist-800-53-cm-3, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -97,6 +97,16 @@ Run `aws s3api get-bucket-versioning --bucket <name>` and confirm
 
 **MITRE ATT&CK**
   - [`T1490`](https://attack.mitre.org/techniques/T1490/)
+
+**NIST CSF 2.0**
+  - [`PR.IP-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CP-9`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cp-9)
+  - [`CM-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-3)
+
+**CSA CCM v4**
+  - [`BCR-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/ROB-AWS-S3-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-S3-001.yaml) — canonical YAML

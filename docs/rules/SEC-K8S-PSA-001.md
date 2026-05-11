@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
 description: "tf-analyze rule SEC-K8S-PSA-001 (HIGH · security): kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / cap…"
-keywords: "security, high, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, cwe-269, cwe-250"
+keywords: "security, high, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, cwe-269, cwe-250, nist-csf-pr.pt-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -147,6 +147,19 @@ must list a level for every non-system namespace.
 **CWE**
   - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
   - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
+
+**NIST CSF 2.0**
+  - [`PR.PT-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `K01`
+  - `K04`
 
 **Source**
   - [`catalog/SEC-K8S-PSA-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-PSA-001.yaml) — canonical YAML

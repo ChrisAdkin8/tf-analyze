@@ -185,6 +185,52 @@ def _references(entry: dict, rule_id: str) -> str:
             url = f"https://d3fend.mitre.org/technique/{did}/"
             d3fend_links.append(f"  - [`{did}`]({url})")
         parts.append("**MITRE D3FEND**\n" + "\n".join(d3fend_links))
+    # R30.1 multi-framework taxonomies. CSF 2.0 has stable per-subcategory
+    # URLs; 800-53 has per-control pages on nvd.nist.gov; CSA CCM links to
+    # the v4 page (no stable per-control anchors); SLSA links the docs
+    # site keyed by track / level.
+    nist_csf = entry.get("nist_csf") or []
+    if nist_csf:
+        csf_lines = []
+        for sub in nist_csf:
+            # CSF 2.0 subcategory pages live at csrc.nist.gov/CSF; the
+            # framework site itself is what consumers know. Link to the
+            # framework page rather than fragile per-subcategory anchors.
+            csf_lines.append(
+                f"  - [`{sub}`](https://www.nist.gov/cyberframework)"
+            )
+        parts.append("**NIST CSF 2.0**\n" + "\n".join(csf_lines))
+    nist_800_53 = entry.get("nist_800_53") or []
+    if nist_800_53:
+        sp_lines = []
+        for control in nist_800_53:
+            # NVD's 800-53 explorer renders one page per control + enhancement.
+            slug = str(control).lower().replace("(", "-").replace(")", "")
+            sp_lines.append(
+                f"  - [`{control}`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number={slug})"
+            )
+        parts.append("**NIST SP 800-53 Rev. 5**\n" + "\n".join(sp_lines))
+    csa_ccm = entry.get("csa_ccm") or []
+    if csa_ccm:
+        ccm_lines = [
+            f"  - [`{c}`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)"
+            for c in csa_ccm
+        ]
+        parts.append("**CSA CCM v4**\n" + "\n".join(ccm_lines))
+    slsa = entry.get("slsa") or []
+    if slsa:
+        slsa_lines = []
+        for s in slsa:
+            url = (
+                f"https://slsa.dev/spec/v1.0/levels#{s.lower()}" if str(s).startswith("L")
+                else f"https://slsa.dev/spec/v1.0/{str(s).lower()}-track"
+            )
+            slsa_lines.append(f"  - [`SLSA {s}`]({url})")
+        parts.append("**SLSA v1.0**\n" + "\n".join(slsa_lines))
+    owasp = entry.get("owasp") or []
+    if owasp:
+        owasp_lines = [f"  - `{o}`" for o in owasp]
+        parts.append("**OWASP (namespaced)**\n" + "\n".join(owasp_lines))
     related = entry.get("related") or []
     if related:
         rel_links = [f"  - [`{r}`](./{r}.md)" for r in related]
@@ -233,6 +279,16 @@ def _front_matter(entry: dict) -> str:
         keywords.append(c.lower())   # cwe-732 etc.
     for d in entry.get("d3fend") or []:
         keywords.append(d.lower())   # d3-mfa etc.
+    for csf in entry.get("nist_csf") or []:
+        keywords.append(f"nist-csf-{csf}".lower())
+    for ctrl in entry.get("nist_800_53") or []:
+        # AC-6(7) → nist-800-53-ac-6-7
+        slug = str(ctrl).lower().replace("(", "-").replace(")", "")
+        keywords.append(f"nist-800-53-{slug}")
+    for ccm in entry.get("csa_ccm") or []:
+        keywords.append(f"csa-ccm-{ccm}".lower())
+    for s in entry.get("slsa") or []:
+        keywords.append(f"slsa-{s}".lower())
     keywords_csv = ", ".join(keywords)
 
     return (

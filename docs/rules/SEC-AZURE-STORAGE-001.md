@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-STORAGE-001 — Azure storage account allows non-HTTPS traffic"
 description: "tf-analyze rule SEC-AZURE-STORAGE-001 (HIGH · security): Azure storage account allows non-HTTPS traffic"
-keywords: "security, high, terraform, iac, azure, cis-3.1, mitre-T1071.001, cwe-319, d3-ei"
+keywords: "security, high, terraform, iac, azure, cis-3.1, mitre-T1071.001, cwe-319, d3-ei, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, csa-ccm-cek-06"
 ---
 
 <script type="application/ld+json">
@@ -100,6 +100,16 @@ The command should return `true`.
 
 **MITRE D3FEND**
   - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-8`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-8)
+  - [`SC-8(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-8-1)
+
+**CSA CCM v4**
+  - [`CEK-06`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AZURE-STORAGE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-STORAGE-001.yaml) — canonical YAML

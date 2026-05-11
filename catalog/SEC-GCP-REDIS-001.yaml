@@ -10,6 +10,12 @@ cwe:
   - "CWE-306"
 d3fend:
   - "D3-AL"
+nist_csf:
+  - "PR.AC-7"
+nist_800_53:
+  - "IA-2"
+csa_ccm:
+  - "IAM-02"
 patterns:
   - kind: resource_missing_arg
     resource: google_redis_instance

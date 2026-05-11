@@ -3,8 +3,7 @@ title: "Workflow uses `permissions: write-all` or omits minimum scopes"
 section: cicd
 default_urgency: HIGH
 blast_radius: environment
-# stub — see SEC-CICD-001 for walker-extension note
-status: stub
+status: active
 mitre:
   - "T1078.004"
   - "T1098.001"
@@ -51,4 +50,5 @@ verification: |
   uses `write-all` and that every `terraform apply` workflow declares
   `id-token: write` plus the specific writes it needs.
 fix_disruption: plan_required
-# fixtures: deferred — rule is `status: stub` until walker extension
+fixtures:
+  - workflow_permissions_write_all

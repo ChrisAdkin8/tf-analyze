@@ -1,7 +1,7 @@
 ---
 title: "ROB-DRIFT-002 — ignore_changes hides too much (wildcard, or tags-wide on a tagged resource)"
 description: "tf-analyze rule ROB-DRIFT-002 (MEDIUM · robustness): ignore_changes hides too much (wildcard, or tags-wide on a tagged resource)"
-keywords: "robustness, medium, terraform, iac, mitre-T1562.001, cwe-693"
+keywords: "robustness, medium, terraform, iac, mitre-T1562.001, cwe-693, nist-csf-pr.ip-3, nist-800-53-cm-3, nist-800-53-cm-6, csa-ccm-ccc-05"
 ---
 
 <script type="application/ld+json">
@@ -118,6 +118,16 @@ no longer trigger churn.
 
 **CWE**
   - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
+
+**NIST CSF 2.0**
+  - [`PR.IP-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-3)
+  - [`CM-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-6)
+
+**CSA CCM v4**
+  - [`CCC-05`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`ROB-DRIFT-001`](./ROB-DRIFT-001.md)

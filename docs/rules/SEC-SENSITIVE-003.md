@@ -1,7 +1,7 @@
 ---
 title: "SEC-SENSITIVE-003 — Sensitive variable passed to templatefile()"
 description: "tf-analyze rule SEC-SENSITIVE-003 (HIGH · security): Sensitive variable passed to templatefile()"
-keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-200, d3-ch"
+keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-200, d3-ch, nist-csf-pr.ds-5, nist-800-53-sc-28, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -104,6 +104,15 @@ cleartext, the leak is confirmed.
 
 **MITRE D3FEND**
   - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-SENSITIVE-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SENSITIVE-003.yaml) — canonical YAML

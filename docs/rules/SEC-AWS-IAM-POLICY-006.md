@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-POLICY-006 — IAM policy uses `not_actions` or `not_resources`"
 description: "tf-analyze rule SEC-AWS-IAM-POLICY-006 (MEDIUM · security): IAM policy uses `not_actions` or `not_resources`"
-keywords: "security, medium, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269"
+keywords: "security, medium, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, nist-csf-pr.ac-4, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -106,6 +106,15 @@ or `NotResource`.
 
 **CWE**
   - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-POLICY-006.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-POLICY-006.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "STK-K8S-AUDIT-POLICY-001 — Managed Kubernetes control plane has no audit-log configuration"
 description: "tf-analyze rule STK-K8S-AUDIT-POLICY-001 (MEDIUM · stack): Managed Kubernetes control plane has no audit-log configuration"
-keywords: "stack, medium, terraform, iac, mitre-T1562.008, mitre-T1530, cwe-778, cwe-223"
+keywords: "stack, medium, terraform, iac, mitre-T1562.008, mitre-T1530, cwe-778, cwe-223, nist-csf-de.cm-1, nist-csf-de.cm-7, nist-csf-pr.pt-1, nist-800-53-au-2, nist-800-53-au-3, nist-800-53-au-12, csa-ccm-log-02, csa-ccm-log-08"
 ---
 
 <script type="application/ld+json">
@@ -113,6 +113,24 @@ resource "azurerm_kubernetes_cluster" "app" {
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
   - [`CWE-223`](https://cwe.mitre.org/data/definitions/223.html)
+
+**NIST CSF 2.0**
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+  - [`DE.CM-7`](https://www.nist.gov/cyberframework)
+  - [`PR.PT-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-2)
+  - [`AU-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-3)
+  - [`AU-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-12)
+
+**CSA CCM v4**
+  - [`LOG-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`LOG-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `A09`
+  - `K05`
 
 **Source**
   - [`catalog/STK-K8S-AUDIT-POLICY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-K8S-AUDIT-POLICY-001.yaml) — canonical YAML

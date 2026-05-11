@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-WAF-002 — ALB/CloudFront/API-Gateway has WAF associated but no rate-based rule"
 description: "tf-analyze rule SEC-AWS-WAF-002 (MEDIUM · security): ALB/CloudFront/API-Gateway has WAF associated but no rate-based rule"
-keywords: "security, medium, terraform, iac, aws, mitre-T1499.002, cwe-770"
+keywords: "security, medium, terraform, iac, aws, mitre-T1499.002, cwe-770, nist-csf-pr.pt-4, nist-csf-de.cm-1, nist-800-53-sc-5, nist-800-53-si-4, csa-ccm-ivs-08"
 ---
 
 <script type="application/ld+json">
@@ -101,6 +101,21 @@ at least one Statement with a RateBasedStatement entry.
 
 **CWE**
   - [`CWE-770`](https://cwe.mitre.org/data/definitions/770.html)
+
+**NIST CSF 2.0**
+  - [`PR.PT-4`](https://www.nist.gov/cyberframework)
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-5)
+  - [`SI-4`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-4)
+
+**CSA CCM v4**
+  - [`IVS-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `API04`
+  - `API06`
 
 **Source**
   - [`catalog/SEC-AWS-WAF-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-WAF-002.yaml) — canonical YAML

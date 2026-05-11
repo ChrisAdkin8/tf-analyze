@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CLOUDTRAIL-001 — CloudTrail not enabled for all regions"
 description: "tf-analyze rule SEC-AWS-CLOUDTRAIL-001 (CRITICAL · security): CloudTrail not enabled for all regions"
-keywords: "security, critical, terraform, iac, aws, cis-3.1, mitre-T1562.008, cwe-778, d3-faa"
+keywords: "security, critical, terraform, iac, aws, cis-3.1, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-csf-de.ae-3, nist-800-53-au-2, nist-800-53-au-12, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -108,6 +108,17 @@ no diff shows `is_multi_region_trail = false` or a missing value.
 
 **MITRE D3FEND**
   - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
+
+**NIST CSF 2.0**
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+  - [`DE.AE-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-2)
+  - [`AU-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-12)
+
+**CSA CCM v4**
+  - [`LOG-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-CLOUDTRAIL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-CLOUDTRAIL-001.yaml) — canonical YAML

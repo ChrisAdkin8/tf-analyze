@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-003 — GKE cluster missing application-layer secrets encryption"
 description: "tf-analyze rule STK-GCP-GKE-003 (HIGH · stack): GKE cluster missing application-layer secrets encryption"
-keywords: "stack, high, terraform, iac, gcp, cis-8.5.5, mitre-T1552.001, cwe-522"
+keywords: "stack, high, terraform, iac, gcp, cis-8.5.5, mitre-T1552.001, cwe-522, nist-csf-pr.ac-1"
 ---
 
 <script type="application/ld+json">
@@ -96,6 +96,9 @@ must return `ENCRYPTED`.
 
 **CWE**
   - [`CWE-522`](https://cwe.mitre.org/data/definitions/522.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
 
 **Source**
   - [`catalog/STK-GCP-GKE-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-GKE-003.yaml) — canonical YAML

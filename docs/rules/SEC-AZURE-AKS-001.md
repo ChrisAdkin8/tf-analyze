@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-AKS-001 — AKS cluster RBAC disabled"
 description: "tf-analyze rule SEC-AZURE-AKS-001 (HIGH · security): AKS cluster RBAC disabled"
-keywords: "security, high, terraform, iac, azure, cis-5.2, mitre-T1078.004"
+keywords: "security, high, terraform, iac, azure, cis-5.2, mitre-T1078.004, nist-csf-pr.ac-1, nist-800-53-ia-2, csa-ccm-iam-02"
 ---
 
 <script type="application/ld+json">
@@ -110,6 +110,15 @@ The command should return `true`.
 
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-2)
+
+**CSA CCM v4**
+  - [`IAM-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AZURE-AKS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-AKS-001.yaml) — canonical YAML

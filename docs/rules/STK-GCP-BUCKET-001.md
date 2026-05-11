@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-BUCKET-001 — GCS bucket missing versioning"
 description: "tf-analyze rule STK-GCP-BUCKET-001 (MEDIUM · stack): GCS bucket missing versioning"
-keywords: "stack, medium, terraform, iac, gcp, cis-5.3, mitre-T1490"
+keywords: "stack, medium, terraform, iac, gcp, cis-5.3, mitre-T1490, nist-csf-pr.ip-4, nist-800-53-cp-9, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -105,6 +105,15 @@ Must return `True`. Re-run tf-analyze; STK-BUCKET-001 should not fire.
 
 **MITRE ATT&CK**
   - [`T1490`](https://attack.mitre.org/techniques/T1490/)
+
+**NIST CSF 2.0**
+  - [`PR.IP-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CP-9`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cp-9)
+
+**CSA CCM v4**
+  - [`BCR-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-BUCKET-001`](./SEC-BUCKET-001.md)

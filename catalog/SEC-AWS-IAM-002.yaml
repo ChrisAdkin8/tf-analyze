@@ -47,6 +47,14 @@ cwe:
 d3fend:
   - "D3-PA"
   - "D3-MFA"
+nist_csf:
+  - "PR.AC-1"
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-3"
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 fix_hcl: |
   resource "aws_iam_role" "example" {
     name = "example"

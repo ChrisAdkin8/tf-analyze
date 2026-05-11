@@ -1,7 +1,7 @@
 ---
 title: "SEC-SENSITIVE-PATTERN-001 — Credential-shaped variable not marked sensitive=true"
 description: "tf-analyze rule SEC-SENSITIVE-PATTERN-001 (HIGH · security): Credential-shaped variable not marked sensitive=true"
-keywords: "security, high, terraform, iac, mitre-T1552.001, mitre-T1552.004"
+keywords: "security, high, terraform, iac, mitre-T1552.001, mitre-T1552.004, nist-csf-pr.ds-5, nist-800-53-sc-28, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -106,6 +106,15 @@ variable is rendered as `<sensitive>`. Re-run tf-analyze in
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
   - [`T1552.004`](https://attack.mitre.org/techniques/T1552/004/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-SENSITIVE-PATTERN-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SENSITIVE-PATTERN-001.yaml) — canonical YAML

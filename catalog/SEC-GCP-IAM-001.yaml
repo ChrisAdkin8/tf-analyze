@@ -41,6 +41,13 @@ cwe:
   - "CWE-732"
 d3fend:
   - "D3-PA"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-3"
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 fix_hcl: |
   resource "google_project_iam_member" "example" {
     project = var.project_id

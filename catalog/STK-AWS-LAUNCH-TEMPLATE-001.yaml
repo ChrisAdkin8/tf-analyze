@@ -15,6 +15,12 @@ cwe:
   - "CWE-668"
 d3fend:
   - "D3-CH"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "AC-3"
+csa_ccm:
+  - "IVS-03"
 patterns:
   - kind: resource_missing_arg
     resource: aws_launch_template

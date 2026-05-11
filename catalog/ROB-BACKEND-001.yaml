@@ -4,6 +4,8 @@ section: robustness
 default_urgency: MEDIUM
 blast_radius: infrastructure-wide
 status: active
+slsa:
+  - "source"
 patterns:
   - kind: backend_inconsistency
     description: multiple terraform backend blocks with different types or missing key attributes

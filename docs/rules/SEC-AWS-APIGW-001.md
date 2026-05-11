@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-APIGW-001 — API Gateway stage missing access log destination"
 description: "tf-analyze rule SEC-AWS-APIGW-001 (MEDIUM · security): API Gateway stage missing access log destination"
-keywords: "security, medium, terraform, iac, aws, mitre-T1190, cwe-284, d3-iaa"
+keywords: "security, medium, terraform, iac, aws, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -117,6 +117,15 @@ must return a non-null CloudWatch log group ARN.
 
 **MITRE D3FEND**
   - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-APIGW-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-APIGW-001.yaml) — canonical YAML

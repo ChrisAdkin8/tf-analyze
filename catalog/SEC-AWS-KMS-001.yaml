@@ -40,6 +40,13 @@ test_template: |
   }
 pci_dss:
   - "Req-3.6"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+  - "SC-12"
+csa_ccm:
+  - "CEK-09"
 fix_hcl: |
   resource "aws_kms_key" "example" {
     description         = "..."

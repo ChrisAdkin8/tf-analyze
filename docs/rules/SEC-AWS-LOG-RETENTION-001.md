@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-LOG-RETENTION-001 — Log bucket missing object_lock_configuration with retention >= 90 days"
 description: "tf-analyze rule SEC-AWS-LOG-RETENTION-001 (HIGH · security): Log bucket missing object_lock_configuration with retention >= 90 days"
-keywords: "security, high, terraform, iac, aws, cis-3.x, mitre-T1070.001, mitre-T1485, cwe-778, cwe-693"
+keywords: "security, high, terraform, iac, aws, cis-3.x, mitre-T1070.001, mitre-T1485, cwe-778, cwe-693, nist-csf-pr.pt-1, nist-800-53-au-11, csa-ccm-log-04"
 ---
 
 <script type="application/ld+json">
@@ -102,6 +102,15 @@ return a mode of `GOVERNANCE` or `COMPLIANCE` with `Days >= 90`.
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
   - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
+
+**NIST CSF 2.0**
+  - [`PR.PT-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-11`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-11)
+
+**CSA CCM v4**
+  - [`LOG-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-LOG-RETENTION-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-LOG-RETENTION-001.yaml) — canonical YAML

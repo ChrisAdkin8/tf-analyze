@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-SQL-001 — Azure MySQL/PostgreSQL single server is deprecated"
 description: "tf-analyze rule STK-AZURE-SQL-001 (HIGH · stack): Azure MySQL/PostgreSQL single server is deprecated"
-keywords: "stack, high, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca"
+keywords: "stack, high, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -130,6 +130,18 @@ Server" should show no instances.
 
 **MITRE D3FEND**
   - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SR-4`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sr-4)
+
+**CSA CCM v4**
+  - [`AIS-07`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA deps`](https://slsa.dev/spec/v1.0/deps-track)
 
 **Source**
   - [`catalog/STK-AZURE-SQL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-AZURE-SQL-001.yaml) — canonical YAML

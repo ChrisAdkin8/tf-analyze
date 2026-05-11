@@ -11,6 +11,12 @@ mitre:
   - "T1552.001"
 d3fend:
   - "D3-CH"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "SC-12"
+csa_ccm:
+  - "CEK-09"
 patterns:
   - kind: resource_missing_arg
     resource: google_kms_crypto_key

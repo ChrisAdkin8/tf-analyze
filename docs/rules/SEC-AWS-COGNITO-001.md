@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-COGNITO-001 — Cognito user pool MFA not enabled"
 description: "tf-analyze rule SEC-AWS-COGNITO-001 (HIGH · security): Cognito user pool MFA not enabled"
-keywords: "security, high, terraform, iac, aws, mitre-T1556.006, cwe-308, d3-mfa"
+keywords: "security, high, terraform, iac, aws, mitre-T1556.006, cwe-308, d3-mfa, nist-csf-pr.ac-7, nist-800-53-ia-2, nist-800-53-ia-2-1, csa-ccm-iam-12"
 ---
 
 <script type="application/ld+json">
@@ -117,6 +117,16 @@ must return `ON`.
 
 **MITRE D3FEND**
   - [`D3-MFA`](https://d3fend.mitre.org/technique/D3-MFA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-7`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-2)
+  - [`IA-2(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-2-1)
+
+**CSA CCM v4**
+  - [`IAM-12`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-COGNITO-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-COGNITO-001.yaml) — canonical YAML

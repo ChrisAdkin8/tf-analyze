@@ -1,7 +1,7 @@
 ---
 title: "SEC-CICD-003 — Apply job missing `environment:` with required_reviewers for production"
 description: "tf-analyze rule SEC-CICD-003 (CRITICAL · cicd): Apply job missing `environment:` with required_reviewers for production"
-keywords: "cicd, critical, terraform, iac, mitre-T1199, cwe-732, cwe-862"
+keywords: "cicd, critical, terraform, iac, mitre-T1199, cwe-732, cwe-862, nist-csf-pr.ac-4, nist-csf-pr.ip-3, nist-800-53-cm-3, nist-800-53-cm-5, nist-800-53-ac-3, csa-ccm-ccc-04, csa-ccm-iam-09, slsa-l3, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -33,7 +33,7 @@ keywords: "cicd, critical, terraform, iac, mitre-T1199, cwe-732, cwe-862"
 
 # 🚨 SEC-CICD-003 — Apply job missing `environment:` with required_reviewers for production
 
-![CRITICAL](https://img.shields.io/badge/CRITICAL-c0392b?style=flat-square) ![Section: cicd](https://img.shields.io/badge/section-cicd-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square) ![Status: stub](https://img.shields.io/badge/status-stub-grey?style=flat-square)
+![CRITICAL](https://img.shields.io/badge/CRITICAL-c0392b?style=flat-square) ![Section: cicd](https://img.shields.io/badge/section-cicd-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-CICD-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-CICD-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-CICD-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
@@ -97,6 +97,27 @@ Settings → Environments → production for required reviewers.
 **CWE**
   - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
   - [`CWE-862`](https://cwe.mitre.org/data/definitions/862.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+  - [`PR.IP-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-3)
+  - [`CM-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-5)
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+
+**CSA CCM v4**
+  - [`CCC-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L3`](https://slsa.dev/spec/v1.0/levels#l3)
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
+
+**OWASP (namespaced)**
+  - `CICD-SEC-1`
+  - `CICD-SEC-7`
 
 **Source**
   - [`catalog/SEC-CICD-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-CICD-003.yaml) — canonical YAML

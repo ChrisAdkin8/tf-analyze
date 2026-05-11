@@ -10,6 +10,12 @@ cwe:
   - "CWE-284"
 d3fend:
   - "D3-IAA"
+nist_csf:
+  - "PR.AC-3"
+nist_800_53:
+  - "SC-7"
+csa_ccm:
+  - "IVS-04"
 patterns:
   - kind: resource_missing_arg
     resource: azurerm_app_service

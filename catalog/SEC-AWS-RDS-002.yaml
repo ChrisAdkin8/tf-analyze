@@ -36,6 +36,13 @@ pci_dss:
   - "Req-3.4"
 soc2_cc:
   - "CC6.7"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+  - "SC-28"
+csa_ccm:
+  - "CEK-03"
 verification: |
   Run `aws rds describe-db-instances --db-instance-identifier <id>` and
   confirm `StorageEncrypted` is `true`. Run `terraform plan` and verify

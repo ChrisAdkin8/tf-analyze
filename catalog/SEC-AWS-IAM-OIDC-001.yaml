@@ -23,6 +23,9 @@ csa_ccm:
 owasp:
   - "CICD-SEC-6"
   - "API01"
+slsa:
+  - "L3"
+  - "build"
 patterns:
   - kind: grep
     file_glob: "**/*.tf"

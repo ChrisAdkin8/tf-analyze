@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-COMPUTE-SHIELDED-001 — GCP Compute instance missing shielded instance configuration"
 description: "tf-analyze rule SEC-GCP-COMPUTE-SHIELDED-001 (MEDIUM · security): GCP Compute instance missing shielded instance configuration"
-keywords: "security, medium, terraform, iac, gcp, mitre-T1542.003, cwe-1278, d3-psh"
+keywords: "security, medium, terraform, iac, gcp, mitre-T1542.003, cwe-1278, d3-psh, nist-csf-pr.pt-3, nist-800-53-si-7, csa-ccm-ivs-03"
 ---
 
 <script type="application/ld+json">
@@ -115,6 +115,15 @@ must show `enableSecureBoot: true`. Re-run tf-analyze in mode:verify-fixed.
 
 **MITRE D3FEND**
   - [`D3-PSH`](https://d3fend.mitre.org/technique/D3-PSH/)
+
+**NIST CSF 2.0**
+  - [`PR.PT-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-7)
+
+**CSA CCM v4**
+  - [`IVS-03`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`STK-GCP-GKE-NODEPOOL-001`](./STK-GCP-GKE-NODEPOOL-001.md)

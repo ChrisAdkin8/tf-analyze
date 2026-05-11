@@ -52,6 +52,14 @@ cwe:
   - "CWE-778"
 d3fend:
   - "D3-FAA"
+nist_csf:
+  - "DE.CM-1"
+  - "DE.AE-3"
+nist_800_53:
+  - "AU-2"
+  - "AU-9"
+csa_ccm:
+  - "LOG-02"
 fix_hcl: |
   resource "aws_cloudtrail" "example" {
     # ... other arguments ...

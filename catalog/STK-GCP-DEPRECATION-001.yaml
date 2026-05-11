@@ -10,6 +10,14 @@ cwe:
   - "CWE-1104"
 d3fend:
   - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-4"
+csa_ccm:
+  - "AIS-07"
+slsa:
+  - "deps"
 patterns:
   # google provider ≥6.0 deprecations
   - kind: resource_arg

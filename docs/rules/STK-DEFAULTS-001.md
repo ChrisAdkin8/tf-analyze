@@ -1,7 +1,7 @@
 ---
 title: "STK-DEFAULTS-001 — Module lacks `terraform { required_version, required_providers }` block"
 description: "tf-analyze rule STK-DEFAULTS-001 (MEDIUM · stack): Module lacks `terraform { required_version, required_providers }` block"
-keywords: "stack, medium, terraform, iac, mitre-T1195.001, cwe-1357, cwe-1395"
+keywords: "stack, medium, terraform, iac, mitre-T1195.001, cwe-1357, cwe-1395, nist-csf-id.sc-2, nist-csf-pr.ip-3, nist-800-53-cm-2, nist-800-53-cm-6, nist-800-53-sa-12, csa-ccm-ccc-04, csa-ccm-sta-04, slsa-l1, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -92,6 +92,27 @@ should list every module root.
 **CWE**
   - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
   - [`CWE-1395`](https://cwe.mitre.org/data/definitions/1395.html)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+  - [`PR.IP-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-2)
+  - [`CM-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-6)
+  - [`SA-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sa-12)
+
+**CSA CCM v4**
+  - [`CCC-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`STA-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L1`](https://slsa.dev/spec/v1.0/levels#l1)
+  - [`SLSA source`](https://slsa.dev/spec/v1.0/source-track)
+
+**OWASP (namespaced)**
+  - `A06`
+  - `CICD-SEC-1`
 
 **Source**
   - [`catalog/STK-DEFAULTS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-DEFAULTS-001.yaml) — canonical YAML

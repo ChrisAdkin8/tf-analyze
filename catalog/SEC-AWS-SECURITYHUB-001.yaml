@@ -12,6 +12,13 @@ mitre:
   - "T1562.001"
 cwe:
   - "CWE-693"
+nist_csf:
+  - "DE.CM-7"
+  - "DE.AE-2"
+nist_800_53:
+  - "SI-4"
+csa_ccm:
+  - "TVM-02"
 patterns:
   - kind: resource_absent
     resource: aws_securityhub_account

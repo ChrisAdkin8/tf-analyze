@@ -1,7 +1,7 @@
 ---
 title: "ROB-DRIFT-003 — ignore_changes lists too many attributes (drift-disable by attrition)"
 description: "tf-analyze rule ROB-DRIFT-003 (LOW · robustness): ignore_changes lists too many attributes (drift-disable by attrition)"
-keywords: "robustness, low, terraform, iac, mitre-T1562.001, cwe-693"
+keywords: "robustness, low, terraform, iac, mitre-T1562.001, cwe-693, nist-csf-pr.ip-3, nist-800-53-cm-3, csa-ccm-ccc-05"
 ---
 
 <script type="application/ld+json">
@@ -128,6 +128,15 @@ show only attributes that are genuinely intended to converge.
 
 **CWE**
   - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
+
+**NIST CSF 2.0**
+  - [`PR.IP-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-3)
+
+**CSA CCM v4**
+  - [`CCC-05`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`ROB-DRIFT-001`](./ROB-DRIFT-001.md)

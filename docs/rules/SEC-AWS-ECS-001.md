@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-ECS-001 — ECS task definition exposes secrets in plaintext environment variables"
 description: "tf-analyze rule SEC-AWS-ECS-001 (HIGH · security): ECS task definition exposes secrets in plaintext environment variables"
-keywords: "security, high, terraform, iac, aws, mitre-T1552.001, cwe-552, cwe-522"
+keywords: "security, high, terraform, iac, aws, mitre-T1552.001, cwe-552, cwe-522, nist-csf-pr.ac-4, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -134,6 +134,15 @@ Secrets should appear under `secrets`, not `environment`.
 **CWE**
   - [`CWE-552`](https://cwe.mitre.org/data/definitions/552.html)
   - [`CWE-522`](https://cwe.mitre.org/data/definitions/522.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-ECS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ECS-001.yaml) — canonical YAML

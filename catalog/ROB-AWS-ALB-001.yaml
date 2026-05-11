@@ -6,6 +6,12 @@ blast_radius: single-resource
 status: active
 mitre:
   - "T1485"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CM-3"
+csa_ccm:
+  - "BCR-08"
 patterns:
   - kind: resource_arg
     resource: aws_lb

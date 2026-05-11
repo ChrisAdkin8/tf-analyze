@@ -41,6 +41,12 @@ mitre:
   - "T1485"
 cwe:
   - "CWE-693"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CM-3"
+csa_ccm:
+  - "BCR-08"
 fix_hcl: |
   resource "google_sql_database_instance" "example" {
     # ... other arguments ...

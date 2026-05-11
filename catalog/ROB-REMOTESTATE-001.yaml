@@ -4,6 +4,8 @@ section: robustness
 default_urgency: MEDIUM
 blast_radius: infrastructure-wide
 status: active
+slsa:
+  - "source"
 patterns:
   - kind: remote_state_present
     description: data "terraform_remote_state" couples this config to another root's state layout

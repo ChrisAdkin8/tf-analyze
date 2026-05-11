@@ -24,6 +24,12 @@ owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:
   - "CWE-269"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 recommendation: |
   Scope `resources` to specific ARNs or ARN patterns. For S3 use
   `arn:aws:s3:::my-bucket/*`; for KMS use the key ARN; for EC2 use

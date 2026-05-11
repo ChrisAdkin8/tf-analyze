@@ -1,7 +1,7 @@
 ---
 title: "OPS-AWS-CWL-001 — CloudWatch log group has no retention policy"
 description: "tf-analyze rule OPS-AWS-CWL-001 (LOW · ops): CloudWatch log group has no retention policy"
-keywords: "ops, low, terraform, iac, aws, mitre-T1562.008, cwe-778, d3-faa"
+keywords: "ops, low, terraform, iac, aws, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-11, csa-ccm-log-04"
 ---
 
 <script type="application/ld+json">
@@ -107,6 +107,15 @@ must return an empty list.
 
 **MITRE D3FEND**
   - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
+
+**NIST CSF 2.0**
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-11`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-11)
+
+**CSA CCM v4**
+  - [`LOG-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/OPS-AWS-CWL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/OPS-AWS-CWL-001.yaml) — canonical YAML

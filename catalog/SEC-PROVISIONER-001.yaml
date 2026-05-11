@@ -8,6 +8,14 @@ mitre:
   - "T1059"
 cwe:
   - "CWE-78"
+nist_csf:
+  - "PR.PT-3"
+nist_800_53:
+  - "SI-10"
+csa_ccm:
+  - "CCC-05"
+slsa:
+  - "build"
 patterns:
   - kind: grep
     file_glob: "**/*.tf"

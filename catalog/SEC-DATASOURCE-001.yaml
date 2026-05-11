@@ -8,6 +8,14 @@ mitre:
   - "T1552.001"
 cwe:
   - "CWE-829"
+nist_csf:
+  - "PR.DS-5"
+nist_800_53:
+  - "IA-5"
+csa_ccm:
+  - "CEK-09"
+slsa:
+  - "build"
 patterns:
   - kind: grep
     file_glob: "**/*.tf"

@@ -27,6 +27,13 @@ owasp_iac:
 cwe:
   - "CWE-269"
   - "CWE-732"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-3"
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 recommendation: |
   Replace `Action: "*"` with the explicit minimum API set the workload
   requires. Use `aws iam simulate-principal-policy` to validate that

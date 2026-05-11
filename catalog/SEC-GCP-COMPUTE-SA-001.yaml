@@ -12,6 +12,12 @@ cwe:
   - "CWE-250"
 d3fend:
   - "D3-PA"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 patterns:
   - kind: resource_missing_arg
     resource: google_compute_instance

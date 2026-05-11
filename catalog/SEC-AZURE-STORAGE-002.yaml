@@ -10,6 +10,15 @@ mitre:
 cwe:
   - "CWE-732"
   - "CWE-284"
+nist_csf:
+  - "PR.AC-3"
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-3"
+  - "SC-7"
+csa_ccm:
+  - "IAM-09"
+  - "IVS-04"
 status: active
 patterns:
   - kind: resource_arg

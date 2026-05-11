@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CLOUDTRAIL-002 — CloudTrail log file integrity validation disabled"
 description: "tf-analyze rule SEC-AWS-CLOUDTRAIL-002 (HIGH · security): CloudTrail log file integrity validation disabled"
-keywords: "security, high, terraform, iac, aws, cis-3.2, mitre-T1562.008, cwe-778, d3-faa"
+keywords: "security, high, terraform, iac, aws, cis-3.2, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-csf-de.ae-3, nist-800-53-au-2, nist-800-53-au-9, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -123,6 +123,17 @@ must return `true`.
 
 **MITRE D3FEND**
   - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
+
+**NIST CSF 2.0**
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+  - [`DE.AE-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-2)
+  - [`AU-9`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-9)
+
+**CSA CCM v4**
+  - [`LOG-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-CLOUDTRAIL-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-CLOUDTRAIL-002.yaml) — canonical YAML

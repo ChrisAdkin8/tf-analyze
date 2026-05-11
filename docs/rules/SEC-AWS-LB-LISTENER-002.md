@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-LB-LISTENER-002 — Load balancer HTTPS listener allows TLS < 1.2"
 description: "tf-analyze rule SEC-AWS-LB-LISTENER-002 (HIGH · security): Load balancer HTTPS listener allows TLS < 1.2"
-keywords: "security, high, terraform, iac, aws, mitre-T1565.001, cwe-326, cwe-327"
+keywords: "security, high, terraform, iac, aws, mitre-T1565.001, cwe-326, cwe-327, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, nist-800-53-sc-13, csa-ccm-ekm-04, csa-ccm-dsi-03"
 ---
 
 <script type="application/ld+json">
@@ -90,6 +90,21 @@ Confirm each listed policy contains `TLS13-1-2` or `TLS-1-2-Ext`.
 **CWE**
   - [`CWE-326`](https://cwe.mitre.org/data/definitions/326.html)
   - [`CWE-327`](https://cwe.mitre.org/data/definitions/327.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-8`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-8)
+  - [`SC-8(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-8-1)
+  - [`SC-13`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-13)
+
+**CSA CCM v4**
+  - [`EKM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`DSI-03`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `A02`
 
 **Source**
   - [`catalog/SEC-AWS-LB-LISTENER-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-LB-LISTENER-002.yaml) — canonical YAML

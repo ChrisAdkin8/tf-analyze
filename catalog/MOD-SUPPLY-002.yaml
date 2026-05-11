@@ -25,6 +25,15 @@ cwe:
   - "CWE-1357"
 d3fend:
   - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-3"
+csa_ccm:
+  - "STA-04"
+slsa:
+  - "L2"
+  - "deps"
 fix_hcl: |
   # Before: module sourced from raw git
   # source = "git::https://github.com/example/terraform-aws-vpc.git"

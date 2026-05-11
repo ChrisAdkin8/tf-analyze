@@ -1,7 +1,7 @@
 ---
 title: "ROB-AZURE-LIFECYCLE-001 — Stateful Azure resource missing lifecycle.prevent_destroy"
 description: "tf-analyze rule ROB-AZURE-LIFECYCLE-001 (HIGH · robustness): Stateful Azure resource missing lifecycle.prevent_destroy"
-keywords: "robustness, high, terraform, iac, azure, mitre-T1485, cwe-693"
+keywords: "robustness, high, terraform, iac, azure, mitre-T1485, cwe-693, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -103,6 +103,15 @@ the resource with an error citing the prevent_destroy lifecycle rule.
 
 **CWE**
   - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
+
+**NIST CSF 2.0**
+  - [`PR.IP-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-3)
+
+**CSA CCM v4**
+  - [`BCR-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/ROB-AZURE-LIFECYCLE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AZURE-LIFECYCLE-001.yaml) — canonical YAML

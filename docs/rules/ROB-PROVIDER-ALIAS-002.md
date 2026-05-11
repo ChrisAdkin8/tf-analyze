@@ -1,7 +1,7 @@
 ---
 title: "ROB-PROVIDER-ALIAS-002 — Provider alias declared but never referenced"
 description: "tf-analyze rule ROB-PROVIDER-ALIAS-002 (LOW · robustness): Provider alias declared but never referenced"
-keywords: "robustness, low, terraform, iac"
+keywords: "robustness, low, terraform, iac, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -82,6 +82,9 @@ Run `terraform plan` and confirm the resource graph is unchanged. If you
 removed the alias, callers that relied on the default provider still work.
 
 ## References
+
+**SLSA v1.0**
+  - [`SLSA source`](https://slsa.dev/spec/v1.0/source-track)
 
 **Source**
   - [`catalog/ROB-PROVIDER-ALIAS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-PROVIDER-ALIAS-002.yaml) — canonical YAML

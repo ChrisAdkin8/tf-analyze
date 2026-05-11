@@ -19,6 +19,8 @@ csa_ccm:
   - "TVM-04"
 owasp:
   - "CICD-SEC-4"
+slsa:
+  - "build"
 patterns:
   - kind: grep
     file_glob: "**/*.tf"

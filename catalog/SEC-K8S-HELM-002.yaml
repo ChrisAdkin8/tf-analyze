@@ -13,6 +13,12 @@ soc2_cc:
 mitre:
   - "T1611"
   - "T1068"
+nist_csf:
+  - "PR.PT-3"
+nist_800_53:
+  - "CM-7"
+csa_ccm:
+  - "AIS-07"
 patterns:
   - kind: helm_set_value
     name: "securityContext.privileged"

@@ -34,6 +34,13 @@ pci_dss:
   - "Req-3.4"
 soc2_cc:
   - "CC6.7"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+  - "SC-28"
+csa_ccm:
+  - "CEK-03"
 verification: |
   `aws sqs get-queue-attributes --queue-url <url> \
     --attribute-names KmsMasterKeyId SqsManagedSseEnabled`

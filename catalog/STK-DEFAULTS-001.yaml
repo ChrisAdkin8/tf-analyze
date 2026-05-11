@@ -21,7 +21,7 @@ csa_ccm:
   - "STA-04"
 slsa:
   - "L1"
-  - "deps"
+  - "source"
 owasp:
   - "A06"
   - "CICD-SEC-1"

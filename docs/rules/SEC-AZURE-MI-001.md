@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-MI-001 — Azure user-assigned identity with no role assignment (orphan UAMI)"
 description: "tf-analyze rule SEC-AZURE-MI-001 (MEDIUM · security): Azure user-assigned identity with no role assignment (orphan UAMI)"
-keywords: "security, medium, terraform, iac, azure, mitre-T1078.004, cwe-250, d3-pa"
+keywords: "security, medium, terraform, iac, azure, mitre-T1078.004, cwe-250, d3-pa, nist-csf-pr.ac-1, nist-800-53-ac-3, nist-800-53-ia-2, csa-ccm-iam-04"
 ---
 
 <script type="application/ld+json">
@@ -115,6 +115,16 @@ must return at least one row.
 
 **MITRE D3FEND**
   - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+  - [`IA-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-2)
+
+**CSA CCM v4**
+  - [`IAM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AZURE-MI-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-MI-001.yaml) — canonical YAML

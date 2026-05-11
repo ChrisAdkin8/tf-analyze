@@ -13,6 +13,12 @@ soc2_cc:
 mitre:
   - "T1190"
   - "T1133"
+nist_csf:
+  - "PR.PT-3"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 patterns:
   - kind: helm_set_value
     name: "service.type"

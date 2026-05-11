@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-NETWORK-003 — VPC subnet missing flow logs"
 description: "tf-analyze rule SEC-GCP-NETWORK-003 (HIGH · security): VPC subnet missing flow logs"
-keywords: "security, high, terraform, iac, gcp, cis-3.8, mitre-T1562.008, cwe-778, d3-nta"
+keywords: "security, high, terraform, iac, gcp, cis-3.8, mitre-T1562.008, cwe-778, d3-nta, nist-csf-de.cm-1, nist-800-53-au-2, nist-800-53-si-4, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -105,6 +105,16 @@ must show `True` for all subnets in scope.
 
 **MITRE D3FEND**
   - [`D3-NTA`](https://d3fend.mitre.org/technique/D3-NTA/)
+
+**NIST CSF 2.0**
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-2)
+  - [`SI-4`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-4)
+
+**CSA CCM v4**
+  - [`LOG-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-GCP-NETWORK-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-NETWORK-003.yaml) — canonical YAML

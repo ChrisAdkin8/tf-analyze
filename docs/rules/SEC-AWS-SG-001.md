@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-SG-001 — Security group allows ingress from 0.0.0.0/0"
 description: "tf-analyze rule SEC-AWS-SG-001 (HIGH · security): Security group allows ingress from 0.0.0.0/0"
-keywords: "security, high, terraform, iac, aws, cis-5.2, cis-5.3"
+keywords: "security, high, terraform, iac, aws, cis-5.2, cis-5.3, nist-csf-pr.ac-3, nist-800-53-sc-7, nist-800-53-sc-7-3, csa-ccm-ivs-04, csa-ccm-ivs-06"
 ---
 
 <script type="application/ld+json">
@@ -94,6 +94,17 @@ no ingress rules have `0.0.0.0/0` or `::/0` as source.
 
 **PCI-DSS**
   - `Req-1.2`
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+  - [`SC-7(3)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7-3)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`IVS-06`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-SG-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-SG-001.yaml) — canonical YAML

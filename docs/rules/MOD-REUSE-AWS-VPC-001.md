@@ -1,7 +1,7 @@
 ---
 title: "MOD-REUSE-AWS-VPC-001 — Hand-rolled VPC scaffolding could be replaced by terraform-aws-modules/vpc/aws"
 description: "tf-analyze rule MOD-REUSE-AWS-VPC-001 (INFO · module-reuse): Hand-rolled VPC scaffolding could be replaced by terraform-aws-modules/vpc/aws"
-keywords: "module-reuse, info, terraform, iac, aws, mitre-T1195.002, cwe-1357, d3-sca"
+keywords: "module-reuse, info, terraform, iac, aws, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-800-53-sa-15, csa-ccm-ais-04, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -108,6 +108,18 @@ counterparts so no real network is destroyed and recreated.
 
 **MITRE D3FEND**
   - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SA-15`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sa-15)
+
+**CSA CCM v4**
+  - [`AIS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA deps`](https://slsa.dev/spec/v1.0/deps-track)
 
 **Related rules**
   - [`MOD-PIN-001`](./MOD-PIN-001.md)

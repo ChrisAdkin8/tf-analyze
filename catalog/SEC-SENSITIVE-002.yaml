@@ -17,6 +17,12 @@ cwe:
   - "CWE-200"
 d3fend:
   - "D3-CH"
+nist_csf:
+  - "PR.DS-5"
+nist_800_53:
+  - "SC-28"
+csa_ccm:
+  - "CEK-09"
 recommendation: |
   Add `sensitive = true` to the child module's variable declaration.
   Sensitivity does not propagate automatically across module boundaries

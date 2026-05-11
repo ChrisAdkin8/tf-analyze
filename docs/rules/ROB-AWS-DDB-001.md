@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-DDB-001 — DynamoDB table missing deletion protection"
 description: "tf-analyze rule ROB-AWS-DDB-001 (HIGH · robustness): DynamoDB table missing deletion protection"
-keywords: "robustness, high, terraform, iac, aws, mitre-T1485"
+keywords: "robustness, high, terraform, iac, aws, mitre-T1485, nist-csf-pr.ip-4, nist-csf-rc.rp-1, nist-800-53-cp-9, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -115,6 +115,16 @@ must return `true`.
 
 **MITRE ATT&CK**
   - [`T1485`](https://attack.mitre.org/techniques/T1485/)
+
+**NIST CSF 2.0**
+  - [`PR.IP-4`](https://www.nist.gov/cyberframework)
+  - [`RC.RP-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CP-9`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cp-9)
+
+**CSA CCM v4**
+  - [`BCR-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/ROB-AWS-DDB-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-DDB-001.yaml) — canonical YAML

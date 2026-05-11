@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-KMS-001 — KMS key rotation disabled"
 description: "tf-analyze rule SEC-AWS-KMS-001 (HIGH · security): KMS key rotation disabled"
-keywords: "security, high, terraform, iac, aws, cis-3.8"
+keywords: "security, high, terraform, iac, aws, cis-3.8, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-12, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -93,6 +93,16 @@ shows `enable_key_rotation = false`.
 
 **PCI-DSS**
   - `Req-3.6`
+
+**NIST CSF 2.0**
+  - [`PR.DS-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-13`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-13)
+  - [`SC-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-12)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-KMS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-KMS-001.yaml) — canonical YAML

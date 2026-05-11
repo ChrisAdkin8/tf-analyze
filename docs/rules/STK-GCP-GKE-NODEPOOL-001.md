@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-NODEPOOL-001 — GKE node pool missing shielded-instance hardening"
 description: "tf-analyze rule STK-GCP-GKE-NODEPOOL-001 (HIGH · stack): GKE node pool missing shielded-instance hardening"
-keywords: "stack, high, terraform, iac, gcp, cis-6.5.5, mitre-T1542.003, cwe-1278, d3-psh"
+keywords: "stack, high, terraform, iac, gcp, cis-6.5.5, mitre-T1542.003, cwe-1278, d3-psh, nist-csf-pr.pt-3, nist-800-53-si-7, csa-ccm-ivs-03"
 ---
 
 <script type="application/ld+json">
@@ -119,6 +119,15 @@ Both fields should print `True`. Re-run tf-analyze to confirm clean.
 
 **MITRE D3FEND**
   - [`D3-PSH`](https://d3fend.mitre.org/technique/D3-PSH/)
+
+**NIST CSF 2.0**
+  - [`PR.PT-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-7)
+
+**CSA CCM v4**
+  - [`IVS-03`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)

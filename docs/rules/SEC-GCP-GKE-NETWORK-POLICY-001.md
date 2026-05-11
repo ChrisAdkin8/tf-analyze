@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-GKE-NETWORK-POLICY-001 — GKE cluster missing network_policy enforcement"
 description: "tf-analyze rule SEC-GCP-GKE-NETWORK-POLICY-001 (HIGH · security): GKE cluster missing network_policy enforcement"
-keywords: "security, high, terraform, iac, gcp, cis-6.6.7, mitre-T1611"
+keywords: "security, high, terraform, iac, gcp, cis-6.6.7, mitre-T1611, nist-csf-pr.ac-5, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -116,6 +116,15 @@ show at least one default-deny policy in workload namespaces.
 
 **MITRE ATT&CK**
   - [`T1611`](https://attack.mitre.org/techniques/T1611/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`STK-GKE-001`](./STK-GKE-001.md)

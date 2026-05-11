@@ -1,7 +1,7 @@
 ---
 title: "STK-K8S-IMAGE-SIGNED-001 — Kubernetes pod or container references an image without a signature/digest pin"
 description: "tf-analyze rule STK-K8S-IMAGE-SIGNED-001 (HIGH · stack): Kubernetes pod or container references an image without a signature/digest pin"
-keywords: "stack, high, terraform, iac, mitre-T1525, mitre-T1574.002, cwe-345, cwe-1357"
+keywords: "stack, high, terraform, iac, mitre-T1525, mitre-T1574.002, cwe-345, cwe-1357, nist-csf-pr.ds-6, nist-csf-id.sc-2, nist-800-53-si-7, nist-800-53-sr-4, csa-ccm-sta-04, slsa-l2, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -80,6 +80,24 @@ Empty output = compliant.
 **CWE**
   - [`CWE-345`](https://cwe.mitre.org/data/definitions/345.html)
   - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-6`](https://www.nist.gov/cyberframework)
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-7)
+  - [`SR-4`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sr-4)
+
+**CSA CCM v4**
+  - [`STA-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L2`](https://slsa.dev/spec/v1.0/levels#l2)
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
+
+**OWASP (namespaced)**
+  - `K04`
 
 **Source**
   - [`catalog/STK-K8S-IMAGE-SIGNED-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-K8S-IMAGE-SIGNED-001.yaml) — canonical YAML

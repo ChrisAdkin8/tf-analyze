@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-SECRETSMANAGER-001 — Secrets Manager secret has no automatic rotation configured"
 description: "tf-analyze rule ROB-AWS-SECRETSMANAGER-001 (MEDIUM · robustness): Secrets Manager secret has no automatic rotation configured"
-keywords: "robustness, medium, terraform, iac, aws, mitre-T1078.004, mitre-T1098.001, d3-ch"
+keywords: "robustness, medium, terraform, iac, aws, mitre-T1078.004, mitre-T1098.001, d3-ch, nist-csf-pr.ac-1, nist-800-53-ia-5"
 ---
 
 <script type="application/ld+json">
@@ -115,6 +115,12 @@ must return `true`.
 
 **MITRE D3FEND**
   - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5)
 
 **Source**
   - [`catalog/ROB-AWS-SECRETSMANAGER-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-SECRETSMANAGER-001.yaml) — canonical YAML

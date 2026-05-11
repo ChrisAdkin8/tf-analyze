@@ -32,6 +32,12 @@ mitre:
   - "T1485"
 cwe:
   - "CWE-693"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CM-3"
+csa_ccm:
+  - "BCR-08"
 recommendation: |
   Add `lifecycle { prevent_destroy = true }` to any resource that holds
   irrecoverable state:

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-SECRETSMANAGER-001 — Secrets Manager secret uses AWS-managed key (no CMK)"
 description: "tf-analyze rule SEC-AWS-SECRETSMANAGER-001 (MEDIUM · security): Secrets Manager secret uses AWS-managed key (no CMK)"
-keywords: "security, medium, terraform, iac, aws, cis-{'id': '3.8', 'title': 'Ensure rotation for customer created symmetric CMKs is enabled'}"
+keywords: "security, medium, terraform, iac, aws, cis-{'id': '3.8', 'title': 'Ensure rotation for customer created symmetric CMKs is enabled'}, nist-csf-pr.ds-5, nist-800-53-sc-12, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -100,6 +100,15 @@ must return your CMK ARN, not null or aws/secretsmanager.
 
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Secrets Storage Management`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-12)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-SECRETSMANAGER-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-SECRETSMANAGER-001.yaml) — canonical YAML

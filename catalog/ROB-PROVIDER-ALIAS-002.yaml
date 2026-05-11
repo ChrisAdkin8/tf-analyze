@@ -4,6 +4,8 @@ section: robustness
 default_urgency: LOW
 blast_radius: module
 status: active
+slsa:
+  - "source"
 patterns:
   - kind: provider_alias_unused
     description: provider block declares alias but no resource/module references it

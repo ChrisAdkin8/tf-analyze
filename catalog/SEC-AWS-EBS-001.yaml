@@ -33,6 +33,13 @@ cwe:
   - "CWE-311"
 d3fend:
   - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+  - "SC-28"
+csa_ccm:
+  - "CEK-03"
 verification: |
   Run `aws ec2 describe-volumes --volume-ids <id>` and confirm
   `Encrypted` is `true`. Run `terraform plan` and verify no diff shows

@@ -1,7 +1,7 @@
 ---
 title: "ROB-BACKEND-001 — Inconsistent backend configuration across root modules"
 description: "tf-analyze rule ROB-BACKEND-001 (MEDIUM · robustness): Inconsistent backend configuration across root modules"
-keywords: "robustness, medium, terraform, iac"
+keywords: "robustness, medium, terraform, iac, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -83,6 +83,9 @@ terraform {
 Grep for all `backend` blocks and compare their configurations.
 
 ## References
+
+**SLSA v1.0**
+  - [`SLSA source`](https://slsa.dev/spec/v1.0/source-track)
 
 **Source**
   - [`catalog/ROB-BACKEND-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-BACKEND-001.yaml) — canonical YAML

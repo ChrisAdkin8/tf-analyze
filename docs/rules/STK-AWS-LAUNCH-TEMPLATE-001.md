@@ -1,7 +1,7 @@
 ---
 title: "STK-AWS-LAUNCH-TEMPLATE-001 — EC2 launch template does not enforce IMDSv2"
 description: "tf-analyze rule STK-AWS-LAUNCH-TEMPLATE-001 (HIGH · stack): EC2 launch template does not enforce IMDSv2"
-keywords: "stack, high, terraform, iac, aws, mitre-T1552.005, cwe-668, d3-ch"
+keywords: "stack, high, terraform, iac, aws, mitre-T1552.005, cwe-668, d3-ch, nist-csf-pr.ac-1, nist-800-53-ac-3, csa-ccm-ivs-03"
 ---
 
 <script type="application/ld+json">
@@ -115,6 +115,15 @@ resource "aws_launch_template" "example" {
 
 **MITRE D3FEND**
   - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+
+**CSA CCM v4**
+  - [`IVS-03`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-AWS-SSRF-001`](./SEC-AWS-SSRF-001.md)

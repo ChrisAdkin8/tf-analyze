@@ -8,6 +8,12 @@ cis:
   - "6.6"
 mitre:
   - "T1485"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CM-3"
+csa_ccm:
+  - "BCR-08"
 patterns:
   - kind: resource_missing_arg
     resource: google_sql_database_instance

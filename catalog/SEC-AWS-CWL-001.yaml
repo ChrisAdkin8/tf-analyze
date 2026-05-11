@@ -26,6 +26,12 @@ cwe:
   - "CWE-778"
 d3fend:
   - "D3-FAA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+csa_ccm:
+  - "LOG-02"
 recommendation: |
   Encrypt every log group with a CMK:
 

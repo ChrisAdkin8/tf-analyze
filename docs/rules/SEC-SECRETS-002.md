@@ -1,7 +1,7 @@
 ---
 title: "SEC-SECRETS-002 — aws_ssm_parameter stores a sensitive value as plain `String` (not `SecureString`)"
 description: "tf-analyze rule SEC-SECRETS-002 (HIGH · security): aws_ssm_parameter stores a sensitive value as plain `String` (not `SecureString`)"
-keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-256, cwe-312"
+keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-256, cwe-312, nist-csf-pr.ds-1, nist-csf-pr.ds-5, nist-800-53-sc-28, nist-800-53-sc-28-1, nist-800-53-ia-5-1, csa-ccm-dsi-04, csa-ccm-ekm-04"
 ---
 
 <script type="application/ld+json">
@@ -89,6 +89,22 @@ any name containing `password|secret|token|key` should be `SecureString`.
 **CWE**
   - [`CWE-256`](https://cwe.mitre.org/data/definitions/256.html)
   - [`CWE-312`](https://cwe.mitre.org/data/definitions/312.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-1`](https://www.nist.gov/cyberframework)
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+  - [`SC-28(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28-1)
+  - [`IA-5(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5-1)
+
+**CSA CCM v4**
+  - [`DSI-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`EKM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `A02`
 
 **Source**
   - [`catalog/SEC-SECRETS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SECRETS-002.yaml) — canonical YAML

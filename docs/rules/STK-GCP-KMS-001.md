@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-KMS-001 — KMS crypto key missing rotation period"
 description: "tf-analyze rule STK-GCP-KMS-001 (HIGH · stack): KMS crypto key missing rotation period"
-keywords: "stack, high, terraform, iac, gcp, cis-1.10, mitre-T1098.001, mitre-T1552.001, d3-ch"
+keywords: "stack, high, terraform, iac, gcp, cis-1.10, mitre-T1098.001, mitre-T1552.001, d3-ch, nist-csf-pr.ac-1, nist-800-53-sc-12, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -110,6 +110,15 @@ Must return a value ≤ `7776000s`.
 
 **MITRE D3FEND**
   - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-12)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`STK-KMS-LOCATION-001`](./STK-KMS-LOCATION-001.md)

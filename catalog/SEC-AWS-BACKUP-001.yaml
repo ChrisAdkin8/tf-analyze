@@ -8,6 +8,13 @@ pci_dss:
   - "Req-3.4"
 soc2_cc:
   - "CC6.7"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+  - "SC-28"
+csa_ccm:
+  - "CEK-03"
 patterns:
   - kind: resource_missing_arg
     resource: aws_backup_vault

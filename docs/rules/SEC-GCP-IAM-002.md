@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-IAM-002 — Public IAM binding (allUsers / allAuthenticatedUsers)"
 description: "tf-analyze rule SEC-GCP-IAM-002 (CRITICAL · security): Public IAM binding (allUsers / allAuthenticatedUsers)"
-keywords: "security, critical, terraform, iac, gcp, cis-5.1, cis-7.1, mitre-T1078.004, cwe-284, cwe-732, d3-pa"
+keywords: "security, critical, terraform, iac, gcp, cis-5.1, cis-7.1, mitre-T1078.004, cwe-284, cwe-732, d3-pa, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -104,6 +104,16 @@ mode:verify-fixed.
 
 **MITRE D3FEND**
   - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-GCP-IAM-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-IAM-002.yaml) — canonical YAML

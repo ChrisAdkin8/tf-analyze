@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-COMPUTE-PUBLIC-IP-001 — Compute instance has a public IP via access_config"
 description: "tf-analyze rule SEC-GCP-COMPUTE-PUBLIC-IP-001 (HIGH · security): Compute instance has a public IP via access_config"
-keywords: "security, high, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284, d3-iaa"
+keywords: "security, high, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -117,6 +117,15 @@ This should print nothing. Re-run tf-analyze to confirm clean.
 
 **MITRE D3FEND**
   - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-NETWORK-001`](./SEC-NETWORK-001.md)

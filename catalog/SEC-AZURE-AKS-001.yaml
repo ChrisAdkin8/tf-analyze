@@ -16,6 +16,12 @@ applies_when:
     azurerm: "3.0"
 mitre:
   - "T1078.004"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "IA-2"
+csa_ccm:
+  - "IAM-02"
 patterns:
   - kind: resource_arg
     resource: azurerm_kubernetes_cluster

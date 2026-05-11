@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-ACCESSKEY-001 — Long-lived IAM access key created for a user"
 description: "tf-analyze rule SEC-AWS-ACCESSKEY-001 (HIGH · security): Long-lived IAM access key created for a user"
-keywords: "security, high, terraform, iac, aws, cis-1.14"
+keywords: "security, high, terraform, iac, aws, cis-1.14, nist-csf-pr.ac-1, nist-csf-pr.ac-6, nist-800-53-ia-5, csa-ccm-iam-04"
 ---
 
 <script type="application/ld+json">
@@ -108,6 +108,16 @@ removal is tracked in a migration plan.
 
 **CIS Benchmark**
   - `CIS 1.14`
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+  - [`PR.AC-6`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5)
+
+**CSA CCM v4**
+  - [`IAM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-ACCESSKEY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ACCESSKEY-001.yaml) — canonical YAML

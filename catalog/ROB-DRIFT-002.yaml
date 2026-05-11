@@ -28,6 +28,13 @@ mitre:
   - "T1562.001"
 cwe:
   - "CWE-693"
+nist_csf:
+  - "PR.IP-3"
+nist_800_53:
+  - "CM-3"
+  - "CM-6"
+csa_ccm:
+  - "CCC-05"
 recommendation: |
   Replace with an explicit list of attributes that must be ignored:
 

@@ -1,7 +1,7 @@
 ---
 title: "SEC-LOG-CROSS-ACCOUNT-001 — Audit log destination is in the same AWS account (no cross-account isolation)"
 description: "tf-analyze rule SEC-LOG-CROSS-ACCOUNT-001 (MEDIUM · security): Audit log destination is in the same AWS account (no cross-account isolation)"
-keywords: "security, medium, terraform, iac, mitre-T1070.001, mitre-T1565, cwe-778"
+keywords: "security, medium, terraform, iac, mitre-T1070.001, mitre-T1565, cwe-778, nist-csf-pr.pt-1, nist-csf-de.ae-3, nist-800-53-au-9-2, nist-800-53-au-11, csa-ccm-log-08"
 ---
 
 <script type="application/ld+json">
@@ -92,6 +92,20 @@ every entry should point at the security-account bucket.
 
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)
+
+**NIST CSF 2.0**
+  - [`PR.PT-1`](https://www.nist.gov/cyberframework)
+  - [`DE.AE-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-9(2)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-9-2)
+  - [`AU-11`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-11)
+
+**CSA CCM v4**
+  - [`LOG-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `A09`
 
 **Source**
   - [`catalog/SEC-LOG-CROSS-ACCOUNT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-LOG-CROSS-ACCOUNT-001.yaml) — canonical YAML

@@ -25,6 +25,12 @@ owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:
   - "CWE-269"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 recommendation: |
   Replace the wildcard principal with the specific account or role
   ARNs that should have access. If true public exposure is the

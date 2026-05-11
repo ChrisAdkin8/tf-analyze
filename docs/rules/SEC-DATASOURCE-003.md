@@ -1,7 +1,7 @@
 ---
 title: "SEC-DATASOURCE-003 — `data \\"external\\"` or `data \\"http\\"` runs at plan time"
 description: "tf-analyze rule SEC-DATASOURCE-003 (HIGH · security): `data \'external\'` or `data \'http\'` runs at plan time"
-keywords: "security, high, terraform, iac, mitre-T1059, mitre-T1071.001, cwe-829, cwe-78"
+keywords: "security, high, terraform, iac, mitre-T1059, mitre-T1071.001, cwe-829, cwe-78, nist-csf-pr.ds-6, nist-800-53-si-3, nist-800-53-cm-7, csa-ccm-tvm-04, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -95,6 +95,22 @@ needs a justification comment or a replacement.
 **CWE**
   - [`CWE-829`](https://cwe.mitre.org/data/definitions/829.html)
   - [`CWE-78`](https://cwe.mitre.org/data/definitions/78.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-6`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-3)
+  - [`CM-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-7)
+
+**CSA CCM v4**
+  - [`TVM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
+
+**OWASP (namespaced)**
+  - `CICD-SEC-4`
 
 **Source**
   - [`catalog/SEC-DATASOURCE-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-DATASOURCE-003.yaml) — canonical YAML

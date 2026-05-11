@@ -1,7 +1,7 @@
 ---
 title: "ROB-VERSION-002 — Submodule directory has no required_version"
 description: "tf-analyze rule ROB-VERSION-002 (LOW · robustness): Submodule directory has no required_version"
-keywords: "robustness, low, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca"
+keywords: "robustness, low, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-cm-2, nist-800-53-sr-3, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l1, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -97,6 +97,22 @@ in isolation) — it should enforce the new constraint.
 
 **MITRE D3FEND**
   - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+  - [`PR.IP-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-2)
+  - [`SR-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sr-3)
+
+**CSA CCM v4**
+  - [`STA-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`CCC-05`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L1`](https://slsa.dev/spec/v1.0/levels#l1)
+  - [`SLSA source`](https://slsa.dev/spec/v1.0/source-track)
 
 **Source**
   - [`catalog/ROB-VERSION-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-VERSION-002.yaml) — canonical YAML

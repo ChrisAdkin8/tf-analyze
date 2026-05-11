@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-ARTIFACT-001 — Artifact Registry repository missing customer-managed encryption key"
 description: "tf-analyze rule STK-GCP-ARTIFACT-001 (MEDIUM · stack): Artifact Registry repository missing customer-managed encryption key"
-keywords: "stack, medium, terraform, iac, gcp, mitre-T1530, cwe-311, d3-ear"
+keywords: "stack, medium, terraform, iac, gcp, mitre-T1530, cwe-311, d3-ear, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
 ---
 
 <script type="application/ld+json">
@@ -112,6 +112,16 @@ must return a non-empty KMS CryptoKey resource name.
 
 **MITRE D3FEND**
   - [`D3-EAR`](https://d3fend.mitre.org/technique/D3-EAR/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-13`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-13)
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`CEK-03`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/STK-GCP-ARTIFACT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-ARTIFACT-001.yaml) — canonical YAML

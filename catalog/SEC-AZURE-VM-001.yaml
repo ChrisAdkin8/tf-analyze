@@ -55,6 +55,13 @@ cwe:
 d3fend:
   - "D3-AL"
   - "D3-MFA"
+nist_csf:
+  - "PR.AC-7"
+nist_800_53:
+  - "IA-5"
+  - "AC-7"
+csa_ccm:
+  - "IAM-12"
 fix_hcl: |
   resource "azurerm_linux_virtual_machine" "example" {
     # ... other arguments ...

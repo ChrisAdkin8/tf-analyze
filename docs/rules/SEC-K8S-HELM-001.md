@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-HELM-001 — helm_release sets `service.type=LoadBalancer` (publicly exposed)"
 description: "tf-analyze rule SEC-K8S-HELM-001 (HIGH · security): helm_release sets `service.type=LoadBalancer` (publicly exposed)"
-keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1190, mitre-T1133"
+keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1190, mitre-T1133, nist-csf-pr.pt-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -122,6 +122,15 @@ should not list workload services.
 **MITRE ATT&CK**
   - [`T1190`](https://attack.mitre.org/techniques/T1190/)
   - [`T1133`](https://attack.mitre.org/techniques/T1133/)
+
+**NIST CSF 2.0**
+  - [`PR.PT-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-K8S-HELM-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-HELM-001.yaml) — canonical YAML

@@ -23,6 +23,12 @@ patterns:
 owasp_iac:
   - "Develop and Distribute / Secrets Detection"
   - "Develop and Distribute / Secrets Storage Management"
+nist_csf:
+  - "PR.DS-5"
+nist_800_53:
+  - "SC-28"
+csa_ccm:
+  - "CEK-09"
 references: []
 recommendation: |
   Add `sensitive = true` to the variable block. If the value is set

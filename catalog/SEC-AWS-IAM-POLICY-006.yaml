@@ -25,6 +25,12 @@ owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:
   - "CWE-269"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 recommendation: |
   Rewrite the statement using `actions` and `resources` to enumerate
   the explicit allow set. Reserve `not_actions` / `not_resources` for

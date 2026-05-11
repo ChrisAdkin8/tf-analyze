@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-IAM-003 — Member has both project-level and resource-level IAM grants"
 description: "tf-analyze rule SEC-GCP-IAM-003 (HIGH · security): Member has both project-level and resource-level IAM grants"
-keywords: "security, high, terraform, iac, gcp, cis-1.6, mitre-T1098.001, mitre-T1078.004, cwe-269, d3-pa"
+keywords: "security, high, terraform, iac, gcp, cis-1.6, mitre-T1098.001, mitre-T1078.004, cwe-269, d3-pa, nist-csf-pr.ac-4, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -112,6 +112,15 @@ equivalent for the resource type) should not show overlap.
 
 **MITRE D3FEND**
   - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)

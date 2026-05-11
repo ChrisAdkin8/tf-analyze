@@ -1,7 +1,7 @@
 ---
 title: "SEC-PROVISIONER-002 — local-exec or remote-exec uses `curl | bash` or unverified-pipe pattern"
 description: "tf-analyze rule SEC-PROVISIONER-002 (CRITICAL · security): local-exec or remote-exec uses `curl | bash` or unverified-pipe pattern"
-keywords: "security, critical, terraform, iac, mitre-T1059.004, mitre-T1105, cwe-494, cwe-78"
+keywords: "security, critical, terraform, iac, mitre-T1059.004, mitre-T1105, cwe-494, cwe-78, nist-csf-pr.ds-6, nist-csf-pr.ip-1, nist-800-53-si-7, nist-800-53-cm-7, csa-ccm-tvm-04, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -97,6 +97,23 @@ with a pre-baked image.
 **CWE**
   - [`CWE-494`](https://cwe.mitre.org/data/definitions/494.html)
   - [`CWE-78`](https://cwe.mitre.org/data/definitions/78.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-6`](https://www.nist.gov/cyberframework)
+  - [`PR.IP-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-7)
+  - [`CM-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-7)
+
+**CSA CCM v4**
+  - [`TVM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
+
+**OWASP (namespaced)**
+  - `CICD-SEC-4`
 
 **Source**
   - [`catalog/SEC-PROVISIONER-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-PROVISIONER-002.yaml) — canonical YAML

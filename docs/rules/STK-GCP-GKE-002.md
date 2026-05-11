@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-002 — GKE cluster missing Workload Identity"
 description: "tf-analyze rule STK-GCP-GKE-002 (HIGH · stack): GKE cluster missing Workload Identity"
-keywords: "stack, high, terraform, iac, gcp, cis-8.5.2, mitre-T1078.004"
+keywords: "stack, high, terraform, iac, gcp, cis-8.5.2, mitre-T1078.004, nist-csf-pr.ac-4, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -105,6 +105,15 @@ should not fire.
 
 **MITRE ATT&CK**
   - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`STK-GKE-NODEPOOL-001`](./STK-GKE-NODEPOOL-001.md)

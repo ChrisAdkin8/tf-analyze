@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-ES-001 — OpenSearch / Elasticsearch domain missing encryption at rest"
 description: "tf-analyze rule SEC-AWS-ES-001 (HIGH · security): OpenSearch / Elasticsearch domain missing encryption at rest"
-keywords: "security, high, terraform, iac, aws, cis-{'id': '2.7', 'title': 'Ensure that OpenSearch domains have encryption at rest enabled'}"
+keywords: "security, high, terraform, iac, aws, cis-{'id': '2.7', 'title': 'Ensure that OpenSearch domains have encryption at rest enabled'}, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
 ---
 
 <script type="application/ld+json">
@@ -116,6 +116,16 @@ must show `Enabled: true`.
 
 **SOC 2 Trust Services Criteria**
   - `CC6.7`
+
+**NIST CSF 2.0**
+  - [`PR.DS-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-13`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-13)
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`CEK-03`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-ES-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ES-001.yaml) — canonical YAML

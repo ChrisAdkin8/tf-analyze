@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-SQL-PUBLIC-001 — Cloud SQL instance permits public IPv4"
 description: "tf-analyze rule SEC-GCP-SQL-PUBLIC-001 (HIGH · security): Cloud SQL instance permits public IPv4"
-keywords: "security, high, terraform, iac, gcp, cis-6.6, mitre-T1190, cwe-284, d3-iaa"
+keywords: "security, high, terraform, iac, gcp, cis-6.6, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -116,6 +116,15 @@ Should print only `PRIVATE` (no `PRIMARY`).
 
 **MITRE D3FEND**
   - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`STK-CLOUDSQL-002`](./STK-CLOUDSQL-002.md)

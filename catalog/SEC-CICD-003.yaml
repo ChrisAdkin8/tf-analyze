@@ -3,8 +3,7 @@ title: "Apply job missing `environment:` with required_reviewers for production"
 section: cicd
 default_urgency: CRITICAL
 blast_radius: infrastructure-wide
-# stub — see SEC-CICD-001 for walker-extension note
-status: stub
+status: active
 mitre:
   - "T1199"
 cwe:
@@ -22,6 +21,7 @@ csa_ccm:
   - "IAM-09"
 slsa:
   - "L3"
+  - "build"
 owasp:
   - "CICD-SEC-1"
   - "CICD-SEC-7"
@@ -29,6 +29,10 @@ patterns:
   - kind: grep
     file_glob: ".github/workflows/*.yml"
     regex: 'terraform\s+(apply|destroy)\s+(?:-auto-approve|.*plan\.binary)'
+    # Suppress when the workflow also declares an `environment:` block
+    # (required_reviewers + wait timer are configured at the protected
+    # environment, so the auto-approve is gated).
+    not_regex: '^\s+environment\s*:'
     scope: file
     description: |
       `terraform apply -auto-approve` (or `apply tfplan.binary`) in a
@@ -58,4 +62,5 @@ verification: |
   `environment:` block is present. Cross-check repository
   Settings → Environments → production for required reviewers.
 fix_disruption: plan_required
-# fixtures: deferred — rule is `status: stub` until walker extension
+fixtures:
+  - workflow_auto_approve_no_env

@@ -11,6 +11,13 @@ pci_dss:
   - "Req-3.5"
 soc2_cc:
   - "CC6.1"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+  - "SC-28"
+csa_ccm:
+  - "CEK-03"
 patterns:
   - kind: resource_arg
     resource: aws_ssm_parameter

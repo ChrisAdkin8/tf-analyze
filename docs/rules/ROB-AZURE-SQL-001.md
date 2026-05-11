@@ -1,7 +1,7 @@
 ---
 title: "ROB-AZURE-SQL-001 — Azure SQL database missing short-term backup retention policy"
 description: "tf-analyze rule ROB-AZURE-SQL-001 (MEDIUM · robustness): Azure SQL database missing short-term backup retention policy"
-keywords: "robustness, medium, terraform, iac, azure, cis-4.1.7, mitre-T1490"
+keywords: "robustness, medium, terraform, iac, azure, cis-4.1.7, mitre-T1490, nist-csf-rc.rp-1, nist-800-53-cp-9, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -99,6 +99,15 @@ The value should be >= 14 for non-prod and >= 35 for production.
 
 **MITRE ATT&CK**
   - [`T1490`](https://attack.mitre.org/techniques/T1490/)
+
+**NIST CSF 2.0**
+  - [`RC.RP-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CP-9`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cp-9)
+
+**CSA CCM v4**
+  - [`BCR-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/ROB-AZURE-SQL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AZURE-SQL-001.yaml) — canonical YAML

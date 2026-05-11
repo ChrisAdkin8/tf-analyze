@@ -4,6 +4,13 @@ section: security
 default_urgency: HIGH
 blast_radius: single-resource
 status: active
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+  - "SC-28"
+csa_ccm:
+  - "CEK-03"
 patterns:
   - kind: resource_missing_arg
     resource: aws_elasticache_replication_group

@@ -5,6 +5,13 @@ default_urgency: HIGH
 blast_radius: module
 cis:
   - "1.14"
+nist_csf:
+  - "PR.AC-1"
+  - "PR.AC-6"
+nist_800_53:
+  - "IA-5"
+csa_ccm:
+  - "IAM-04"
 status: active
 patterns:
   - kind: resource_present

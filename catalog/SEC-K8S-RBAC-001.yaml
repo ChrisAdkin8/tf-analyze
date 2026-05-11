@@ -20,12 +20,10 @@ cwe:
 nist_csf:
   - "PR.AC-4"
 nist_800_53:
+  - "AC-3"
   - "AC-6"
-  - "AC-6(1)"
-  - "AC-6(7)"
 csa_ccm:
   - "IAM-09"
-  - "IAM-15"
 owasp:
   - "K03"
 patterns:

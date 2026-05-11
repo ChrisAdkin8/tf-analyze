@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-VM-001 — Linux VM allows SSH password authentication"
 description: "tf-analyze rule SEC-AZURE-VM-001 (HIGH · security): Linux VM allows SSH password authentication"
-keywords: "security, high, terraform, iac, azure, cis-7.3, mitre-T1110.001, cwe-521, cwe-307, d3-al, d3-mfa"
+keywords: "security, high, terraform, iac, azure, cis-7.3, mitre-T1110.001, cwe-521, cwe-307, d3-al, d3-mfa, nist-csf-pr.ac-7, nist-800-53-ia-5, nist-800-53-ac-7, csa-ccm-iam-12"
 ---
 
 <script type="application/ld+json">
@@ -130,6 +130,16 @@ must return `true`.
 **MITRE D3FEND**
   - [`D3-AL`](https://d3fend.mitre.org/technique/D3-AL/)
   - [`D3-MFA`](https://d3fend.mitre.org/technique/D3-MFA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-7`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5)
+  - [`AC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-7)
+
+**CSA CCM v4**
+  - [`IAM-12`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AZURE-VM-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-VM-001.yaml) — canonical YAML

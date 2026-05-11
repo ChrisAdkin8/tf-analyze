@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-RBAC-001 — Azure role assignment scope is subscription-wide"
 description: "tf-analyze rule SEC-AZURE-RBAC-001 (HIGH · security): Azure role assignment scope is subscription-wide"
-keywords: "security, high, terraform, iac, azure, cis-1.21, mitre-T1078.004, cwe-269, d3-pa"
+keywords: "security, high, terraform, iac, azure, cis-1.21, mitre-T1078.004, cwe-269, d3-pa, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -112,6 +112,16 @@ not `/subscriptions/<sub-id>`.
 
 **MITRE D3FEND**
   - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-IAM-001`](./SEC-IAM-001.md)

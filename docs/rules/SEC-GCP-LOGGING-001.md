@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-LOGGING-001 — Cloud Audit Logs not configured"
 description: "tf-analyze rule SEC-GCP-LOGGING-001 (HIGH · security): Cloud Audit Logs not configured"
-keywords: "security, high, terraform, iac, gcp, cis-2.1, mitre-T1562.008, cwe-778, d3-faa"
+keywords: "security, high, terraform, iac, gcp, cis-2.1, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -101,6 +101,15 @@ and confirm at least one event is returned.
 
 **MITRE D3FEND**
   - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
+
+**NIST CSF 2.0**
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-2)
+
+**CSA CCM v4**
+  - [`LOG-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-GCP-LOGGING-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-LOGGING-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-S3-PUBLIC-BLOCK-001 — S3 bucket missing public access block"
 description: "tf-analyze rule SEC-AWS-S3-PUBLIC-BLOCK-001 (HIGH · security): S3 bucket missing public access block"
-keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530, cwe-732, cwe-284"
+keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530, cwe-732, cwe-284, nist-csf-pr.ac-3, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-sc-7, csa-ccm-iam-09, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -102,6 +102,18 @@ must show all four settings as `true`.
 **CWE**
   - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
   - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-S3-PUBLIC-BLOCK-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-S3-PUBLIC-BLOCK-001.yaml) — canonical YAML

@@ -30,6 +30,15 @@ soc2_cc:
   - "CC6.1"
 mitre:
   - "T1552.001"
+nist_csf:
+  - "PR.DS-5"
+nist_800_53:
+  - "SC-28"
+  - "AC-3"
+csa_ccm:
+  - "CEK-09"
+slsa:
+  - "source"
 fix_hcl: |
   # 1. Add to .gitignore
   # *.tfstate

@@ -1,7 +1,7 @@
 ---
 title: "SEC-SENSITIVE-001 — Sensitive output not marked sensitive=true"
 description: "tf-analyze rule SEC-SENSITIVE-001 (HIGH · security): Sensitive output not marked sensitive=true"
-keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-200, cwe-532, d3-ch"
+keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-200, cwe-532, d3-ch, nist-csf-pr.ds-5, nist-800-53-sc-28, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -92,6 +92,15 @@ Run `terraform output <name>` and confirm the value is masked as
 
 **MITRE D3FEND**
   - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-SENSITIVE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SENSITIVE-001.yaml) — canonical YAML

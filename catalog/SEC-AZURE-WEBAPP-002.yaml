@@ -11,6 +11,13 @@ cwe:
   - "CWE-319"
 d3fend:
   - "D3-EI"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+  - "SC-8(1)"
+csa_ccm:
+  - "CEK-06"
 status: active
 patterns:
   - kind: resource_missing_arg

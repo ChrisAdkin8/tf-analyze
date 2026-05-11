@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-003 — IAM account password policy is not configured or too weak"
 description: "tf-analyze rule SEC-AWS-IAM-003 (MEDIUM · security): IAM account password policy is not configured or too weak"
-keywords: "security, medium, terraform, iac, aws, cis-{'id': '1.8', 'title': 'Ensure IAM password policy requires minimum length of 14'}, cis-{'id': '1.9', 'title': 'Ensure IAM password policy prevents password reuse'}, mitre-T1098.001, mitre-T1078.004, cwe-269, d3-pa"
+keywords: "security, medium, terraform, iac, aws, cis-{'id': '1.8', 'title': 'Ensure IAM password policy requires minimum length of 14'}, cis-{'id': '1.9', 'title': 'Ensure IAM password policy prevents password reuse'}, mitre-T1098.001, mitre-T1078.004, cwe-269, d3-pa, nist-csf-pr.ac-4, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -133,6 +133,15 @@ must return 14 or greater.
 
 **MITRE D3FEND**
   - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-003.yaml) — canonical YAML

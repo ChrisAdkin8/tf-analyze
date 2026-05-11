@@ -12,6 +12,12 @@ cwe:
   - "CWE-1278"
 d3fend:
   - "D3-PSH"
+nist_csf:
+  - "PR.PT-3"
+nist_800_53:
+  - "SI-7"
+csa_ccm:
+  - "IVS-03"
 patterns:
   - kind: graph_check
     function: gke_nodepool_secure_boot

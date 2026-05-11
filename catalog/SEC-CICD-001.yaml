@@ -3,10 +3,7 @@ title: "Workflow file applies Terraform without required-reviewers gate"
 section: cicd
 default_urgency: HIGH
 blast_radius: environment
-# stub until the engine's file walker is extended to scan .github/workflows/*.yml
-# alongside *.tf files (the regex pattern below is correct; nothing in
-# `all_files_text` matches the glob until the walker is widened).
-status: stub
+status: active
 mitre:
   - "T1199"
   - "T1078.004"
@@ -22,6 +19,7 @@ csa_ccm:
   - "IAM-09"
 slsa:
   - "L3"
+  - "build"
 owasp:
   - "CICD-SEC-1"
   - "CICD-SEC-3"
@@ -29,6 +27,10 @@ patterns:
   - kind: grep
     file_glob: ".github/workflows/*.yml"
     regex: 'terraform\s+apply'
+    # Suppress when the workflow declares any `environment:` block —
+    # GitHub environments are how `required_reviewers` is wired, so the
+    # presence of the block is the gate (R30.6).
+    not_regex: '^\s+environment\s*:'
     scope: file
     description: |
       `terraform apply` without an `environment:` block gating
@@ -58,4 +60,5 @@ verification: |
   `environment:` block with a `name:` pointing at a protected
   environment.
 fix_disruption: plan_required
-# fixtures: deferred — rule is `status: stub` until walker extension
+fixtures:
+  - workflow_apply_no_reviewers

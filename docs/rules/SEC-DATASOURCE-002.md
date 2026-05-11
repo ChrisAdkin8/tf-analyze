@@ -1,7 +1,7 @@
 ---
 title: "SEC-DATASOURCE-002 — data.external program takes user-controlled input"
 description: "tf-analyze rule SEC-DATASOURCE-002 (HIGH · security): data.external program takes user-controlled input"
-keywords: "security, high, terraform, iac, cwe-78"
+keywords: "security, high, terraform, iac, cwe-78, nist-csf-pr.pt-3, nist-800-53-si-10, csa-ccm-ccc-05, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -94,6 +94,18 @@ whose contents are reviewed alongside the Terraform.
 
 **CWE**
   - [`CWE-78`](https://cwe.mitre.org/data/definitions/78.html)
+
+**NIST CSF 2.0**
+  - [`PR.PT-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-10`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-10)
+
+**CSA CCM v4**
+  - [`CCC-05`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
 
 **Source**
   - [`catalog/SEC-DATASOURCE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-DATASOURCE-002.yaml) — canonical YAML

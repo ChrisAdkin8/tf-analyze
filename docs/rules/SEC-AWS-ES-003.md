@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-ES-003 — OpenSearch domain missing fine-grained access control"
 description: "tf-analyze rule SEC-AWS-ES-003 (HIGH · security): OpenSearch domain missing fine-grained access control"
-keywords: "security, high, terraform, iac, aws"
+keywords: "security, high, terraform, iac, aws, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
 ---
 
 <script type="application/ld+json">
@@ -113,6 +113,16 @@ must return `true`.
 
 **SOC 2 Trust Services Criteria**
   - `CC6.1`
+
+**NIST CSF 2.0**
+  - [`PR.DS-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-13`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-13)
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`CEK-03`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-ES-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ES-003.yaml) — canonical YAML

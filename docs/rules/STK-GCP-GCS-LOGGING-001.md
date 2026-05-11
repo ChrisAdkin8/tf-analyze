@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GCS-LOGGING-001 — GCS bucket logging target lacks public_access_prevention"
 description: "tf-analyze rule STK-GCP-GCS-LOGGING-001 (HIGH · stack): GCS bucket logging target lacks public_access_prevention"
-keywords: "stack, high, terraform, iac, gcp, cis-5.1, mitre-T1530, mitre-T1562.008, cwe-778, d3-faa"
+keywords: "stack, high, terraform, iac, gcp, cis-5.1, mitre-T1530, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -117,6 +117,15 @@ should not fire.
 
 **MITRE D3FEND**
   - [`D3-FAA`](https://d3fend.mitre.org/technique/D3-FAA/)
+
+**NIST CSF 2.0**
+  - [`DE.CM-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AU-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=au-2)
+
+**CSA CCM v4**
+  - [`LOG-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-BUCKET-001`](./SEC-BUCKET-001.md)

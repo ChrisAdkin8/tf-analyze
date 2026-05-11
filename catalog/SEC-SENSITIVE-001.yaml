@@ -18,6 +18,12 @@ cwe:
   - "CWE-532"
 d3fend:
   - "D3-CH"
+nist_csf:
+  - "PR.DS-5"
+nist_800_53:
+  - "SC-28"
+csa_ccm:
+  - "CEK-09"
 recommendation: |
   Add `sensitive = true` to the output block. Without this marker the
   value appears in `terraform plan` and `terraform output` console

@@ -1,7 +1,7 @@
 ---
 title: "MOD-PIN-001 — Module source not pinned"
 description: "tf-analyze rule MOD-PIN-001 (HIGH · module): Module source not pinned"
-keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca"
+keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-sr-3, nist-800-53-cm-2, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l2, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -102,6 +102,22 @@ every machine. Commit `.terraform.lock.hcl`.
 
 **MITRE D3FEND**
   - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+  - [`PR.IP-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SR-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sr-3)
+  - [`CM-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-2)
+
+**CSA CCM v4**
+  - [`STA-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`CCC-05`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L2`](https://slsa.dev/spec/v1.0/levels#l2)
+  - [`SLSA deps`](https://slsa.dev/spec/v1.0/deps-track)
 
 **Source**
   - [`catalog/MOD-PIN-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/MOD-PIN-001.yaml) — canonical YAML

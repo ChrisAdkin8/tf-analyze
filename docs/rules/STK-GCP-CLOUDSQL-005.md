@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDSQL-005 — Cloud SQL instance uses end-of-life database version"
 description: "tf-analyze rule STK-GCP-CLOUDSQL-005 (HIGH · stack): Cloud SQL instance uses end-of-life database version"
-keywords: "stack, high, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe-1104, d3-sca"
+keywords: "stack, high, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -101,6 +101,18 @@ must return a supported, non-EOL version string.
 
 **MITRE D3FEND**
   - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SR-4`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sr-4)
+
+**CSA CCM v4**
+  - [`AIS-07`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA deps`](https://slsa.dev/spec/v1.0/deps-track)
 
 **Source**
   - [`catalog/STK-GCP-CLOUDSQL-005.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-CLOUDSQL-005.yaml) — canonical YAML

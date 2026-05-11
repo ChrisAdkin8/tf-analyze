@@ -1,7 +1,7 @@
 ---
 title: "SEC-USERDATA-001 — user_data templates a sensitive var or contains a curl|bash pattern"
 description: "tf-analyze rule SEC-USERDATA-001 (HIGH · security): user_data templates a sensitive var or contains a curl|bash pattern"
-keywords: "security, high, terraform, iac, mitre-T1552.001, mitre-T1059.004, cwe-200, cwe-78"
+keywords: "security, high, terraform, iac, mitre-T1552.001, mitre-T1059.004, cwe-200, cwe-78, nist-csf-pr.ds-1, nist-800-53-sc-28, nist-800-53-si-3, csa-ccm-dsi-04"
 ---
 
 <script type="application/ld+json">
@@ -102,6 +102,19 @@ Confirm no secrets and no unverified pipes.
 **CWE**
   - [`CWE-200`](https://cwe.mitre.org/data/definitions/200.html)
   - [`CWE-78`](https://cwe.mitre.org/data/definitions/78.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+  - [`SI-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-3)
+
+**CSA CCM v4**
+  - [`DSI-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `A02`
 
 **Source**
   - [`catalog/SEC-USERDATA-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-USERDATA-001.yaml) — canonical YAML

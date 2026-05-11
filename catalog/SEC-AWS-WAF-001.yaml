@@ -8,6 +8,14 @@ mitre:
   - "T1562.004"
 cwe:
   - "CWE-693"
+nist_csf:
+  - "PR.PT-3"
+  - "DE.CM-1"
+nist_800_53:
+  - "SC-7"
+  - "SI-4"
+csa_ccm:
+  - "TVM-02"
 patterns:
   - kind: resource_absent
     resource: aws_wafv2_logging_configuration

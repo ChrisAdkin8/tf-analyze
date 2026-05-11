@@ -1,7 +1,7 @@
 ---
 title: "SEC-DATASOURCE-001 — External or HTTP data source executes at plan time"
 description: "tf-analyze rule SEC-DATASOURCE-001 (MEDIUM · security): External or HTTP data source executes at plan time"
-keywords: "security, medium, terraform, iac, mitre-T1552.001, cwe-829"
+keywords: "security, medium, terraform, iac, mitre-T1552.001, cwe-829, nist-csf-pr.ds-5, nist-800-53-ia-5, csa-ccm-cek-09, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -98,6 +98,18 @@ documented with a justification or replaced with a native alternative.
 
 **CWE**
   - [`CWE-829`](https://cwe.mitre.org/data/definitions/829.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
 
 **Source**
   - [`catalog/SEC-DATASOURCE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-DATASOURCE-001.yaml) — canonical YAML

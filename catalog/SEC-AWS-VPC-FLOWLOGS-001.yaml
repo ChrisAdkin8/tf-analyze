@@ -19,6 +19,13 @@ cwe:
   - "CWE-778"
 d3fend:
   - "D3-NTA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+  - "SI-4"
+csa_ccm:
+  - "LOG-02"
 recommendation: |
   Add an `aws_flow_log` resource targeting every VPC:
 

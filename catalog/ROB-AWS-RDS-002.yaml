@@ -31,6 +31,12 @@ soc2_cc:
   - "A1.2"
 mitre:
   - "T1490"
+nist_csf:
+  - "RC.RP-1"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
 fix_hcl: |
   resource "aws_db_instance" "example" {
     # ... other arguments ...

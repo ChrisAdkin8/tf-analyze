@@ -19,8 +19,7 @@ nist_800_53:
 csa_ccm:
   - "TVM-04"
 slsa:
-  - "L2"
-  - "deps"
+  - "build"
 owasp:
   - "CICD-SEC-4"
 patterns:

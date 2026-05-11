@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-REDIS-002 — Cloud Memorystore Redis instance transit encryption disabled"
 description: "tf-analyze rule SEC-GCP-REDIS-002 (HIGH · security): Cloud Memorystore Redis instance transit encryption disabled"
-keywords: "security, high, terraform, iac, gcp, mitre-T1040, cwe-319, d3-ei"
+keywords: "security, high, terraform, iac, gcp, mitre-T1040, cwe-319, d3-ei, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, csa-ccm-cek-06"
 ---
 
 <script type="application/ld+json">
@@ -116,6 +116,16 @@ must return `SERVER_AUTHENTICATION`.
 
 **MITRE D3FEND**
   - [`D3-EI`](https://d3fend.mitre.org/technique/D3-EI/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-8`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-8)
+  - [`SC-8(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-8-1)
+
+**CSA CCM v4**
+  - [`CEK-06`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-GCP-REDIS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-REDIS-002.yaml) — canonical YAML

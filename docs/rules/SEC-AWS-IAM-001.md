@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-001 — IAM policy with wildcard resource"
 description: "tf-analyze rule SEC-AWS-IAM-001 (HIGH · security): IAM policy with wildcard resource"
-keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, cwe-732, d3-pa, d3-mfa"
+keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, cwe-732, d3-pa, d3-mfa, nist-csf-pr.ac-1, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -108,6 +108,17 @@ has no `"Resource": "*"` statements.
 **MITRE D3FEND**
   - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
   - [`D3-MFA`](https://d3fend.mitre.org/technique/D3-MFA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-IAM-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-001.yaml) — canonical YAML

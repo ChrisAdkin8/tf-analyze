@@ -1,7 +1,7 @@
 ---
 title: "ROB-PROVIDER-ALIAS-001 — Module references provider alias that is not declared"
 description: "tf-analyze rule ROB-PROVIDER-ALIAS-001 (HIGH · robustness): Module references provider alias that is not declared"
-keywords: "robustness, high, terraform, iac"
+keywords: "robustness, high, terraform, iac, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -98,6 +98,9 @@ in the intended region/account.
 ```
 
 ## References
+
+**SLSA v1.0**
+  - [`SLSA source`](https://slsa.dev/spec/v1.0/source-track)
 
 **Source**
   - [`catalog/ROB-PROVIDER-ALIAS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-PROVIDER-ALIAS-001.yaml) — canonical YAML

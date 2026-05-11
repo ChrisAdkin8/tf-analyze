@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-NETPOL-001 — kubernetes_network_policy absent for the corpus"
 description: "tf-analyze rule SEC-K8S-NETPOL-001 (HIGH · security): kubernetes_network_policy absent for the corpus"
-keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1611"
+keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1611, nist-csf-pr.ac-5, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -123,6 +123,15 @@ should not be empty.
 
 **MITRE ATT&CK**
   - [`T1611`](https://attack.mitre.org/techniques/T1611/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-K8S-NETPOL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-NETPOL-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-REDIS-001 — Cloud Memorystore Redis instance AUTH disabled"
 description: "tf-analyze rule SEC-GCP-REDIS-001 (HIGH · security): Cloud Memorystore Redis instance AUTH disabled"
-keywords: "security, high, terraform, iac, gcp, mitre-T1078, cwe-306, d3-al"
+keywords: "security, high, terraform, iac, gcp, mitre-T1078, cwe-306, d3-al, nist-csf-pr.ac-7, nist-800-53-ia-2, csa-ccm-iam-02"
 ---
 
 <script type="application/ld+json">
@@ -110,6 +110,15 @@ must return `True`.
 
 **MITRE D3FEND**
   - [`D3-AL`](https://d3fend.mitre.org/technique/D3-AL/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-7`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-2)
+
+**CSA CCM v4**
+  - [`IAM-02`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-GCP-REDIS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-REDIS-001.yaml) — canonical YAML

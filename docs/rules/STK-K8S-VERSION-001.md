@@ -1,7 +1,7 @@
 ---
 title: "STK-K8S-VERSION-001 — EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2"
 description: "tf-analyze rule STK-K8S-VERSION-001 (HIGH · stack): EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2"
-keywords: "stack, high, terraform, iac, mitre-T1190, mitre-T1068, cwe-1395, cwe-1104"
+keywords: "stack, high, terraform, iac, mitre-T1190, mitre-T1068, cwe-1395, cwe-1104, nist-csf-id.ra-1, nist-csf-pr.ip-12, nist-800-53-si-2, nist-800-53-ra-5, csa-ccm-tvm-04, csa-ccm-tvm-05"
 ---
 
 <script type="application/ld+json">
@@ -89,6 +89,22 @@ Plan rolling upgrades; node pools must be drained and recreated.
 **CWE**
   - [`CWE-1395`](https://cwe.mitre.org/data/definitions/1395.html)
   - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)
+
+**NIST CSF 2.0**
+  - [`ID.RA-1`](https://www.nist.gov/cyberframework)
+  - [`PR.IP-12`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SI-2`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=si-2)
+  - [`RA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ra-5)
+
+**CSA CCM v4**
+  - [`TVM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`TVM-05`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `A06`
+  - `K05`
 
 **Source**
   - [`catalog/STK-K8S-VERSION-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-K8S-VERSION-001.yaml) — canonical YAML

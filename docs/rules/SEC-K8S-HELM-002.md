@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-HELM-002 — helm_release sets `securityContext.privileged=true`"
 description: "tf-analyze rule SEC-K8S-HELM-002 (CRITICAL · security): helm_release sets `securityContext.privileged=true`"
-keywords: "security, critical, terraform, iac, cis-5.2.4, mitre-T1611, mitre-T1068"
+keywords: "security, critical, terraform, iac, cis-5.2.4, mitre-T1611, mitre-T1068, nist-csf-pr.pt-3, nist-800-53-cm-7, csa-ccm-ais-07"
 ---
 
 <script type="application/ld+json">
@@ -126,6 +126,15 @@ must return empty.
 **MITRE ATT&CK**
   - [`T1611`](https://attack.mitre.org/techniques/T1611/)
   - [`T1068`](https://attack.mitre.org/techniques/T1068/)
+
+**NIST CSF 2.0**
+  - [`PR.PT-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-7)
+
+**CSA CCM v4**
+  - [`AIS-07`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-K8S-HELM-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-HELM-002.yaml) — canonical YAML

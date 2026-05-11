@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-RDS-003 — RDS instance or Aurora cluster missing deletion protection"
 description: "tf-analyze rule ROB-AWS-RDS-003 (HIGH · robustness): RDS instance or Aurora cluster missing deletion protection"
-keywords: "robustness, high, terraform, iac, aws, mitre-T1485"
+keywords: "robustness, high, terraform, iac, aws, mitre-T1485, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -114,6 +114,15 @@ must return `true`.
 
 **MITRE ATT&CK**
   - [`T1485`](https://attack.mitre.org/techniques/T1485/)
+
+**NIST CSF 2.0**
+  - [`PR.IP-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-3)
+
+**CSA CCM v4**
+  - [`BCR-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/ROB-AWS-RDS-003.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-RDS-003.yaml) — canonical YAML

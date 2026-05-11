@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-DDB-002 — DynamoDB table missing point-in-time recovery"
 description: "tf-analyze rule ROB-AWS-DDB-002 (MEDIUM · robustness): DynamoDB table missing point-in-time recovery"
-keywords: "robustness, medium, terraform, iac, aws, mitre-T1490"
+keywords: "robustness, medium, terraform, iac, aws, mitre-T1490, nist-csf-rc.rp-1, nist-800-53-cp-9, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -104,6 +104,15 @@ must return `"ENABLED"`.
 
 **MITRE ATT&CK**
   - [`T1490`](https://attack.mitre.org/techniques/T1490/)
+
+**NIST CSF 2.0**
+  - [`RC.RP-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CP-9`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cp-9)
+
+**CSA CCM v4**
+  - [`BCR-08`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/ROB-AWS-DDB-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AWS-DDB-002.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-NETWORK-001 — SSH (tcp:22) exposed to 0.0.0.0/0"
 description: "tf-analyze rule SEC-GCP-NETWORK-001 (CRITICAL · security): SSH (tcp:22) exposed to 0.0.0.0/0"
-keywords: "security, critical, terraform, iac, gcp, cis-3.6, mitre-T1190, mitre-T1133, cwe-284, cwe-1327, d3-iaa"
+keywords: "security, critical, terraform, iac, gcp, cis-3.6, mitre-T1190, mitre-T1133, cwe-284, cwe-1327, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, nist-800-53-sc-7-3, csa-ccm-ivs-04, csa-ccm-ivs-06"
 ---
 
 <script type="application/ld+json">
@@ -133,6 +133,17 @@ Should return zero rows. Re-run tf-analyze to confirm clean.
 
 **MITRE D3FEND**
   - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+  - [`SC-7(3)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7-3)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`IVS-06`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Related rules**
   - [`SEC-NETWORK-002`](./SEC-NETWORK-002.md)

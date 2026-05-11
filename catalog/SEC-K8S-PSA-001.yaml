@@ -17,15 +17,11 @@ cwe:
   - "CWE-269"
   - "CWE-250"
 nist_csf:
-  - "PR.AC-4"
-  - "PR.IP-1"
+  - "PR.PT-3"
 nist_800_53:
   - "AC-6"
-  - "CM-7"
-  - "SI-7"
 csa_ccm:
-  - "IAM-15"
-  - "TVM-04"
+  - "IAM-09"
 owasp:
   - "K01"
   - "K04"

@@ -1,7 +1,7 @@
 ---
 title: "SEC-STATE-001 — .tfstate file committed to the repository"
 description: "tf-analyze rule SEC-STATE-001 (CRITICAL · security): .tfstate file committed to the repository"
-keywords: "security, critical, terraform, iac, cis-1.1, mitre-T1552.001"
+keywords: "security, critical, terraform, iac, cis-1.1, mitre-T1552.001, nist-csf-pr.ds-5, nist-800-53-sc-28, nist-800-53-ac-3, csa-ccm-cek-09, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -110,6 +110,19 @@ and `git log --all --full-history -- '*.tfstate*'` returns empty.
 
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA source`](https://slsa.dev/spec/v1.0/source-track)
 
 **Source**
   - [`catalog/SEC-STATE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-STATE-001.yaml) — canonical YAML

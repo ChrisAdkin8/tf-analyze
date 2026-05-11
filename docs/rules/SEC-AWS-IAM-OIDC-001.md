@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-IAM-OIDC-001 — GitHub OIDC trust policy accepts wildcard `repo:*` or `sub: *` claims"
 description: "tf-analyze rule SEC-AWS-IAM-OIDC-001 (CRITICAL · security): GitHub OIDC trust policy accepts wildcard `repo:*` or `sub: *` claims"
-keywords: "security, critical, terraform, iac, aws, mitre-T1199, mitre-T1078.004, cwe-287, cwe-862"
+keywords: "security, critical, terraform, iac, aws, mitre-T1199, mitre-T1078.004, cwe-287, cwe-862, nist-csf-pr.ac-1, nist-csf-pr.ac-7, nist-800-53-ia-5, nist-800-53-ia-5-1, nist-800-53-ac-6, csa-ccm-iam-04, csa-ccm-iam-09, slsa-l3, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -104,6 +104,27 @@ Confirm no `sub` value is `*`, `repo:*`, or ends in `:ref:refs/heads/*`.
 **CWE**
   - [`CWE-287`](https://cwe.mitre.org/data/definitions/287.html)
   - [`CWE-862`](https://cwe.mitre.org/data/definitions/862.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+  - [`PR.AC-7`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5)
+  - [`IA-5(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5-1)
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L3`](https://slsa.dev/spec/v1.0/levels#l3)
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
+
+**OWASP (namespaced)**
+  - `CICD-SEC-6`
+  - `API01`
 
 **Source**
   - [`catalog/SEC-AWS-IAM-OIDC-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-IAM-OIDC-001.yaml) — canonical YAML

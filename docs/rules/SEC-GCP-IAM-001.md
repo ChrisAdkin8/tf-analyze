@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-IAM-001 — Project-level binding of overly broad role"
 description: "tf-analyze rule SEC-GCP-IAM-001 (HIGH · security): Project-level binding of overly broad role"
-keywords: "security, high, terraform, iac, gcp, cis-1.6, mitre-T1078.004, cwe-269, cwe-732, d3-pa"
+keywords: "security, high, terraform, iac, gcp, cis-1.6, mitre-T1078.004, cwe-269, cwe-732, d3-pa, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -103,6 +103,16 @@ mode:verify-fixed and confirm SEC-IAM-001 is RESOLVED.
 
 **MITRE D3FEND**
   - [`D3-PA`](https://d3fend.mitre.org/technique/D3-PA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-GCP-IAM-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-IAM-001.yaml) — canonical YAML

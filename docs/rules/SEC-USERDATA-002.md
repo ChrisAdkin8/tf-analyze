@@ -1,7 +1,7 @@
 ---
 title: "SEC-USERDATA-002 — user_data passes a sensitive var unencoded (base64encode missing)"
 description: "tf-analyze rule SEC-USERDATA-002 (MEDIUM · security): user_data passes a sensitive var unencoded (base64encode missing)"
-keywords: "security, medium, terraform, iac, mitre-T1552.001, cwe-200"
+keywords: "security, medium, terraform, iac, mitre-T1552.001, cwe-200, nist-csf-pr.ds-1, nist-csf-pr.ds-2, nist-800-53-sc-28, csa-ccm-dsi-04"
 ---
 
 <script type="application/ld+json">
@@ -88,6 +88,19 @@ match is either a non-secret string or wrapped in `base64encode + templatefile`.
 
 **CWE**
   - [`CWE-200`](https://cwe.mitre.org/data/definitions/200.html)
+
+**NIST CSF 2.0**
+  - [`PR.DS-1`](https://www.nist.gov/cyberframework)
+  - [`PR.DS-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`DSI-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**OWASP (namespaced)**
+  - `A02`
 
 **Source**
   - [`catalog/SEC-USERDATA-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-USERDATA-002.yaml) — canonical YAML

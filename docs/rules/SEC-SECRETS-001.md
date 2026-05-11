@@ -1,7 +1,7 @@
 ---
 title: "SEC-SECRETS-001 — Hardcoded credential or API key in Terraform source"
 description: "tf-analyze rule SEC-SECRETS-001 (CRITICAL · security): Hardcoded credential or API key in Terraform source"
-keywords: "security, critical, terraform, iac, cwe-798, d3-ch"
+keywords: "security, critical, terraform, iac, cwe-798, d3-ch, nist-csf-pr.ds-5, nist-csf-pr.ac-1, nist-800-53-sc-12, nist-800-53-sc-28, csa-ccm-cek-09, csa-ccm-iam-04"
 ---
 
 <script type="application/ld+json">
@@ -151,6 +151,18 @@ does not appear in `terraform show` output (it will be marked
 
 **MITRE D3FEND**
   - [`D3-CH`](https://d3fend.mitre.org/technique/D3-CH/)
+
+**NIST CSF 2.0**
+  - [`PR.DS-5`](https://www.nist.gov/cyberframework)
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-12)
+  - [`SC-28`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-28)
+
+**CSA CCM v4**
+  - [`CEK-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`IAM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-SECRETS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SECRETS-001.yaml) — canonical YAML

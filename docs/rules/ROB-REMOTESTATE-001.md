@@ -1,7 +1,7 @@
 ---
 title: "ROB-REMOTESTATE-001 — terraform_remote_state data source couples modules implicitly"
 description: "tf-analyze rule ROB-REMOTESTATE-001 (MEDIUM · robustness): terraform_remote_state data source couples modules implicitly"
-keywords: "robustness, medium, terraform, iac"
+keywords: "robustness, medium, terraform, iac, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -86,6 +86,9 @@ If the replacement uses provider data sources, run `terraform plan` and
 confirm the same values resolve.
 
 ## References
+
+**SLSA v1.0**
+  - [`SLSA source`](https://slsa.dev/spec/v1.0/source-track)
 
 **Source**
   - [`catalog/ROB-REMOTESTATE-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-REMOTESTATE-001.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-STORAGE-002 — Azure storage account allows public blob access"
 description: "tf-analyze rule SEC-AZURE-STORAGE-002 (HIGH · security): Azure storage account allows public blob access"
-keywords: "security, high, terraform, iac, azure, cis-3.7, mitre-T1530, cwe-732, cwe-284"
+keywords: "security, high, terraform, iac, azure, cis-3.7, mitre-T1530, cwe-732, cwe-284, nist-csf-pr.ac-3, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-sc-7, csa-ccm-iam-09, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -95,6 +95,18 @@ The command should return `false`.
 **CWE**
   - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)
   - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-3)
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AZURE-STORAGE-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-STORAGE-002.yaml) — canonical YAML

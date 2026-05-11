@@ -24,6 +24,12 @@ cwe:
   - "CWE-269"
 d3fend:
   - "D3-PA"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 recommendation: |
   Remove the project-level binding. Keep the resource-level bindings —
   they encode the actual access boundary. If you genuinely need the

@@ -1,7 +1,7 @@
 ---
 title: "ROB-DRIFT-001 — Resource uses ignore_changes = all"
 description: "tf-analyze rule ROB-DRIFT-001 (HIGH · robustness): Resource uses ignore_changes = all"
-keywords: "robustness, high, terraform, iac, mitre-T1562.001, cwe-693"
+keywords: "robustness, high, terraform, iac, mitre-T1562.001, cwe-693, nist-csf-pr.ip-3, nist-800-53-cm-3, nist-800-53-cm-6, csa-ccm-ccc-05"
 ---
 
 <script type="application/ld+json">
@@ -96,6 +96,16 @@ are real drift that was previously hidden.
 
 **CWE**
   - [`CWE-693`](https://cwe.mitre.org/data/definitions/693.html)
+
+**NIST CSF 2.0**
+  - [`PR.IP-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`CM-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-3)
+  - [`CM-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-6)
+
+**CSA CCM v4**
+  - [`CCC-05`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/ROB-DRIFT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-DRIFT-001.yaml) — canonical YAML

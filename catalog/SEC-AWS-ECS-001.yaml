@@ -49,6 +49,12 @@ mitre:
 cwe:
   - "CWE-552"
   - "CWE-522"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
 verification: |
   `aws ecs describe-task-definition --task-definition <family> \
     --query 'taskDefinition.containerDefinitions[*].environment'`

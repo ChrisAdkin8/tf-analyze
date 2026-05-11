@@ -10,6 +10,13 @@ cwe:
   - "CWE-250"
 d3fend:
   - "D3-PA"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "AC-3"
+  - "IA-2"
+csa_ccm:
+  - "IAM-04"
 patterns:
   - kind: graph_check
     function: azure_uami_orphan

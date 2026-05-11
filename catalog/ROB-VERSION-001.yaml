@@ -19,6 +19,18 @@ cwe:
   - "CWE-1357"
 d3fend:
   - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+  - "PR.IP-1"
+nist_800_53:
+  - "CM-2"
+  - "SR-3"
+csa_ccm:
+  - "STA-04"
+  - "CCC-05"
+slsa:
+  - "L2"
+  - "deps"
 recommendation: |
   Set `required_version = "~> 1.10"` (or whatever the current Terraform
   major is). Many checks in this skill assume features only available in

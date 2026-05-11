@@ -39,6 +39,13 @@ soc2_cc:
   - "A1.2"
 mitre:
   - "T1485"
+nist_csf:
+  - "PR.IP-4"
+  - "RC.RP-1"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
 verification: |
   `aws dynamodb describe-table --table-name <name> \
     --query 'Table.DeletionProtectionEnabled'`

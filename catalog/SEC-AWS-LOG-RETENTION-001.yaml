@@ -11,15 +11,11 @@ cwe:
   - "CWE-778"
   - "CWE-693"
 nist_csf:
-  - "PR.IP-4"
   - "PR.PT-1"
 nist_800_53:
-  - "AU-9"
   - "AU-11"
-  - "SI-12"
 csa_ccm:
-  - "BCR-11"
-  - "STA-09"
+  - "LOG-04"
 cis:
   - "3.x"
 patterns:

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-004 — GKE cluster missing master authorized networks"
 description: "tf-analyze rule STK-GCP-GKE-004 (HIGH · stack): GKE cluster missing master authorized networks"
-keywords: "stack, high, terraform, iac, gcp, cis-8.5.4, mitre-T1190, cwe-284, d3-iaa"
+keywords: "stack, high, terraform, iac, gcp, cis-8.5.4, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -111,6 +111,15 @@ must return at least one CIDR entry.
 
 **MITRE D3FEND**
   - [`D3-IAA`](https://d3fend.mitre.org/technique/D3-IAA/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SC-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sc-7)
+
+**CSA CCM v4**
+  - [`IVS-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/STK-GCP-GKE-004.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-GKE-004.yaml) — canonical YAML

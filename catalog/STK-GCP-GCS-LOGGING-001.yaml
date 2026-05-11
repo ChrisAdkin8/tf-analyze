@@ -25,6 +25,12 @@ cwe:
   - "CWE-778"
 d3fend:
   - "D3-FAA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+csa_ccm:
+  - "LOG-02"
 recommendation: |
   Add `public_access_prevention = "enforced"` to the target bucket
   block. Also confirm `uniform_bucket_level_access = true` and that no

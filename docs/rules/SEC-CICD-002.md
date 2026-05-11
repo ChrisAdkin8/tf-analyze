@@ -1,7 +1,7 @@
 ---
 title: "SEC-CICD-002 — Workflow uses `permissions: write-all` or omits minimum scopes"
 description: "tf-analyze rule SEC-CICD-002 (HIGH · cicd): Workflow uses `permissions: write-all` or omits minimum scopes"
-keywords: "cicd, high, terraform, iac, mitre-T1078.004, mitre-T1098.001, cwe-269, cwe-250"
+keywords: "cicd, high, terraform, iac, mitre-T1078.004, mitre-T1098.001, cwe-269, cwe-250, nist-csf-pr.ac-4, nist-800-53-ac-6, nist-800-53-ac-6-1, csa-ccm-iam-09, slsa-l2, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -33,7 +33,7 @@ keywords: "cicd, high, terraform, iac, mitre-T1078.004, mitre-T1098.001, cwe-269
 
 # ⚠️ SEC-CICD-002 — Workflow uses `permissions: write-all` or omits minimum scopes
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: cicd](https://img.shields.io/badge/section-cicd-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square) ![Status: stub](https://img.shields.io/badge/status-stub-grey?style=flat-square)
+![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: cicd](https://img.shields.io/badge/section-cicd-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-CICD-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-CICD-002" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-CICD-002 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
@@ -91,6 +91,24 @@ uses `write-all` and that every `terraform apply` workflow declares
 **CWE**
   - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
   - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
+
+**NIST CSF 2.0**
+  - [`PR.AC-4`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+  - [`AC-6(1)`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6-1)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L2`](https://slsa.dev/spec/v1.0/levels#l2)
+  - [`SLSA build`](https://slsa.dev/spec/v1.0/build-track)
+
+**OWASP (namespaced)**
+  - `CICD-SEC-1`
+  - `CICD-SEC-2`
 
 **Source**
   - [`catalog/SEC-CICD-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-CICD-002.yaml) — canonical YAML

@@ -1,7 +1,7 @@
 ---
 title: "MOD-SUPPLY-002 — Module uses raw git source instead of registry"
 description: "tf-analyze rule MOD-SUPPLY-002 (LOW · module): Module uses raw git source instead of registry"
-keywords: "module, low, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca"
+keywords: "module, low, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-3, csa-ccm-sta-04, slsa-l2, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -95,6 +95,19 @@ Replace `git::` sources with registry equivalents where available.
 
 **MITRE D3FEND**
   - [`D3-SCA`](https://d3fend.mitre.org/technique/D3-SCA/)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SR-3`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sr-3)
+
+**CSA CCM v4**
+  - [`STA-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L2`](https://slsa.dev/spec/v1.0/levels#l2)
+  - [`SLSA deps`](https://slsa.dev/spec/v1.0/deps-track)
 
 **Source**
   - [`catalog/MOD-SUPPLY-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/MOD-SUPPLY-002.yaml) — canonical YAML

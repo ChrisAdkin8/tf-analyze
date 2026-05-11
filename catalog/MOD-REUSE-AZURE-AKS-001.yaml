@@ -10,6 +10,14 @@ cwe:
   - "CWE-1357"
 d3fend:
   - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SA-15"
+csa_ccm:
+  - "AIS-04"
+slsa:
+  - "deps"
 patterns:
   - kind: registry_fingerprint
     fingerprint: azure_aks_module

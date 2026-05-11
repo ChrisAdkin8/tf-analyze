@@ -4,6 +4,12 @@ section: security
 default_urgency: MEDIUM
 blast_radius: infrastructure-wide
 status: active
+nist_csf:
+  - "PR.DS-5"
+nist_800_53:
+  - "SC-28"
+csa_ccm:
+  - "CEK-09"
 patterns:
   - kind: grep
     file_glob: "**/versions.tf"

@@ -1,7 +1,7 @@
 ---
 title: "SEC-SUPPLY-001 — Module source not pinned to an immutable digest or signed tag"
 description: "tf-analyze rule SEC-SUPPLY-001 (HIGH · security): Module source not pinned to an immutable digest or signed tag"
-keywords: "security, high, terraform, iac, mitre-T1195.001, mitre-T1195.002, cwe-1357"
+keywords: "security, high, terraform, iac, mitre-T1195.001, mitre-T1195.002, cwe-1357, nist-csf-id.sc-2, nist-csf-pr.ds-6, nist-800-53-sa-12, nist-800-53-cm-7, csa-ccm-sta-04, slsa-l2, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -109,6 +109,25 @@ SEC-SUPPLY-001 findings.
 
 **CWE**
   - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
+
+**NIST CSF 2.0**
+  - [`ID.SC-2`](https://www.nist.gov/cyberframework)
+  - [`PR.DS-6`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`SA-12`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=sa-12)
+  - [`CM-7`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=cm-7)
+
+**CSA CCM v4**
+  - [`STA-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
+
+**SLSA v1.0**
+  - [`SLSA L2`](https://slsa.dev/spec/v1.0/levels#l2)
+  - [`SLSA deps`](https://slsa.dev/spec/v1.0/deps-track)
+
+**OWASP (namespaced)**
+  - `CICD-SEC-1`
+  - `CICD-SEC-9`
 
 **Source**
   - [`catalog/SEC-SUPPLY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-SUPPLY-001.yaml) — canonical YAML

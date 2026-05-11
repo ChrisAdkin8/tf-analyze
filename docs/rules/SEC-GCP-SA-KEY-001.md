@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-SA-KEY-001 — GCP service account key created in Terraform"
 description: "tf-analyze rule SEC-GCP-SA-KEY-001 (HIGH · security): GCP service account key created in Terraform"
-keywords: "security, high, terraform, iac, gcp, cis-1.4, mitre-T1098.001, mitre-T1552.001"
+keywords: "security, high, terraform, iac, gcp, cis-1.4, mitre-T1098.001, mitre-T1552.001, nist-csf-pr.ac-1, nist-csf-pr.ac-6, nist-800-53-ia-5, nist-800-53-ac-6, csa-ccm-iam-04"
 ---
 
 <script type="application/ld+json">
@@ -140,6 +140,17 @@ return only system-managed keys (type = SYSTEM_MANAGED). Re-run tf-analyze
 **MITRE ATT&CK**
   - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
+
+**NIST CSF 2.0**
+  - [`PR.AC-1`](https://www.nist.gov/cyberframework)
+  - [`PR.AC-6`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`IA-5`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ia-5)
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-04`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-GCP-SA-KEY-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-SA-KEY-001.yaml) — canonical YAML

@@ -4,6 +4,8 @@ section: robustness
 default_urgency: HIGH
 blast_radius: module
 status: active
+slsa:
+  - "source"
 patterns:
   - kind: provider_alias_module_mismatch
     description: module providers={} maps to pname.alias that is not declared in the calling config

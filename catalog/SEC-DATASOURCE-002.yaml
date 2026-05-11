@@ -6,6 +6,14 @@ blast_radius: infrastructure-wide
 status: active
 cwe:
   - "CWE-78"
+nist_csf:
+  - "PR.PT-3"
+nist_800_53:
+  - "SI-10"
+csa_ccm:
+  - "CCC-05"
+slsa:
+  - "build"
 patterns:
   - kind: data_external_injection
     description: data.external program array includes var/local references — untrusted input reaches a plan-time shell

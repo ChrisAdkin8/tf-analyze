@@ -29,6 +29,12 @@ soc2_cc:
   - "A1.2"
 mitre:
   - "T1490"
+nist_csf:
+  - "RC.RP-1"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
 verification: |
   `aws dynamodb describe-continuous-backups --table-name <name> \
     --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus'`

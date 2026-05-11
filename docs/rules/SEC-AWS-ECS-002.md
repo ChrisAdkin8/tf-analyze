@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-ECS-002 — ECS task definition runs a privileged container"
 description: "tf-analyze rule SEC-AWS-ECS-002 (HIGH · security): ECS task definition runs a privileged container"
-keywords: "security, high, terraform, iac, aws, mitre-T1611, cwe-250"
+keywords: "security, high, terraform, iac, aws, mitre-T1611, cwe-250, nist-csf-pr.pt-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -119,6 +119,15 @@ must return `null` or `false` for all containers.
 
 **CWE**
   - [`CWE-250`](https://cwe.mitre.org/data/definitions/250.html)
+
+**NIST CSF 2.0**
+  - [`PR.PT-3`](https://www.nist.gov/cyberframework)
+
+**NIST SP 800-53 Rev. 5**
+  - [`AC-6`](https://csrc.nist.gov/projects/risk-management/sp800-53-controls/release-search#!/control?version=5.1&number=ac-6)
+
+**CSA CCM v4**
+  - [`IAM-09`](https://cloudsecurityalliance.org/research/cloud-controls-matrix)
 
 **Source**
   - [`catalog/SEC-AWS-ECS-002.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AWS-ECS-002.yaml) — canonical YAML

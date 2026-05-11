@@ -17,6 +17,12 @@ owasp_iac:
   - "Deploy / Resource Decommissioning Process"
 mitre:
   - "T1485"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CM-3"
+csa_ccm:
+  - "BCR-08"
 recommendation: |
   Set `force_destroy = false` (or remove the argument). With force_destroy
   enabled, a `terraform destroy` will silently delete every object in the
