@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="900" height="700" viewBox="0 0 900 700">
+  <style>
+    .h    { font: 700 24px Helvetica, Arial, sans-serif; fill: #18181b; }
+    .sub  { font: 400 13px Helvetica, Arial, sans-serif; fill: #71717a; }
+    .lbl  { font: 700 15px Helvetica, Arial, sans-serif; fill: #18181b; }
+    .desc { font: 400 12px Helvetica, Arial, sans-serif; fill: #52525b; }
+    .px   { font: 400 11px Helvetica, Arial, sans-serif; fill: #a1a1aa; }
+    .hdr  { font: 700 11px Helvetica, Arial, sans-serif; fill: #52525b; letter-spacing: 1px; }
+  </style>
+
+  <rect width="900" height="700" fill="#f4f4f5"/>
+  <text x="40" y="36" class="h">Magnifying glass + Terraform glyph</text>
+  <text x="40" y="58" class="sub">The official 4-parallelogram stepped-T mark, in HashiCorp purple, framed by the lens.</text>
+
+  <!-- Tile row: each tile shows 256 hero + 128/64/32/16 on dark strip -->
+
+  <!-- Solid -->
+  <g transform="translate(40, 90)">
+    <rect width="820" height="170" rx="12" fill="#ffffff" stroke="#e4e4e7"/>
+    <image x="12" y="12" width="146" height="146" xlink:href="10-tf-mark-solid.png"/>
+    <text x="178" y="36" class="lbl">Variant A — solid mark</text>
+    <text x="178" y="56" class="desc">Filled HashiCorp purple parallelograms. Cleanest read, most "official".</text>
+    <text x="178" y="72" class="desc">Closest visual to the HashiCorp Terraform brand mark.</text>
+
+    <text x="540" y="88" class="hdr" text-anchor="middle">128</text>
+    <text x="640" y="88" class="hdr" text-anchor="middle">64</text>
+    <text x="720" y="88" class="hdr" text-anchor="middle">32</text>
+    <text x="780" y="88" class="hdr" text-anchor="middle">16</text>
+    <rect x="490" y="94" width="320" height="64" rx="6" fill="#1e1e1e"/>
+    <image x="508" y="96" width="64" height="64" xlink:href="10-tf-mark-solid.png"/>
+    <image x="608" y="112" width="32" height="32" xlink:href="10-tf-mark-solid.png"/>
+    <image x="700" y="120" width="20" height="20" xlink:href="10-tf-mark-solid.png"/>
+    <image x="764" y="120" width="16" height="16" xlink:href="10-tf-mark-solid.png"/>
+  </g>
+
+  <!-- Stroked -->
+  <g transform="translate(40, 280)">
+    <rect width="820" height="170" rx="12" fill="#ffffff" stroke="#e4e4e7"/>
+    <image x="12" y="12" width="146" height="146" xlink:href="11-tf-mark-stroked.png"/>
+    <text x="178" y="36" class="lbl">Variant B — stroked mark</text>
+    <text x="178" y="56" class="desc">Outline-only glyph. Lighter, more "schematic". Risk: thin strokes</text>
+    <text x="178" y="72" class="desc">disappear at 16px.</text>
+
+    <text x="540" y="88" class="hdr" text-anchor="middle">128</text>
+    <text x="640" y="88" class="hdr" text-anchor="middle">64</text>
+    <text x="720" y="88" class="hdr" text-anchor="middle">32</text>
+    <text x="780" y="88" class="hdr" text-anchor="middle">16</text>
+    <rect x="490" y="94" width="320" height="64" rx="6" fill="#1e1e1e"/>
+    <image x="508" y="96" width="64" height="64" xlink:href="11-tf-mark-stroked.png"/>
+    <image x="608" y="112" width="32" height="32" xlink:href="11-tf-mark-stroked.png"/>
+    <image x="700" y="120" width="20" height="20" xlink:href="11-tf-mark-stroked.png"/>
+    <image x="764" y="120" width="16" height="16" xlink:href="11-tf-mark-stroked.png"/>
+  </g>
+
+  <!-- Finding -->
+  <g transform="translate(40, 470)">
+    <rect width="820" height="170" rx="12" fill="#ffffff" stroke="#e4e4e7"/>
+    <image x="12" y="12" width="146" height="146" xlink:href="12-tf-mark-finding.png"/>
+    <text x="178" y="36" class="lbl">Variant C — one tile flagged</text>
+    <text x="178" y="56" class="desc">Solid mark with the bottom-stem tile painted red. Reads as</text>
+    <text x="178" y="72" class="desc">"Terraform code, scanned, finding here." Closest match to product purpose.</text>
+
+    <text x="540" y="88" class="hdr" text-anchor="middle">128</text>
+    <text x="640" y="88" class="hdr" text-anchor="middle">64</text>
+    <text x="720" y="88" class="hdr" text-anchor="middle">32</text>
+    <text x="780" y="88" class="hdr" text-anchor="middle">16</text>
+    <rect x="490" y="94" width="320" height="64" rx="6" fill="#1e1e1e"/>
+    <image x="508" y="96" width="64" height="64" xlink:href="12-tf-mark-finding.png"/>
+    <image x="608" y="112" width="32" height="32" xlink:href="12-tf-mark-finding.png"/>
+    <image x="700" y="120" width="20" height="20" xlink:href="12-tf-mark-finding.png"/>
+    <image x="764" y="120" width="16" height="16" xlink:href="12-tf-mark-finding.png"/>
+  </g>
+
+  <text x="450" y="680" class="sub" text-anchor="middle">Notes: glyph uses Terraform brand purple #7B42BC; lens uses HashiCorp accent #5C4EE5.</text>
+</svg>
