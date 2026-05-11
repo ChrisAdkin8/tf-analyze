@@ -15,12 +15,12 @@
 [![tf-analyze score](https://tfanalyze.com/badge/ChrisAdkin8/tf-analyze.svg)](https://tfanalyze.com/scan/ChrisAdkin8/tf-analyze)
 
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 235](https://img.shields.io/badge/rules-235-brightgreen)
-![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
+![Rules: 238](https://img.shields.io/badge/rules-238-brightgreen)
+![fix_hcl: 89%](https://img.shields.io/badge/fix__hcl-89%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
 ![Tests: 840](https://img.shields.io/badge/tests-840%20passing-brightgreen)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-235%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-238%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
@@ -109,7 +109,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Built-in attack-path graph | ✅ | ❌ | ❌ | ❌ |
 | Module Reuse Advisor with lines-saved ROI | ✅ | ❌ | ❌ | ❌ |
 | Aggregate risk score + letter grade (A–F) | ✅ | ❌ | ❌ | ❌ |
-| `fix_hcl` snippet on **every** rule | ✅ (100%) | ⚠️ partial | ⚠️ partial | n/a |
+| `fix_hcl` snippet on every fixable rule | ✅ (89%; remaining 11% are module-reuse / advisory / version-bump rules where no single HCL edit is correct) | ⚠️ partial | ⚠️ partial | n/a |
 | Inline GitHub PR `suggestion` blocks | ✅ | ❌ | ❌ | n/a |
 | MITRE ATT&CK mapping (technique + tactic-grouped output) | ✅ pinned to v17 | ❌ | ⚠️ partial | ⚠️ via plugin |
 | MITRE D3FEND defensive-technique tagging | ✅ | ❌ | ❌ | ❌ |
@@ -120,7 +120,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | **Public web scanner** (paste a GitHub URL, get a permalink) | ✅ ([tfanalyze.com/scan/&lt;owner&gt;/&lt;repo&gt;](https://tfanalyze.com)) | ❌ | ❌ | ❌ |
 | **Blast-radius analysis** — "what could one `terraform apply` destroy?" | ✅ (`--blast-radius`; per-finding + per-node + top-N) | ❌ | ❌ | ❌ |
 | OSCAL Assessment Results JSON output | ✅ | ❌ | ❌ | ❌ |
-| Compliance frameworks shipped (with real per-rule data) | **13** (CIS, PCI-DSS, SOC 2, OWASP IaC, NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA, OWASP Top 10 / API / CICD / LLM / K8s / ASVS) | 1 (CIS) | 6 | 5 |
+| Compliance frameworks shipped (with real per-rule data) | **11** (CIS, PCI-DSS, SOC 2, OWASP IaC, NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA, OWASP Top 10, OWASP API, OWASP K8s); 3 more CLI modes (OWASP CICD / LLM / ASVS) ship as flags but have no tagged rules yet | 1 (CIS) | 6 | 5 |
 | Baseline ratcheting (`--baseline prior.json`) | ✅ | ⚠️ via filter | ✅ | ❌ |
 | LSP server for IDE diagnostics | ✅ | ❌ | ❌ | ❌ |
 | HCP Terraform Run Task integration | ✅ | ❌ | ❌ | ❌ |
