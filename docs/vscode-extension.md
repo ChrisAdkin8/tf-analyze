@@ -26,7 +26,7 @@ against their working copy of `detect.py`), not user features.
 
 **From the `.vsix` (the only supported user path):**
 ```bash
-code --install-extension tf-analyze-0.1.39.vsix
+code --install-extension tf-analyze-0.1.49.vsix
 ```
 
 That's it. Open any Terraform workspace and the status-bar items
@@ -216,6 +216,87 @@ No network calls are made. All analysis is local.
 To add a new command or view, edit `src/extension.ts` and update
 `contributes` in `package.json`. The `FindingsProvider` drives the tree;
 the `TfAnalyzeCodeActionProvider` drives Quick Fix.
+
+## Audit-shipped behaviour (R30.8 → R30.12, v0.1.45 → v0.1.49)
+
+Five audit rounds between v0.1.44 and v0.1.49 hardened the extension
+against several classes of bug that aren't visible in the feature
+descriptions above. These are user-observable, so they're documented
+here rather than buried in the CHANGELOG.
+
+### Wall-clock timeout on every engine invocation (120 s)
+
+Both the main scan path (`runScan`) and every panel-spawned engine
+invocation (remediation, compliance, delta, HTML report, module-reuse,
+MITRE ATT&CK) cap the engine at **120 seconds** of wall-clock time. A
+hung `detect.py` — Windows filesystem stall, infinite loop in a new
+rule, multi-thousand-file repo — used to leave the status bar spinning
+forever. The new shape `SIGTERM`s the engine after 120s and the
+panel surfaces a clear "timed out" message with the engine command.
+
+The shared engine-spawn helper lives in
+`vscode-extension/src/engineRunner.ts`; the constant is
+`ENGINE_TIMEOUT_MS = 120_000`. To tune for a slow workspace, fork the
+constant — there is no user-facing setting because the right
+remediation for a slow scan is almost always to scope the workspace
+(via `tf-analyze.section` or a per-folder Run Scan).
+
+### XSS-hardened webview (attack-graph + HTML report)
+
+Every engine-supplied field rendered into a webview's `innerHTML` —
+resource names, finding IDs, rule titles, file paths, narrative
+templates — is HTML-escaped on the way in. The attack-graph webview
+also runs under a tight `Content-Security-Policy` that allows only
+inline scripts and the d3.js CDN. A custom-catalogue rule title
+containing `<img onerror=alert(1)>` (or any payload of that shape)
+no longer executes JS when the report is opened.
+
+### `viewsWelcome` empty states
+
+The Findings tree and the Blast Radius tree both have explicit empty-
+state messages (with a one-click **Run Scan** button) so an unscanned
+workspace doesn't look broken. Before v0.1.45, the Blast Radius panel
+in particular looked blank by default on workspaces where every
+resource had a downstream count below the high-blast threshold —
+users (rightly) read that as "extension is broken." The welcome state
+tells them what the panel does and how to populate it.
+
+### Multi-root workspace warning
+
+Scans currently target only `workspaceFolders[0]`. Opening a multi-
+root workspace now emits a one-shot warning notification ("scans
+target only `<first-folder>`") plus a `[tf-analyze] WARN:` line in
+the output channel. Full per-root scan plumbing is tracked as a
+follow-up; the warning closes the silent-misbehaviour gap in the
+meantime.
+
+### URI handler workspace-root gate
+
+The `vscode://tfanalyze.tf-analyze/explain` verb now validates the
+optional `file=` parameter against the active workspace root before
+calling `openTextDocument`. A crafted link like
+`vscode://tfanalyze.tf-analyze/explain?id=SEC-X-001&file=/etc/passwd&line=1`
+would have previously opened the host file; it now logs a warning
+and skips the file-open while still opening the rule explainer.
+
+The `/scan` and `/suppress` verbs already had the gate; R30.9 closed
+the asymmetry.
+
+### Concurrency guard on `runScan`
+
+A `_scanInFlight` latch serialises scan invocations so a status-bar
+click and an autosave-on-save can't spawn two engines whose
+`findingsMap.clear()` calls race.
+
+### Engine bundle hygiene
+
+The `vscode-extension/scripts/bundle-engine.js` script discovers
+sibling Python modules by globbing `scripts/_*.py` (R30.9) rather than
+maintaining the list by hand. A new engine extract (e.g.
+`scripts/_xyz.py`) is bundled automatically on the next `npm run
+bundle-engine` — no separate file-list update required. The smoke
+test enforces a `MIN_SIBLING_COUNT = 15` floor so a glob misconfig
+fails the build instead of shipping a half-bundle.
 
 ## Troubleshooting
 

@@ -105,3 +105,60 @@ python3 scripts/detect.py --target . --plan-json plan.json --format json
 
 The server's behaviour is exactly that, plus the HMAC-verified webhook
 plumbing.
+
+## Engine-crash handling (R30.10 + R30.12)
+
+The server treats a crashed or hung `detect.py` differently than a
+clean scan with zero findings, so an HCP Run Task callback never
+reports a healthy "0 findings" outcome when the engine actually died.
+
+### `SYN-SCAN-FAILED` synthetic finding
+
+When the engine subprocess returns malformed JSON (parse error, empty
+stdout, partial output from an OOM kill), the server constructs a
+single synthetic finding with these fields:
+
+```json
+{
+  "id": "SYN-SCAN-FAILED",
+  "urgency": "CRITICAL",
+  "title": "tf-analyze engine crashed",
+  "section": "verification",
+  "file": "(engine)",
+  "line": 0,
+  "recommendation": "The engine returned non-JSON. Check the run-task logs …",
+  "context": "<captured stderr, first 2000 bytes>"
+}
+```
+
+Plus the existing `_scan_failed: true` flag on the top-level dict for
+backwards-compatibility with consumers that already special-cased it.
+
+Downstream renderers (the dashboard, the Slack notifier, the HCP
+callback body builder) handle the synthetic entry through their normal
+"render each finding" pipeline — they do not need to know it's a
+sentinel. The `id` value `SYN-SCAN-FAILED` is the canonical hook:
+match on it if you want to differentiate engine failures from real
+CRITICAL findings, e.g. for paging.
+
+The `section: "verification"` is deliberate: the catalogue's
+`_VALID_SECTIONS` includes `verification` (used by `--verify-fixed`
+findings), and using a valid section value means downstream code that
+validates `section` against the catalogue accepts the synthetic
+entry cleanly. Prior to R30.12 this field was `"engine"`, which is
+**not** a valid section — downstream renderers either rejected the
+finding or quietly stripped it.
+
+### Timeout discipline (R30.12)
+
+The engine subprocess is invoked via `subprocess.Popen(...)` +
+`proc.communicate(timeout=120)` + explicit `proc.kill()` in the
+`TimeoutExpired` branch. The earlier `subprocess.run(..., timeout=120)`
+shape would raise the timeout exception but **leave the child process
+running** (Python ≤ 3.13 behaviour), so on a busy HCP Run Task worker
+a series of timeouts accumulated zombie `detect.py` processes that
+held file handles open. The new shape reaps the child reliably.
+
+After a timeout, the server still emits a `SYN-SCAN-FAILED` finding
+(exit code 124 by convention) so the HCP callback carries a clear
+"engine timed out" signal rather than silence.

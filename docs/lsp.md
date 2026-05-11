@@ -116,3 +116,24 @@ printf "Content-Length: %d\r\n\r\n%s" "$LEN" "$MSG" \
 ```
 
 Expected: JSON with `capabilities.textDocumentSync` and `serverInfo.name = "tf-analyze"`.
+
+## Embedding the LSP server in another tool (R30.10)
+
+`scripts/_lsp.py:run_lsp_server(catalog_dir, project_config, *, scanner,
+load_catalog)` accepts two **injected callables** so the module stays
+import-free of `detect.py` state. The callable signatures are now
+asserted at module entry via `inspect.signature` — a wrapper with the
+wrong arity raises `TypeError` immediately rather than failing on the
+first JSON-RPC request.
+
+The contract:
+
+| Param | Expected signature | Notes |
+|---|---|---|
+| `scanner` | `(path: Path, entries: list[dict]) -> list[dict]` | Exactly 2 positional args. `*args`-bearing callables are rejected: the interface is fixed at 2 args, and `*args` would mask future arity drift. |
+| `load_catalog` | `(catalog_dir: Path, …) -> list[dict]` | At least 1 required positional arg; extra optional kwargs (`include_stubs`, `strict`, `extra_rules_dir`) are allowed and ignored unless callers pass them. |
+
+If you wrap `run_lsp_server` from outside `detect.py` (e.g. embedding
+tf-analyze in another LSP host), make sure your wrapper's positional
+arity matches. The assertion error includes the offending signature
+verbatim so the failure mode is self-explanatory.

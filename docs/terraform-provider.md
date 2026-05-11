@@ -153,3 +153,45 @@ Cross-validation tests in `tests/test_terraform_provider.py` (11 cases)
 confirm the Go module compiles, the binary boots, the example files
 exist, and the registry docs are populated. Auto-skipped when `go`
 isn't on PATH so CI environments without Go can still run the suite.
+
+## Failure modes and diagnostics
+
+The provider distinguishes three distinct failure paths so a downstream
+`precondition` block (or a human reading `terraform plan` output) can
+tell them apart instead of treating every empty `compliance_report` or
+`findings_json` the same.
+
+### Compliance gap report failed (R30.11)
+
+A compliance subprocess that exits ≥ 2 (engine crash, framework typo,
+catalogue load failure) raises a **hard error** via
+`resp.Diagnostics.AddError`. The data source's state is not populated;
+`terraform plan` halts. This was promoted from `AddWarning` in R30.11
+because the prior shape silently produced
+`compliance_report = ""`, and a user gating `terraform apply` on
+`length(data.tfanalyze_scan.x.compliance_report) > 0` would pass the
+gate even though compliance never actually ran.
+
+### Compliance gap report cancelled (R30.12)
+
+If the parent `terraform plan` is aborted (Ctrl-C, IDE cancellation,
+CI timeout) **before** the compliance subprocess finishes, the
+context-cancellation error is surfaced as a distinct diagnostic:
+`"compliance gap report cancelled — the parent terraform operation
+was cancelled before the compliance subprocess finished."`. This
+distinguishes an aborted-but-otherwise-healthy run from a
+runtime-crashed scan, and prevents an HCL `precondition` from
+misreading the empty result as "compliance ran clean."
+
+### `findings_json` serialisation failure (R30.12)
+
+A non-serialisable field in the engine's output (defensive: the engine
+emits only stdlib-JSON-compatible types today, but a future engine
+field could regress) raises **`failed to serialise findings to JSON`**
+as `AddError`. The prior code swallowed the marshal error via `_` and
+produced an empty `findings_json` string; the new shape forces the
+operator to notice the engine contract was violated. The diagnostic
+includes the underlying error and a pointer to file an issue.
+
+All three diagnostics are checked by the test suite under
+`tests/test_terraform_provider.py`.

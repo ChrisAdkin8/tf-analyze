@@ -12,17 +12,17 @@ Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE AT
 ## Read
 
 - 📄 [**Project README**](https://github.com/ChrisAdkin8/tf-analyze#readme) — quickstart, feature matrix, the "why another scanner" pitch.
-- 📚 [**Rule reference**](rules/) — auto-generated docs page per catalogue rule (237 pages, sortable by section/urgency in the index). Each page lists CIS / PCI-DSS / SOC 2 / OWASP IaC / NIST CSF 2.0 / NIST SP 800-53 / CSA CCM v4 / SLSA / MITRE ATT&CK / CWE / D3FEND references, every sibling in the same family (e.g. `SEC-AWS-IAM-001` links to `-002` and `-003`), and ships "📂 Open in VS Code" + "📝 Suppress in workspace" deep-link buttons.
+- 📚 [**Rule reference**](rules/) — auto-generated docs page per catalogue rule (238 pages, sortable by section/urgency in the index). Each page lists CIS / PCI-DSS / SOC 2 / OWASP IaC / NIST CSF 2.0 / NIST SP 800-53 / CSA CCM v4 / SLSA / MITRE ATT&CK / CWE / D3FEND references, every sibling in the same family (e.g. `SEC-AWS-IAM-001` links to `-002` and `-003`), and ships "📂 Open in VS Code" + "📝 Suppress in workspace" deep-link buttons.
 
 ### Surfaces
 
 - ⚙️ [**CLI reference**](cli.md) — every flag, every output format, generated from `argparse` so it never drifts.
 - 🚀 [**GitHub Action**](github-action.md) — composite action with engine-rendered PR summary, inline `suggestion` blocks, SARIF upload, optional compliance gate.
-- 🧩 [**VS Code extension**](vscode-extension.md) — installation, the six status-bar surfaces (scan with score+grade badge, attack graph, delta, compliance, remediate, module reuse), four-verb `vscode://` URI handler, troubleshooting matrix.
+- 🧩 [**VS Code extension**](vscode-extension.md) — installation, the seven status-bar surfaces (scan with score+grade badge, attack graph, delta, compliance, remediate, module reuse, blast radius), four-verb `vscode://` URI handler, troubleshooting matrix, R30.8-R30.12 hardening (120 s timeout, XSS-hardened webview, multi-root warning, URI gate).
 - 🛰️ [**LSP server**](lsp.md) — using `detect.py --lsp` from any LSP-aware editor.
 - 🪝 [**Pre-commit hook**](pre-commit.md) — block PRs at commit time.
 - 🏃 [**HCP Terraform Run Task**](run-task.md) — pre-apply gate inside HCP.
-- 🧠 [**MCP server**](mcp-server.md) — `scan_workspace` / `explain_rule` / `apply_fixes` / `attack_graph` / `compliance_report` tools for Claude Desktop, Cursor, Continue.dev, and other MCP-aware agents. Hardened against agent-side abuse (LLM01/05/06/10).
+- 🧠 [**MCP server**](mcp-server.md) — `scan_workspace` / `explain_rule` / `apply_fixes` / `attack_graph` / `compliance_report` / `blast_radius_report` tools for Claude Desktop, Cursor, Continue.dev, and other MCP-aware agents. Hardened against agent-side abuse (LLM01/05/06/10).
 - 🪛 [**Terraform provider**](terraform-provider.md) — `data "tfanalyze_scan"` for gating `terraform apply` on a clean scan via `precondition` blocks, no external CI required.
 
 ### Authoring
