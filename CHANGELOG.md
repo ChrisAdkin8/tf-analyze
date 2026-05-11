@@ -5,6 +5,36 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.15 — Detector topic-module split — 2026-05-11 (ext v0.1.53)
+
+**Follow-up to R30.14.** The 51 dispatch-table handlers that R30.14 introduced into `detect.py` are now organised into five topic modules under `scripts/_handlers_*.py`. `detect.py` shrinks from 4377 → 3052 lines and each detection family is independently readable.
+
+### What shipped
+
+- `scripts/_handlers_generic.py` — 12 primitive handlers (resource_present, resource_arg, hcl_attr, grep, moved/removed blocks, resource_absent, deprecated_datasource, etc.).
+- `scripts/_handlers_security.py` — 9 handlers (IAM HCL + JSON policy analysis, sensitive-variable leaks via outputs / templatefile / cross-module, firewall world-open, Helm-release values, data-external injection).
+- `scripts/_handlers_robustness.py` — 14 handlers (count/for_each anti-patterns, validation gaps, ignore_changes overuse, precondition error-message gaps, intent_gap sub-checks, prod_no_deletion_protection).
+- `scripts/_handlers_modules.py` — 7 handlers (variable/output description + unused, module-test-missing, orphan modules, registry-fingerprint reuse).
+- `scripts/_handlers_infra.py` — 9 handlers (backends, remote state, provider aliases, tfstate in repo, required_version, required_providers version constraints, graph_check dispatcher).
+
+### How the imports resolve
+
+Each topic module imports back from `detect` for the shared ctx dataclasses, regex constants and helpers. The five `import _handlers_*` statements sit at the bottom of `detect.py`, after every module-level definition, so the back-imports resolve cleanly.
+
+When `detect.py` runs as `__main__` (the CLI), a single `sys.modules.setdefault("detect", sys.modules[__name__])` aliases the running module under the `detect` name. Without that, topic modules would re-import `detect.py` as a *second* copy and register their handlers into a different dict than the one the dispatch loop reads. The two-line fix is the only piece of glue R30.15 needed.
+
+### Lossage recovered during integration
+
+Subtle pitfall of the deletion-based extraction: in batch 1 I cut the `OUTPUT_START` regex constant (orphaned mid-file at line 1546) and two `@_register_corpus` decorator lines (`output_sensitive_leak`, `intent_gap`) that lived immediately above handlers being deleted. The pytest run caught both — 324 fixture failures collapsed to 0 once `OUTPUT_START` was restored next to the other `_START` regexes and the two decorators were re-applied. Worth flagging in this changelog because the failure mode is silent: the handlers just don't fire, and only the fixture tests surface that.
+
+### Verification
+
+- `pytest tests/`: 840 passed, 2 skipped (identical to R30.14 baseline).
+- `npm test` in `vscode-extension/`: 62 / 62 pass.
+- VS Code extension repackaged as `tf-analyze-0.1.53.vsix`. The bundle script's `scripts/_*.py` glob picked up the five new files automatically.
+
+---
+
 ## Round 30.14 — Detector dispatch table (structural) — 2026-05-11 (ext v0.1.52)
 
 **Collapses the two detector god functions into 25-LoC dispatch loops backed by 51 registered handler functions.** This was the second-largest structural item I flagged after R30.13's `_brace_walk` extraction. Each detector kind is now an independently-testable function — `detect_in_file` and `detect_corpus` no longer carry the per-kind logic inline.

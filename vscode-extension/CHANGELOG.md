@@ -5,6 +5,50 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.53] — 2026-05-11
+
+**Engine refresh — R30.15 topic-module split.** Follow-up to R30.14.
+The 51 detector handlers that used to live inline in `detect.py` are
+now organised into five topic modules under `scripts/_handlers_*.py`,
+making each detection family independently readable and reviewable
+without paging through a 4000-line orchestrator.
+
+### Bundled engine refresh
+
+- `scripts/_handlers_generic.py` — 12 primitive handlers
+  (resource_present, resource_arg, hcl_attr, grep, moved/removed
+  blocks, resource_absent, deprecated_datasource, etc.)
+- `scripts/_handlers_security.py` — 9 handlers (IAM policy analysis
+  for both HCL and inline JSON, sensitive-variable leaks via outputs
+  / templatefile / cross-module, firewall world-open detection,
+  Helm-release value patterns, data-external injection)
+- `scripts/_handlers_robustness.py` — 14 handlers (count/for_each
+  anti-patterns, validation gaps, ignore_changes overuse,
+  precondition error-message gaps, intent_gap sub-checks,
+  prod_no_deletion_protection)
+- `scripts/_handlers_modules.py` — 7 handlers (variable/output
+  description + unused, module-test-missing, orphan modules,
+  registry-fingerprint reuse)
+- `scripts/_handlers_infra.py` — 9 handlers (backends, remote state,
+  provider aliases, tfstate in repo, required_version,
+  required_providers version constraints, cross-resource graph
+  dispatcher)
+
+`detect.py` itself shrinks from 4377 → 3052 lines. Behaviour is
+unchanged — the dispatch loops and handler bodies are identical; only
+the file boundaries moved. Each topic module imports back from
+`detect` for the shared regex constants, ctx dataclasses and helpers
+it needs.
+
+### Counts
+
+- 51 of 51 handlers in topic modules (12 + 9 + 14 + 7 + 9)
+- 840 pytest cases pass (unchanged from 0.1.52)
+- VS Code engine bundle picks up the new modules automatically via
+  the `scripts/_*.py` glob already in `bundle-engine.js`.
+
+---
+
 ## [0.1.52] — 2026-05-11
 
 **Engine refresh — R30.14 dispatch-table refactor complete.** The
