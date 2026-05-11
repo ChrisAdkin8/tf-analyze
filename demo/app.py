@@ -99,6 +99,11 @@ def _run_scan(target_dir: str) -> dict:
             "--format", "json",
             "--attack-graph",
             "--explain-score",
+            # R30.16 — emit INFO-tier findings (module-reuse advisor + style)
+            # so the paste-and-scan UI can render the dedicated 📦 panel.
+            # Frontend segregates MOD-REUSE-* from other INFO findings to
+            # keep the noise floor low.
+            "--show-info",
         ],
         capture_output=True,
         text=True,

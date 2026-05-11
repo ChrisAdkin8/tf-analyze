@@ -54,6 +54,49 @@
   .link.critical { stroke: #e94560; stroke-width: 2.5; marker-end: url(#arrow-red); }
   @keyframes pulse { 0%,100%{stroke-opacity:0.8} 50%{stroke-opacity:0.2} }
   .inet-ring { animation: pulse 2s ease-in-out infinite; }
+
+  /* Score banner above the findings list. The number is the load-bearing
+     viewer-attention anchor in screenshots / demo videos. */
+  #score-banner { padding: 14px 14px 12px; background: linear-gradient(180deg, #16213e 0%, #0f1a2e 100%); border-bottom: 1px solid #0f3460; }
+  #score-banner .score-row { display: flex; align-items: baseline; gap: 6px; }
+  #score-banner .score-num { font-size: 36px; font-weight: 700; line-height: 1; letter-spacing: -1px; }
+  #score-banner .score-grade { font-size: 16px; font-weight: 600; opacity: 0.85; }
+  #score-banner .score-counts { font-size: 11px; color: #a0a0c0; margin-top: 6px; letter-spacing: 0.3px; }
+  #score-banner .score-counts b { color: #e0e0e0; }
+  .grade-A  { color: #4ade80; }
+  .grade-B  { color: #86efac; }
+  .grade-B- { color: #bef264; }
+  .grade-C  { color: #fcd34d; }
+  .grade-D  { color: #fb923c; }
+  .grade-F  { color: #f87171; }
+  .grade-unknown { color: #9f9f9f; }
+
+  /* Top fixes panel — "fix this, score rises to Y" */
+  #top-fixes-section { padding: 10px 14px; border-bottom: 1px solid #0f3460; background: #0f1a2e; }
+  #top-fixes-section .section-title { font-size: 11px; font-weight: 600; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .top-fix-row { font-size: 11px; padding: 3px 0; color: #c0c0d0; display: flex; gap: 8px; }
+  .top-fix-rank { color: #888; min-width: 16px; }
+  .top-fix-id { font-family: monospace; flex: 1; color: #e0e0e0; }
+  .top-fix-delta { color: #86efac; font-weight: 600; }
+
+  /* Module reuse — INFO-tier finding rendered as a dedicated panel. */
+  #module-reuse-section { padding: 10px 14px; border-bottom: 1px solid #0f3460; background: #0f1a2e; }
+  #module-reuse-section .section-title { font-size: 11px; font-weight: 600; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .mod-reuse-row { background: #1a2a4e; border-left: 3px solid #6bbf84; border-radius: 4px; padding: 8px 10px; margin-bottom: 6px; font-size: 12px; }
+  .mod-reuse-row .mod-reuse-id { font-family: monospace; font-size: 10px; color: #6bbf84; }
+  .mod-reuse-row .mod-reuse-title { margin-top: 3px; color: #e0e0e0; }
+  .mod-reuse-row .mod-reuse-suggestion { margin-top: 4px; font-size: 11px; color: #a0a0c0; }
+  .mod-reuse-row .mod-reuse-recommendation { display: none; margin-top: 6px; padding: 6px 8px; background: #0d1b2a; border-radius: 3px; font-family: monospace; font-size: 10.5px; white-space: pre-wrap; color: #a8cc8c; }
+  .mod-reuse-row.expanded .mod-reuse-recommendation { display: block; }
+
+  /* Collapsed group for non-MOD-REUSE INFO findings (style/format/etc). */
+  #info-group-section { padding: 10px 14px; border-top: 1px solid #0f3460; background: #0f1a2e; cursor: pointer; }
+  #info-group-section .section-title { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  #info-group-list { display: none; padding: 6px 14px 8px; background: #0d1626; }
+  #info-group-section.expanded + #info-group-list { display: block; }
+  .info-row { font-size: 11px; padding: 4px 0; color: #888; font-family: monospace; }
+
+  .INFO { background: #1a2e1a; color: #6bbf84; }
 </style>
 </head>
 <body>
@@ -82,7 +125,14 @@
       <span id="status">paste HCL or enter a repo URL</span>
     </div>
     <div class="panel-body">
+      <div id="score-banner" style="display:none"></div>
+      <div id="top-fixes-section" style="display:none"></div>
+      <div id="module-reuse-section" style="display:none"></div>
       <div id="findings-list"><div id="empty-state">Run a scan to see findings</div></div>
+      <div id="info-group-section" style="display:none" onclick="this.classList.toggle('expanded')">
+        <span class="section-title">▸ <span id="info-count">0</span> INFO findings (style / format)</span>
+      </div>
+      <div id="info-group-list" style="display:none"></div>
     </div>
   </div>
   <div class="panel" id="graph-panel">
@@ -103,30 +153,65 @@
   </div>
 </div>
 <script>
-const EXAMPLE_HCL = `resource "aws_s3_bucket" "data" {
-  bucket = "my-data-bucket"
-  force_destroy = true
+// Default example exercises all four panels in one scan:
+//   • Score banner + top-fixes — populated from --explain-score
+//   • Module-reuse advisor     — 5 supporting types match terraform-aws-modules/vpc/aws
+//   • Attack graph             — internet → SG → EC2 → S3 kill chain
+//   • Findings list            — SSH 0.0.0.0/0, public EC2, unencrypted S3
+const EXAMPLE_HCL = `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
 }
 
-resource "aws_instance" "web" {
-  ami           = "ami-0c55b159cbfafe1f0"
-  instance_type = "t3.micro"
-  associate_public_ip_address = true
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
 }
 
-resource "aws_ebs_volume" "disk" {
-  availability_zone = "us-east-1a"
-  size              = 40
+resource "aws_subnet" "private" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.2.0/24"
 }
 
-resource "aws_security_group" "allow_all" {
-  name = "allow_all"
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "web" {
+  name   = "web"
+  vpc_id = aws_vpc.main.id
   ingress {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+}
+
+resource "aws_instance" "web" {
+  ami                         = "ami-0c55b159cbfafe1f0"
+  instance_type               = "t3.micro"
+  subnet_id                   = aws_subnet.public.id
+  vpc_security_group_ids      = [aws_security_group.web.id]
+  associate_public_ip_address = true
+}
+
+resource "aws_s3_bucket" "data" {
+  bucket        = "demo-data"
+  force_destroy = true
 }`;
 
 const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
@@ -150,8 +235,7 @@ async function scanHcl() {
     });
     if (!resp.ok) { const e = await resp.json(); setStatus('Error: ' + e.detail, 'error'); return; }
     const data = await resp.json();
-    renderFindings(data.findings ?? []);
-    renderGraph(data.graph ?? {nodes:[], edges:[]});
+    renderScanResult(data);
     setStatus((data.findings?.length ?? 0) + ' finding(s)', 'success');
   } catch(e) { setStatus('Request failed: ' + e.message, 'error'); }
 }
@@ -167,16 +251,92 @@ async function scanRepo() {
     });
     if (!resp.ok) { const e = await resp.json(); setStatus('Error: ' + e.detail, 'error'); return; }
     const data = await resp.json();
-    renderFindings(data.findings ?? []);
-    renderGraph(data.graph ?? {nodes:[], edges:[]});
+    renderScanResult(data);
     setStatus((data.findings?.length ?? 0) + ' finding(s)', 'success');
   } catch(e) { setStatus('Request failed: ' + e.message, 'error'); }
 }
 
-function renderFindings(findings) {
+// Top-level renderer: route the engine's JSON to four sections that read
+// the same scan output — score banner, top-fixes, module-reuse, and the
+// regular findings list. INFO findings that aren't MOD-REUSE collapse
+// into the bottom group so they don't drown out the actionable items.
+function renderScanResult(data) {
+  renderGraph(data.graph ?? {nodes:[], edges:[]});
+  const findings = data.findings ?? [];
+  const summary = data.summary ?? {};
+  const explanation = data.score_explanation ?? {};
+  renderScoreBanner(summary);
+  renderTopFixes(explanation.top ?? []);
+  // Module-reuse findings carry urgency=LOW but live in their own section.
+  // INFO is reserved for style/format hints; collapse those so they don't
+  // crowd the actionable security findings.
+  const isModuleReuse = f => (f.id||'').startsWith('MOD-REUSE-');
+  const moduleReuse = findings.filter(isModuleReuse);
+  const otherInfo = findings.filter(f => f.urgency === 'INFO' && !isModuleReuse(f));
+  const regular = findings.filter(f => f.urgency !== 'INFO' && !isModuleReuse(f));
+  renderModuleReuse(moduleReuse);
+  renderRegularFindings(regular);
+  renderInfoGroup(otherInfo);
+}
+
+function renderScoreBanner(summary) {
+  const el = document.getElementById('score-banner');
+  if (typeof summary.score !== 'number' || !summary.grade) { el.style.display = 'none'; return; }
+  const gradeClass = 'grade-' + (summary.grade || 'unknown');
+  const counts = summary.counts || {};
+  const countParts = ['CRITICAL','HIGH','MEDIUM','LOW'].filter(t => counts[t]).map(t => `<b>${counts[t]}</b> ${t}`);
+  const countLine = countParts.length ? countParts.join(' · ') : 'no findings at default tiers';
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="score-row">
+      <span class="score-num ${gradeClass}">${summary.score}</span>
+      <span class="score-grade ${gradeClass}">(${summary.grade})</span>
+    </div>
+    <div class="score-counts">${countLine}</div>`;
+}
+
+function renderTopFixes(top) {
+  const el = document.getElementById('top-fixes-section');
+  if (!top.length) { el.style.display = 'none'; return; }
+  const rows = top.slice(0, 5).map(t => `
+    <div class="top-fix-row">
+      <span class="top-fix-rank">#${t.rank}</span>
+      <span class="top-fix-id">${t.id}</span>
+      <span class="top-fix-delta">→ ${t.projected_score} (${t.projected_grade})</span>
+    </div>`).join('');
+  el.style.display = 'block';
+  el.innerHTML = `<div class="section-title">Top fixes by score impact</div>${rows}`;
+}
+
+function renderModuleReuse(findings) {
+  const el = document.getElementById('module-reuse-section');
+  if (!findings.length) { el.style.display = 'none'; return; }
+  const esc = s => String(s||'').replace(/</g,'&lt;');
+  el.style.display = 'block';
+  el.innerHTML = `<div class="section-title">📦 Module reuse — ${findings.length} suggestion(s)</div>` +
+    findings.map(f => {
+      const roi = f.roi || {};
+      const roiLine = roi.lines_saved
+        ? `Save ${roi.lines_saved} lines (${roi.pct_saved}% reduction) by replacing ${roi.bespoke_lines}-line bespoke stack with ${roi.replacement_lines}-line module call.`
+        : '';
+      const link = f.registry_url
+        ? `<a href="${esc(f.registry_url)}" target="_blank" rel="noopener" style="color:#6bbf84">Open module on registry ↗</a>`
+        : '';
+      return `
+      <div class="mod-reuse-row" onclick="this.classList.toggle('expanded')">
+        <div class="mod-reuse-id">${esc(f.id)} · confidence: ${esc(f.confidence||'?')}</div>
+        <div class="mod-reuse-title">${esc(f.title||'')}</div>
+        ${roiLine ? `<div class="mod-reuse-suggestion"><b>${esc(roiLine)}</b></div>` : ''}
+        ${link ? `<div class="mod-reuse-suggestion">${link}</div>` : ''}
+        ${f.recommendation ? `<div class="mod-reuse-recommendation">${esc(f.recommendation)}</div>` : ''}
+      </div>`;
+    }).join('');
+}
+
+function renderRegularFindings(findings) {
   const list = document.getElementById('findings-list');
   if (!findings.length) {
-    list.innerHTML = '<div id="empty-state" style="color:#86efac">✓ No findings — configuration looks good!</div>';
+    list.innerHTML = '<div id="empty-state" style="color:#86efac">✓ No findings at default tiers — configuration looks good!</div>';
     return;
   }
   list.innerHTML = findings.map(f => `
@@ -189,6 +349,18 @@ function renderFindings(findings) {
       ${f.fix_hcl ? `<div class="finding-fix">${f.fix_hcl.replace(/</g,'&lt;')}</div>` : ''}
     </div>
   `).join('');
+}
+
+function renderInfoGroup(findings) {
+  const sec = document.getElementById('info-group-section');
+  const list = document.getElementById('info-group-list');
+  if (!findings.length) { sec.style.display = 'none'; list.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  list.style.display = '';  // controlled via .expanded sibling rule
+  document.getElementById('info-count').textContent = findings.length;
+  list.innerHTML = findings.map(f =>
+    `<div class="info-row">${f.id} — ${(f.title||'').slice(0,60)}</div>`
+  ).join('');
 }
 
 const COLOR = {compute:'#4A90D9',storage:'#E8A838',iam:'#D4A017',network:'#7B9EA6',key:'#6BBF84',secret:'#6BBF84',internet:'#e94560',unknown:'#888'};
