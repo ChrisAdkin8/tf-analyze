@@ -35,12 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CompliancePanel = void 0;
 const vscode = __importStar(require("vscode"));
-const cp = __importStar(require("child_process"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const scriptResolver_1 = require("./scriptResolver");
 const iframeBridge_1 = require("./iframeBridge");
+const engineRunner_1 = require("./engineRunner");
 const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'owasp_iac', 'all'];
 /** Compliance gap report panel. Wraps `detect.py --format html
  * --compliance --compliance-framework <fw>` in a webview with a
@@ -71,7 +71,9 @@ class CompliancePanel {
         this._panel.onDidDispose(() => {
             CompliancePanel.currentPanel = undefined;
         });
-        this._panel.webview.onDidReceiveMessage((msg) => {
+        // Audit follow-up #1 — capture + dispose the message handler so a
+        // closed-and-reopened panel doesn't leak the prior subscription.
+        const msgSub = this._panel.webview.onDidReceiveMessage((msg) => {
             if (msg?.command === 'setFramework' && msg.framework && FRAMEWORKS.includes(msg.framework)) {
                 this._framework = msg.framework;
                 this._refresh();
@@ -90,6 +92,7 @@ class CompliancePanel {
                 }
             }
         });
+        this._panel.onDidDispose(() => msgSub.dispose());
         this._panel.webview.html = this._loading();
         this._refresh();
     }
@@ -102,14 +105,13 @@ class CompliancePanel {
                 (0, scriptResolver_1.defaultSearchPaths)(wsFolder).map(p => `<li><code>${this._escape(p)}</code></li>`).join('') + '</ul>');
             return;
         }
-        const argv = [absScript, '--target', wsFolder, '--format', 'html', '--compliance', '--compliance-framework', this._framework];
-        cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+        const argv = ['--target', wsFolder, '--format', 'html', '--compliance', '--compliance-framework', this._framework];
+        (0, engineRunner_1.runEngine)(absScript, argv, ({ err, stdout, stderr, cmdLine, timedOut }) => {
             const errCode = err?.code;
             const exitGtOne = typeof errCode === 'number' && errCode > 1;
             const stdoutEmpty = !stdout || !stdout.trim();
-            const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
-            if (exitGtOne || stdoutEmpty) {
-                this._panel.webview.html = this._error('detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
+            if (exitGtOne || stdoutEmpty || timedOut) {
+                this._panel.webview.html = this._error(timedOut ? 'detect.py timed out' : 'detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
                     `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;
@@ -122,7 +124,15 @@ class CompliancePanel {
         });
     }
     _wrap(reportHtml) {
-        const srcdoc = reportHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        // Audit follow-up #14 — srcdoc escape must cover the same character
+        // set as the inline `_escape` helper below; previously this path
+        // only escaped `&` and `"`, so a `</script>` sequence inside an
+        // engine-rendered attribute could break the wrapping HTML.
+        const srcdoc = reportHtml
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
         const opts = FRAMEWORKS.map(fw => {
             const label = fw === 'cis' ? 'CIS' :
                 fw === 'pci_dss' ? 'PCI DSS' :

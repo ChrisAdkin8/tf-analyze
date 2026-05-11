@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
+import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
 import { ruleDocsUrl } from './urls';
+import { runEngine } from './engineRunner';
 
 interface Finding {
   id: string;
@@ -56,10 +57,24 @@ export class DeltaPanel {
     this._panel.onDidDispose(() => {
       DeltaPanel.currentPanel = undefined;
     });
-    this._panel.webview.onDidReceiveMessage(async (msg: { command?: string; file?: string; line?: number }) => {
+    // Audit follow-up #1 — dispose the message-handler subscription
+    // when the panel closes so handlers do not accumulate in memory.
+    // Audit follow-up #8 — gate the file path to the workspace root
+    // before passing it to `openTextDocument`. The handler accepts a
+    // file arg from a webview message; without containment, a crafted
+    // payload could open arbitrary host files.
+    const msgSub = this._panel.webview.onDidReceiveMessage(async (msg: { command?: string; file?: string; line?: number }) => {
       if (msg?.command === 'open' && msg.file && typeof msg.line === 'number') {
+        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const abs = path.resolve(msg.file);
+        if (ws && !abs.startsWith(path.resolve(ws) + path.sep) && abs !== path.resolve(ws)) {
+          void vscode.window.showWarningMessage(
+            `tf-analyze: refusing to open ${msg.file} (outside workspace root)`,
+          );
+          return;
+        }
         try {
-          const doc = await vscode.workspace.openTextDocument(msg.file);
+          const doc = await vscode.workspace.openTextDocument(abs);
           const editor = await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
           const pos = new vscode.Position(Math.max(0, msg.line - 1), 0);
           editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
@@ -69,6 +84,7 @@ export class DeltaPanel {
         }
       }
     });
+    this._panel.onDidDispose(() => msgSub.dispose());
     this._panel.webview.html = '<html><body style="background:#1e1e1e;color:#ccc;font-family:sans-serif;padding:24px"><p>Comparing against last scan…</p></body></html>';
     this._refresh();
   }
@@ -86,16 +102,14 @@ export class DeltaPanel {
       return;
     }
 
-    const argv = [absScript, '--target', wsFolder, '--format', 'json', '--auto-compare'];
-    cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const errCode = (err as cp.ExecException & { code?: number } | null)?.code;
+    runEngine(absScript, ['--target', wsFolder, '--format', 'json', '--auto-compare'], ({ err, stdout, stderr, cmdLine, timedOut }) => {
+      const errCode = err?.code;
       const exitGtOne = typeof errCode === 'number' && errCode > 1;
       const stdoutEmpty = !stdout || !stdout.trim();
-      const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
 
-      if (exitGtOne || stdoutEmpty) {
+      if (exitGtOne || stdoutEmpty || timedOut) {
         this._panel.webview.html = this._errorHtml(
-          'detect.py failed',
+          timedOut ? 'detect.py timed out' : 'detect.py failed',
           `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
           `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
           `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`

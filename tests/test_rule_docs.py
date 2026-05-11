@@ -356,6 +356,13 @@ class TestGeneratorDeterminism:
             f"`gen_rule_docs.py --check` failed (exit {res.returncode}). "
             f"Stderr:\n{res.stderr}"
         )
+        # Audit follow-up #13/#18 — exit 0 is not enough on its own.
+        # A partial generation that prints a Traceback to stderr but
+        # still happens to write a coherent docs/rules/ tree would
+        # exit 0 and slip through. Assert stderr is clean too.
+        assert "Traceback (most recent call last)" not in (res.stderr or ""), (
+            f"gen_rule_docs.py emitted a Python traceback even on exit 0:\n{res.stderr}"
+        )
 
 
 # ---------------------------------------------------------------------------

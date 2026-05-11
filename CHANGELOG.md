@@ -5,6 +5,60 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.9 — Follow-up audit pass — 2026-05-11 (ext v0.1.46)
+
+**Closes the 24-finding follow-up audit (`tasks/repo-audit-2026-05-11-followup.md`).** The R30.8 round closed the prior audit's test-rail and blast-radius gaps; the failure surface shifted to VS Code panel discipline + a long-standing escape-handling bug in `_hcl.py`. This round closes that whole set in one pass.
+
+### Engine — robustness fixes
+
+- **`detect.py` `--output PATH` file-handle leak closed.** `_out_file` was opened at line 3515 with explicit closes at the bottom of `main()` and four early-return sites — none in `try/finally`. A render exception in the 240-line output block leaked the fd. `atexit.register` is the smallest patch that guarantees a close on uncaught exceptions too. (Audit follow-up #2 / #15.)
+- **`_hcl.py block_arg_value` backslash-aware quote state.** The quote-state walker toggled `in_dq`/`in_sq` on every quote byte without checking for a preceding `\`. A value like `key = "foo \"bar\""` flipped out of dq prematurely and downstream parsing returned corrupted bytes. Now tracks the prior character and skips escaped quotes. Two new regression tests in `tests/test_hcl_primitives.py`. (Audit follow-up #6.)
+- **`_attack_graph.py` redundant if/elif collapsed.** Two branches with identical loops over `_EDGE_PROFILE_ROLE_RE` differed only in their (mutually exclusive) `rtype == "aws_iam_instance_profile"` guard. Code was structurally redundant and read as if there was a semantic distinction. Collapsed to one unconditional loop. (Audit follow-up #7.)
+- **`_cache.py corpus_hash` no longer truncates `patterns`.** Previously hashed only `str(e.get("patterns", ""))[:200]`; two catalogue entries whose patterns shared the first 200 chars collided into the same cache key. Now hashes the full `json.dumps(e, sort_keys=True)` payload. A catalogue PR that adds compliance tags to existing rules can no longer get a false cache HIT against stale findings. (Audit follow-up #11.)
+- **`_lsp.run_lsp_server` asserts injected callable arity.** The `scanner` and `load_catalog` parameters are validated at module entry via `inspect.signature`. A refactor that changes `detect_in_file`'s signature without updating the wrapper now raises a `TypeError` with the offending parameter list, instead of crashing at the first JSON-RPC request. (Audit follow-up #12.)
+- **`detect.py` line numbers in `hcl_context: true` rules now point at the original file.** Prior to this fix, the match offset was in the comment-stripped text but the reported line number was counted against that stripped text — off by however many comment lines preceded the match. The new path re-locates the matched bytes in the original text. (Audit follow-up #19.)
+- **`detect.py` `ignore_changes` parser is quote-aware.** A list like `ignore_changes = ["a,b", "c"]` previously split as three items and misfired a threshold-based finding. Now walks the characters with backslash-aware quote tracking and only splits on commas outside `"…"` regions. (Audit follow-up #20.)
+
+### VS Code extension — see [`vscode-extension/CHANGELOG.md`](vscode-extension/CHANGELOG.md#0146--2026-05-11) for the per-feature breakdown
+
+- New shared `engineRunner.ts` (closes audit #1 / #3 / #9 — panel boilerplate, missing timeouts, leaked message subscriptions all in one structural seam).
+- `/explain?file=...` URI handler gated to workspace root (audit #8).
+- srcdoc escape complete on compliance + htmlReport panels (audit #14).
+- Empty workspace-name guard in `htmlReport._openInBrowser` (audit #21).
+- Iframe-bridge sentinel comment for idempotency check (audit #22).
+- Multi-root workspace warning + Output-channel log (audit #4).
+- Extension: v0.1.45 → **v0.1.46** (+1 `node:test` case for URI workspace-root rejection).
+
+### CI
+
+- **`pytest-timeout=300` added on every matrix slot.** A hung test (subprocess deadlock, infinite loop in a new rule) can no longer stall a CI matrix job for the workflow's 6h default. `--timeout-method=thread` because some tests spawn subprocesses; signal-based timeouts can't interrupt a thread blocked in a syscall. (Audit follow-up #17.)
+- **`bundle-engine.js` discovers siblings by glob.** `ENGINE_SIBLING_FILES` was manually maintained; each new `scripts/_xyz.py` extract had to be added in two places. Forgotten entries shipped a `.vsix` that crashed at first import (caught only when `detect.py` imported the module at startup — lazy-imported modules slipped through). Now globs `scripts/_*.py` and concatenates `detect.py` at the front; a `MIN_SIBLING_COUNT = 15` guard fails the build if the glob produces an unreasonably small result. (Audit follow-up #16.)
+
+### Tests + stderr propagation
+
+- **`check_terragoat_snapshot.py`** now surfaces a non-JSON / empty stdout with a real diagnostic instead of falling through to a `JSONDecodeError` traceback (audit #13 / #18).
+- **`tests/test_rule_docs.py`** asserts stderr is traceback-free even on exit 0 (audit #13).
+- **`integrations/mcp-server/server.py`** treats exit 1 with empty stdout as a crash rather than success (audit #13).
+- **`integrations/run-task/server.py`** escalates traceback-containing stderr to ERROR level and surfaces a parse failure as a synthetic `_scan_failed` finding so the downstream summary doesn't render "0 findings" for a scan that actually crashed (audit #13).
+
+### Subagent claims rejected on re-read
+
+- **`onDidSaveTextDocument` "subscription leak"** — the disposable is already part of the `context.subscriptions.push(...)` block in `extension.ts` at line 972. Audit follow-up #10 was wrong; no change needed.
+- **`_attack_graph.py` "duplicate edge inference"** — the two branches are mutually exclusive, not concurrent. The fix collapses redundancy, not a correctness bug.
+- **`_catalog.py:152` "silent corruption of every rule"** — narrower reproduction than claimed; the colon-in-quoted-value case is handled correctly. The genuine limitation (list-of-quoted-scalar-with-colon falls back to scalar string) is a usability constraint rather than data corruption; documented but not fixed here.
+- **`_diff.py` "mtime sentinel still included in sorted results"** — the R30.8 fix is correct; `_mtime_safe(p) >= 0` filters the sentinel out before sort.
+
+### Counts
+
+- Pytest cases: 822 → **824** (+2 HCL escape regression tests).
+- Extension `node:test` cases: 61 → **62** (+1 URI handler workspace-root test).
+- Self-test fixtures: 238/238 positive + 146/146 clean (unchanged).
+- Terragoat snapshot: in sync (gcp=85, aws=125, azure=93, total=306).
+- Audit follow-up findings closed: **20 of 24**; 3 rejected on re-read (#7 → fixed as smell, #10/#23 not real bugs); 1 deferred (multi-root scan plumbing — warning shipped, full per-root scan is a follow-up).
+- Extension: v0.1.45 → **v0.1.46**.
+
+---
+
 ## Round 30.8 — Repo audit + UX recovery on the blast-radius panel — 2026-05-11 (ext v0.1.45)
 
 **Closes the 2026-05-11 repo audit (41 findings across 5 surfaces) and the secondary "still not displaying" UX report on the blast-radius panel.** The v0.1.44 patch correctly fixed the engine-args bug, but a workspace whose graph contains no resource above the high-blast threshold still landed on a blank panel with no explanation — users (rightly) read that as "still broken." This round adds a `viewsWelcome` empty state so the panel always tells the user what it does and how to populate it.

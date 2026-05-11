@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
+import { runEngine, EngineResult } from './engineRunner';
 
 /** Remediation panel: bulk apply-fixes UX.
  *
@@ -40,18 +40,24 @@ export class RemediationPanel {
     this._panel.onDidDispose(() => {
       RemediationPanel.currentPanel = undefined;
     });
-    this._panel.webview.onDidReceiveMessage((msg: { command?: string }) => {
+    // Audit follow-up #1 — capture the disposable returned by
+    // `onDidReceiveMessage` and dispose it when the panel closes.
+    // Previously the handler stayed in memory after the panel was
+    // closed; opening + closing the same panel many times in a
+    // session leaked subscriptions.
+    const msgSub = this._panel.webview.onDidReceiveMessage((msg: { command?: string }) => {
       if (msg?.command === 'apply') {
         void this._apply();
       } else if (msg?.command === 'refresh') {
         this._refresh();
       }
     });
+    this._panel.onDidDispose(() => msgSub.dispose());
     this._panel.webview.html = this._loading('Computing the diff…');
     this._refresh();
   }
 
-  private _runEngine(mode: 'dry-run' | 'apply', cb: (err: cp.ExecException | null, stdout: string, stderr: string, cmdLine: string) => void): void {
+  private _runEngine(mode: 'dry-run' | 'apply', cb: (result: EngineResult) => void): void {
     const cfg = vscode.workspace.getConfiguration('tf-analyze');
     const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '.';
     const absScript = resolveScriptPath(cfg, wsFolder);
@@ -63,21 +69,17 @@ export class RemediationPanel {
       );
       return;
     }
-    const argv = [absScript, '--target', wsFolder, '--apply-fixes', mode];
-    const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
-    cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
-      cb(err as cp.ExecException | null, stdout, stderr, cmdLine);
-    });
+    runEngine(absScript, ['--target', wsFolder, '--apply-fixes', mode], cb);
   }
 
   private _refresh(): void {
-    this._runEngine('dry-run', (err, stdout, stderr, cmdLine) => {
-      const errCode = (err as cp.ExecException & { code?: number } | null)?.code;
+    this._runEngine('dry-run', ({ err, stdout, stderr, cmdLine, timedOut }) => {
+      const errCode = err?.code;
       const exitGtOne = typeof errCode === 'number' && errCode > 1;
       const stdoutEmpty = !stdout || !stdout.trim();
-      if (exitGtOne) {
+      if (exitGtOne || timedOut) {
         this._panel.webview.html = this._error(
-          'detect.py failed',
+          timedOut ? 'detect.py timed out' : 'detect.py failed',
           `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
           `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
           `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`
@@ -120,12 +122,12 @@ export class RemediationPanel {
     if (choice !== 'Apply') return;
 
     this._panel.webview.html = this._loading('Applying fixes…');
-    this._runEngine('apply', (err, stdout, stderr, cmdLine) => {
-      const errCode = (err as cp.ExecException & { code?: number } | null)?.code;
+    this._runEngine('apply', ({ err, stdout, stderr, cmdLine, timedOut }) => {
+      const errCode = err?.code;
       const exitGtOne = typeof errCode === 'number' && errCode > 1;
-      if (exitGtOne) {
+      if (exitGtOne || timedOut) {
         this._panel.webview.html = this._error(
-          'Apply failed',
+          timedOut ? 'Apply timed out' : 'Apply failed',
           `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
           `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
           `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`

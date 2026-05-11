@@ -5,6 +5,82 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.46] — 2026-05-11
+
+**Follow-up audit pass — panel discipline.** The post-R30.8 audit
+(`tasks/repo-audit-2026-05-11-followup.md`) flagged the VS Code panels
+as the next-largest failure surface: six panels each duplicating
+`cp.execFile` boilerplate, no wall-clock timeout, leaked
+`onDidReceiveMessage` subscriptions. This release extracts a shared
+`runEngine()` helper and routes every panel through it, closing four
+audit findings in one structural seam.
+
+### Structural — shared engine runner
+
+- **New `src/engineRunner.ts`** owns the spawn, the 120s `SCAN_TIMEOUT_MS`
+  cap, the 50 MiB buffer limit, and the `cmdLine` string used in error
+  rendering. Every panel that runs `detect.py` now calls
+  `runEngine(scriptPath, args, callback)` and receives a uniform
+  `EngineResult` with `{err, stdout, stderr, cmdLine, timedOut}`.
+  - Six call-sites converted: `remediationPanel`, `compliancePanel`,
+    `deltaPanel`, `htmlReport`, `moduleReusePanel`, `mitrePanel`.
+  - Removes ~30 LoC of duplicated boilerplate per panel.
+  - Adds wall-clock timeout to every panel (the prior `runScan`-only
+    120s guard left panel-spawned engines free to hang).
+- **`onDidReceiveMessage` disposables now captured + disposed on close.**
+  Five panels (remediation, compliance, htmlReport, delta, plus the
+  new pattern locked in for any future panel) push their message-
+  handler subscription onto `onDidDispose`. Power users opening +
+  closing panels many times in a session no longer accumulate
+  handlers in memory.
+
+### Security
+
+- **`/explain?file=...` URI handler now gates the file argument to the
+  workspace root.** Mirror of `/scan` and `/suppress` — without it, a
+  crafted link (`vscode://tfanalyze.tf-analyze/explain?id=X&file=/etc/passwd&line=1`)
+  would open a host file outside the workspace. Rule pane still opens
+  (the rule ID is valid); only the editor jump is gated.
+- **`/delta` panel: `openTextDocument` containment.** The "open file"
+  message handler in the delta view now refuses paths outside the
+  active workspace root before passing them to
+  `vscode.workspace.openTextDocument`.
+
+### Robustness
+
+- **srcdoc escape now covers `<`/`>`.** `compliancePanel._wrap` and
+  `htmlReport._wrapReport` previously escaped only `&` and `"`; a
+  `</script>` sequence inside an engine-rendered attribute could
+  break the wrapping HTML. Fixed.
+- **Iframe-bridge idempotency check uses a sentinel comment.**
+  Replaces the substring `'openLink'` check, which could false-positive
+  on legitimate engine HTML that mentions the same identifier.
+- **Empty workspace-name fallback in `htmlReport._openInBrowser`.**
+  An empty `workspaceFolders[0].name` no longer produces a temp file
+  with the dangling double-dash `tf-analyze--<ts>.html`.
+
+### UX — multi-root workspace
+
+- **One-shot warning when a multi-root workspace is detected.** Scans
+  still target `workspaceFolders[0]`, but the user now sees an
+  explicit notification (and a `[tf-analyze] WARN:` line in the
+  output channel) so they know the second/third root is not being
+  scanned. A "Pick folder" affordance is wired but full per-root
+  scan plumbing is tracked as a follow-up.
+
+### Tests
+
+- `node:test` cases: 62/62 (+1: URI handler workspace-root rejection).
+
+### Counts
+
+- Extension: v0.1.45 → **v0.1.46**.
+- Bundled engine: refreshed (engine changes documented in main CHANGELOG).
+- LoC delta: net -120 (six panel `cp.execFile` blocks removed; one
+  shared helper added).
+
+---
+
 ## [0.1.45] — 2026-05-11
 
 **Audit pass — security, robustness, Windows correctness, UX.** This release

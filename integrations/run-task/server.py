@@ -106,12 +106,29 @@ def _run_detect(plan_json_path: Path) -> tuple[dict, int]:
         cmd.extend(["--compliance-framework", COMPLIANCE_FRAMEWORK])
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if res.stderr:
-        LOG.info("detect.py stderr: %s", res.stderr.strip())
+        # Audit follow-up #13 — escalate stderr containing a Python
+        # traceback to ERROR level so it shows up in oncall logs
+        # even when the worker silently passes the result through.
+        if "Traceback (most recent call last)" in res.stderr:
+            LOG.error("detect.py emitted a traceback: %s", res.stderr.strip())
+        else:
+            LOG.info("detect.py stderr: %s", res.stderr.strip())
     try:
         data = json.loads(res.stdout)
     except json.JSONDecodeError:
-        LOG.error("detect.py did not return JSON: %s", res.stdout[:500])
-        data = {}
+        LOG.error(
+            "detect.py did not return JSON (exit %d): %s",
+            res.returncode, res.stdout[:500],
+        )
+        # Audit follow-up #13 — surface the parse failure as a synthetic
+        # finding so the downstream summary doesn't render "0 findings"
+        # for a scan that actually crashed.
+        data = {
+            "findings": [],
+            "summary": {"score": 0, "grade": "F", "counts": {}},
+            "_scan_failed": True,
+            "_stderr": res.stderr[:2000],
+        }
     return data, res.returncode
 
 

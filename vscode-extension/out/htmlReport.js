@@ -35,12 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HtmlReportPanel = void 0;
 const vscode = __importStar(require("vscode"));
-const cp = __importStar(require("child_process"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const scriptResolver_1 = require("./scriptResolver");
 const iframeBridge_1 = require("./iframeBridge");
+const engineRunner_1 = require("./engineRunner");
 /** Webview panel that renders `detect.py --format html` output inline.
  *
  * The engine emits a self-contained HTML document with all CSS inlined
@@ -71,7 +71,8 @@ class HtmlReportPanel {
         // button posts { command: 'openExternal' }. We persist the most
         // recently rendered report HTML on `this` so the handler doesn't
         // have to re-scan to satisfy the click.
-        this._panel.webview.onDidReceiveMessage((msg) => {
+        // Audit follow-up #1 — dispose on close.
+        const msgSub = this._panel.webview.onDidReceiveMessage((msg) => {
             if (msg?.command === 'openExternal') {
                 void this._openInBrowser();
             }
@@ -84,6 +85,7 @@ class HtmlReportPanel {
                 }
             }
         });
+        this._panel.onDidDispose(() => msgSub.dispose());
         this._panel.webview.html = this._getLoadingHtml();
         this._refresh();
     }
@@ -104,23 +106,24 @@ class HtmlReportPanel {
         // user has dialed in for the rest of the extension.
         const section = (cfg.get('section') ?? '').trim();
         const extraArgs = (cfg.get('extraArgs') ?? []).filter(a => typeof a === 'string' && a.length > 0);
-        const argv = [absScript, '--target', wsFolder, '--format', 'html'];
+        const argv = ['--target', wsFolder, '--format', 'html'];
         if (section)
             argv.push('--section', section);
         argv.push(...extraArgs);
-        cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+        (0, engineRunner_1.runEngine)(absScript, argv, ({ err, stdout, stderr, cmdLine, timedOut }) => {
             // Same diagnostic shape as the attack-graph panel: exit 1 with
             // empty stdout means Python crashed before emitting; exit > 1
             // is a hard failure. Either way, surface stderr verbatim.
             const errCode = err?.code;
             const exitGtOne = typeof errCode === 'number' && errCode > 1;
             const stdoutEmpty = !stdout || !stdout.trim();
-            const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
-            if (exitGtOne || stdoutEmpty) {
-                const reason = stdoutEmpty && !exitGtOne
-                    ? 'detect.py exited without printing HTML. Most often this is an unhandled Python exception — see stderr below.'
-                    : 'detect.py exited with an error.';
-                this._panel.webview.html = this._getErrorHtml('detect.py failed', `<p>${this._escape(reason)}</p>` +
+            if (exitGtOne || stdoutEmpty || timedOut) {
+                const reason = timedOut
+                    ? `detect.py exceeded the 120s timeout and was cancelled.`
+                    : stdoutEmpty && !exitGtOne
+                        ? 'detect.py exited without printing HTML. Most often this is an unhandled Python exception — see stderr below.'
+                        : 'detect.py exited with an error.';
+                this._panel.webview.html = this._getErrorHtml(timedOut ? 'detect.py timed out' : 'detect.py failed', `<p>${this._escape(reason)}</p>` +
                     `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
                     `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>` +
@@ -152,9 +155,14 @@ class HtmlReportPanel {
      * artefact (the same bytes that would land on disk).
      */
     _wrapReport(reportHtml) {
+        // Audit follow-up #14 — escape the full <,>,&," set so a stray
+        // `</script>` in an engine-rendered attribute can't break out of
+        // the srcdoc wrapper.
         const srcdoc = reportHtml
             .replace(/&/g, '&amp;')
-            .replace(/"/g, '&quot;');
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
         return `<!DOCTYPE html>
 <html>
 <head>
@@ -195,7 +203,12 @@ class HtmlReportPanel {
             return;
         }
         const wsName = vscode.workspace.workspaceFolders?.[0]?.name ?? 'workspace';
-        const safe = wsName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        // Audit follow-up #21 — guard against an empty result. If wsName
+        // contained only `[^a-zA-Z0-9._-]` characters, `safe` would be all
+        // underscores; if wsName were an empty string the path would be
+        // `tf-analyze--<ts>.html` with a double dash. Fall back to a
+        // sentinel so the filename always has a recognisable middle token.
+        const safe = (wsName.replace(/[^a-zA-Z0-9._-]/g, '_') || 'workspace');
         const file = path.join(os.tmpdir(), `tf-analyze-${safe}-${Date.now()}.html`);
         try {
             fs.writeFileSync(file, this._lastHtml, 'utf8');

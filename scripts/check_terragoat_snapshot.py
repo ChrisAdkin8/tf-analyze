@@ -38,7 +38,25 @@ def _count(target: Path) -> int:
     if r.returncode > 1:
         sys.stderr.write(r.stderr)
         raise SystemExit(f"detect.py crashed on {target} (exit {r.returncode})")
-    return len(json.loads(r.stdout)["findings"])
+    # Audit follow-up #13/#18 — surface a partial / non-JSON stdout
+    # loudly. The prior code silently raised JSONDecodeError on the
+    # next line which gave the operator a confusing traceback.
+    # Engine exit 1 with empty stdout means a Python exception fired
+    # before the report was emitted (signal, OOM, unhandled bug).
+    if not r.stdout.strip():
+        sys.stderr.write(r.stderr)
+        raise SystemExit(
+            f"detect.py emitted empty stdout for {target} (exit {r.returncode}). "
+            f"stderr was: {r.stderr[:500] or '(empty)'}"
+        )
+    try:
+        return len(json.loads(r.stdout)["findings"])
+    except json.JSONDecodeError as e:
+        sys.stderr.write(r.stderr)
+        raise SystemExit(
+            f"detect.py returned non-JSON for {target}: {e}. "
+            f"First 500 chars of stdout: {r.stdout[:500]!r}"
+        ) from e
 
 
 def _measure() -> dict[str, int]:

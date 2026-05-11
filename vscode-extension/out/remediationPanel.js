@@ -35,8 +35,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RemediationPanel = void 0;
 const vscode = __importStar(require("vscode"));
-const cp = __importStar(require("child_process"));
 const scriptResolver_1 = require("./scriptResolver");
+const engineRunner_1 = require("./engineRunner");
 /** Remediation panel: bulk apply-fixes UX.
  *
  * The panel runs `detect.py --apply-fixes dry-run` to produce a unified
@@ -66,7 +66,12 @@ class RemediationPanel {
         this._panel.onDidDispose(() => {
             RemediationPanel.currentPanel = undefined;
         });
-        this._panel.webview.onDidReceiveMessage((msg) => {
+        // Audit follow-up #1 — capture the disposable returned by
+        // `onDidReceiveMessage` and dispose it when the panel closes.
+        // Previously the handler stayed in memory after the panel was
+        // closed; opening + closing the same panel many times in a
+        // session leaked subscriptions.
+        const msgSub = this._panel.webview.onDidReceiveMessage((msg) => {
             if (msg?.command === 'apply') {
                 void this._apply();
             }
@@ -74,6 +79,7 @@ class RemediationPanel {
                 this._refresh();
             }
         });
+        this._panel.onDidDispose(() => msgSub.dispose());
         this._panel.webview.html = this._loading('Computing the diff…');
         this._refresh();
     }
@@ -86,19 +92,15 @@ class RemediationPanel {
                 (0, scriptResolver_1.defaultSearchPaths)(wsFolder).map(p => `<li><code>${this._escape(p)}</code></li>`).join('') + '</ul>');
             return;
         }
-        const argv = [absScript, '--target', wsFolder, '--apply-fixes', mode];
-        const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
-        cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
-            cb(err, stdout, stderr, cmdLine);
-        });
+        (0, engineRunner_1.runEngine)(absScript, ['--target', wsFolder, '--apply-fixes', mode], cb);
     }
     _refresh() {
-        this._runEngine('dry-run', (err, stdout, stderr, cmdLine) => {
+        this._runEngine('dry-run', ({ err, stdout, stderr, cmdLine, timedOut }) => {
             const errCode = err?.code;
             const exitGtOne = typeof errCode === 'number' && errCode > 1;
             const stdoutEmpty = !stdout || !stdout.trim();
-            if (exitGtOne) {
-                this._panel.webview.html = this._error('detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
+            if (exitGtOne || timedOut) {
+                this._panel.webview.html = this._error(timedOut ? 'detect.py timed out' : 'detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
                     `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;
@@ -134,11 +136,11 @@ class RemediationPanel {
         if (choice !== 'Apply')
             return;
         this._panel.webview.html = this._loading('Applying fixes…');
-        this._runEngine('apply', (err, stdout, stderr, cmdLine) => {
+        this._runEngine('apply', ({ err, stdout, stderr, cmdLine, timedOut }) => {
             const errCode = err?.code;
             const exitGtOne = typeof errCode === 'number' && errCode > 1;
-            if (exitGtOne) {
-                this._panel.webview.html = this._error('Apply failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
+            if (exitGtOne || timedOut) {
+                this._panel.webview.html = this._error(timedOut ? 'Apply timed out' : 'Apply failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
                     `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;

@@ -35,9 +35,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModuleReusePanel = void 0;
 const vscode = __importStar(require("vscode"));
-const cp = __importStar(require("child_process"));
 const scriptResolver_1 = require("./scriptResolver");
 const urls_1 = require("./urls");
+const engineRunner_1 = require("./engineRunner");
 /**
  * Module-reuse advisory view. Runs `detect.py --show-info --format json`,
  * filters findings to the `module-reuse` section, and groups them by
@@ -75,13 +75,11 @@ class ModuleReusePanel {
                 (0, scriptResolver_1.defaultSearchPaths)(wsFolder).map(p => `<li><code>${this._escape(p)}</code></li>`).join('') + '</ul>');
             return;
         }
-        const argv = [absScript, '--target', wsFolder, '--format', 'json', '--show-info'];
-        cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+        (0, engineRunner_1.runEngine)(absScript, ['--target', wsFolder, '--format', 'json', '--show-info'], ({ err, stdout, stderr, cmdLine, timedOut }) => {
             const errCode = err?.code;
             const exitGtOne = typeof errCode === 'number' && errCode > 1;
-            const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
-            if (exitGtOne || !stdout) {
-                this._panel.webview.html = this._error('detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
+            if (exitGtOne || !stdout || timedOut) {
+                this._panel.webview.html = this._error(timedOut ? 'detect.py timed out' : 'detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
                     `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;

@@ -34,9 +34,23 @@ def corpus_hash(all_files_text: dict, entries: list) -> str:
         content = all_files_text[fp_raw]
         fh.update(content.encode() if isinstance(content, str) else content)
     ch = hashlib.sha256()
+    # Audit follow-up #11 — previously this hashed only the first 200
+    # chars of the `patterns` field. Two catalogue entries whose
+    # patterns share that prefix (common when a rule adds a new
+    # alternation suffix) collided into the same cache key — a
+    # catalogue update added compliance tags or pattern arms got a
+    # silent cache HIT against stale findings. Hash the *whole*
+    # entry's JSON repr (sorted keys, so insertion-order drift can't
+    # falsify the hash) and let the hash absorb the size.
     for e in sorted(entries, key=lambda x: x["id"]):
         ch.update(e["id"].encode())
-        ch.update(str(e.get("patterns", ""))[:200].encode())
+        try:
+            payload = json.dumps(e, sort_keys=True, default=str)
+        except TypeError:
+            # Defensive: an exotic field that defies json.dumps still
+            # gives a stable digest via repr (no truncation).
+            payload = repr(sorted(e.items()))
+        ch.update(payload.encode())
     return hashlib.sha256(
         (fh.hexdigest() + ch.hexdigest()).encode()
     ).hexdigest()[:16]

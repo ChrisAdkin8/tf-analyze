@@ -141,7 +141,51 @@ def run_lsp_server(
     `scanner(path, entries)` returns findings for a single .tf file.
     `load_catalog(catalog_dir)` returns the parsed catalogue entries.
     Both are injected so this module does not import from `detect.py`.
+
+    Audit follow-up #12 — assert the injected callables actually match
+    the documented arity at module entry instead of failing on the
+    first JSON-RPC request. A refactor that changes `detect_in_file`'s
+    signature without updating the `_scanner` wrapper in detect.py
+    now raises a `TypeError` here with the offending parameter list,
+    rather than a less-helpful traceback inside the LSP loop.
     """
+    import inspect
+    def _required_positional_count(fn: Callable) -> tuple[int, int]:
+        """Return (min, max) positional-arg count the callable accepts.
+
+        `min` is parameters without defaults (callers MUST supply);
+        `max` includes parameters with defaults plus *args. Functions
+        with `*args` get `max = float('inf')` effectively (None).
+        """
+        sig = inspect.signature(fn)
+        positional = [
+            p for p in sig.parameters.values()
+            if p.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        required = sum(
+            1 for p in positional if p.default is inspect.Parameter.empty
+        )
+        has_varargs = any(
+            p.kind == inspect.Parameter.VAR_POSITIONAL
+            for p in sig.parameters.values()
+        )
+        return required, (10_000 if has_varargs else len(positional))
+
+    scan_min, scan_max = _required_positional_count(scanner)
+    if not (scan_min <= 2 <= scan_max):
+        raise TypeError(
+            f"_lsp.run_lsp_server: scanner must be callable with 2 positional "
+            f"args (path, entries); accepts {scan_min}..{scan_max}"
+        )
+    load_min, load_max = _required_positional_count(load_catalog)
+    if not (load_min <= 1 <= load_max):
+        raise TypeError(
+            f"_lsp.run_lsp_server: load_catalog must be callable with 1 positional "
+            f"arg (catalog_dir); accepts {load_min}..{load_max}"
+        )
     entries = load_catalog(catalog_dir)
     id_map = {e["id"]: e for e in entries}
     _diagnostics: dict[str, list] = {}

@@ -160,6 +160,16 @@ def _run_engine(args: list[str], *, timeout: int | None = None) -> str:
         raise RuntimeError(
             f"detect.py exited {res.returncode}. stderr: {res.stderr.strip()}"
         )
+    # Audit follow-up #13 — an exit-1 with empty stdout signals an
+    # unhandled Python exception that fired BEFORE the engine emitted
+    # a JSON payload. Surface stderr verbatim so the LLM agent (or the
+    # operator inspecting logs) sees the actual traceback instead of
+    # an empty document.
+    if not res.stdout.strip():
+        raise RuntimeError(
+            f"detect.py exited {res.returncode} with empty stdout. "
+            f"stderr: {res.stderr.strip() or '(empty)'}"
+        )
     return res.stdout
 
 

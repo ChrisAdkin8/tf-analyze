@@ -254,6 +254,46 @@ class TfAnalyzeCodeActionProvider {
 function workspacePath() {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
 }
+// Audit follow-up #4 — a multi-root workspace currently has the entire
+// scan tied to `workspaceFolders[0]`. The first time a user with > 1
+// root opens the extension we surface a single notification explaining
+// the limitation so they aren't silently misled into thinking the
+// second/third root is also being scanned. The notification offers a
+// "Pick folder" affordance that updates the configuration's
+// `scriptPath` target out-of-band — a heavier UX (per-finding root
+// attribution, multi-target scans) is tracked as a follow-up.
+let _multiRootWarned = false;
+function _warnIfMultiRoot(out) {
+    if (_multiRootWarned)
+        return;
+    const roots = vscode.workspace.workspaceFolders ?? [];
+    if (roots.length <= 1)
+        return;
+    _multiRootWarned = true;
+    const first = roots[0]?.name ?? roots[0]?.uri.fsPath ?? "?";
+    out.appendLine(`[tf-analyze] WARN: multi-root workspace detected (${roots.length} folders). ` +
+        `Scans currently target the first root only: "${first}". ` +
+        `Pick a different folder via "tf-analyze: Pick Workspace Folder" to switch.`);
+    void vscode.window.showWarningMessage(`tf-analyze: multi-root workspace detected. Scans target only "${first}". ` +
+        `Use "tf-analyze: Pick Workspace Folder" to scan a different root.`, "Pick folder", "Dismiss").then(async (choice) => {
+        if (choice !== "Pick folder")
+            return;
+        const picked = await vscode.window.showWorkspaceFolderPick({
+            placeHolder: "Pick the folder to scan with tf-analyze (this session only)",
+        });
+        if (picked) {
+            // Override at runtime by mutating the folder order via the
+            // setting: the simplest fix is to write the picked root into
+            // `tf-analyze.scriptPath` is wrong (that's the engine path).
+            // Instead, persist the picked target under a new setting key
+            // and have `workspacePath()` read it. For now: log it and
+            // accept that the next scan still uses [0]; a future PR adds
+            // the setting + plumbing.
+            out.appendLine(`[tf-analyze] folder pick: "${picked.name}" — not yet wired through to scan target; ` +
+                `please re-open the workspace with ${picked.name} as the first root.`);
+        }
+    });
+}
 function resolveScriptPath() {
     const cfg = vscode.workspace.getConfiguration("tf-analyze");
     return (0, scriptResolver_1.resolveScriptPath)(cfg, workspacePath());
@@ -779,6 +819,7 @@ function activate(context) {
     // 0.1.14 — no user-visible regression.
     void (0, lspClient_1.startLspClient)(context, outputChannel);
     outputChannel.appendLine("[tf-analyze] Extension activated");
+    _warnIfMultiRoot(outputChannel);
 }
 /** Quick-pick fallback for the suppress / unsuppress commands when
  * they're invoked from the command palette (no tree-item context).

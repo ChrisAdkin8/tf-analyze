@@ -19,7 +19,7 @@
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
-![Tests: 822](https://img.shields.io/badge/tests-822%20passing-brightgreen)
+![Tests: 824](https://img.shields.io/badge/tests-824%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-235%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 

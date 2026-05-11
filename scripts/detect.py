@@ -457,9 +457,28 @@ def detect_in_file(
                                 "resource": f"{btype}.{bname}",
                             })
                 else:
-                    search_text = strip_hcl_context(text) if pat.get("hcl_context") else text
+                    use_stripped = bool(pat.get("hcl_context"))
+                    search_text = strip_hcl_context(text) if use_stripped else text
                     for m in regex.finditer(search_text):
+                        # Audit follow-up #19 — when `hcl_context: true`
+                        # is set, comments are removed from
+                        # `search_text` before matching. The match
+                        # offset is in the stripped text; reporting it
+                        # as a line number against the *original* file
+                        # would be wrong (off by however many comment
+                        # lines preceded the match). Resolve the
+                        # original line by re-locating the matched
+                        # bytes inside the unstripped text. The match
+                        # string is unique enough in nearly all real
+                        # rule patterns; on a rare collision we fall
+                        # back to the stripped-text count which at
+                        # worst reproduces the prior (buggy) behaviour.
                         line = search_text.count("\n", 0, m.start()) + 1
+                        if use_stripped:
+                            matched = m.group(0)
+                            orig_pos = text.find(matched)
+                            if orig_pos >= 0:
+                                line = text.count("\n", 0, orig_pos) + 1
                         # Best-effort resource attribution: find the enclosing
                         # resource/data block so the attack graph can attach
                         # this finding even though the rule wasn't a
@@ -1309,7 +1328,32 @@ def detect_in_file(
                     # ROB-DRIFT-002 owns the wildcard case; skip here.
                     if re.search(r"['\"]\*['\"]", inner) or "[*]" in inner:
                         continue
-                    items = [x.strip() for x in inner.split(",") if x.strip()]
+                    # Audit follow-up #20 — a bare `inner.split(",")` is
+                    # quote-blind; a value like `["a,b", "c"]` would
+                    # split into three items instead of two and a
+                    # threshold-based finding would misfire. Walk the
+                    # characters and only split on commas outside
+                    # `"…"` regions. Single-quoted strings aren't
+                    # valid HCL string syntax so we don't track them.
+                    items: list[str] = []
+                    buf: list[str] = []
+                    in_dq = False
+                    prev = ""
+                    for ch in inner:
+                        if ch == '"' and prev != "\\":
+                            in_dq = not in_dq
+                            buf.append(ch)
+                        elif ch == "," and not in_dq:
+                            piece = "".join(buf).strip()
+                            if piece:
+                                items.append(piece)
+                            buf.clear()
+                        else:
+                            buf.append(ch)
+                        prev = ch
+                    tail = "".join(buf).strip()
+                    if tail:
+                        items.append(tail)
                     if len(items) > max_attrs:
                         btype, bname = blk["groups"]
                         findings.append(
@@ -3510,9 +3554,22 @@ def main():
     # Route report output: stdout (default) or a file (--output PATH).
     # We shadow `print` for report output only — stderr progress lines
     # always go to sys.stderr and are unaffected.
+    #
+    # Audit follow-up #2 / #15 — the file is closed at the bottom of
+    # `main()` and at four early-return sites. None of those paths run
+    # if a render exception fires partway through the ~860-line output
+    # block. `atexit.register` is the smallest patch that guarantees a
+    # close on uncaught exceptions too — without indenting the rest of
+    # `main()` into a `try: ... finally:` block. The existing explicit
+    # closes are retained (they release the fd sooner on the happy
+    # path); atexit is the safety net for the exception case.
     _out_file = None
     if args.output:
         _out_file = open(args.output, "w", encoding="utf-8")
+        import atexit
+        atexit.register(
+            lambda: _out_file.close() if (_out_file is not None and not _out_file.closed) else None
+        )
 
     def _emit(text: str) -> None:
         """Write report output to stdout or --output file."""

@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
 import { injectLinkInterceptor, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
+import { runEngine } from './engineRunner';
 
 const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'owasp_iac', 'all'] as const;
 type Framework = (typeof FRAMEWORKS)[number];
@@ -47,7 +47,9 @@ export class CompliancePanel {
     this._panel.onDidDispose(() => {
       CompliancePanel.currentPanel = undefined;
     });
-    this._panel.webview.onDidReceiveMessage((msg: { command?: string; framework?: string; url?: string }) => {
+    // Audit follow-up #1 — capture + dispose the message handler so a
+    // closed-and-reopened panel doesn't leak the prior subscription.
+    const msgSub = this._panel.webview.onDidReceiveMessage((msg: { command?: string; framework?: string; url?: string }) => {
       if (msg?.command === 'setFramework' && msg.framework && FRAMEWORKS.includes(msg.framework as Framework)) {
         this._framework = msg.framework as Framework;
         this._refresh();
@@ -64,6 +66,7 @@ export class CompliancePanel {
         }
       }
     });
+    this._panel.onDidDispose(() => msgSub.dispose());
     this._panel.webview.html = this._loading();
     this._refresh();
   }
@@ -81,16 +84,15 @@ export class CompliancePanel {
       return;
     }
 
-    const argv = [absScript, '--target', wsFolder, '--format', 'html', '--compliance', '--compliance-framework', this._framework];
-    cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const errCode = (err as cp.ExecException & { code?: number } | null)?.code;
+    const argv = ['--target', wsFolder, '--format', 'html', '--compliance', '--compliance-framework', this._framework];
+    runEngine(absScript, argv, ({ err, stdout, stderr, cmdLine, timedOut }) => {
+      const errCode = err?.code;
       const exitGtOne = typeof errCode === 'number' && errCode > 1;
       const stdoutEmpty = !stdout || !stdout.trim();
-      const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
 
-      if (exitGtOne || stdoutEmpty) {
+      if (exitGtOne || stdoutEmpty || timedOut) {
         this._panel.webview.html = this._error(
-          'detect.py failed',
+          timedOut ? 'detect.py timed out' : 'detect.py failed',
           `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
           `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
           `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`
@@ -107,7 +109,15 @@ export class CompliancePanel {
   }
 
   private _wrap(reportHtml: string): string {
-    const srcdoc = reportHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    // Audit follow-up #14 — srcdoc escape must cover the same character
+    // set as the inline `_escape` helper below; previously this path
+    // only escaped `&` and `"`, so a `</script>` sequence inside an
+    // engine-rendered attribute could break the wrapping HTML.
+    const srcdoc = reportHtml
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
     const opts = FRAMEWORKS.map(fw => {
       const label =
         fw === 'cis' ? 'CIS' :

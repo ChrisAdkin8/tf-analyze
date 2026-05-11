@@ -27,15 +27,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pytest + hypothesis
+      - name: Install pytest + hypothesis + pytest-timeout
         # hypothesis enables the property-based tests added for
-        # `_blast_radius` cycle handling.
-        run: pip install pytest pytest-xdist hypothesis --quiet
+        # `_blast_radius` cycle handling. pytest-timeout caps any
+        # single test at 300s (audit follow-up #17) so a hung
+        # subprocess can't stall the whole matrix slot.
+        run: pip install pytest pytest-xdist pytest-timeout hypothesis --quiet
       - name: Run full pytest suite
         # Audit item 31 — previously this step ran three named files,
         # leaving 43 test modules unexercised in CI. The full suite is
         # the single highest-ROI guard in the repo.
-        run: pytest tests/ --tb=short -q --junitxml=test-results-py${{ matrix.python-version }}.xml
+        #
+        # `--timeout=300 --timeout-method=thread` (audit follow-up #17)
+        # bounds any individual test at 5 minutes. `thread` instead of
+        # `signal` is required because some tests spawn subprocesses;
+        # signal-based timeouts can't interrupt a thread blocked in a
+        # syscall.
+        run: pytest tests/ --tb=short -q --timeout=300 --timeout-method=thread --junitxml=test-results-py${{ matrix.python-version }}.xml
       - name: Run fixture self-test
         run: python3 scripts/self_test.py
       - name: Run schema validator regression

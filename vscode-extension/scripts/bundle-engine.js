@@ -31,24 +31,41 @@ const repoRoot = path.dirname(extensionRoot);                      // tf-analyze
 //   engine/catalog/*.yaml
 // the engine works with no extension-side flag bookkeeping.
 //
-// `ENGINE_SIBLING_FILES` lists every Python file in scripts/ that
-// detect.py imports as a sibling. Add a name here when extracting a
-// new module from detect.py — without it, `import _mitre` (or
-// whatever) blows up at extension load time inside a packaged .vsix.
-const ENGINE_SIBLING_FILES = [
-  'detect.py',
-  // Sessions A-G (R30.0.6 → R30.7): the original modularisation seams.
-  '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py',
-  '_output.py', '_attack_graph.py', '_cross_resource.py', '_lsp.py',
-  // R30.2: threat-intel.
-  '_threat_intel.py',
-  // R30.17: blast-radius.
-  '_blast_radius.py',
-  // R30.19 (Sessions H-O): eight further seams — cache, diff, registry,
-  // plan/state, apply-fixes, baseline, fleet/trend, verify-fixed.
-  '_cache.py', '_diff.py', '_registry.py', '_plan_state.py',
-  '_apply_fixes.py', '_baseline.py', '_modes.py', '_verify.py',
-];
+// Audit follow-up #16 — the file list used to be maintained by hand,
+// which meant every new `scripts/_xyz.py` extract had to be added in
+// two places (the extract itself plus this array). Forgotten entries
+// ship a .vsix that crashes at first import of the missing module,
+// and the smoke test only catches it when detect.py imports the
+// module at startup — lazy-imported modules (`from _registry import
+// …` inside a per-rule branch) slip through silently.
+//
+// We now discover siblings by globbing `scripts/_*.py`, then concat
+// `detect.py` at the front so the bundle order remains stable. A
+// runtime sanity check below still enforces a minimum count (the
+// previous guard against an accidentally-empty array) and a fixed
+// list of NEVER_BUNDLE entries lets us deliberately exclude a file
+// (none today, but keeps the door open for test-only helpers).
+const NEVER_BUNDLE = new Set([]);
+const sourceScriptsDirEarly = path.join(path.dirname(__dirname), '..', 'scripts');
+const ENGINE_SIBLING_FILES = (
+  fs.existsSync(sourceScriptsDirEarly)
+    ? fs.readdirSync(sourceScriptsDirEarly)
+        .filter(n => /^_[a-zA-Z0-9_]+\.py$/.test(n) && !NEVER_BUNDLE.has(n))
+        .sort()
+    : []
+);
+ENGINE_SIBLING_FILES.unshift('detect.py');
+// Minimum sibling count is a safety net: today's catalogue has 18 of
+// them, so a sudden drop to 5 (e.g. a glob bug that misses underscore-
+// prefixed files) fails the build instead of shipping a half-bundle.
+const MIN_SIBLING_COUNT = 15;
+if (ENGINE_SIBLING_FILES.length < MIN_SIBLING_COUNT) {
+  console.error(
+    `[bundle-engine] FATAL: glob picked only ${ENGINE_SIBLING_FILES.length} sibling files, ` +
+    `expected ≥ ${MIN_SIBLING_COUNT}. The glob (\`scripts/_*.py\`) probably ran against the wrong cwd.`,
+  );
+  process.exit(1);
+}
 
 const sourceScriptsDir = path.join(repoRoot, 'scripts');
 const sourceCatalogDir = path.join(repoRoot, 'catalog');

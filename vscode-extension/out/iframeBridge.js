@@ -18,7 +18,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LINK_BRIDGE_PARENT_JS = void 0;
 exports.injectLinkInterceptor = injectLinkInterceptor;
+// Audit follow-up #22 — a sentinel HTML comment identifies the bridge
+// uniquely so the idempotency check can't false-positive on a
+// legitimate `'openLink'` occurrence in unmodified engine HTML.
+const INTERCEPTOR_SENTINEL = '<!-- tfanalyze-link-bridge-v1 -->';
 const INTERCEPTOR_SCRIPT = `
+${INTERCEPTOR_SENTINEL}
 <script>
 (function () {
   // Intercept clicks on any anchor with an http/https href and forward
@@ -47,7 +52,10 @@ const INTERCEPTOR_SCRIPT = `
  * same panel), this returns the input unchanged.
  */
 function injectLinkInterceptor(html) {
-    if (!html || html.indexOf("'openLink'") !== -1)
+    // Audit follow-up #22 — match on a unique sentinel comment, not the
+    // substring `'openLink'` (which is also referenced verbatim in
+    // documentation and could legitimately appear in engine-rendered HTML).
+    if (!html || html.indexOf(INTERCEPTOR_SENTINEL) !== -1)
         return html;
     // Engine HTML reliably ends with `</body></html>`; inject just
     // before the closing body tag. If the layout ever changes, fall

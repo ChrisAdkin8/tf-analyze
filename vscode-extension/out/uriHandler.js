@@ -89,7 +89,19 @@ function dispatchUri(uri, handlers) {
         handlers.openRule(ruleId);
         const file = safePath(params.get("file"));
         const line = safeLine(params.get("line"));
+        // Audit follow-up #8 — gate the `file` argument to the workspace
+        // root the same way `/scan` and `/suppress` do. Previously /explain
+        // accepted any absolute path; a crafted link
+        // (`vscode://…/explain?id=X&file=/etc/passwd&line=1`) would open
+        // a host file outside the workspace. The rule pane still opens
+        // (handlers.openRule called above) — we only gate the editor jump.
         if (file && line !== null) {
+            const ws = handlers.workspacePath();
+            if (file !== ws && !file.startsWith(ws + "/")) {
+                handlers.warn(`tf-analyze: /explain file ${file} is outside the active ` +
+                    `workspace (${ws}); refusing to open it.`);
+                return { kind: "explain", ruleId, file: null, line };
+            }
             handlers.openLocation(file, line);
         }
         return { kind: "explain", ruleId, file, line };

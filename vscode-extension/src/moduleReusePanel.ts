@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
 import { ruleDocsUrl } from './urls';
+import { runEngine } from './engineRunner';
 
 interface ModuleReuseFinding {
   id: string;
@@ -78,15 +78,13 @@ export class ModuleReusePanel {
       return;
     }
 
-    const argv = [absScript, '--target', wsFolder, '--format', 'json', '--show-info'];
-    cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const errCode = (err as cp.ExecException & { code?: number } | null)?.code;
+    runEngine(absScript, ['--target', wsFolder, '--format', 'json', '--show-info'], ({ err, stdout, stderr, cmdLine, timedOut }) => {
+      const errCode = err?.code;
       const exitGtOne = typeof errCode === 'number' && errCode > 1;
-      const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
 
-      if (exitGtOne || !stdout) {
+      if (exitGtOne || !stdout || timedOut) {
         this._panel.webview.html = this._error(
-          'detect.py failed',
+          timedOut ? 'detect.py timed out' : 'detect.py failed',
           `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
           `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
           `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`

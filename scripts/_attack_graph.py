@@ -266,12 +266,14 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
 
         for m in _EDGE_IAM_PROFILE_RE.finditer(body):
             _add_edge(addr, f"aws_iam_instance_profile.{m.group(1)}", "iam_profile")
-        if rtype == "aws_iam_instance_profile":
-            for m in _EDGE_PROFILE_ROLE_RE.finditer(body):
-                _add_edge(addr, f"aws_iam_role.{m.group(1)}", "role")
-        elif rtype not in {"aws_iam_instance_profile"}:
-            for m in _EDGE_PROFILE_ROLE_RE.finditer(body):
-                _add_edge(addr, f"aws_iam_role.{m.group(1)}", "role")
+        # Audit follow-up #7 — the previous shape was `if rtype == X:
+        # … elif rtype not in {X}: …` with identical bodies in both
+        # branches, which is structurally redundant (every rtype runs
+        # one branch with the same loop). Collapsed to a single
+        # unconditional loop so a future reader doesn't infer a
+        # semantic distinction where none exists.
+        for m in _EDGE_PROFILE_ROLE_RE.finditer(body):
+            _add_edge(addr, f"aws_iam_role.{m.group(1)}", "role")
         for m in _EDGE_KMS_KEY_ID_RE.finditer(body):
             _add_edge(addr, f"aws_kms_key.{m.group(1)}", "kms_key")
         for m in _EDGE_KMS_KEY_NAME_RE.finditer(body):

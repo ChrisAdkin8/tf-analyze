@@ -312,16 +312,26 @@ def block_arg_value(body: str, arg: str) -> str | None:
         return None
     val = m.group(1).strip()
     if '"' in val or "'" in val:
+        # Audit follow-up #6 — the quote-state walker must skip an
+        # escaped quote (`\"`, `\'`) instead of toggling the in-quote
+        # flag on it. Without the `prev != "\\"` guard, a value like
+        # `key = "foo \"bar\""` flips out of DQ on the first `\"` and
+        # the comment-strip pass eats real bytes. Tracking the prior
+        # character is sufficient (HCL doesn't allow `\\\"` ambiguity
+        # in scalar string syntax — a literal backslash is `\\`).
         in_dq = in_sq = False
         cut = None
+        prev = ""
         for idx, ch in enumerate(val):
-            if ch == '"' and not in_sq:
+            escaped = prev == "\\"
+            if ch == '"' and not in_sq and not escaped:
                 in_dq = not in_dq
-            elif ch == "'" and not in_dq:
+            elif ch == "'" and not in_dq and not escaped:
                 in_sq = not in_sq
             elif ch == "#" and not in_dq and not in_sq:
                 cut = idx
                 break
+            prev = ch
         if cut is not None:
             val = val[:cut].rstrip()
     else:

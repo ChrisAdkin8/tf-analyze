@@ -35,9 +35,10 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeltaPanel = void 0;
 const vscode = __importStar(require("vscode"));
-const cp = __importStar(require("child_process"));
+const path = __importStar(require("path"));
 const scriptResolver_1 = require("./scriptResolver");
 const urls_1 = require("./urls");
+const engineRunner_1 = require("./engineRunner");
 /** "Since last scan" panel. Runs `detect.py --format json --auto-compare`
  * which auto-discovers the most recent prior JSON report in the
  * configured reports-dir and emits a `delta = {new, resolved, unchanged}`
@@ -64,10 +65,22 @@ class DeltaPanel {
         this._panel.onDidDispose(() => {
             DeltaPanel.currentPanel = undefined;
         });
-        this._panel.webview.onDidReceiveMessage(async (msg) => {
+        // Audit follow-up #1 — dispose the message-handler subscription
+        // when the panel closes so handlers do not accumulate in memory.
+        // Audit follow-up #8 — gate the file path to the workspace root
+        // before passing it to `openTextDocument`. The handler accepts a
+        // file arg from a webview message; without containment, a crafted
+        // payload could open arbitrary host files.
+        const msgSub = this._panel.webview.onDidReceiveMessage(async (msg) => {
             if (msg?.command === 'open' && msg.file && typeof msg.line === 'number') {
+                const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                const abs = path.resolve(msg.file);
+                if (ws && !abs.startsWith(path.resolve(ws) + path.sep) && abs !== path.resolve(ws)) {
+                    void vscode.window.showWarningMessage(`tf-analyze: refusing to open ${msg.file} (outside workspace root)`);
+                    return;
+                }
                 try {
-                    const doc = await vscode.workspace.openTextDocument(msg.file);
+                    const doc = await vscode.workspace.openTextDocument(abs);
                     const editor = await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
                     const pos = new vscode.Position(Math.max(0, msg.line - 1), 0);
                     editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
@@ -78,6 +91,7 @@ class DeltaPanel {
                 }
             }
         });
+        this._panel.onDidDispose(() => msgSub.dispose());
         this._panel.webview.html = '<html><body style="background:#1e1e1e;color:#ccc;font-family:sans-serif;padding:24px"><p>Comparing against last scan…</p></body></html>';
         this._refresh();
     }
@@ -90,14 +104,12 @@ class DeltaPanel {
                 (0, scriptResolver_1.defaultSearchPaths)(wsFolder).map(p => `<li><code>${this._escape(p)}</code></li>`).join('') + '</ul>');
             return;
         }
-        const argv = [absScript, '--target', wsFolder, '--format', 'json', '--auto-compare'];
-        cp.execFile('python3', argv, { maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+        (0, engineRunner_1.runEngine)(absScript, ['--target', wsFolder, '--format', 'json', '--auto-compare'], ({ err, stdout, stderr, cmdLine, timedOut }) => {
             const errCode = err?.code;
             const exitGtOne = typeof errCode === 'number' && errCode > 1;
             const stdoutEmpty = !stdout || !stdout.trim();
-            const cmdLine = `python3 ${argv.slice(1).map(a => /\s/.test(a) ? `"${a}"` : a).join(' ')}`;
-            if (exitGtOne || stdoutEmpty) {
-                this._panel.webview.html = this._errorHtml('detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
+            if (exitGtOne || stdoutEmpty || timedOut) {
+                this._panel.webview.html = this._errorHtml(timedOut ? 'detect.py timed out' : 'detect.py failed', `<p><strong>Exit code:</strong> ${errCode ?? '(none)'}</p>` +
                     `<p><strong>stderr:</strong></p><pre>${this._escape(stderr || (err && err.message) || '(empty)')}</pre>` +
                     `<p><strong>Command:</strong> <code>${this._escape(cmdLine)}</code></p>`);
                 return;

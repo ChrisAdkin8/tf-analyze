@@ -132,6 +132,29 @@ class TestBlockArgValue:
         for arg in ("encrypted", "name", "enabled", "x"):
             detect.block_arg_value(body, arg)
 
+    def test_escaped_quotes_dont_break_quote_state(self) -> None:
+        """Audit follow-up #6 — `\\"` inside a quoted value must not
+        toggle the in-quote flag. Previously the quote-state walker
+        treated every `"` byte as a state-changer, so a value containing
+        an escaped quote would prematurely exit the quoted region and
+        downstream parsing returned a corrupted slice.
+        """
+        # The HCL primitive returns the inner literal with the outer
+        # quotes stripped. The escape-aware walker should treat the
+        # inner `\"` pair as part of the value, not as a quote pair.
+        body = 'arg = "foo \\"bar\\" baz"'
+        result = detect.block_arg_value(body, "arg")
+        assert result == 'foo \\"bar\\" baz', f"got {result!r}"
+
+    def test_hash_inside_escaped_quoted_value_not_treated_as_comment(self) -> None:
+        """Audit follow-up #6 — `#` inside a quoted region is data, not
+        a comment. The bug surfaces when a `\\"` flips us out of dq
+        prematurely and a later `#` is read as comment-start.
+        """
+        body = 'arg = "value with \\"#hash\\" inside"'
+        result = detect.block_arg_value(body, "arg")
+        assert result == 'value with \\"#hash\\" inside', f"got {result!r}"
+
 
 # ---------------------------------------------------------------------------
 # _resolve_var_ref

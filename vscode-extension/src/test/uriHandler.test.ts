@@ -219,6 +219,21 @@ test('/explain with invalid file or line opens rule but skips editor jump', () =
   assert.equal(calls.openLocation.length, 0);
 });
 
+test('/explain refuses to open files outside the active workspace (audit follow-up #8)', () => {
+  // Crafted /explain link points at a host file outside the workspace.
+  // Rule pane still opens (the rule ID is valid), but `openLocation`
+  // must NOT be invoked — that would let any markdown link or third-
+  // party README open arbitrary files in VS Code.
+  const { handlers, calls } = makeHandlers();
+  dispatchUri(
+    makeUri('/explain', `id=SEC-AWS-IAM-001&file=${encodeURIComponent('/etc/passwd')}&line=1`),
+    handlers,
+  );
+  assert.deepEqual(calls.openRule, ['SEC-AWS-IAM-001']);
+  assert.equal(calls.openLocation.length, 0, 'must not jump to file outside workspace');
+  assert.equal(calls.warn.length, 1, 'must surface the rejection to the user');
+});
+
 test('/explain without id is rejected', () => {
   const { handlers, calls } = makeHandlers();
   dispatchUri(makeUri('/explain'), handlers);
