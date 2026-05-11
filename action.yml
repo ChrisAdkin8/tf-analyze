@@ -148,10 +148,28 @@ runs:
         done
 
         # Surface the score + counts as outputs.
+        # Round-3 audit fix #5 — wrap the JSON load in try/except so a
+        # crashed engine (empty or partial tf-analyze-findings.json)
+        # surfaces a clear error message in the Action log instead of
+        # an untruncated Python traceback. The PR-comment step that
+        # consumes these outputs (downstream) then sees zeroed
+        # defaults rather than an undefined `findings` list.
         python3 - <<'PY' >> "$GITHUB_OUTPUT"
-        import json, os
-        with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")) as f:
-            d = json.load(f)
+        import json, os, sys
+        path = os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")
+        try:
+            with open(path) as fh:
+                d = json.load(fh)
+        except (OSError, json.JSONDecodeError) as e:
+            sys.stderr.write(
+                f"::error::tf-analyze-findings.json is missing or malformed ({e}); "
+                f"the engine likely crashed before emitting JSON. "
+                f"Check the previous step's stderr for the real cause.\n"
+            )
+            # Fall back to zeroed outputs so downstream steps (PR
+            # comment, SARIF upload) can still run with safe defaults
+            # instead of failing on an undefined variable.
+            d = {"summary": {}, "findings": []}
         s = d.get("summary", {})
         c = s.get("counts", {})
         f = d.get("findings", [])

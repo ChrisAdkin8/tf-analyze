@@ -150,16 +150,27 @@ def run_lsp_server(
     rather than a less-helpful traceback inside the LSP loop.
     """
     import inspect
-    def _required_positional_count(fn: Callable) -> tuple[int, int]:
-        """Return (min, max) positional-arg count the callable accepts.
+    def _check_arity(fn: Callable, want: int, name: str) -> None:
+        """Assert ``fn`` accepts exactly ``want`` positional args.
 
-        `min` is parameters without defaults (callers MUST supply);
-        `max` includes parameters with defaults plus *args. Functions
-        with `*args` get `max = float('inf')` effectively (None).
+        Round-3 audit fix #7 — the previous implementation tolerated
+        ``*args``-bearing callables by treating their max-arity as
+        10,000. The interface is fixed; a wrapper that grows a
+        ``*args`` parameter is itself a regression we want to
+        surface. Reject varargs explicitly and report the offending
+        parameter list verbatim in the error.
         """
         sig = inspect.signature(fn)
+        params = list(sig.parameters.values())
+        for p in params:
+            if p.kind == inspect.Parameter.VAR_POSITIONAL:
+                raise TypeError(
+                    f"_lsp.run_lsp_server: {name} must NOT accept *args; "
+                    f"the interface is fixed at {want} positional arg(s). "
+                    f"Got signature {sig}."
+                )
         positional = [
-            p for p in sig.parameters.values()
+            p for p in params
             if p.kind in (
                 inspect.Parameter.POSITIONAL_ONLY,
                 inspect.Parameter.POSITIONAL_OR_KEYWORD,
@@ -168,24 +179,15 @@ def run_lsp_server(
         required = sum(
             1 for p in positional if p.default is inspect.Parameter.empty
         )
-        has_varargs = any(
-            p.kind == inspect.Parameter.VAR_POSITIONAL
-            for p in sig.parameters.values()
-        )
-        return required, (10_000 if has_varargs else len(positional))
+        if not (required <= want <= len(positional)):
+            raise TypeError(
+                f"_lsp.run_lsp_server: {name} must be callable with {want} "
+                f"positional arg(s); got signature {sig} "
+                f"(requires {required}, accepts up to {len(positional)})."
+            )
 
-    scan_min, scan_max = _required_positional_count(scanner)
-    if not (scan_min <= 2 <= scan_max):
-        raise TypeError(
-            f"_lsp.run_lsp_server: scanner must be callable with 2 positional "
-            f"args (path, entries); accepts {scan_min}..{scan_max}"
-        )
-    load_min, load_max = _required_positional_count(load_catalog)
-    if not (load_min <= 1 <= load_max):
-        raise TypeError(
-            f"_lsp.run_lsp_server: load_catalog must be callable with 1 positional "
-            f"arg (catalog_dir); accepts {load_min}..{load_max}"
-        )
+    _check_arity(scanner, 2, "scanner")
+    _check_arity(load_catalog, 1, "load_catalog")
     entries = load_catalog(catalog_dir)
     id_map = {e["id"]: e for e in entries}
     _diagnostics: dict[str, list] = {}

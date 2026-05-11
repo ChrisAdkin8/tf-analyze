@@ -5,6 +5,48 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.47] — 2026-05-11
+
+**Third audit pass — regression-of-fix sweep + remaining hardening.** The
+post-R30.9 audit (`tasks/repo-audit-2026-05-11-round3.md`) flagged a
+real regression introduced by R30.9 itself (the `hcl_context` line-
+counting "fix" turned out to address an imaginary bug — `strip_hcl_context`
+already preserved offsets — but the fix added a `text.find` collision
+that broke line numbers on common patterns). This release reverts the
+broken fix, locks the underlying invariant in `strip_hcl_context`, and
+ships a small bundle of remaining hardening.
+
+### Security / robustness
+
+- **`/explain` URI handler — workspace gate test extended** to confirm
+  the existing R30.9 fix still rejects `/etc/passwd`-style traversal
+  payloads after every refactor.
+- **`iframeBridge.ts` double-confirms idempotency** — sentinel comment
+  (R30.9) plus a `class="tfanalyze-link-bridge"` attribute on the
+  injected `<script>` tag. A future render template colliding on the
+  comment text is now caught by either signal independently.
+
+### Engine — coordinate fix lives in `_hcl.strip_hcl_context`
+
+`strip_hcl_context` previously replaced block-comment content with N
+spaces, which preserved length but converted internal newlines to
+spaces — line counts after a multi-line `/* … */` were off. The new
+shape preserves both length and newline positions; the line-counting
+logic in `detect.py` was reverted to a plain
+`search_text.count("\n", 0, m.start()) + 1` because the equal-length
+contract is now genuinely byte-for-byte true. A new regression test
+(`test_strip_hcl_context_preserves_length_and_offsets`) pins the
+invariant so future contributors can't reintroduce the same imaginary
+bug the round-2 fix tried to solve.
+
+### Counts
+
+- Extension: v0.1.46 → **v0.1.47**.
+- `node:test` cases: 62/62 (unchanged — fixes are behavioural).
+- Engine changes documented in main CHANGELOG.
+
+---
+
 ## [0.1.46] — 2026-05-11
 
 **Follow-up audit pass — panel discipline.** The post-R30.8 audit

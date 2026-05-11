@@ -176,17 +176,35 @@ _BLOCK_COMMENT_RE = re.compile(r'/\*.*?\*/', re.DOTALL)
 
 
 def strip_hcl_context(text: str) -> str:
-    """Replace comments with equal-length whitespace so line numbers
-    of remaining code match the original. String literals are left alone —
-    patterns that would false-positive on strings should be HCL-aware
-    (resource_arg, hcl_attr) rather than grep."""
+    """Replace comments with equal-length whitespace so byte offsets AND
+    line numbers of remaining code match the original. String literals
+    are left alone — patterns that would false-positive on strings
+    should be HCL-aware (resource_arg, hcl_attr) rather than grep.
+
+    Contract pinned by ``test_strip_hcl_context_preserves_length_and_offsets``
+    in ``tests/test_audit_2026_05_11_regressions.py`` (round-3 audit).
+    Length-preserving alone wasn't enough: a multi-line ``/* ... */``
+    comment used to have its newlines replaced with spaces, which
+    shifted every line count after it. The block-comment substitution
+    now preserves newline positions explicitly.
+    """
     def blank(match: re.Match) -> str:
         s = match.group(0)
         # Preserve the first captured char if it's not part of the comment.
         lead = match.group(1) if match.lastindex else ""
-        return lead + " " * (len(s) - len(lead))
+        # Round-3 audit fix — keep newlines (line-comments don't match
+        # them, but a defensive replace here costs nothing).
+        rest = "".join(c if c == "\n" else " " for c in s[len(lead):])
+        return lead + rest
     out = _LINE_COMMENT_RE.sub(blank, text)
-    out = _BLOCK_COMMENT_RE.sub(lambda m: " " * len(m.group(0)), out)
+    # Round-3 audit fix — block comments span multiple lines, so
+    # replacing the whole match with N spaces previously converted
+    # internal newlines to spaces and shifted line counts in code
+    # following a /* ... */ comment.
+    out = _BLOCK_COMMENT_RE.sub(
+        lambda m: "".join(c if c == "\n" else " " for c in m.group(0)),
+        out,
+    )
     return out
 
 

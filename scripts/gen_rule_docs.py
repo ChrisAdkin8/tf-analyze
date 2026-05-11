@@ -694,6 +694,19 @@ def main() -> int:
                     help="Verify docs/rules/ matches the catalogue. Exit 1 if stale (for CI gating).")
     args = ap.parse_args()
 
+    # Round-3 audit fix #22 — `mkdir(parents=True, exist_ok=True)` is
+    # silent when the path exists as a non-directory (e.g. someone
+    # accidentally `touch`ed `docs/rules`). Without this preflight,
+    # the subsequent `write_text` calls raise `NotADirectoryError`
+    # deep in the generator with no actionable message. Surface the
+    # mismatch with a clear hint instead.
+    if DOCS_RULES_DIR.exists() and not DOCS_RULES_DIR.is_dir():
+        print(
+            f"FATAL: {DOCS_RULES_DIR} exists but is not a directory. "
+            f"Remove or rename it, then re-run.",
+            file=sys.stderr,
+        )
+        return 2
     DOCS_RULES_DIR.mkdir(parents=True, exist_ok=True)
 
     entries: list[dict] = []

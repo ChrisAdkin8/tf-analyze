@@ -123,9 +123,36 @@ def _run_detect(plan_json_path: Path) -> tuple[dict, int]:
         # Audit follow-up #13 — surface the parse failure as a synthetic
         # finding so the downstream summary doesn't render "0 findings"
         # for a scan that actually crashed.
+        #
+        # Round-3 audit fix #17 — emit a real finding entry (with a
+        # sentinel rule-id `SYN-SCAN-FAILED`) so downstream renderers
+        # (Slack notifier, the dashboard, the run-task callback body)
+        # surface the failure through their normal "render each
+        # finding" pipeline. The `_scan_failed: True` flag is kept for
+        # backwards-compat with anything that already special-cases
+        # it; new consumers should match on `id == "SYN-SCAN-FAILED"`.
         data = {
-            "findings": [],
-            "summary": {"score": 0, "grade": "F", "counts": {}},
+            "findings": [
+                {
+                    "id": "SYN-SCAN-FAILED",
+                    "urgency": "CRITICAL",
+                    "title": "tf-analyze engine crashed",
+                    "section": "engine",
+                    "file": "(engine)",
+                    "line": 0,
+                    "recommendation": (
+                        "The engine returned non-JSON. Check the run-task "
+                        "logs for the captured stderr. Most common causes: "
+                        "missing catalogue, malformed .tf file, OOM."
+                    ),
+                    "context": res.stderr[:2000] or "(empty stderr)",
+                },
+            ],
+            "summary": {
+                "score": 0,
+                "grade": "F",
+                "counts": {"CRITICAL": 1, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0},
+            },
             "_scan_failed": True,
             "_stderr": res.stderr[:2000],
         }

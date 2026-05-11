@@ -289,7 +289,28 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
             # Each line of the body is a `name = value` assignment.
             for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', body):
                 lname, raw = lm.group(1), lm.group(2)
-                lval = re.sub(r'\s*#.*$', '', raw).strip().strip('"').strip("'")
+                # Audit fix #12 — the trailing-comment strip used to be
+                # `re.sub(r'\s*#.*$', '', raw)` which is quote-blind: a
+                # value like `"value # not a comment"` lost everything
+                # from `#` onward. Walk the raw value tracking quote
+                # state (matches `_hcl.block_arg_value`'s escape-aware
+                # quote walker) and only strip a `#` that lives outside
+                # a quoted region.
+                in_dq = in_sq = False
+                prev = ""
+                cut = None
+                for idx, ch in enumerate(raw):
+                    escaped = prev == "\\"
+                    if ch == '"' and not in_sq and not escaped:
+                        in_dq = not in_dq
+                    elif ch == "'" and not in_dq and not escaped:
+                        in_sq = not in_sq
+                    elif ch == "#" and not in_dq and not in_sq:
+                        cut = idx
+                        break
+                    prev = ch
+                cleaned = raw[:cut].rstrip() if cut is not None else raw.rstrip()
+                lval = cleaned.strip().strip('"').strip("'")
                 result.setdefault(dir_key, {})["__local__" + lname] = lval
 
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
@@ -457,28 +478,24 @@ def detect_in_file(
                                 "resource": f"{btype}.{bname}",
                             })
                 else:
-                    use_stripped = bool(pat.get("hcl_context"))
-                    search_text = strip_hcl_context(text) if use_stripped else text
+                    # `strip_hcl_context` replaces comments with EQUAL-LENGTH
+                    # whitespace (see `_hcl.strip_hcl_context` docstring),
+                    # so the stripped text has the same length and the same
+                    # byte offsets as the original. `m.start()` is therefore
+                    # already a correct position against `text` — line
+                    # counts and block-attribution `<=`/`<` comparisons
+                    # against the original `text` work directly.
+                    #
+                    # An earlier R30.9 fix tried to re-locate the match via
+                    # `text.find(matched)` to "translate" coordinates that
+                    # were never actually shifted. That introduced a
+                    # first-occurrence collision (if the matched bytes
+                    # appeared earlier in the file, e.g. an attribute value
+                    # repeated, the reported line was wrong). Reverted in
+                    # round 3 once the equal-length contract was confirmed.
+                    search_text = strip_hcl_context(text) if pat.get("hcl_context") else text
                     for m in regex.finditer(search_text):
-                        # Audit follow-up #19 — when `hcl_context: true`
-                        # is set, comments are removed from
-                        # `search_text` before matching. The match
-                        # offset is in the stripped text; reporting it
-                        # as a line number against the *original* file
-                        # would be wrong (off by however many comment
-                        # lines preceded the match). Resolve the
-                        # original line by re-locating the matched
-                        # bytes inside the unstripped text. The match
-                        # string is unique enough in nearly all real
-                        # rule patterns; on a rare collision we fall
-                        # back to the stripped-text count which at
-                        # worst reproduces the prior (buggy) behaviour.
                         line = search_text.count("\n", 0, m.start()) + 1
-                        if use_stripped:
-                            matched = m.group(0)
-                            orig_pos = text.find(matched)
-                            if orig_pos >= 0:
-                                line = text.count("\n", 0, orig_pos) + 1
                         # Best-effort resource attribution: find the enclosing
                         # resource/data block so the attack graph can attach
                         # this finding even though the rule wasn't a

@@ -61,13 +61,34 @@ def run_detect(fixture_dir: Path, fixture_name: str, all_rules: bool = False) ->
     if not all_rules:
         args.extend(["--only-fixture", fixture_name])
     result = subprocess.run(args, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"  detect.py failed: {result.stderr}", file=sys.stderr)
+    # Round-3 audit fix #4 — distinguish "engine ran, findings or none"
+    # (exit 0 or 1) from "engine crashed" (exit ≥ 2). The previous
+    # `!= 0` check rejected exit 1 (the normal positive-fixture
+    # outcome) but the script worked in practice because
+    # `--only-fixture` short-circuits before the `--fail-on` exit-code
+    # logic; the test surface still silently degraded on real
+    # crashes. The new shape surfaces stderr loudly, including any
+    # Python traceback, instead of returning the empty set.
+    if result.returncode > 1:
+        print(f"  detect.py crashed (exit {result.returncode}): {result.stderr.strip() or '(empty stderr)'}", file=sys.stderr)
+        return set()
+    if not result.stdout.strip():
+        # Exit 0/1 with empty stdout means the engine died before
+        # emitting the report. Surface stderr verbatim so the
+        # operator sees the real cause.
+        print(
+            f"  detect.py emitted empty stdout (exit {result.returncode}). "
+            f"stderr: {result.stderr.strip() or '(empty)'}",
+            file=sys.stderr,
+        )
         return set()
     try:
         data = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        print(f"  invalid JSON from detect.py", file=sys.stderr)
+    except json.JSONDecodeError as e:
+        print(
+            f"  invalid JSON from detect.py ({e}). stderr: {result.stderr.strip() or '(empty)'}",
+            file=sys.stderr,
+        )
         return set()
     # Handle both old list format and new dict format
     if isinstance(data, list):

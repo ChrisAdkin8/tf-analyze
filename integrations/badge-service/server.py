@@ -136,7 +136,20 @@ _GRADE_COLOURS: dict[str, tuple[str, str]] = {
 
 
 def _grade_colour(grade: str) -> tuple[str, str]:
-    return _GRADE_COLOURS.get(grade, ("#9f9f9f", "#fff"))
+    # Round-3 audit fix #21 — validate the grade at render time too,
+    # not just at ingest. A future engine that emits `"A+"` or any
+    # other unrecognised letter would slip through ingest if its
+    # validation surface ever loosens; rendering with a clear fallback
+    # (`F` colour + a stderr log) prevents silent grey badges that
+    # users could mistake for "scan not yet run".
+    if grade in _GRADE_COLOURS:
+        return _GRADE_COLOURS[grade]
+    import sys
+    sys.stderr.write(
+        f"[badge-service] WARN: unrecognised grade {grade!r}; "
+        f"rendering with F-tier colour\n",
+    )
+    return _GRADE_COLOURS["F"]
 
 
 def render_badge_svg(label: str, score: int, grade: str) -> str:

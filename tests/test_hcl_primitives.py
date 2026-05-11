@@ -112,11 +112,18 @@ class TestBlockArgValue:
 
     @given(_idents, st.text(alphabet="abcdefghij_0123456789-", min_size=1, max_size=30))
     def test_quoted_value_strips_quotes(self, arg: str, value: str) -> None:
+        # Round-3 audit fix #8 — assert the contract unconditionally.
+        # Previously: `if result is not None: assert result == value`
+        # which passed even if the function always returned None (the
+        # property test became a tautology). The contract is "a
+        # well-formed `arg = "value"` line returns `value`"; that
+        # contract must hold for every input the strategy produces.
         body = f'  {arg} = "{value}"'
         result = detect.block_arg_value(body, arg)
-        # The function strips matching outer quotes.
-        if result is not None:
-            assert result == value
+        assert result == value, (
+            f"block_arg_value({body!r}, {arg!r}) returned {result!r}; "
+            f"expected {value!r}"
+        )
 
     @given(_idents)
     def test_missing_arg_returns_none(self, arg: str) -> None:

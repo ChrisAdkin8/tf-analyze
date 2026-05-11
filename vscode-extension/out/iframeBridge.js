@@ -21,10 +21,17 @@ exports.injectLinkInterceptor = injectLinkInterceptor;
 // Audit follow-up #22 — a sentinel HTML comment identifies the bridge
 // uniquely so the idempotency check can't false-positive on a
 // legitimate `'openLink'` occurrence in unmodified engine HTML.
+//
+// Round-3 audit fix #18 — double-confirm via a CSS class on the
+// injected `<script>` tag. If a future render template happens to
+// include the same comment text, the class attribute is far less
+// likely to collide; the idempotency check below already prefers
+// the comment but the class lets a downstream linter / verifier
+// confirm injection independently.
 const INTERCEPTOR_SENTINEL = '<!-- tfanalyze-link-bridge-v1 -->';
 const INTERCEPTOR_SCRIPT = `
 ${INTERCEPTOR_SENTINEL}
-<script>
+<script class="tfanalyze-link-bridge" data-version="1">
 (function () {
   // Intercept clicks on any anchor with an http/https href and forward
   // the URL to the parent webview. preventDefault stops the iframe

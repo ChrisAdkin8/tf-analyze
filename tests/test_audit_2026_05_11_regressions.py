@@ -66,6 +66,39 @@ def test_engine_stderr_carries_no_traceback_on_clean_run() -> None:
     assert "ERROR:" not in (r.stderr or ""), r.stderr
 
 
+# ─── Round 3 audit — strip_hcl_context preserves byte offsets ───────
+def test_strip_hcl_context_preserves_length_and_offsets() -> None:
+    """The R30.9 `hcl_context` line-counting "fix" assumed comments
+    shifted byte offsets in the stripped text; the actual contract is
+    that comments are replaced with equal-length whitespace, so the
+    stripped text shares lengths and offsets with the original. The
+    fix was a no-op at best and a regression source on first-occurrence
+    collisions of `text.find(matched)`. Pinning the invariant prevents
+    a future contributor from "fixing" the same imaginary bug again.
+    """
+    from _hcl import strip_hcl_context  # type: ignore
+    samples = [
+        "resource \"aws_s3_bucket\" \"x\" { # a comment\n  encrypted = false\n}\n",
+        "// double-slash comment\n  key = \"value\"\n/* block\ncomment */\n",
+        "no comments at all here\n",
+        "",
+    ]
+    for src in samples:
+        stripped = strip_hcl_context(src)
+        assert len(stripped) == len(src), (
+            f"strip_hcl_context changed length from {len(src)} to "
+            f"{len(stripped)} on input {src!r}"
+        )
+        # Every newline in the original must appear at the same offset
+        # in the stripped output — the line-counting contract relies
+        # on this.
+        for i, ch in enumerate(src):
+            if ch == "\n":
+                assert stripped[i] == "\n", (
+                    f"newline at offset {i} moved during strip on {src!r}"
+                )
+
+
 # ─── Audit item 22 — single-element `~> N` constraints must work ───────
 def test_versions_tilde_arrow_single_element_includes_min_v() -> None:
     """`~> 3` previously short-circuited via `len(v) < 2: continue`.

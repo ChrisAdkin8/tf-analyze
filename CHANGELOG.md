@@ -5,6 +5,64 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.10 — Third audit pass — regression-of-fix + hardening — 2026-05-11 (ext v0.1.47)
+
+**Closes the 22-finding round-3 audit (`tasks/repo-audit-2026-05-11-round3.md`).** Two notable things: (a) the audit found that R30.9's `hcl_context` line-counting "fix" tried to solve a problem that didn't exist (`strip_hcl_context` already preserved byte offsets — its length-preserving contract is documented at `_hcl.py:179`); (b) the same R30.9 fix exposed a *different* real bug that had been latent for a long time — `strip_hcl_context` was preserving length but converting newlines inside block comments to spaces, so line counts after a multi-line `/* … */` were off. This round fixes the real bug at the source (`strip_hcl_context` now preserves newline positions), reverts the broken R30.9 line-counting workaround, and pins both invariants with a new property test.
+
+### Engine — coordinate fix at the source
+
+- **`_hcl.strip_hcl_context` now preserves newline positions inside block comments.** A multi-line `/* foo\nbar */` used to become `"      \n     "` → `"            "` (all spaces); now becomes `"   \n   "` (whitespace except `\n`). Length is preserved (`len(out) == len(text)`) AND every newline lands at the same offset. Pinned by `test_strip_hcl_context_preserves_length_and_offsets` in `tests/test_audit_2026_05_11_regressions.py`. (Audit follow-up #1 / #2 root cause.)
+- **`detect.py` reverted the R30.9 `text.find(matched)` workaround.** The fix tried to address a bug that didn't exist (the bytes were never shifted) and introduced a first-occurrence collision when a matched string appeared earlier in the file. The new code is the original one-line `search_text.count("\n", 0, m.start()) + 1`, and the test above guards the invariant against future "helpful" regressions.
+
+### Engine — additional hardening
+
+- **`_lsp.py` rejects `*args`-bearing callables** at module entry instead of silently treating them as accepting up to 10,000 args. The interface is fixed; a wrapper growing varargs is itself a regression we want to surface. (Audit follow-up #7.)
+- **`detect.py` locals-parser is quote-aware.** A `local = "value # not a comment"` no longer loses everything from `#` onward; the trailing-comment strip mirrors `_hcl.block_arg_value`'s escape-aware quote walker. (Audit follow-up #12.)
+- **`_output.py` urgency rank consolidated to one source of truth.** Two module-level constants — `URGENCY_RANK_ASCENDING` and `URGENCY_RANK_DESCENDING` — replace five inline dicts. A future bump to HIGH=5 now touches one location. The two senses (CRITICAL=0 vs CRITICAL=4) are documented and named so a contributor can't pick the wrong direction. (Audit follow-up #11.)
+
+### Tests
+
+- **`tests/helpers.run_detect` raises on engine crashes.** Previously caught `JSONDecodeError` and returned `[]` — tests asserting "no findings" passed silently when the engine died. Now raises `AssertionError` with the captured stderr (audit #3).
+- **`scripts/self_test.py` distinguishes exit 0/1 from exit ≥ 2.** Empty stdout with exit 0 means "engine emitted nothing", a real failure; the prior `returncode != 0` check was incorrectly rejecting normal exit-1 (findings present) cases anyway (audit #4).
+- **Hypothesis property test unconditional.** `test_quoted_value_strips_quotes` no longer guards the assertion behind `if result is not None`, which previously turned the property test into a tautology that would pass even if the function always returned `None` (audit #8).
+
+### Integrations
+
+- **GitHub Action wraps the JSON load in `try/except`.** A crashed engine no longer surfaces as a raw Python traceback; downstream steps see zeroed defaults plus a clear `::error::` annotation in the Action log (audit #5).
+- **Terraform provider promotes compliance failure from `AddWarning` to `AddError`.** A `terraform apply` gated on `data.compliance_report` no longer silently passes when the compliance run itself died (audit #6).
+- **`integrations/run-task/server.py`** synthetic-failure entry now carries a `SYN-SCAN-FAILED` rule-id and a populated findings list, so downstream renderers handle it through the normal "render each finding" pipeline instead of having to special-case `_scan_failed: True` (audit #17).
+- **`integrations/badge-service/server.py`** validates the grade at render time too. An unrecognised grade renders as F-tier red + a stderr WARN, not the prior neutral grey that users misread as "no scan yet" (audit #21).
+- **`demo/app.py`** distinguishes engine config errors from JSON parse errors in the public scanner. The 500 response now carries the captured stderr instead of just "invalid JSON" (audit #19).
+
+### Tooling + docs
+
+- **`scripts/gen_rule_docs.py`** preflight check on `DOCS_RULES_DIR`. If someone accidentally `touch`ed `docs/rules` (now a file), the generator surfaces a clear "remove or rename it" message instead of `NotADirectoryError` deep in the call stack (audit #22).
+- **`bundle-engine.js` MIN_SIBLING_COUNT rationale** documented (audit #16). The constant is `≈ current count − 3`, sized to allow one or two legitimate module consolidations per round while still catching glob breakage.
+- **`docs/mcp-server.md`** now correctly says "six tools" and lists `blast_radius_report` in the tool table (audit #20). Drift since R30.18.
+
+### VS Code extension
+
+- **`iframeBridge.ts`** double-confirms idempotency via a CSS class on the injected `<script>` (audit #18). Sentinel comment plus class attribute means a future render template colliding on either signal alone won't re-inject the bridge.
+
+See [`vscode-extension/CHANGELOG.md`](vscode-extension/CHANGELOG.md#0147--2026-05-11) for the per-feature breakdown.
+
+### Subagent claims rejected on re-read
+
+- **"moduleReusePanel + mitrePanel missed in the disposable-leak fix"** — both panels are created with `enableScripts: false` and have no `onDidReceiveMessage` handler. Nothing to leak.
+- **"`_attack_graph.py:269-274` duplicate edge inference"** — already collapsed in R30.9.
+- **"`detect.py` atexit closure captures a mutable reference"** — `_out_file` is never reassigned after init; the closure is safe.
+
+### Counts
+
+- Pytest cases: 824 → **825** (+1: `strip_hcl_context` invariant; -0 net because the badge test was rewritten in place, not added).
+- Extension `node:test` cases: 62/62 (unchanged).
+- Self-test fixtures: 238/238 positive + 146/146 clean.
+- Terragoat snapshot: in sync (gcp=85, aws=125, azure=93, total=306).
+- Audit follow-up findings closed: **20 of 22**; 3 rejected on re-read; 2 deferred (`_catalog.py` multi-line scalars + `detect_in_file` brace-walking duplication — both warrant a dedicated structural PR).
+- Extension: v0.1.46 → **v0.1.47**.
+
+---
+
 ## Round 30.9 — Follow-up audit pass — 2026-05-11 (ext v0.1.46)
 
 **Closes the 24-finding follow-up audit (`tasks/repo-audit-2026-05-11-followup.md`).** The R30.8 round closed the prior audit's test-rail and blast-radius gaps; the failure surface shifted to VS Code panel discipline + a long-standing escape-handling bug in `_hcl.py`. This round closes that whole set in one pass.

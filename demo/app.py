@@ -109,10 +109,38 @@ def _run_scan(target_dir: str) -> dict:
         text=True,
         timeout=30,
     )
+    # Round-3 audit fix #19 — a non-JSON stdout could mean either (a)
+    # a real parse error in a non-empty payload, or (b) an empty
+    # payload because the engine crashed with a config error before
+    # emitting JSON. The original handler raised "invalid JSON" for
+    # both, masking case (b)'s root cause (visible only in stderr).
+    # Distinguish them so the 500 message carries actionable signal.
+    if not result.stdout.strip():
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Scanner emitted empty stdout (exit {result.returncode}). "
+                f"Engine stderr: {(result.stderr or '').strip()[:500] or '(empty)'}"
+            ),
+        )
+    if result.returncode > 1:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Scanner exited {result.returncode}. "
+                f"stderr: {(result.stderr or '').strip()[:500] or '(empty)'}"
+            ),
+        )
     try:
         return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Scanner returned invalid JSON")
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Scanner returned invalid JSON: {e}. "
+                f"stderr: {(result.stderr or '').strip()[:500] or '(empty)'}"
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------

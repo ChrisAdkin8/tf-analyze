@@ -23,10 +23,26 @@ def run_detect(target: Path, *, all_rules: bool = False, fixture_name: str = "")
     if not all_rules and fixture_name:
         args += ["--only-fixture", fixture_name]
     result = subprocess.run(args, capture_output=True, text=True)
+    # Round-3 audit fix #3 — previously this function caught
+    # JSONDecodeError and returned `[]`. An engine crash (exit > 1,
+    # empty stdout, traceback on stderr) silently degraded into an
+    # empty result, so any test asserting "no findings" passed
+    # whether the scan succeeded or died. Treat the engine like the
+    # subprocess it is: anything ≥ exit 2 is a real failure, and any
+    # JSON parse failure with a non-empty stderr is also a failure.
+    if result.returncode > 1:
+        raise AssertionError(
+            f"detect.py crashed on {target} (exit {result.returncode}). "
+            f"stderr: {result.stderr.strip() or '(empty)'}"
+        )
     try:
         data = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as e:
+        raise AssertionError(
+            f"detect.py did not return JSON on {target}: {e}. "
+            f"exit={result.returncode}, stderr={result.stderr.strip() or '(empty)'}, "
+            f"stdout[:500]={result.stdout[:500]!r}"
+        ) from e
     if isinstance(data, list):
         return data
     return data.get("findings", [])

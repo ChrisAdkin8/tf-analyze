@@ -74,9 +74,20 @@ class TestSvgRendering:
             f"{sorted(seen)}"
         )
 
-    def test_unknown_grade_falls_back_to_neutral(self) -> None:
+    def test_unknown_grade_falls_back_to_f_tier(self, capsys) -> None:
+        """Round-3 audit fix #21 — unrecognised grade renders as F-tier
+        red, not neutral grey. Grey was easily misread as "no scan
+        yet"; an engine that emitted a typo grade silently rendered as
+        "missing data". Red + stderr WARN forces the operator to
+        notice the mismatch.
+        """
         bg, _ = server._grade_colour("X")
-        assert bg == "#9f9f9f"
+        # F-tier red is the canonical "worst" colour in the palette
+        # and matches the rendered SVG so users see a real signal
+        # rather than a placeholder.
+        assert bg == server._GRADE_COLOURS["F"][0]
+        captured = capsys.readouterr()
+        assert "unrecognised grade" in captured.err
 
     def test_unknown_badge_renders_without_score(self) -> None:
         svg = server.render_unknown_badge()

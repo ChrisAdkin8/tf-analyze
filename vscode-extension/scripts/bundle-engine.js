@@ -58,6 +58,14 @@ ENGINE_SIBLING_FILES.unshift('detect.py');
 // Minimum sibling count is a safety net: today's catalogue has 18 of
 // them, so a sudden drop to 5 (e.g. a glob bug that misses underscore-
 // prefixed files) fails the build instead of shipping a half-bundle.
+//
+// Round-3 audit fix #16 — the threshold is ≈ current count − 3,
+// chosen to allow one or two legitimate module consolidations per
+// round while still catching glob breakage. Raising this value
+// when the actual count grows is safe; lowering it past 12 should
+// be avoided because the four R30.0 → R30.7 seams (`_hcl`,
+// `_catalog`, `_versions`, `_scoring`) plus `detect.py` itself
+// already total 5 and they're load-bearing.
 const MIN_SIBLING_COUNT = 15;
 if (ENGINE_SIBLING_FILES.length < MIN_SIBLING_COUNT) {
   console.error(

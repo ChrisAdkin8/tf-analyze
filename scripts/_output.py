@@ -117,6 +117,42 @@ from _mitre import MITRE_ATTACK_VERSION
 from _catalog import validate_catalog_entry
 
 
+# ---- urgency rank — single source of truth ------------------------------
+# Round-3 audit fix #11 — the urgency-rank table was previously defined
+# inline at five sites in this module: the executive view (line 1048),
+# the fix-priority HTML (line 1182), the compliance render (line 1501),
+# and the find-display fallback (line 1553 — note the opposite sense:
+# CRITICAL=4 high vs CRITICAL=0 low, which is what made the inline
+# copies a drift hazard).
+#
+# Two canonical orderings, both centralised:
+#
+#   * ``URGENCY_RANK_ASCENDING`` — lower number = more severe. Used
+#     anywhere a sort by urgency-then-other wants CRITICAL first via
+#     `key=lambda x: URGENCY_RANK_ASCENDING.get(x["urgency"], …)`.
+#   * ``URGENCY_RANK_DESCENDING`` — higher number = more severe. Used
+#     in the few sites that pick the "largest" urgency via
+#     `max(…, key=lambda u: URGENCY_RANK_DESCENDING[u])`.
+#
+# A future contributor bumping HIGH from 1 to 5 needs to touch only
+# this file. The constants are intentionally exposed at module scope
+# so the test suite can lock them.
+URGENCY_RANK_ASCENDING: dict[str, int] = {
+    "CRITICAL": 0,
+    "HIGH": 1,
+    "MEDIUM": 2,
+    "LOW": 3,
+    "INFO": 4,
+}
+URGENCY_RANK_DESCENDING: dict[str, int] = {
+    "CRITICAL": 4,
+    "HIGH": 3,
+    "MEDIUM": 2,
+    "LOW": 1,
+    "INFO": 0,
+}
+
+
 # ---- rule-docs canonical URL --------------------------------------------
 # Single source of truth for the per-rule docs URL — drives:
 #   - SARIF `helpUri` on every result + every rule definition
@@ -1045,7 +1081,8 @@ def _render_mitre(findings: list[dict], entries: list[dict],
             if re.sub(r"[-_ ]", "", k).lower() == wanted
         }
 
-    URGENCY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    # Audit fix #11 — sort uses the module-level rank.
+    URGENCY_RANK = URGENCY_RANK_ASCENDING
     out: list[str] = [
         f"## MITRE ATT&CK Coverage  (pinned to ATT&CK {MITRE_ATTACK_VERSION})",
         "",
@@ -1179,7 +1216,8 @@ def _render_pr_summary(
 
     # Rank findings by urgency × centrality. Centrality may be absent
     # (graph wasn't built); treat missing as 0 so urgency dominates.
-    URG_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    # Audit fix #11 — share the single source of truth at module top.
+    URG_RANK = URGENCY_RANK_ASCENDING
     cent = centrality or {}
 
     def _rank_key(f: dict) -> tuple:
@@ -1498,7 +1536,8 @@ def to_html(
     by_id: dict[str, list[dict]] = {}
     for f in findings:
         by_id.setdefault(f["id"], []).append(f)
-    urgency_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    # Audit fix #11 — share the single source of truth at module top.
+    urgency_rank = URGENCY_RANK_ASCENDING
     sorted_ids = sorted(
         by_id.keys(),
         key=lambda i: (
@@ -1550,7 +1589,15 @@ def to_html(
         # else catalogue default. Take the highest urgency among all findings for the summary badge.
         urgency = entry.get("default_urgency", "MEDIUM")
         eff_urgencies = [_effective_urgency(f, entry) for f in fs]
-        display_urgency = max(eff_urgencies, key=lambda u: {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}.get(u, 2)) if eff_urgencies else urgency
+        # Audit fix #11 — `max` against descending rank picks the
+        # *worst* urgency in the group. Previously this was an inline
+        # dict that disagreed in sense with the ascending rank above
+        # (CRITICAL=4 here vs CRITICAL=0 above) — exactly the drift
+        # this audit-round consolidation prevents.
+        display_urgency = max(
+            eff_urgencies,
+            key=lambda u: URGENCY_RANK_DESCENDING.get(u, 2),
+        ) if eff_urgencies else urgency
         title = entry.get("title", eid)
         detail_rows = _make_detail_rows(eid, display_urgency, fs)
         docs_url = RULE_DOCS_URL_BASE.format(id=eid)

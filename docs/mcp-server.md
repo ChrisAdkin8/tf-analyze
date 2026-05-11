@@ -17,7 +17,7 @@ the agent treating finding text as instructions.
 
 ## Tools
 
-The server exposes five tools and one resource. Each tool's argument
+The server exposes six tools and one resource. Each tool's argument
 shape is validated at the MCP boundary so the engine never sees a
 half-validated input.
 
@@ -28,6 +28,7 @@ half-validated input.
 | `apply_fixes(path, dry_run=True)` | Preview or apply `--apply-fixes`. Default dry-run so the agent must explicitly opt in to writes. |
 | `attack_graph(path)` | Build the internet → crown-jewels graph; returns JSON shape + a Mermaid string. |
 | `compliance_report(path, framework='cis')` | Plain-text compliance gap report. Frameworks: `cis`, `pci_dss`, `soc2`, `owasp_iac`, `all`. The `owasp_iac` framework maps against the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html) — static-analysable items only. |
+| `blast_radius_report(path, top_n=10)` | Top-N resources whose destruction or recreation would cascade to the most downstream dependents — the "what could one `terraform apply` destroy?" question. Runs `--attack-graph` internally. |
 
 The catalogue index is also exposed as the resource `tfanalyze://catalogue`.
 
@@ -49,7 +50,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
 }
 ```
 
-Restart Claude Desktop. The five tools appear in the tool picker; the
+Restart Claude Desktop. The six tools appear in the tool picker; the
 agent can call them on any folder you give it.
 
 ### Cursor

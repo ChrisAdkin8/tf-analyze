@@ -338,11 +338,20 @@ func (d *ScanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 				if exitErr, ok := cErr.(*exec.ExitError); ok {
 					stderr = string(exitErr.Stderr)
 				}
-				resp.Diagnostics.AddWarning(
+				// Round-3 audit fix #6 — promoted from AddWarning to
+				// AddError. A user gating `terraform apply` on
+				// `data.compliance_report` (via `precondition` or
+				// `null_resource` triggers) silently passed the gate
+				// when the compliance run itself died — i.e. the
+				// *absence* of a failure-report was read as "no
+				// failures". The error level forces the operator to
+				// notice that compliance never actually ran.
+				resp.Diagnostics.AddError(
 					"compliance gap report failed",
 					fmt.Sprintf("framework=%s stderr:\n%s\nerr: %s",
 						fw, stderr, cErr.Error()),
 				)
+				return
 			}
 		}
 		complianceText = string(cOut)
