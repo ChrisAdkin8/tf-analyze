@@ -185,14 +185,61 @@ BOOL_COUNT_RE = re.compile(
 COUNT_GUARD_RE = re.compile(r'\?|try\s*\(|length\s*\(|one\s*\(')
 
 
-def _collect_extra_files(target: Path, entries: list[dict]) -> list[Path]:
+def _path_is_ignored(path: Path, target: Path, ignore_paths: list) -> bool:
+    """Return True when ``path`` should be skipped per ``ignore_paths``.
+
+    Each entry is matched against the file's path *relative to the scan
+    target* (so users write paths the way they'd type them at the repo
+    root). Matching is prefix-style on path components — an entry
+    ``examples/`` matches ``examples/foo/main.tf`` and ``examples/bar.tf``
+    but never matches ``not-examples/main.tf`` (string-prefix matching
+    would).
+
+    Used to honour ``ignore_paths:`` from ``.tf-analyze.yaml`` so a repo
+    that ships deliberate negative fixtures (e.g. tf-analyze itself, or
+    any security-tool repo with intentionally-vulnerable test corpora)
+    can scan only its production code instead of self-scoring against
+    the fixtures.
+    """
+    if not ignore_paths:
+        return False
+    try:
+        rel = path.resolve().relative_to(target.resolve())
+    except ValueError:
+        return False
+    rel_parts = rel.parts
+    for raw in ignore_paths:
+        pat = str(raw).strip().strip("/").replace("\\", "/")
+        if not pat:
+            continue
+        pat_parts = tuple(pat.split("/"))
+        # File matches if every component of the pattern matches the
+        # corresponding leading component of the relative path. This is
+        # the "prefix on path components" rule documented above — string
+        # prefix would let `examples/` accidentally match `examples2/`.
+        if len(pat_parts) > len(rel_parts):
+            continue
+        if rel_parts[:len(pat_parts)] == pat_parts:
+            return True
+    return False
+
+
+def _collect_extra_files(
+    target: Path,
+    entries: list[dict],
+    ignore_paths: list | None = None,
+) -> list[Path]:
     """Walk `target` for files matching any non-tf `file_glob` declared in
     the catalogue (workflow YAML for SEC-CICD-001..003, tfvars rules, etc.).
 
     De-duplicates across rules so the same file is read once even when
     multiple catalogue entries share a glob. `.terraform/` is excluded
-    so cached provider plugins never appear in the corpus.
+    so cached provider plugins never appear in the corpus. ``ignore_paths``
+    further filters via :func:`_path_is_ignored` so a workflow YAML living
+    under an excluded directory (e.g. ``examples/.github/workflows/...``)
+    doesn't contaminate the scan.
     """
+    _ignore_paths = ignore_paths or []
     extra_globs: set[str] = set()
     for entry in entries:
         for pat in entry.get("patterns", []) or []:
@@ -241,6 +288,8 @@ def _collect_extra_files(target: Path, entries: list[dict]) -> list[Path]:
             if ".terraform" in p.parts:
                 continue
             if not p.is_file():
+                continue
+            if _path_is_ignored(p, target, _ignore_paths):
                 continue
             rp = p.resolve()
             if rp in seen:
@@ -2307,7 +2356,12 @@ def main():
             )
             sys.exit(2)
         # Load corpus for re-probing
-        tf_files = [p for p in target.rglob("*.tf") if ".terraform" not in p.parts]
+        _ignore_paths_vf = project_config.get("ignore_paths") or []
+        tf_files = [
+            p for p in target.rglob("*.tf")
+            if ".terraform" not in p.parts
+            and not _path_is_ignored(p, target, _ignore_paths_vf)
+        ]
         all_text = {}
         for fp in tf_files:
             try:
@@ -2349,16 +2403,24 @@ def main():
                 file=sys.stderr,
             )
 
+    _ignore_paths = project_config.get("ignore_paths") or []
     tf_files = [
-        p for p in target.rglob("*.tf") if ".terraform" not in p.parts
+        p for p in target.rglob("*.tf")
+        if ".terraform" not in p.parts
+        and not _path_is_ignored(p, target, _ignore_paths)
     ]
+    if _ignore_paths:
+        print(
+            f"# ignore_paths active: skipping {', '.join(map(str, _ignore_paths))}",
+            file=sys.stderr,
+        )
     # Workflow-YAML walker — pick up `.github/workflows/*.yml`, `*.tfvars`,
     # and any other non-tf file_glob declared in the catalogue so the
     # CICD rules (SEC-CICD-001/002/003) actually fire. The Terraform
     # rules still filter by `file_path.match(file_glob)` inside
     # `detect_in_file`, so adding workflow YAMLs to the corpus does not
     # cross-contaminate tf rules.
-    extra_files = _collect_extra_files(target, entries)
+    extra_files = _collect_extra_files(target, entries, ignore_paths=_ignore_paths)
 
     # Pass 1 — load every file so we can compute provider constraints
     # before deciding which rules apply. Inline suppressions are also

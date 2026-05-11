@@ -1,0 +1,21 @@
+# tf-analyze project config.
+#
+# `ignore_paths` is honoured by the engine's file walker so the public
+# scanner at tfanalyze.com/scan/<owner>/<repo> doesn't count this repo's
+# deliberately-vulnerable test corpora as production findings.
+#
+# Three directories are excluded:
+#   * examples/   — showcase corpora (terragoat clone, attack-graph-demo,
+#                   module-reuse-demo) shipped to exercise the engine end
+#                   to end. Always intended to fire dozens of findings.
+#   * fixtures/   — single-rule positive (and `_clean` negative) fixtures
+#                   used by tests/test_fixtures.py.
+#   * tasks/      — local planning notes; never contain Terraform.
+#
+# Without these excludes, scanning the repo against itself produces ~2700
+# findings (mostly from terragoat) and an F grade — actively misleading
+# for anyone seeing the score badge.
+ignore_paths:
+  - examples/
+  - fixtures/
+  - tasks/
