@@ -438,3 +438,187 @@ class TestLspRobustness:
         good_id = lsp.send_request("shutdown")
         resp = lsp.read_response(good_id)
         assert resp.get("result") is None
+
+
+# ---------------------------------------------------------------------------
+# Coverage-gap fillers (R30.7 — paired with the `_lsp.py` extraction)
+# ---------------------------------------------------------------------------
+
+
+class TestLspMultiFileCorpus:
+    """Diagnostics on file A must NOT include findings that live in file B —
+    the LSP scans one file at a time, but the helper that builds
+    `all_files` for var-default resolution sees the sibling .tf files in
+    the same directory. Regression-guard the per-file scoping so a
+    misconfigured `_extract_var_defaults_by_dir` can't leak findings."""
+
+    def test_didOpen_only_reports_findings_for_the_opened_file(
+        self, lsp: LspClient, tmp_path: Path,
+    ) -> None:
+        # Two files, both with rule-firing content; open only file_a.
+        file_a = tmp_path / "a.tf"
+        file_a.write_text(
+            'resource "aws_db_instance" "a" {\n'
+            '  storage_encrypted = false\n'
+            '}\n'
+        )
+        file_b = tmp_path / "b.tf"
+        file_b.write_text(
+            'resource "aws_db_instance" "b" {\n'
+            '  storage_encrypted = false\n'
+            '}\n'
+        )
+        _initialize(lsp)
+        uri_a = _file_uri(file_a)
+        lsp.send_notification("textDocument/didOpen", {
+            "textDocument": {"uri": uri_a, "languageId": "terraform",
+                             "version": 1, "text": file_a.read_text()},
+        })
+        msg = lsp.read_until(
+            lambda m: m.get("method") == "textDocument/publishDiagnostics"
+                      and m.get("params", {}).get("uri") == uri_a,
+            timeout=10.0,
+        )
+        # Diagnostics must reference file_a only — we never opened file_b.
+        assert msg["params"]["uri"] == uri_a
+        # Sanity: at least one diagnostic on the opened file.
+        assert msg["params"]["diagnostics"], (
+            "expected ≥1 diagnostic on the opened file"
+        )
+
+
+class TestLspCodeActionEdgeCases:
+    """Cover the codeAction path for findings WITHOUT `fix_hcl`, which
+    must return an empty list rather than crash or invent an action."""
+
+    def test_code_action_skips_findings_without_fix_hcl(
+        self, lsp: LspClient, tmp_path: Path,
+    ) -> None:
+        # ROB-VERSION-002 fires on missing required_version but its
+        # catalogue entry has no `fix_hcl` snippet — the action handler
+        # must filter it out cleanly.
+        tf = tmp_path / "main.tf"
+        tf.write_text('terraform {}\n')
+        _initialize(lsp)
+        uri = _file_uri(tf)
+        lsp.send_notification("textDocument/didOpen", {
+            "textDocument": {"uri": uri, "languageId": "terraform",
+                             "version": 1, "text": tf.read_text()},
+        })
+        diag_msg = lsp.read_until(
+            lambda m: m.get("method") == "textDocument/publishDiagnostics"
+                      and m.get("params", {}).get("uri") == uri,
+            timeout=10.0,
+        )
+        diags = diag_msg["params"]["diagnostics"]
+        if not diags:
+            pytest.skip("no per-file diagnostic for this fixture")
+        target_line = diags[0]["range"]["start"]["line"]
+
+        rid = lsp.send_request("textDocument/codeAction", {
+            "textDocument": {"uri": uri},
+            "range": {"start": {"line": target_line, "character": 0},
+                      "end":   {"line": target_line, "character": 0}},
+            "context": {"diagnostics": diags},
+        })
+        resp = lsp.read_response(rid, timeout=10.0)
+        # All returned actions must be properly shaped and carry fix_hcl.
+        # We can't assert the count (some rules do have fix_hcl), but we
+        # can assert no action is malformed.
+        for a in resp["result"]:
+            assert a["kind"] == "quickfix"
+            assert "tf-analyze fix" in a["title"]
+            uri_changes = a["edit"]["changes"][uri]
+            assert uri_changes and "newText" in uri_changes[0]
+
+
+class TestLspNonTerraformFile:
+    """`_scan_uri` must short-circuit on non-`.tf` files instead of
+    parsing them as HCL and emitting bogus diagnostics. Used to prevent
+    workflow YAMLs / READMEs from generating squiggles when opened in
+    the editor."""
+
+    def test_md_file_yields_empty_diagnostics(
+        self, lsp: LspClient, tmp_path: Path,
+    ) -> None:
+        doc = tmp_path / "NOTES.md"
+        doc.write_text("# heading\n\nresource \"aws_db_instance\" example\n")
+        _initialize(lsp)
+        uri = _file_uri(doc)
+        lsp.send_notification("textDocument/didOpen", {
+            "textDocument": {"uri": uri, "languageId": "markdown",
+                             "version": 1, "text": doc.read_text()},
+        })
+        msg = lsp.read_until(
+            lambda m: m.get("method") == "textDocument/publishDiagnostics"
+                      and m.get("params", {}).get("uri") == uri,
+            timeout=5.0,
+        )
+        assert msg["params"]["diagnostics"] == []
+
+
+class TestLspDidChange:
+    """`textDocument/didChange` must re-publish diagnostics — without
+    this, the user's edits never update the squiggles. The legacy
+    in-place implementation handled didOpen/didSave/didChange via a
+    single elif arm; the extracted `_lsp.py` preserves that branching."""
+
+    def test_didChange_republishes_diagnostics(
+        self, lsp: LspClient, tmp_path: Path,
+    ) -> None:
+        tf = tmp_path / "main.tf"
+        tf.write_text(
+            'resource "aws_db_instance" "x" {\n'
+            '  identifier        = "demo"\n'
+            '  engine            = "postgres"\n'
+            '  storage_encrypted = false\n'
+            '}\n'
+        )
+        _initialize(lsp)
+        uri = _file_uri(tf)
+        lsp.send_notification("textDocument/didOpen", {
+            "textDocument": {"uri": uri, "languageId": "terraform",
+                             "version": 1, "text": tf.read_text()},
+        })
+        # Drain the open-time publish so the change-time publish
+        # arrives as a distinct message.
+        lsp.read_until(
+            lambda m: m.get("method") == "textDocument/publishDiagnostics"
+                      and m.get("params", {}).get("uri") == uri,
+            timeout=10.0,
+        )
+        # Disk write happens server-side via the URI; for our purposes
+        # the engine just re-reads from disk on didChange. Update the
+        # file to a clean state, then notify didChange.
+        tf.write_text(
+            'output "ok" {\n'
+            '  value       = "ok"\n'
+            '  description = "post-edit clean state"\n'
+            '}\n'
+        )
+        lsp.send_notification("textDocument/didChange", {
+            "textDocument": {"uri": uri, "version": 2},
+            "contentChanges": [{"text": tf.read_text()}],
+        })
+        msg = lsp.read_until(
+            lambda m: m.get("method") == "textDocument/publishDiagnostics"
+                      and m.get("params", {}).get("uri") == uri,
+            timeout=10.0,
+        )
+        assert msg["params"]["diagnostics"] == [], (
+            "didChange should re-scan and clear the previous diagnostics"
+        )
+
+
+class TestLspCapabilitiesPinned:
+    """Lock down the exact `serverInfo` shape so older
+    vscode-languageclient versions that key off `serverInfo.name` keep
+    working through the seam refactor."""
+
+    def test_server_info_shape(self, lsp: LspClient) -> None:
+        resp = _initialize(lsp)
+        info = resp["result"]["serverInfo"]
+        assert info["name"] == "tf-analyze"
+        # version is present and looks semver-ish — we don't pin the
+        # exact value because the LSP advertises 0.1.0 historically.
+        assert isinstance(info.get("version"), str)

@@ -182,6 +182,52 @@ BOOL_COUNT_RE = re.compile(
 COUNT_GUARD_RE = re.compile(r'\?|try\s*\(|length\s*\(|one\s*\(')
 
 
+def _collect_extra_files(target: Path, entries: list[dict]) -> list[Path]:
+    """Walk `target` for files matching any non-tf `file_glob` declared in
+    the catalogue (workflow YAML for SEC-CICD-001..003, tfvars rules, etc.).
+
+    De-duplicates across rules so the same file is read once even when
+    multiple catalogue entries share a glob. `.terraform/` is excluded
+    so cached provider plugins never appear in the corpus.
+    """
+    extra_globs: set[str] = set()
+    for entry in entries:
+        for pat in entry.get("patterns", []) or []:
+            fg = pat.get("file_glob")
+            if not fg or fg in ("**/*.tf", "*.tf"):
+                continue
+            # The walker handles only the obvious non-tf cases. Specifically
+            # leave the tf-shaped globs (which include `*.tf` covered by
+            # the main walker) alone here; they're a no-op for this helper.
+            if fg.endswith(".tf"):
+                continue
+            extra_globs.add(fg)
+
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for glob_pat in sorted(extra_globs):
+        # `Path.glob` does not anchor to the root with leading `.`, so
+        # `target.glob(".github/workflows/*.yml")` correctly finds files
+        # directly under `target/.github/workflows/`. Use `rglob` for
+        # `**/...`-style patterns by routing them through `target.glob`,
+        # which already supports the `**` wildcard.
+        try:
+            matches = list(target.glob(glob_pat))
+        except (ValueError, OSError):
+            continue
+        for p in matches:
+            if ".terraform" in p.parts:
+                continue
+            if not p.is_file():
+                continue
+            rp = p.resolve()
+            if rp in seen:
+                continue
+            seen.add(rp)
+            out.append(p)
+    return out
+
+
 def _resolve_var_ref(val: str, var_defaults: dict) -> str:
     """Resolve plain `var.X` / `local.X` references to their known values,
     plus simple ternary constant folding `<bool-ref> ? <a> : <b>`.
@@ -357,10 +403,27 @@ def detect_in_file(
                 if "regex" not in pat:
                     continue
                 regex = re.compile(pat["regex"], re.MULTILINE)
+                # `not_regex` (R30.6) suppresses the rule when the file
+                # also matches the negative pattern — e.g. a workflow
+                # with `terraform apply` AND an `environment:` block
+                # has the required-reviewer gate so SEC-CICD-001 must
+                # not fire.
+                not_regex_grep = (
+                    re.compile(pat["not_regex"], re.MULTILINE)
+                    if "not_regex" in pat else None
+                )
                 glob = pat.get("file_glob", "**/*.tf")
-                if glob not in ("**/*.tf", "*.tf") and not str(file_path).endswith(
-                    glob.lstrip("*/")
-                ):
+                if glob not in ("**/*.tf", "*.tf"):
+                    # Path.match handles `.github/workflows/*.yml`-style
+                    # directory-anchored globs that the legacy `endswith`
+                    # check could not (R30.6 workflow-YAML walker).
+                    try:
+                        matched = file_path.match(glob)
+                    except Exception:
+                        matched = str(file_path).endswith(glob.lstrip("*/"))
+                    if not matched:
+                        continue
+                if not_regex_grep is not None and not_regex_grep.search(text):
                     continue
                 scope = pat.get("scope", "")
                 if scope == "resource_body":
@@ -2747,6 +2810,8 @@ from _scoring import (
     _URGENCY_TIERS,
     _grade_for_score,
     _compute_summary,
+    explain_score,
+    render_score_explanation,
 )
 
 
@@ -2818,23 +2883,20 @@ def _plan_value_at_path(values: dict, path: str):
     return cur
 
 
-def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
-    """Re-evaluate applicable rules against `terraform show -json` output.
+def _evaluate_against_resources(
+    resources: list[dict],
+    entries: list[dict],
+    *,
+    finding_mode: str,
+    file_marker: str,
+) -> list[dict]:
+    """Re-evaluate plan-supported rule kinds against a flat resource list.
 
-    Returns the same finding shape as `detect_in_file` so the SARIF /
-    JSON / markdown emitters need no changes. Findings are tagged with
-    `mode: plan` so reports can disambiguate plan-time vs static-time
-    triggers of the same rule ID.
+    Factored out so both `detect_in_plan` (planned_values) and
+    `detect_in_state` (state values) can share the inner loop. The
+    `finding_mode` value lands on each finding's `mode` field; consumers
+    use it to disambiguate plan-time vs state-time vs static.
     """
-    try:
-        plan = json.loads(plan_json_path.read_text())
-    except Exception as e:
-        print(
-            f"ERROR: cannot read plan JSON {plan_json_path}: {e}",
-            file=sys.stderr,
-        )
-        return []
-    resources = _walk_plan_resources(plan.get("planned_values") or {})
     findings: list[dict] = []
     for entry in entries:
         eid = entry["id"]
@@ -2865,10 +2927,10 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
                     if hit:
                         findings.append({
                             "id": eid,
-                            "file": "<plan>",
+                            "file": file_marker,
                             "line": 0,
                             "resource": r.get("address", f"{rt}.?"),
-                            "mode": "plan",
+                            "mode": finding_mode,
                         })
             elif kind == "resource_missing_arg":
                 rt = pat.get("resource")
@@ -2890,10 +2952,10 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
                                     continue
                         findings.append({
                             "id": eid,
-                            "file": "<plan>",
+                            "file": file_marker,
                             "line": 0,
                             "resource": r.get("address", f"{rt}.?"),
-                            "mode": "plan",
+                            "mode": finding_mode,
                         })
             elif kind == "resource_present":
                 rt = pat.get("resource")
@@ -2903,10 +2965,10 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
                     if r.get("type") == rt:
                         findings.append({
                             "id": eid,
-                            "file": "<plan>",
+                            "file": file_marker,
                             "line": 0,
                             "resource": r.get("address", f"{rt}.?"),
-                            "mode": "plan",
+                            "mode": finding_mode,
                         })
             elif kind == "data_source_present":
                 dt = pat.get("data_source")
@@ -2916,10 +2978,10 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
                     if r.get("type") == dt and r.get("mode") == "data":
                         findings.append({
                             "id": eid,
-                            "file": "<plan>",
+                            "file": file_marker,
                             "line": 0,
                             "resource": r.get("address", f"data.{dt}.?"),
-                            "mode": "plan",
+                            "mode": finding_mode,
                         })
             elif kind == "hcl_attr":
                 rt = pat.get("resource")
@@ -2936,12 +2998,71 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
                     if not_equal is not None and str(val).lower() != str(not_equal).lower():
                         findings.append({
                             "id": eid,
-                            "file": "<plan>",
+                            "file": file_marker,
                             "line": 0,
                             "resource": r.get("address", f"{rt}.?"),
-                            "mode": "plan",
+                            "mode": finding_mode,
                         })
     return findings
+
+
+def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
+    """Re-evaluate applicable rules against `terraform show -json` plan output.
+
+    Returns the same finding shape as `detect_in_file` so the SARIF /
+    JSON / markdown emitters need no changes. Findings are tagged with
+    `mode: plan` so reports can disambiguate plan-time vs static-time
+    triggers of the same rule ID.
+    """
+    try:
+        plan = json.loads(plan_json_path.read_text())
+    except Exception as e:
+        print(
+            f"ERROR: cannot read plan JSON {plan_json_path}: {e}",
+            file=sys.stderr,
+        )
+        return []
+    resources = _walk_plan_resources(plan.get("planned_values") or {})
+    return _evaluate_against_resources(
+        resources, entries,
+        finding_mode="plan",
+        file_marker="<plan>",
+    )
+
+
+def detect_in_state(state_json_path: Path, entries: list[dict]) -> list[dict]:
+    """Re-evaluate applicable rules against `terraform show -json` state output.
+
+    R30.12 — `tf-analyze drift`. State output's top-level shape is
+    `{"format_version": ..., "values": {"root_module": {...}}}`, so we
+    walk `values` instead of `planned_values` and tag findings with
+    `mode: state` so reports can distinguish "the static HCL claims X
+    but the state file shows Y" from plan/static-time triggers.
+
+    Drift is the gap between intent (the HCL the team wrote) and reality
+    (what `terraform apply` actually deployed). Catching it requires
+    re-running the catalogue against the state file the way plan-mode
+    re-runs against the plan file.
+    """
+    try:
+        state = json.loads(state_json_path.read_text())
+    except Exception as e:
+        print(
+            f"ERROR: cannot read state JSON {state_json_path}: {e}",
+            file=sys.stderr,
+        )
+        return []
+    # `terraform show -json plan.tfplan` puts the planned resources under
+    # `planned_values`; `terraform show -json state.tfstate` puts the
+    # actual deployed resources under `values`. Both share the same
+    # `{root_module, child_modules}` shape underneath.
+    root = state.get("values") or {}
+    resources = _walk_plan_resources(root)
+    return _evaluate_against_resources(
+        resources, entries,
+        finding_mode="state",
+        file_marker="<state>",
+    )
 
 
 # ---- Meta-commands ------------------------------------------------------
@@ -3741,14 +3862,18 @@ def _handle_apply_fixes(
     """
     entry_map = {e["id"]: e for e in entries}
 
-    # Group fixable findings by file
+    # Group fixable findings by file. A rule with either `fix_hcl_minimal`
+    # or `fix_hcl` is patchable; `fix_hcl_minimal` (R30.10) is the
+    # preferred form when both are present — it's the stripped-down patch
+    # snippet without the surrounding resource declaration, which makes
+    # the regex-based insert/replace below more reliable.
     by_file: dict[str, list[dict]] = {}
     for f in findings:
         fp = f.get("file", "")
         if not fp:
             continue
         entry = entry_map.get(f["id"])
-        if not entry or not entry.get("fix_hcl"):
+        if not entry or not (entry.get("fix_hcl_minimal") or entry.get("fix_hcl")):
             continue
         by_file.setdefault(fp, []).append(f)
 
@@ -3774,7 +3899,9 @@ def _handle_apply_fixes(
 
         for finding in file_findings:
             entry = entry_map.get(finding["id"])
-            fix_hcl = entry.get("fix_hcl", "")
+            # Prefer `fix_hcl_minimal` when set (R30.10) — it's the
+            # patcher-friendly form without an outer resource wrapper.
+            fix_hcl = entry.get("fix_hcl_minimal") or entry.get("fix_hcl", "")
             if not fix_hcl:
                 continue
 
@@ -3854,175 +3981,32 @@ def _handle_apply_fixes(
 # ---- Main ---------------------------------------------------------------
 
 def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
-    """JSON-RPC 2.0 LSP server on stdin/stdout."""
-    import json as _json
+    """JSON-RPC 2.0 LSP server on stdin/stdout.
 
-    entries = load_catalog(catalog_dir)
-    id_map = {e["id"]: e for e in entries}
-    _diagnostics: dict[str, list] = {}
+    Thin shim around `_lsp.run_lsp_server`. The heavy detection logic
+    (`detect_in_file` + `_extract_var_defaults_by_dir`) is wired in here
+    via callable injection so `_lsp.py` stays free of `detect` imports
+    (R30.7 — ninth modularisation seam).
+    """
+    from _lsp import run_lsp_server as _lsp_run
 
-    def _uri_to_path(uri: str) -> Path:
-        return Path(uri.removeprefix("file://"))
-
-    def _scan_uri(uri: str) -> list[dict]:
-        path = _uri_to_path(uri)
-        if not path.exists() or path.suffix != ".tf":
-            return []
+    def _scanner(path: Path, entries: list[dict]) -> list[dict]:
         text = path.read_text()
-        target = path.parent
-        all_files = {str(p): p.read_text() for p in target.glob("*.tf") if p.exists()}
+        target_dir = path.parent
+        all_files = {
+            str(p): p.read_text()
+            for p in target_dir.glob("*.tf") if p.exists()
+        }
         var_defaults = _extract_var_defaults_by_dir(all_files)
-        return detect_in_file(path, text, entries, var_defaults.get(str(target), {}))
-
-    def _findings_to_diagnostics(findings: list[dict]) -> list[dict]:
-        sev_map = {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
-        diags = []
-        for f in findings:
-            line = max(0, f["line"] - 1)
-            urgency = id_map.get(f["id"], {}).get("default_urgency", "LOW")
-            diags.append({
-                "range": {"start": {"line": line, "character": 0},
-                           "end":   {"line": line, "character": 9999}},
-                "severity": sev_map.get(urgency, 3),
-                "code": f["id"],
-                "source": "tf-analyze",
-                "message": f"{f['id']}: {id_map.get(f['id'], {}).get('title', '')}",
-            })
-        return diags
-
-    def _read_message() -> dict | None:
-        header = b""
-        while not header.endswith(b"\r\n\r\n"):
-            ch = sys.stdin.buffer.read(1)
-            if not ch:
-                return None
-            header += ch
-        m = re.search(rb"Content-Length: (\d+)", header)
-        if not m:
-            return None
-        length = int(m.group(1))
-        body = sys.stdin.buffer.read(length)
-        return _json.loads(body)
-
-    def _send(obj: dict) -> None:
-        body = _json.dumps(obj).encode()
-        sys.stdout.buffer.write(
-            f"Content-Length: {len(body)}\r\n\r\n".encode() + body
+        return detect_in_file(
+            path, text, entries, var_defaults.get(str(target_dir), {}),
         )
-        sys.stdout.buffer.flush()
 
-    def _notify(method: str, params: dict) -> None:
-        _send({"jsonrpc": "2.0", "method": method, "params": params})
-
-    while True:
-        msg = _read_message()
-        if msg is None:
-            break
-        method = msg.get("method", "")
-        mid = msg.get("id")
-
-        # Wrap every message handler in a try/except so a single bad
-        # file or malformed payload can't take the whole server down.
-        # vscode-languageclient gives up after five crashes in three
-        # minutes ("The server will not be restarted"), so any handler
-        # that throws on real-world input loses the LSP entirely until
-        # the user reloads. Log the traceback to stderr (visible in
-        # the extension's Output channel) and keep the loop alive.
-        try:
-            if method == "initialize":
-                _send({
-                    "jsonrpc": "2.0", "id": mid,
-                    "result": {
-                        "capabilities": {
-                            # Spec-compliant shape: openClose + change=Full
-                            # (we re-scan the whole file on every update,
-                            # so incremental sync would be wasted) + save
-                            # as an object so older clients don't reject it.
-                            "textDocumentSync": {
-                                "openClose": True,
-                                "change": 1,
-                                "save": {"includeText": False},
-                            },
-                            "codeActionProvider": True,
-                        },
-                        "serverInfo": {"name": "tf-analyze", "version": "0.1.0"},
-                    }
-                })
-
-            elif method == "initialized":
-                pass
-
-            elif method in ("textDocument/didOpen", "textDocument/didSave", "textDocument/didChange"):
-                uri = msg["params"]["textDocument"]["uri"]
-                findings = _scan_uri(uri)
-                _diagnostics[uri] = findings
-                _notify("textDocument/publishDiagnostics", {
-                    "uri": uri,
-                    "diagnostics": _findings_to_diagnostics(findings),
-                })
-
-            elif method == "textDocument/didClose":
-                uri = msg["params"]["textDocument"]["uri"]
-                _diagnostics.pop(uri, None)
-                _notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": []})
-
-            elif method == "textDocument/codeAction":
-                uri = msg["params"]["textDocument"]["uri"]
-                req_line = msg["params"]["range"]["start"]["line"] + 1
-                findings = _diagnostics.get(uri, [])
-                actions = []
-                for f in findings:
-                    if abs(f["line"] - req_line) > 2:
-                        continue
-                    entry = id_map.get(f["id"], {})
-                    fix_hcl = entry.get("fix_hcl")
-                    if not fix_hcl:
-                        continue
-                    actions.append({
-                        "title": f"tf-analyze fix: {f['id']}",
-                        "kind": "quickfix",
-                        "edit": {
-                            "changes": {
-                                uri: [{
-                                    "range": {
-                                        "start": {"line": f["line"] - 1, "character": 0},
-                                        "end":   {"line": f["line"] - 1, "character": 0},
-                                    },
-                                    "newText": f"\n# tf-analyze fix for {f['id']}:\n{fix_hcl}\n",
-                                }]
-                            }
-                        }
-                    })
-                _send({"jsonrpc": "2.0", "id": mid, "result": actions})
-
-            elif method == "shutdown":
-                _send({"jsonrpc": "2.0", "id": mid, "result": None})
-
-            elif method == "exit":
-                sys.exit(0)
-
-            elif mid is not None:
-                # Unknown request — return MethodNotFound. Notifications
-                # (mid is None) for unhandled methods are silently dropped
-                # per LSP spec.
-                _send({"jsonrpc": "2.0", "id": mid,
-                       "error": {"code": -32601, "message": f"Method not found: {method}"}})
-        except SystemExit:
-            # `exit` notification calls sys.exit(0) — let that propagate.
-            raise
-        except Exception as _exc:
-            import traceback as _tb
-            _tb.print_exc(file=sys.stderr)
-            print(f"[tf-analyze LSP] handler for {method!r} crashed; continuing. {_exc!r}", file=sys.stderr)
-            # If this was a request (has an id), return an error so the
-            # client doesn't hang waiting for a response that'll never
-            # arrive. Notifications get no response either way.
-            if mid is not None:
-                try:
-                    _send({"jsonrpc": "2.0", "id": mid,
-                           "error": {"code": -32603, "message": f"Internal error in {method}: {_exc}"}})
-                except Exception:
-                    pass
+    _lsp_run(
+        catalog_dir, project_config,
+        scanner=_scanner,
+        load_catalog=load_catalog,
+    )
 
 
 def main():
@@ -4129,6 +4113,19 @@ def main():
         ),
     )
     ap.add_argument(
+        "--pdf-output",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write a CISO-targetable PDF rendering of the compliance "
+            "gap report to PATH. R30.13 — built on top of the HTML "
+            "compliance report via weasyprint (optional dep). Pair "
+            "with --compliance / --compliance-framework FOO. weasyprint "
+            "is not a hard dependency; if not installed, the engine "
+            "errors with a one-line install hint and exit 2."
+        ),
+    )
+    ap.add_argument(
         "--gen-tests",
         default=None,
         metavar="OUTDIR",
@@ -4173,9 +4170,29 @@ def main():
     )
     ap.add_argument(
         "--mode",
-        choices=["static", "diff", "verify-fixed", "fleet", "trend", "pr-review"],
+        choices=["static", "diff", "verify-fixed", "fleet", "trend", "pr-review", "drift"],
         default="static",
-        help="Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history.",
+        help=(
+            "Execution mode. fleet: multi-repo scan. trend: risk "
+            "trajectory over git history. drift (R30.12): re-evaluate "
+            "rules against `terraform show -json state.tfstate` output, "
+            "catching the gap between the HCL intent and what's actually "
+            "deployed. Requires --state-json."
+        ),
+    )
+    ap.add_argument(
+        "--state-json",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to `terraform show -json state.tfstate` output. "
+            "Required by --mode drift. The catalogue's resource_arg / "
+            "resource_missing_arg / resource_present / hcl_attr / "
+            "data_source_present kinds are re-evaluated against the "
+            "deployed values; findings are tagged mode='state' so "
+            "downstream consumers can distinguish drift from "
+            "plan-time / static-time triggers of the same rule."
+        ),
     )
     ap.add_argument(
         "--lookback",
@@ -4251,6 +4268,44 @@ def main():
             "Include INFO-tier findings (advisory; e.g. module-reuse "
             "suggestions) in output. Default off — INFO findings are "
             "counted in the summary but not rendered."
+        ),
+    )
+    ap.add_argument(
+        "--explain-score",
+        action="store_true",
+        default=False,
+        help=(
+            "Surface the top-5 findings ranked by score contribution, "
+            "showing the projected score and grade if each is fixed. "
+            "Tells the user which fix is worth most. Renders as a "
+            "header block in text / pr-summary output; surfaces as a "
+            "structured `score_explanation` object in JSON output."
+        ),
+    )
+    ap.add_argument(
+        "--rank-by",
+        choices=["urgency", "exploitability", "hybrid"],
+        default="urgency",
+        help=(
+            "Ordering mode for findings (R30.2 — exploitability "
+            "prioritisation). `urgency` (default) keeps the legacy "
+            "CRITICAL-first ordering. `exploitability` promotes findings "
+            "whose rule touches a CWE currently in CISA KEV one urgency "
+            "tier and sorts KEV hits first. `hybrid` keeps urgency-first "
+            "ordering with the KEV promotion applied. CISA KEV + FIRST.org "
+            "EPSS feeds are cached daily at ~/.cache/tf-analyze/. "
+            "No comparable OSS IaC scanner integrates KEV today."
+        ),
+    )
+    ap.add_argument(
+        "--no-threat-intel",
+        action="store_true",
+        default=False,
+        help=(
+            "Disable network fetches for CISA KEV / FIRST.org EPSS. "
+            "Falls back to cache if present, otherwise skips KEV / EPSS "
+            "enrichment (no badges, no urgency promotion). Useful for "
+            "air-gapped CI."
         ),
     )
     ap.add_argument(
@@ -4675,6 +4730,14 @@ def main():
     tf_files = [
         p for p in target.rglob("*.tf") if ".terraform" not in p.parts
     ]
+    # Workflow-YAML walker — pick up `.github/workflows/*.yml`, `*.tfvars`,
+    # and any other non-tf file_glob declared in the catalogue so the
+    # CICD rules (SEC-CICD-001/002/003) actually fire. The Terraform
+    # rules still filter by `file_path.match(file_glob)` inside
+    # `detect_in_file`, so adding workflow YAMLs to the corpus does not
+    # cross-contaminate tf rules.
+    extra_files = _collect_extra_files(target, entries)
+
     # Pass 1 — load every file so we can compute provider constraints
     # before deciding which rules apply. Inline suppressions are also
     # collected here so we don't have to re-read text in pass 2.
@@ -4689,6 +4752,15 @@ def main():
         all_text[fp] = text
         if not args.no_suppress:
             file_inline_suppressions[str(fp)] = load_inline_suppressions(text)
+
+    # Extra files (workflow YAML, tfvars, etc.) — read with the same
+    # normaliser, but never used for provider-constraint detection.
+    extra_text: dict = {}
+    for fp in extra_files:
+        try:
+            extra_text[fp] = _read_normalized(fp)
+        except Exception as e:
+            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
 
     # Provider/Terraform-version-aware filter: entries with `applies_when`
     # are skipped when the target's required_providers / required_version
@@ -4744,6 +4816,12 @@ def main():
                 detect_in_file(fp, text, entries,
                                var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
             )
+        # Run grep-style rules against workflow YAML / tfvars / any
+        # other non-tf file_glob (--mode diff intentionally skips these
+        # since they are not in the git diff of *.tf files).
+        if diff_files is None:
+            for fp, text in extra_text.items():
+                findings.extend(detect_in_file(fp, text, entries))
 
     # Plan-mode rule re-evaluation. Findings are merged into the same
     # list so suppression, comparison, and reporting all see them; the
@@ -4764,6 +4842,34 @@ def main():
                 file=sys.stderr,
             )
         findings.extend(plan_findings)
+
+    # Drift mode — re-evaluate rules against `terraform show -json
+    # state.tfstate` output. R30.12 — closes the gap between HCL intent
+    # and actual deployed values for oncalls who need to spot drift
+    # without re-running plan.
+    state_json_arg = getattr(args, "state_json", None)
+    if args.mode == "drift" and not state_json_arg:
+        print(
+            "ERROR: --mode drift requires --state-json PATH",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if state_json_arg:
+        state_path = Path(state_json_arg).resolve()
+        if not state_path.exists():
+            print(
+                f"ERROR: --state-json path does not exist: {state_path}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        state_findings = detect_in_state(state_path, entries)
+        if state_findings:
+            print(
+                f"# {len(state_findings)} drift finding(s) from "
+                f"{state_path.name}",
+                file=sys.stderr,
+            )
+        findings.extend(state_findings)
 
     # Corpus-level checks run against all files (even in diff mode)
     if not _cache_hit:
@@ -4793,8 +4899,25 @@ def main():
     # Auto-fix application — runs before suppression so the patched file
     # re-scan (if the user re-runs) won't report those findings.
     if getattr(args, "apply_fixes", None):
+        # `--apply-fixes` × `--baseline` (R30.11): when a baseline is set,
+        # findings already present in the baseline are not auto-patched.
+        # Closes the "snapshot today, fix only new stuff" UX. The full
+        # finding list is still emitted in the report; only the patcher
+        # input is narrowed.
+        fixable_findings = findings
+        if getattr(args, "baseline", None):
+            _baseline_path = Path(args.baseline)
+            if _baseline_path.exists():
+                _retained, _suppressed_b = apply_baseline(findings, _baseline_path)
+                if _suppressed_b:
+                    print(
+                        f"# apply-fixes: skipping {len(_suppressed_b)} baselined finding(s) "
+                        f"({len(_retained)} eligible for auto-patch)",
+                        file=sys.stderr,
+                    )
+                fixable_findings = _retained
         _handle_apply_fixes(
-            args, findings, entries,
+            args, fixable_findings, entries,
             dry_run=(args.apply_fixes == "dry-run"),
         )
         if args.apply_fixes == "apply":
@@ -4883,7 +5006,7 @@ def main():
 
     # Compliance gap report
     compliance_report: dict | None = None
-    if getattr(args, "compliance", False) or args.format == "compliance":
+    if getattr(args, "compliance", False) or args.format == "compliance" or getattr(args, "pdf_output", None):
         fw_arg = getattr(args, "compliance_framework", "cis") or "cis"
         compliance_report = _compliance_gap_report(findings, entries, framework=fw_arg)
         if getattr(args, "oscal", None):
@@ -4894,6 +5017,60 @@ def main():
             oscal_path = Path(args.oscal)
             oscal_path.write_text(json.dumps(oscal_data, indent=2))
             print(f"# OSCAL written to {oscal_path}", file=sys.stderr)
+        # R30.13 — Compliance PDF export. Renders the HTML compliance
+        # report through weasyprint into a print-shaped PDF the CISO
+        # can take to an audit. weasyprint is an optional dep — print
+        # an install hint when missing rather than failing silently.
+        if getattr(args, "pdf_output", None):
+            try:
+                from weasyprint import HTML, CSS  # type: ignore
+            except ImportError:
+                print(
+                    "ERROR: --pdf-output requires weasyprint. "
+                    "Install with `pip install weasyprint` (depends on "
+                    "system libs pango/cairo). Skipping PDF generation.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+            pdf_path = Path(args.pdf_output)
+            # Wrap the compliance HTML fragment in a minimal page so the
+            # PDF picks up a title, paper size, and print-friendly styles
+            # (page margins, font scaling, anti-orphan headings).
+            _comp_html_body = _render_compliance_html(compliance_report)
+            page_html = (
+                "<!doctype html>\n<html><head><meta charset='utf-8'>"
+                "<title>tf-analyze · Compliance Gap Report</title>"
+                "<style>"
+                "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
+                "color:#222;font-size:11pt;line-height:1.4;margin:0;padding:0}"
+                "h1,h2,h3{color:#157878;page-break-after:avoid}"
+                "h1{font-size:22pt;margin:0 0 6pt 0}"
+                "h2{font-size:15pt;border-bottom:2px solid #157878;padding-bottom:3pt}"
+                "table{width:100%;border-collapse:collapse;margin:8pt 0;page-break-inside:avoid}"
+                "td,th{padding:4pt 6pt;border-bottom:1px solid #ddd;text-align:left}"
+                "th{background:#157878;color:#fff;font-weight:600}"
+                "code{font-family:'SF Mono',Consolas,monospace;font-size:9pt;background:#f3f4f6;padding:1pt 3pt;border-radius:2pt}"
+                "a{color:#157878;text-decoration:none}"
+                "</style></head>"
+                f"<body><h1>tf-analyze · Compliance Gap Report</h1>"
+                f"<p style='color:#666;font-size:9pt'>Framework: <code>{fw_arg}</code>"
+                f" · Generated {os.environ.get('TFA_PDF_GEN_TIMESTAMP') or ''}</p>"
+                f"{_comp_html_body}"
+                f"<hr style='margin-top:18pt;border:none;border-top:1px solid #ccc'/>"
+                f"<p style='font-size:8pt;color:#888'>Generated by "
+                f"<a href='https://chrisadkin8.github.io/tf-analyze/'>tf-analyze</a> "
+                f"— deterministic static analysis with attack-path prioritisation.</p>"
+                "</body></html>"
+            )
+            try:
+                HTML(string=page_html).write_pdf(str(pdf_path))
+                print(f"# PDF compliance report written to {pdf_path}", file=sys.stderr)
+            except Exception as e:
+                print(
+                    f"ERROR: weasyprint PDF generation failed: {e}",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
 
     # PR review mode — post inline comments and exit
     if args.mode == "pr-review":
@@ -4928,6 +5105,44 @@ def main():
                 file=sys.stderr,
             )
         findings = retained
+
+    # Threat-intel enrichment (R30.2 — KEV + EPSS exploitability ranking).
+    # Cross-references each rule's `cwe:` tags with CISA KEV's CWE set
+    # so findings touching actively-exploited weakness classes get a 🔥 KEV
+    # badge, an optional EPSS score, and (when --rank-by != "urgency") a
+    # one-tier urgency promotion. Daily-cached at ~/.cache/tf-analyze/;
+    # network failures fall back to cache, missing cache degrades to a
+    # no-op (no badges, no promotion).
+    rank_by_mode = getattr(args, "rank_by", "urgency")
+    allow_network = not getattr(args, "no_threat_intel", False)
+    if rank_by_mode != "urgency":
+        from _threat_intel import (
+            load_kev_cwes, load_epss_scores, enrich_findings,
+            rank_findings, warn_on_status,
+        )
+        kev_cwes, kev_status = load_kev_cwes(allow_network=allow_network)
+        warn_on_status("KEV", kev_status)
+        # EPSS is optional — without per-rule CVE tags it only kicks in
+        # when the catalogue starts shipping `cve:` lists. Load lazily.
+        epss_scores: dict[str, float] = {}
+        if kev_cwes:
+            epss_scores, epss_status = load_epss_scores(allow_network=allow_network)
+            warn_on_status("EPSS", epss_status)
+        enrich_findings(
+            findings, entries,
+            rank_by=rank_by_mode,
+            kev_cwes=kev_cwes,
+            epss_scores=epss_scores,
+        )
+        findings = rank_findings(findings, rank_by_mode)
+        promoted = sum(1 for f in findings if f.get("exploitability_promoted"))
+        kev_hits = sum(1 for f in findings if f.get("kev"))
+        if kev_hits:
+            print(
+                f"# exploitability: {kev_hits} finding(s) tagged KEV"
+                + (f"; {promoted} promoted urgency tier" if promoted else ""),
+                file=sys.stderr,
+            )
 
     # Compute the always-emitted summary block (score, grade, counts).
     # SKILL.md describes the same formula; the constants in detect.py are
@@ -4978,6 +5193,8 @@ def main():
             }
             if attack_graph:
                 output["graph"] = attack_graph
+            if getattr(args, "explain_score", False):
+                output["score_explanation"] = explain_score(findings, summary)
             _emit(json.dumps(output, indent=2))
         elif args.format == "sarif":
             sarif = to_sarif(findings, entries)
@@ -5025,6 +5242,15 @@ def main():
                 _emit("\n")
                 _emit(_render_compliance_text(compliance_report))
     else:
+        # --explain-score (R30.8): rank findings by score contribution
+        # so the user sees which fix is worth most. Computed once and
+        # threaded into both JSON (`score_explanation` field) and text
+        # output (header block before the findings list).
+        score_explanation = (
+            explain_score(findings, summary)
+            if getattr(args, "explain_score", False) else None
+        )
+
         # Standard output
         if args.format == "json":
             output_data: dict = {"summary": summary, "findings": findings}
@@ -5034,6 +5260,8 @@ def main():
                 output_data["suppressed_by_baseline"] = suppressed_by_baseline
             if attack_graph:
                 output_data["graph"] = attack_graph
+            if score_explanation:
+                output_data["score_explanation"] = score_explanation
             _emit(json.dumps(output_data, indent=2))
         elif args.format == "sarif":
             sarif = to_sarif(findings, entries)
@@ -5067,9 +5295,17 @@ def main():
                 + (f" · {summary['suppressed_count']} suppressed"
                    if summary["suppressed_count"] else "")
             )
+            if score_explanation:
+                _emit("")
+                _emit(render_score_explanation(score_explanation))
+                _emit("")
             entry_map_out = {e["id"]: e for e in entries}
             for f in findings:
-                _emit(f"{f['id']} {f['file']}:{f['line']} {f['resource']}")
+                # 🔥 KEV badge: rule's CWE intersects CISA Known Exploited
+                # Vulnerabilities (R30.2). Renders before the ID so the
+                # visual landmark is at the start of the line.
+                kev_badge = "🔥 KEV " if f.get("kev") else ""
+                _emit(f"{kev_badge}{f['id']} {f['file']}:{f['line']} {f['resource']}")
                 if attack_graph:
                     e_out = entry_map_out.get(f["id"], {})
                     if e_out.get("default_urgency") in ("HIGH", "CRITICAL"):

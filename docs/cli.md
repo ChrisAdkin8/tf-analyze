@@ -34,11 +34,11 @@ Reports directory (default: <skill>/reports). Used for auto-discovery in --compa
 
 ### `--mode MODE`
 
-**Choices:** `static`, `diff`, `verify-fixed`, `fleet`, `trend`, `pr-review`
+**Choices:** `static`, `diff`, `verify-fixed`, `fleet`, `trend`, `pr-review`, `drift`
 
 **Default:** `static`
 
-Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history.
+Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history. drift (R30.12): re-evaluate rules against `terraform show -json state.tfstate` output, catching the gap between the HCL intent and what's actually deployed. Requires --state-json.
 
 ### `--prior-report PRIOR_REPORT`
 
@@ -163,6 +163,10 @@ Compliance framework to map against. Choices: cis (default), pci_dss, soc2, owas
 
 Write an OSCAL Assessment Results JSON file to PATH. Requires --compliance. Compatible with any --format.
 
+### `--pdf-output`
+
+Write a CISO-targetable PDF rendering of the compliance gap report to PATH. R30.13 — built on top of the HTML compliance report via weasyprint (optional dep). Pair with --compliance / --compliance-framework FOO. weasyprint is not a hard dependency; if not installed, the engine errors with a one-line install hint and exit 2.
+
 ### `--gen-tests`
 
 Generate .tftest.hcl assertion files for each finding whose catalogue entry defines a `test_template` field. Files are written to OUTDIR (created if absent). Native Terraform test format (requires Terraform >= 1.6).
@@ -179,6 +183,10 @@ When a catalogue entry carries a `fix_hcl` snippet, render it alongside each fin
 
 Write report output to PATH instead of stdout. The file is created or overwritten. stderr (progress, counts, errors) is unaffected.
 
+### `--state-json`
+
+Path to `terraform show -json state.tfstate` output. Required by --mode drift. The catalogue's resource_arg / resource_missing_arg / resource_present / hcl_attr / data_source_present kinds are re-evaluated against the deployed values; findings are tagged mode='state' so downstream consumers can distinguish drift from plan-time / static-time triggers of the same rule.
+
 ### `--lookback`
 
 Days of git history to analyse in --mode trend (default: 30).
@@ -186,6 +194,18 @@ Days of git history to analyse in --mode trend (default: 30).
 ### `--show-info`
 
 Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
+
+### `--explain-score`
+
+Surface the top-5 findings ranked by score contribution, showing the projected score and grade if each is fixed. Tells the user which fix is worth most. Renders as a header block in text / pr-summary output; surfaces as a structured `score_explanation` object in JSON output.
+
+### `--rank-by`
+
+Ordering mode for findings (R30.2 — exploitability prioritisation). `urgency` (default) keeps the legacy CRITICAL-first ordering. `exploitability` promotes findings whose rule touches a CWE currently in CISA KEV one urgency tier and sorts KEV hits first. `hybrid` keeps urgency-first ordering with the KEV promotion applied. CISA KEV + FIRST.org EPSS feeds are cached daily at ~/.cache/tf-analyze/. No comparable OSS IaC scanner integrates KEV today.
+
+### `--no-threat-intel`
+
+Disable network fetches for CISA KEV / FIRST.org EPSS. Falls back to cache if present, otherwise skips KEV / EPSS enrichment (no badges, no urgency promotion). Useful for air-gapped CI.
 
 ### `--mitre-tactic`
 

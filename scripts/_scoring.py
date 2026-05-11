@@ -68,6 +68,109 @@ def _grade_for_score(score: int) -> str:
     return "F"
 
 
+def explain_score(
+    findings: list[dict],
+    summary: dict,
+    *,
+    top_n: int = 5,
+) -> dict:
+    """Rank findings by score impact and project the score if each is fixed.
+
+    Returns a JSON-safe dict carrying:
+      * ``top`` — list of `{rank, id, urgency, weight, file, line, resource,
+        title, projected_score, projected_grade}` entries, sorted by score
+        contribution descending (highest-impact first), with deterministic
+        secondary sort on (id, file, line) so two runs against the same
+        corpus agree.
+      * ``base_score`` / ``base_grade`` — the unchanged score before any
+        fix is applied. Mirrors `summary['score']` for self-contained
+        consumption.
+      * ``perfect_score`` — what the score would be after fixing all
+        listed findings (capped at 100). Useful as a "ceiling if you do
+        all of this" hint in the PR comment.
+
+    Pure function. INFO-tier findings carry weight 0 so they are excluded
+    from the top-N (fixing them does not move the score).
+
+    R30.8: `--explain-score` flag. Tells the user which fix is worth the
+    most — the single highest-leverage piece of advice an IaC scanner
+    can give beyond the "you broke rule X" line.
+    """
+    base_score = int(summary.get("score", 100))
+    eligible = [
+        f for f in findings
+        if _RISK_WEIGHTS.get(f.get("urgency", "MEDIUM"), 0) > 0
+    ]
+    # Sort: weight desc, then id/file/line asc for deterministic output.
+    ranked = sorted(
+        eligible,
+        key=lambda f: (
+            -_RISK_WEIGHTS.get(f.get("urgency", "MEDIUM"), 0),
+            f.get("id", ""),
+            f.get("file", ""),
+            f.get("line", 0),
+        ),
+    )
+    top = ranked[:top_n]
+    cumulative = 0
+    rows: list[dict] = []
+    for i, f in enumerate(top, start=1):
+        w = _RISK_WEIGHTS.get(f.get("urgency", "MEDIUM"), 0)
+        cumulative += w
+        projected = min(100, base_score + cumulative)
+        rows.append({
+            "rank": i,
+            "id": f.get("id"),
+            "urgency": f.get("urgency"),
+            "weight": w,
+            "file": f.get("file"),
+            "line": f.get("line"),
+            "resource": f.get("resource", ""),
+            "title": f.get("title", ""),
+            "projected_score": projected,
+            "projected_grade": _grade_for_score(projected),
+        })
+    perfect = min(100, base_score + sum(r["weight"] for r in rows))
+    return {
+        "base_score": base_score,
+        "base_grade": summary.get("grade", _grade_for_score(base_score)),
+        "perfect_score": perfect,
+        "perfect_grade": _grade_for_score(perfect),
+        "top": rows,
+    }
+
+
+def render_score_explanation(payload: dict) -> str:
+    """Format `explain_score()` output for text/PR-summary surfaces.
+
+    Stable text block; consumed by detect.py's text formatter and the
+    GitHub Action's PR comment. JSON consumers should use the structured
+    `score_explanation` field instead.
+    """
+    base = payload["base_score"]
+    base_grade = payload["base_grade"]
+    perfect = payload["perfect_score"]
+    perfect_grade = payload["perfect_grade"]
+    rows = payload["top"]
+    lines = [
+        "# --explain-score: top fixes ranked by score impact",
+        f"# current: {base} ({base_grade}) · ceiling if you fix the top "
+        f"{len(rows)}: {perfect} ({perfect_grade})",
+    ]
+    if not rows:
+        lines.append("# (no score-affecting findings — score is already at the ceiling)")
+        return "\n".join(lines)
+    for r in rows:
+        loc = f"{r['file']}:{r['line']}" if r.get("file") else "<corpus>"
+        title = f" {r['title']}" if r.get("title") else ""
+        lines.append(
+            f"  #{r['rank']} [{r['urgency']}] {r['id']} −{r['weight']} pts  "
+            f"({loc}) → if fixed: {r['projected_score']} "
+            f"({r['projected_grade']}){title}"
+        )
+    return "\n".join(lines)
+
+
 def _compute_summary(
     findings: list[dict],
     suppressed: list[dict] | None = None,

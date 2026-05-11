@@ -12,7 +12,7 @@ Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE AT
 ## Read
 
 - 📄 [**Project README**](https://github.com/ChrisAdkin8/tf-analyze#readme) — quickstart, feature matrix, the "why another scanner" pitch.
-- 📚 [**Rule reference**](rules/) — auto-generated docs page per catalogue rule (217 pages, sortable by section/urgency in the index). Each page lists CIS / PCI-DSS / SOC 2 / OWASP IaC / MITRE references, every sibling in the same family (e.g. `SEC-AWS-IAM-001` links to `-002` and `-003`), and ships "📂 Open in VS Code" + "📝 Suppress in workspace" deep-link buttons.
+- 📚 [**Rule reference**](rules/) — auto-generated docs page per catalogue rule (237 pages, sortable by section/urgency in the index). Each page lists CIS / PCI-DSS / SOC 2 / OWASP IaC / NIST CSF 2.0 / NIST SP 800-53 / CSA CCM v4 / SLSA / MITRE ATT&CK / CWE / D3FEND references, every sibling in the same family (e.g. `SEC-AWS-IAM-001` links to `-002` and `-003`), and ships "📂 Open in VS Code" + "📝 Suppress in workspace" deep-link buttons.
 
 ### Surfaces
 

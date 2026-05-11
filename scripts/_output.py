@@ -418,6 +418,17 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
         }
         if f["id"] in rule_index:
             result["level"] = rules[rule_index[f["id"]]]["defaultConfiguration"]["level"]
+        # KEV exploitability tag (R30.2). Surfaced at the per-result
+        # level rather than per-rule so consumers can distinguish "this
+        # specific finding hit a KEV-listed CWE" from "the rule could
+        # theoretically map to KEV". GitHub Code Scanning surfaces these
+        # tags in the result-detail panel.
+        if f.get("kev"):
+            result_props = result.setdefault("properties", {})
+            result_tags = result_props.setdefault("tags", [])
+            result_tags.append("exploitability:kev")
+            if f.get("exploitability_score"):
+                result_props["epss_score"] = f["exploitability_score"]
         results.append(result)
 
     taxonomies = _sarif_taxonomies(entries)
@@ -1180,10 +1191,14 @@ def _render_pr_summary(
         urg = entry_map.get(rid, {}).get("default_urgency", "?")
         title = entry_map.get(rid, {}).get("title", "")
         loc = f"`{f.get('file','?')}:{f.get('line','?')}`"
+        # 🔥 KEV badge (R30.2) when the rule's CWE intersects CISA's
+        # Known Exploited Vulnerabilities. Prepended to the urgency
+        # cell so the visual landmark lands at column 1.
+        kev_badge = "🔥 " if f.get("kev") else ""
         # Link rule ID to the canonical docs page so reviewers can
         # one-click for full rationale.
         rule_link = f"[`{rid}`]({RULE_DOCS_URL_BASE.format(id=rid)}) — {title}"
-        parts.append(f"| **{urg}** | {rule_link} | {loc} |")
+        parts.append(f"| {kev_badge}**{urg}** | {rule_link} | {loc} |")
     if len(ranked) > 3:
         parts.append("")
         parts.append(

@@ -14,11 +14,12 @@
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/ChrisAdkin8/tf-analyze/pkgs/container/tf-analyze)
 
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 232](https://img.shields.io/badge/rules-232-brightgreen)
+![Rules: 235](https://img.shields.io/badge/rules-235-brightgreen)
 ![fix_hcl: 100%](https://img.shields.io/badge/fix__hcl-100%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
-![Tests: 654](https://img.shields.io/badge/tests-654%20passing-brightgreen)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-232%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
+![Tests: 710](https://img.shields.io/badge/tests-710%20passing-brightgreen)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-235%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
@@ -112,8 +113,12 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | MITRE ATT&CK mapping (technique + tactic-grouped output) | ✅ pinned to v17 | ❌ | ⚠️ partial | ⚠️ via plugin |
 | MITRE D3FEND defensive-technique tagging | ✅ | ❌ | ❌ | ❌ |
 | CWE taxonomy in SARIF output | ✅ | ❌ | ⚠️ partial | ❌ |
+| **CISA KEV + FIRST.org EPSS exploitability ranking** (`--rank-by exploitability`) | ✅ | ❌ | ❌ | ❌ |
+| **`--mode drift` against `terraform show -json state.tfstate`** | ✅ | ❌ | ❌ | ⚠️ live API only |
+| **Compliance PDF export for CISOs** (`--pdf-output`) | ✅ | ❌ | ❌ | ❌ |
+| **Public web scanner** (paste a GitHub URL, get a permalink) | ✅ ([tfanalyze.com/scan/&lt;owner&gt;/&lt;repo&gt;](https://tfanalyze.com)) | ❌ | ❌ | ❌ |
 | OSCAL Assessment Results JSON output | ✅ | ❌ | ❌ | ❌ |
-| OWASP IaC Cheat Sheet compliance mapping | ✅ | ❌ | ❌ | ❌ |
+| Compliance frameworks shipped (with real per-rule data) | **13** (CIS, PCI-DSS, SOC 2, OWASP IaC, NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA, OWASP Top 10 / API / CICD / LLM / K8s / ASVS) | 1 (CIS) | 6 | 5 |
 | Baseline ratcheting (`--baseline prior.json`) | ✅ | ⚠️ via filter | ✅ | ❌ |
 | LSP server for IDE diagnostics | ✅ | ❌ | ❌ | ❌ |
 | HCP Terraform Run Task integration | ✅ | ❌ | ❌ | ❌ |
@@ -140,7 +145,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-217 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+235 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -211,6 +216,12 @@ Suppressed and baseline-suppressed findings count at half weight (acknowledged, 
 | `--diff-base REF` | Limit to `.tf` files changed since `REF` |
 | `--no-hcl2` | Disable the python-hcl2 fast-path (env: `TF_ANALYZE_NO_HCL2=1`) |
 | `--show-info` | Render INFO-tier findings (e.g. `MOD-REUSE-*` module-reuse advisories). Default off — INFO is counted in `summary.counts.INFO` but not displayed |
+| `--rank-by exploitability\|hybrid` | **NEW (R30.2)** — promote findings whose rule touches a CISA KEV-listed CWE one urgency tier; surface 🔥 KEV badge in text/PR-summary/SARIF. Daily-cached at `~/.cache/tf-analyze/`. Pair with `--no-threat-intel` for air-gapped CI. |
+| `--explain-score` | **NEW (R30.8)** — top-5 findings ranked by score impact, with projected score/grade if each is fixed. Tells you which fix is worth most. Surfaces as a header block in text output and a structured `score_explanation` field in JSON. |
+| `--mode drift --state-json PATH` | **NEW (R30.12)** — diff the static-HCL findings against `terraform show -json state.tfstate` output. Findings tagged `mode='state'` so oncalls can spot the gap between the HCL the team wrote and what's actually deployed. |
+| `--pdf-output PATH` | **NEW (R30.13)** — render the compliance gap report to a CISO-targetable PDF via weasyprint (optional dep). Pair with `--compliance --compliance-framework <name>`. |
+| `--apply-fixes × --baseline` | **NEW (R30.11)** — when both are set, `--apply-fixes` skips findings already in baseline. Closes the "snapshot today, fix only new stuff" UX. |
+| `--mode diff × --baseline` | **NEW (R30.11)** — narrow to changed files AND filter against baseline tuples. Compose the two layers cleanly. |
 
 Full CLI reference: [`docs/cli.md`](docs/cli.md).
 
@@ -219,7 +230,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | | Path | Doc |
 |---|------|-----|
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks + engine-rendered PR summary (`--format pr-summary`); optional `compliance-framework` / `attack-graph` / `show-info` inputs; pin via `ref` for reproducible CI |
-| VS Code extension (v0.1.39) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
+| VS Code extension (v0.1.40) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine; ships 11 sibling Python files including `_lsp.py` + `_threat_intel.py`), LSP-driven real-time diagnostics, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse shortcuts, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |

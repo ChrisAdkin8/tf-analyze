@@ -5,6 +5,103 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.3 — Public web scanner + drift mode + compliance PDF + composition flags + `fix_hcl_minimal` — 2026-05-11 (R30.10 + R30.11 + R30.12 + R30.13 + R30.14)
+
+**Six paired changes ship together: the load-bearing public-scanner permalink that turns every share into an organic referral, the drift mode that finally separates "HCL intent" from "deployed reality" for oncalls, the CISO-targetable compliance PDF, the `--apply-fixes × --baseline` and `--mode diff × --baseline` compositions that close the "snapshot today, fix only new stuff" UX, and the `fix_hcl_minimal` catalogue field that makes the auto-patcher robust on complex rules.**
+
+### R30.10 — `fix_hcl_minimal` catalogue field
+
+New optional `fix_hcl_minimal:` field in the catalogue schema. Stripped-down form of `fix_hcl` without an outer resource declaration. `--apply-fixes` prefers it when present — the regex-based attribute insert/replace path is dramatically more reliable on snippets that don't carry a wrapping `resource "X" "Y" { ... }`. Existing `fix_hcl` remains the human-readable form rendered on docs pages and in `--show-fixes`.
+
+### R30.11 — composition flags
+
+* `--apply-fixes × --baseline` — when both are set, the patcher receives only the retained findings (i.e. those not already in the baseline). One-line stderr diagnostic surfaces the skip count. Closes the "ratchet on legacy repos" workflow: snapshot today, auto-patch only new flaws.
+* `--mode diff × --baseline` — already structurally compose because diff narrows the file set and baseline filters by tuple; lock-in test (`tests/test_apply_fixes_composition.py::TestDiffWithBaseline`) cements the contract.
+
+### R30.12 — `tf-analyze drift` (`--mode drift --state-json PATH`)
+
+Re-evaluates the catalogue against `terraform show -json state.tfstate` output, catching the gap between the HCL the team wrote and what's actually deployed. Findings are tagged `mode='state'` so downstream consumers (PR summary, SARIF, JSON) can disambiguate drift from plan-time and static-time triggers of the same rule ID. Reuses the plan-mode resource walker via the new `_evaluate_against_resources` helper. New `detect_in_state()` mirrors `detect_in_plan()`. 6 tests in `tests/test_drift_mode.py` lock in the walker, the CLI surface, and the parity contract with plan mode. **Different audience from PR review (oncalls vs PR reviewers); near-zero new code thanks to the plan-mode refactor.**
+
+### R30.13 — Compliance PDF export (`--pdf-output PATH`)
+
+CISO-targetable PDF rendering of the compliance gap report. Uses `weasyprint` (optional dep) to render the existing HTML compliance report through a print-shaped stylesheet (page margins, avoid-orphan headings, font scaling). When weasyprint isn't installed, the engine exits 2 with a clean one-line install hint instead of failing silently. 2 tests cover both branches (installed + missing).
+
+### R30.14 — Public web scanner (`tfanalyze.com/scan/<owner>/<repo>`)
+
+The load-bearing virality surface. Extends `demo/app.py` with three new endpoints:
+
+* `GET /scan/{owner}/{repo}` — HTML permalink. Resolves the default-branch HEAD via `git ls-remote`, shallow-clones, runs the engine with `--attack-graph --explain-score`, caches the result by commit SHA at `/var/cache/tf-analyze/<owner>_<repo>_<sha>.json` (Fly volume), returns a styled report with Open Graph metadata so shares preview cleanly on Slack / Twitter / HN.
+* `GET /scan/{owner}/{repo}.json` — same content, machine-readable. Useful for badge services and dashboards.
+* `GET /healthz` — liveness probe.
+
+Hardening: owner/repo regex validation (no path traversal), 10 req / 60s sliding rate limit, 60s clone timeout, `--depth 1 --single-branch --filter=blob:limit=1m`, refuse repos >500 `.tf` files or >50 MB. Dockerfile updated to copy all 11 engine sibling Python files (previously only `detect.py`, which would have broken on every R30.x release since seam extraction began). fly.toml mounts a 1 GB volume for the per-SHA cache. Operator deployment doc at `demo/README.md`. 7 tests in `tests/test_public_scanner.py` cover the permalink, JSON form, cache hit on second visit, rate limit, owner regex, 404 handling, and health probe.
+
+**Why a permalink and not a form?** Static URLs are shareable. `https://tfanalyze.com/scan/terraform-aws-modules/terraform-aws-vpc` is a one-click action; visitors land on a pre-rendered report with an OG card showing the score and grade. Form-based scanners ask the visitor to do work first; nobody shares those.
+
+### Numbers
+
+| Metric                       | Pre-R30.3 | Post-R30.3 | Δ |
+|------------------------------|-----------|------------|----|
+| Active rules                 | 235       | 235        | (no rule changes this round) |
+| detect.py LoC                | 5,068     | ~5,170     | +~100 (drift, PDF, baseline+apply, state-json plumbing) |
+| Modes shipped                | 6 (static, diff, verify-fixed, fleet, trend, pr-review) | **7** (+ drift) | +1 |
+| Compliance output formats    | text, html, JSON, OSCAL | text, html, JSON, OSCAL, **PDF** | +1 |
+| Pytest cases                 | 710       | ~735       | +~25 (drift 6 + composition 5 + scanner 7 + pdf 2 + minor) |
+| `apply_taxonomies.py` tagged | 174       | 174        | (no schema work this round) |
+| Public surfaces              | 10        | **11**     | +1 (`tfanalyze.com/scan/`) |
+
+---
+
+## Round 30.2 — KEV+EPSS + workflow walker + `--explain-score` + bulk taxonomy + `_lsp.py` — 2026-05-11 (R30.2 + R30.6 + R30.7 + R30.8 + taxonomy bulk-tag)
+
+**Five paired changes ship together: the largest comparison-table win against tfsec/checkov/trivy (CISA KEV + FIRST.org EPSS exploitability ranking), three previously-stubbed CICD rules activated by a workflow-YAML walker, a top-5 score-impact ranking flag, the ninth modularisation seam (`_lsp.py`), and bulk-tagging the 217-rule legacy catalogue against the four R30.1 taxonomies (NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA) so the 9 new compliance modes finally surface real data.**
+
+### R30.2 — CISA KEV + FIRST.org EPSS exploitability ranking
+
+New module `scripts/_threat_intel.py` (~330 LoC) cross-references each rule's `cwe:` tags with the CWE set cited by CISA's Known Exploited Vulnerabilities catalog. Findings whose rule touches a KEV-listed CWE class get a **🔥 KEV** badge in text / PR summary / SARIF (`exploitability:kev` tag at the per-result level). New CLI flag `--rank-by {urgency|exploitability|hybrid}` promotes KEV findings one urgency tier (LOW→MEDIUM→HIGH→CRITICAL, capped) when set to `exploitability` or `hybrid`. CISA KEV (~10 MB JSON) and FIRST.org EPSS (~250k row CSV, top-25k kept) are cached daily at `~/.cache/tf-analyze/` (override via `$TFA_CACHE_DIR`, TTL via `$TFA_THREAT_INTEL_TTL`). New flag `--no-threat-intel` for air-gapped CI. Offline-degrades-gracefully: stale-cache fallback if network is down, no-op if both cache and network are absent. **No comparable OSS IaC scanner integrates KEV today** — this is the line for the comparison table.
+
+### R30.6 — Workflow-YAML walker + 3 stubbed rules activated
+
+The engine walker now picks up `.github/workflows/*.yml` (and any non-tf `file_glob` declared in the catalogue) via new `_collect_extra_files`. Fixes the long-standing `Path.match` vs `lstrip("*/")` bug that prevented directory-anchored globs (`.github/workflows/*.yml`) from ever matching. New `not_regex:` field on grep patterns suppresses the rule when the negative pattern also matches the file. Three R30.3 rules move from `status: stub` → `status: active`: **SEC-CICD-001** (workflow runs `terraform apply` without `environment:` block), **SEC-CICD-002** (`permissions: write-all`), **SEC-CICD-003** (`apply -auto-approve` without `environment:`). 6 new fixtures (3 positive, 3 clean) + 6 walker tests.
+
+### R30.7 — `_lsp.py` extraction (ninth seam) + LSP test expansion
+
+Extracted `_run_lsp_server` (originally ~175 LoC of JSON-RPC glue inside `detect.py`) into `scripts/_lsp.py` via the callable-injection pattern: `_lsp.py` takes a `scanner` callback and a `load_catalog` callback so it never imports `detect`, avoiding circular-import risk. detect.py's `_run_lsp_server` is now a 22-LoC shim that wires up the closure. **All 11 original LSP tests pass unchanged** + 5 new coverage tests (`TestLspMultiFileCorpus` per-file scoping, `TestLspCodeActionEdgeCases` empty-quickfix shape, `TestLspNonTerraformFile` `.md` short-circuit, `TestLspDidChange` change re-publish, `TestLspCapabilitiesPinned` serverInfo lock-in) + 5 seam-contract tests in `tests/test_session_g_extracts.py`. New module `findings_to_diagnostics()` is also pure-function-testable. **Ninth modularisation seam shipped.**
+
+### R30.8 — `--explain-score` flag
+
+`scripts/_scoring.py` gains `explain_score()` + `render_score_explanation()`. The CLI flag emits a top-5 block ordered by score contribution (CRITICAL=15 pts > HIGH=7 > MEDIUM=3 > LOW=1; INFO weight 0 excluded) with cumulative projected score & grade. Surfaces:
+
+* **Text format** — header block before findings list.
+* **JSON** — structured `score_explanation: {base_score, base_grade, perfect_score, perfect_grade, top: [...]}`.
+
+Tells the user **which fix is worth most** — the single highest-leverage piece of advice an IaC scanner can give beyond "you broke rule X". 9 tests cover ranking, projection arithmetic, INFO exclusion, render formatting, and CLI integration.
+
+### Bulk taxonomy tagging — 174 catalogue files
+
+`scripts/apply_taxonomies.py` (mirrors the `apply_mitre.py` pattern) inserts NIST CSF 2.0, NIST SP 800-53 Rev. 5, CSA CCM v4, and SLSA tags into 174 legacy rules. Manifest is grouped semantically (encryption-at-rest, encryption-in-transit, public exposure, IAM/least privilege, logging/audit, recovery/backups, supply chain, secrets, drift, K8s/container, IMDS, provisioner/data-source, auth/MFA). The 9 R30.1 `--compliance-framework` modes now surface real data instead of empty stubs:
+
+* NIST CSF 2.0: ~25 unique controls (PR.AC-*, PR.DS-*, PR.IP-*, DE.CM-*, ID.SC-*, RC.RP-*, etc.).
+* NIST 800-53 Rev. 5: ~40 unique controls (AC-3/6, SC-7/8/13/28, AU-2/12, CP-9, CM-3, SR-3/4, IA-2/5, etc.).
+* CSA CCM v4: ~26 unique controls (IAM-04/09/12, CEK-03/06/09, IVS-04/06, LOG-02, BCR-08, STA-04, etc.).
+* SLSA v1.0: levels (L1–L3) + tracks (source/build/deps), tagged on 30 supply-chain rules.
+
+### Numbers
+
+| Metric                    | Pre-R30.2 | Post-R30.2 | Δ |
+|---------------------------|-----------|------------|----|
+| Active rules              | 232       | 235        | +3 (SEC-CICD-001/002/003 → active) |
+| detect.py LoC             | 5,125     | 5,068      | −57 (after `_lsp.py` extract) |
+| Modularisation seams      | 8         | 9          | +1 (`_lsp.py`) |
+| Pytest cases              | 658       | 713        | +55 (workflow + explain-score + LSP + threat-intel + seam) |
+| Catalogue rules carrying `nist_csf` | 22 | 188 | +166 |
+| Catalogue rules carrying `slsa` | 17 | 47 | +30 |
+| Active compliance frameworks | 13 (4 surfacing data) | 13 (13 surfacing data) | +9 reports finally useful |
+| Bundle siblings (`.vsix`) | 9 files | 11 files | +`_lsp.py` + `_threat_intel.py` |
+| Extension version         | 0.1.39    | 0.1.40     | +1 |
+
+---
+
 ## Round 30.1 — multi-framework taxonomy sweep + 15 new rules + Session F refactor — 2026-05-11 (R30.0.12 + R30.1 + R30.3 + R30.4 + R30.5)
 
 **Combined release: catalog grows 217 → 232 active rules (+15), four new taxonomy fields land (NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA), nine new `--compliance-framework` modes, plus the eighth modularisation seam (`_cross_resource.py`). Session F also moves `block_arg_value` and the `_USE_HCL2` toggle into `_hcl.py` so cross-resource detectors import cleanly.**

@@ -245,6 +245,13 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     fix_hcl = data.get("fix_hcl")
     if fix_hcl is not None and not isinstance(fix_hcl, str):
         errs.append(f"{source}: 'fix_hcl' must be a string if present")
+    # `fix_hcl_minimal` (R30.10): preferred by `--apply-fixes` when present.
+    # Stripped-down form of `fix_hcl` — just the attribute or nested block
+    # the patcher needs to insert/replace, with no surrounding resource
+    # declaration. Falls back to `fix_hcl` when absent.
+    fix_hcl_minimal = data.get("fix_hcl_minimal")
+    if fix_hcl_minimal is not None and not isinstance(fix_hcl_minimal, str):
+        errs.append(f"{source}: 'fix_hcl_minimal' must be a string if present")
     fix_disruption = data.get("fix_disruption")
     if fix_disruption is not None and fix_disruption not in _VALID_FIX_DISRUPTIONS:
         errs.append(

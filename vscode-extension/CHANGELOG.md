@@ -5,6 +5,80 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.41] — 2026-05-11
+
+### Fixed
+
+- **Documentation backfill — the `0.1.40` changelog entry below was missing on first publish.** The `.vsix` was built and tagged before the changelog file in the repo had been updated; users browsing the Marketplace listing's *Changelog* tab on `0.1.40` saw the prior `0.1.39` entry as the most recent. This release ships the same engine bits as `0.1.40` with the full retroactive entry written. No behaviour change.
+
+### Counts
+
+- Extension: v0.1.40 → **v0.1.41**
+
+---
+
+## [0.1.40] — 2026-05-11
+
+The bundled engine inside this `.vsix` gains ten new engine-level capabilities. Nothing about the extension's UI surface changed — but the LSP-driven diagnostics, the Quick Fix action, the attack-graph view, and the status-bar badge all silently benefit. The "Highlights" section explains where users see the difference.
+
+### Changed
+
+- **Bundle pipeline now ships 11 sibling Python files (was 9).** Two new modules ship inside `engine/scripts/`:
+  - **`_lsp.py`** (231 LoC, R30.7 / Session G) — the entire JSON-RPC LSP loop extracted from `detect.py` via the callable-injection pattern. `_lsp.py` accepts a `scanner` and `load_catalog` callback so it never imports `detect`, avoiding circular-import risk. detect.py's `_run_lsp_server` is now a 22-LoC shim. **Ninth modularisation seam.** Re-export shim preserves every legacy private name.
+  - **`_threat_intel.py`** (~330 LoC, R30.2) — CISA KEV + FIRST.org EPSS integration. Cross-references each catalogue rule's `cwe:` tags against the CWE set cited by KEV; promotes urgency by one tier when `--rank-by exploitability` or `--rank-by hybrid` is set. Daily-cached at `~/.cache/tf-analyze/` (overridable via `$TFA_CACHE_DIR`; freshness via `$TFA_THREAT_INTEL_TTL`). Offline-degrades-gracefully — stale-cache fallback on network failure, no-op when both cache and network are unavailable. **No comparable OSS IaC scanner integrates KEV today.**
+- **`ENGINE_SIBLING_FILES`** now lists `['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py', '_attack_graph.py', '_output.py', '_cross_resource.py', '_lsp.py', '_threat_intel.py']`.
+- **Workflow-YAML walker activated 3 previously-stubbed rules (R30.6).** `_collect_extra_files` walks `.github/workflows/*.yml` (and any non-tf `file_glob` declared in the catalogue) alongside `.tf` files. `Path.match` replaces the broken `lstrip("*/")` suffix check so directory-anchored globs actually fire. New `not_regex:` field on grep patterns suppresses the rule when the negative pattern also matches. **SEC-CICD-001** (workflow runs `terraform apply` without an `environment:` block), **SEC-CICD-002** (`permissions: write-all`), **SEC-CICD-003** (`apply -auto-approve` without `environment:`) all move from `status: stub` → `status: active`.
+
+### Added
+
+- **`--rank-by {urgency|exploitability|hybrid}` (R30.2)** — exploitability prioritisation. The default `urgency` keeps the legacy CRITICAL-first ordering. `exploitability` cross-references each rule's CWE tags against CISA KEV's CWE set, promotes KEV findings one urgency tier (LOW→MEDIUM→HIGH→CRITICAL, capped at CRITICAL), and sorts KEV hits first. `hybrid` keeps urgency-first ordering with the KEV promotion applied. New 🔥 KEV badge in text output, in the PR-summary table cell, and in SARIF (`exploitability:kev` per-result tag with optional `epss_score`). `--no-threat-intel` flag for air-gapped CI. *The extension's status-bar badge and Findings panel render the new urgency tier transparently — no UI work needed.*
+- **`--explain-score` (R30.8)** — top-5 findings ranked by score contribution (CRITICAL=15 pts > HIGH=7 > MEDIUM=3 > LOW=1; INFO=0 excluded), with cumulative projected score and grade if each fix is applied. Text format renders as a header block; JSON output gains a structured `score_explanation: {base_score, base_grade, perfect_score, perfect_grade, top: [...]}` field. Tells the user **which fix is worth most.** *The extension can surface this in a future "Top Fixes" panel; the engine data is already wired through.*
+- **`--mode drift --state-json PATH` (R30.12)** — new execution mode re-evaluates the catalogue against `terraform show -json state.tfstate` output. Findings tagged `mode='state'` so the extension's Findings panel can group "drift" separately from static / plan-time. Reuses the plan-mode walker via the new `_evaluate_against_resources` helper; `detect_in_state()` mirrors `detect_in_plan()`.
+- **`--pdf-output PATH` (R30.13)** — CISO-targetable PDF rendering of the compliance gap report via weasyprint (optional dep). Pair with `--compliance --compliance-framework <name>` for any of the 13 frameworks. Engine exits 2 with a one-line install hint when weasyprint is missing.
+- **`--apply-fixes × --baseline` composition (R30.11)** — when both are set, `--apply-fixes` skips findings already present in the baseline. Closes the "snapshot today, fix only new stuff" UX. The extension's bulk-apply-fixes command picks this up automatically when the user has a baseline configured.
+- **`--mode diff × --baseline` composition (R30.11)** — orthogonal layers (diff narrows files, baseline filters tuples) now have a regression test pinning the composition contract.
+- **`fix_hcl_minimal:` catalogue field (R30.10)** — optional second snippet stripped of the outer `resource "X" "Y" { ... }` wrapper. `--apply-fixes` prefers it when present, making the Quick Fix path more reliable on complex rules. The extension's **`code action: tf-analyze fix`** command now patches more cleanly when catalogue authors add `fix_hcl_minimal`.
+
+### Added (catalogue)
+
+- **Bulk taxonomy tagging — 174 catalogue files (R30.9).** `scripts/apply_taxonomies.py` inserts NIST CSF 2.0, NIST SP 800-53 Rev. 5, CSA CCM v4, and SLSA tags into 174 of the 217 legacy rules so the 9 R30.1 `--compliance-framework` modes finally surface real data instead of empty stubs. Concrete coverage:
+  - NIST CSF 2.0: ~25 unique controls (PR.AC-*, PR.DS-*, PR.IP-*, DE.CM-*, ID.SC-*, RC.RP-*).
+  - NIST 800-53 Rev. 5: ~40 unique controls (AC-3/6, SC-7/8/13/28, AU-2/12, CP-9, CM-3, SR-3/4, IA-2/5).
+  - CSA CCM v4: ~26 unique controls (IAM-04/09/12, CEK-03/06/09, IVS-04/06, LOG-02, BCR-08, STA-04).
+  - SLSA v1.0: levels (L1–L3) + tracks (source/build/deps), tagged on 30 supply-chain rules.
+
+  The extension's `compliance` panel now shows real PASS/FAIL coverage when the user switches to any of these frameworks via the framework picker.
+
+### Highlights — where users notice the difference
+
+- **Squiggle order changes if you set `--rank-by exploitability`** in the extension settings. Findings whose rule touches a KEV-listed CWE float to the top of the Findings panel and gain a 🔥 KEV decoration.
+- **Quick Fix is more reliable** on rules whose catalogue entry now ships a `fix_hcl_minimal:` snippet (the patcher prefers it).
+- **`Show Compliance Report` for `nist_csf` / `nist_800_53` / `csa_ccm` / `slsa`** stops showing empty stubs.
+- **`Show Attack Graph` on a workflow-heavy repo** now picks up CICD findings the engine could never previously surface (SEC-CICD-001/002/003 fire on real `.github/workflows/*.yml` files).
+- **LSP boot-up is unchanged in user-visible behaviour** even though the entire JSON-RPC loop now lives in a separate file (R30.7 seam extraction).
+
+### Counts
+
+- 232 → **235 active rules** (+3: SEC-CICD-001/002/003 promoted from stub by the workflow-YAML walker)
+- Catalogue rules carrying `nist_csf`: 22 → **188** (+166 via R30.9 bulk tag)
+- Catalogue rules carrying `slsa`: 17 → **47** (+30)
+- Compliance modes surfacing real data: 4 (CIS, PCI-DSS, SOC 2, OWASP IaC) → **13** (all 9 R30.1 modes now populated)
+- Modularisation seams: 8 → **9** (+`_lsp.py`)
+- Bundle siblings: 9 → **11** (+`_lsp.py`, +`_threat_intel.py`)
+- `detect.py` 5,116 → **5,068 LoC** (this release) → **~5,170** after R30.10–R30.14 (engine grew by ~100 LoC for drift + PDF + baseline + state-json plumbing, net of the LSP extraction)
+- Pytest: 658 → **748** (+90: workflow 6, explain-score 9, LSP 5 new + 5 seam, threat-intel 17, drift 6, composition 5, scanner 7, pdf 2, others)
+- Extension: v0.1.39 → **v0.1.40**
+
+### Out of scope (CLI-only this round)
+
+The following ship in the engine but don't change the extension's UI:
+
+- `--mode drift` (CLI use today; extension command coming in a future release).
+- `--pdf-output` (CISO export is CLI-driven; no extension button yet).
+- Public web scanner at `tfanalyze.com/scan/<owner>/<repo>` (separate Fly.io service, not part of the .vsix).
+
+---
+
 ## [0.1.39] — 2026-05-11
 
 ### Changed
