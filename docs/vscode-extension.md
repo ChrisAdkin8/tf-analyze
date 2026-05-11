@@ -298,6 +298,17 @@ bundle-engine` — no separate file-list update required. The smoke
 test enforces a `MIN_SIBLING_COUNT = 15` floor so a glob misconfig
 fails the build instead of shipping a half-bundle.
 
+As of R30.15 the bundle ships 24 sibling Python files. Five of those
+are the detector topic modules — `_handlers_generic.py`,
+`_handlers_security.py`, `_handlers_robustness.py`,
+`_handlers_modules.py`, `_handlers_infra.py` — that hold the 51
+detection-pattern handlers that previously lived inline in
+`detect.py`. They are imported by side-effect at the bottom of
+`detect.py`; each handler self-registers via the `@_register_infile`
+/ `@_register_corpus` decorator. No catalogue or wiring change is
+required to add a 52nd handler — drop it into the matching topic
+module (or create a new one) and the decorator does the rest.
+
 ## Troubleshooting
 
 ### The Attack Graph panel opens but is blank

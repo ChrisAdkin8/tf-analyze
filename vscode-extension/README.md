@@ -36,7 +36,7 @@ Brings the **`tf-analyze`** detection engine (215 catalogue rules across AWS, GC
 ### 1. Install
 
 ```bash
-code --install-extension tf-analyze-0.1.39.vsix
+code --install-extension tf-analyze-0.1.53.vsix
 ```
 
 That's it. The extension ships with everything it needs.
