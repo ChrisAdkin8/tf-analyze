@@ -520,134 +520,27 @@ def detect_in_file(
         eid = entry["id"]
         for pat in entry.get("patterns", []) or []:
             kind = pat.get("kind", "")
-            # Round 30.14 — registry dispatch FIRST; falls through to
-            # the legacy `elif` chain when no handler is registered.
-            # Each kind that gets migrated below is removed from the
-            # elif chain, so over time the chain shrinks to zero.
+            # Round 30.14 — registry dispatch. Every in-file detector
+            # kind is now a registered handler in `_INFILE_HANDLERS`.
+            # Unknown kinds (catalogue-only / corpus-only) fall through
+            # silently — `detect_corpus` handles its own kinds; truly
+            # malformed catalogue entries are caught at load time by
+            # `_catalog.validate_catalog_entry`.
             _handler = _INFILE_HANDLERS.get(kind)
-            if _handler is not None:
-                _ctx = InFileCtx(
-                    file_path=file_path,
-                    text=text,
-                    var_defaults=_vd,
-                    resources=resources,
-                    modules=modules,
-                    variables=variables,
-                    entry=entry,
-                    eid=eid,
-                    pat=pat,
-                )
-                findings.extend(_handler(_ctx))
+            if _handler is None:
                 continue
-            if kind == "grep":
-                if "regex" not in pat:
-                    continue
-                regex = re.compile(pat["regex"], re.MULTILINE)
-                # `not_regex` (R30.6) suppresses the rule when the file
-                # also matches the negative pattern — e.g. a workflow
-                # with `terraform apply` AND an `environment:` block
-                # has the required-reviewer gate so SEC-CICD-001 must
-                # not fire.
-                not_regex_grep = (
-                    re.compile(pat["not_regex"], re.MULTILINE)
-                    if "not_regex" in pat else None
-                )
-                glob = pat.get("file_glob", "**/*.tf")
-                if glob not in ("**/*.tf", "*.tf"):
-                    # Path.match handles `.github/workflows/*.yml`-style
-                    # directory-anchored globs that the legacy `endswith`
-                    # check could not (R30.6 workflow-YAML walker).
-                    #
-                    # Audit item 29 — the prior `except Exception:` arm
-                    # silently absorbed a malformed glob like `**/*.tf[`
-                    # by falling back to a substring match, hiding the
-                    # catalogue bug from the operator. Narrow to the
-                    # specific `ValueError` that `Path.match` raises on
-                    # an invalid pattern and surface it loudly; a real
-                    # syntax error in a catalogue file should fail the
-                    # scan, not silently match nothing.
-                    try:
-                        matched = file_path.match(glob)
-                    except ValueError as e:
-                        raise ValueError(
-                            f"catalogue rule has malformed file_glob "
-                            f"{glob!r}: {e}"
-                        ) from e
-                    if not matched:
-                        continue
-                if not_regex_grep is not None and not_regex_grep.search(text):
-                    continue
-                scope = pat.get("scope", "")
-                if scope == "resource_body":
-                    # Restrict the search to resource block bodies so the pattern
-                    # cannot fire on comments, variable descriptions, or output values.
-                    rt_filter = pat.get("resource", "")
-                    for blk in resources:
-                        btype, bname = blk["groups"]
-                        if rt_filter and btype != rt_filter:
-                            continue
-                        if _resource_is_count_zero(blk["body"], _vd):
-                            continue
-                        if regex.search(blk["body"]):
-                            findings.append({
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"{btype}.{bname}",
-                            })
-                else:
-                    # `strip_hcl_context` replaces comments with EQUAL-LENGTH
-                    # whitespace (see `_hcl.strip_hcl_context` docstring),
-                    # so the stripped text has the same length and the same
-                    # byte offsets as the original. `m.start()` is therefore
-                    # already a correct position against `text` — line
-                    # counts and block-attribution `<=`/`<` comparisons
-                    # against the original `text` work directly.
-                    #
-                    # An earlier R30.9 fix tried to re-locate the match via
-                    # `text.find(matched)` to "translate" coordinates that
-                    # were never actually shifted. That introduced a
-                    # first-occurrence collision (if the matched bytes
-                    # appeared earlier in the file, e.g. an attribute value
-                    # repeated, the reported line was wrong). Reverted in
-                    # round 3 once the equal-length contract was confirmed.
-                    search_text = strip_hcl_context(text) if pat.get("hcl_context") else text
-                    for m in regex.finditer(search_text):
-                        line = search_text.count("\n", 0, m.start()) + 1
-                        # Best-effort resource attribution: find the enclosing
-                        # resource/data block so the attack graph can attach
-                        # this finding even though the rule wasn't a
-                        # resource-shaped pattern.
-                        addr = ""
-                        for blk in resources:
-                            if blk["start_pos"] <= m.start() < blk["end_pos"]:
-                                addr = f"{blk['groups'][0]}.{blk['groups'][1]}"
-                                break
-                        if not addr:
-                            for dblk in find_blocks(text, DATA_START):
-                                if dblk["start_pos"] <= m.start() < dblk["end_pos"]:
-                                    addr = f"data.{dblk['groups'][0]}.{dblk['groups'][1]}"
-                                    break
-                        findings.append({"id": eid, "file": str(file_path), "line": line, "resource": addr})
-            # `resource_present`, `data_source_present`, `resource_arg`,
-            # `resource_missing_arg` migrated to `_INFILE_HANDLERS`. See
-            # the registered handlers below.
-            # `iam_policy_analysis` migrated to `_INFILE_HANDLERS`.
-            # `helm_set_value` migrated to `_INFILE_HANDLERS`.
-            # `iam_json_policy_analysis` migrated to `_INFILE_HANDLERS`.
-            # `firewall_open_port` migrated to `_INFILE_HANDLERS`.
-            # `resource_body_contains`, `hcl_attr`, `module_block_missing_arg`
-            # migrated to `_INFILE_HANDLERS`. See the registered handlers below.
-            # `variable_type`, `variable_missing_validation`,
-            # `check_block_missing_assert`, `precondition_missing_error_message`
-            # migrated to `_INFILE_HANDLERS`. See registered handlers below.
-            # `count_index_ref`, `count_index_in_name`, `count_bool_pattern`
-            # migrated to `_INFILE_HANDLERS`.
-            # `variable_missing_description`, `output_missing_description`
-            # migrated to `_INFILE_HANDLERS`.
-            # `variable_credential_pattern` migrated to `_INFILE_HANDLERS`.
-            # `ignore_changes_overuse` migrated to `_INFILE_HANDLERS`.
-            # corpus-level kinds handled in detect_corpus
+            _ctx = InFileCtx(
+                file_path=file_path,
+                text=text,
+                var_defaults=_vd,
+                resources=resources,
+                modules=modules,
+                variables=variables,
+                entry=entry,
+                eid=eid,
+                pat=pat,
+            )
+            findings.extend(_handler(_ctx))
     return findings
 
 
@@ -1562,6 +1455,91 @@ def _detect_firewall_open_port(c: InFileCtx) -> list[dict]:
                 "line": blk["start_line"],
                 "resource": f"{btype}.{bname}",
             })
+    return out
+
+
+@_register_infile("grep")
+def _detect_grep(c: InFileCtx) -> list[dict]:
+    """``grep`` — the most-used pattern kind. Match a regex against
+    file content. Two modes via the ``scope`` field:
+
+    * ``scope == "resource_body"`` — search only inside resource
+      bodies, optionally filtered by resource type via ``resource``.
+      Honours ``count = 0`` so resources definitely not created are
+      skipped.
+    * default — search the full file (with comments stripped to
+      equal-length whitespace if ``hcl_context: true``). The match
+      offset is then attributed to a resource/data block by position.
+
+    The ``not_regex`` field (R30.6) suppresses the rule when the file
+    matches a negative pattern — e.g. a workflow file that has both
+    ``terraform apply`` and an ``environment:`` block (required-reviewer
+    gate) should not fire SEC-CICD-001.
+
+    The ``file_glob`` field (R30.6) restricts the pattern to files
+    matching a path-anchored glob (e.g. ``.github/workflows/*.yml``).
+    A malformed glob raises loudly (R30.8 audit fix #29).
+    """
+    pat = c.pat
+    if "regex" not in pat:
+        return []
+    regex = re.compile(pat["regex"], re.MULTILINE)
+    not_regex_grep = (
+        re.compile(pat["not_regex"], re.MULTILINE)
+        if "not_regex" in pat else None
+    )
+    glob = pat.get("file_glob", "**/*.tf")
+    if glob not in ("**/*.tf", "*.tf"):
+        try:
+            matched = c.file_path.match(glob)
+        except ValueError as e:
+            raise ValueError(
+                f"catalogue rule has malformed file_glob {glob!r}: {e}"
+            ) from e
+        if not matched:
+            return []
+    if not_regex_grep is not None and not_regex_grep.search(c.text):
+        return []
+    scope = pat.get("scope", "")
+    out: list[dict] = []
+    if scope == "resource_body":
+        rt_filter = pat.get("resource", "")
+        for blk in c.resources:
+            btype, bname = blk["groups"]
+            if rt_filter and btype != rt_filter:
+                continue
+            if _resource_is_count_zero(blk["body"], c.var_defaults):
+                continue
+            if regex.search(blk["body"]):
+                out.append({
+                    "id": c.eid,
+                    "file": str(c.file_path),
+                    "line": blk["start_line"],
+                    "resource": f"{btype}.{bname}",
+                })
+        return out
+    # Full-file scope. `strip_hcl_context` preserves byte offsets so
+    # `m.start()` is valid against `c.text` directly (R30.11 audit fix).
+    search_text = strip_hcl_context(c.text) if pat.get("hcl_context") else c.text
+    for m in regex.finditer(search_text):
+        line = search_text.count("\n", 0, m.start()) + 1
+        # Best-effort resource attribution by file position.
+        addr = ""
+        for blk in c.resources:
+            if blk["start_pos"] <= m.start() < blk["end_pos"]:
+                addr = f"{blk['groups'][0]}.{blk['groups'][1]}"
+                break
+        if not addr:
+            for dblk in find_blocks(c.text, DATA_START):
+                if dblk["start_pos"] <= m.start() < dblk["end_pos"]:
+                    addr = f"data.{dblk['groups'][0]}.{dblk['groups'][1]}"
+                    break
+        out.append({
+            "id": c.eid,
+            "file": str(c.file_path),
+            "line": line,
+            "resource": addr,
+        })
     return out
 
 
