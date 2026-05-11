@@ -59,7 +59,7 @@
 - [ ] `GET /scan/<owner>/<repo>/<sha>/` → serve `/data/reports/<sha>/report.html`. 404 if scan never ran; 410 if cache evicted (LRU-removed)
 - [ ] `GET /scan/<owner>/<repo>/<sha>/findings.json` → serve cached JSON (lets users wget)
 - [ ] `GET /scan/<owner>/<repo>/` (no sha) → 302 to latest scan for that repo (queries DB for max(finished_at)), or 404 if never scanned
-- [ ] `GET /badge/<owner>/<repo>.svg` → shields.io-format SVG with score + grade. Fallback "scan now" badge if no scan exists. Cache-Control: 5 min (let CF cache it)
+- [x] `GET /badge/<owner>/<repo>.svg` → shields.io-format SVG with score + grade. Fallback "no data" badge if no scan exists. Cache-Control: 5 min (let CF cache it). **Shipped R30.15** — `demo/_badge.py` + route in `demo/app.py`; 18 tests in `tests/test_badge.py`.
 - [ ] `GET /healthz` → 200 if the engine import succeeds and SQLite read works. Probed by Fly health checks
 
 ### Background scan worker
@@ -99,7 +99,7 @@
 - [ ] `curl -X POST tfanalyze.com/scan -d 'url=https://github.com/ChrisAdkin8/tf-analyze' -H 'Content-Type: application/x-www-form-urlencoded'` returns 200 + scan_id
 - [ ] Polling `/status/<id>` returns `done` within 30 seconds
 - [ ] `/scan/ChrisAdkin8/tf-analyze/<sha>/` returns the HTML report
-- [ ] `/badge/ChrisAdkin8/tf-analyze.svg` returns a valid SVG with the right score
+- [x] `/badge/ChrisAdkin8/tf-analyze.svg` returns a valid SVG with the right score (after first `/scan/.../` visit populates the cache)
 - [ ] Re-submitting the same URL within 1 minute returns the cached scan_id (no re-scan)
 - [ ] Submitting a non-GitHub URL returns 400 with a helpful message
 - [ ] Submitting a private/nonexistent repo returns 404 with a helpful message

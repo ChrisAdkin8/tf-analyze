@@ -9,6 +9,7 @@ A FastAPI app exposing three surfaces:
 | `POST /scan/repo` | JSON body `{repo: "<url>"}` — legacy API |
 | **`GET /scan/<owner>/<repo>`** | **Public permalink (R30.14).** Resolves HEAD, scans, returns styled HTML. Cached by commit SHA. |
 | `GET /scan/<owner>/<repo>.json` | Machine-readable form of the same permalink. |
+| **`GET /badge/<owner>/<repo>.svg`** | **Score badge (R30.15).** shields.io-shape SVG. Reads the same per-SHA cache the permalink writes; renders a "no data" placeholder if the repo has never been scanned. Wrap in a link to the matching `/scan/...` permalink so the first click populates the cache. |
 | `GET /healthz` | Liveness probe |
 
 The public permalink is the **load-bearing virality surface** — every

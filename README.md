@@ -12,6 +12,7 @@
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/tfanalyze.tf-analyze?label=vs%20code%20marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze)
 [![Open VSX](https://img.shields.io/open-vsx/v/tfanalyze/tf-analyze?label=open%20vsx&logo=eclipseide)](https://open-vsx.org/extension/tfanalyze/tf-analyze)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/ChrisAdkin8/tf-analyze/pkgs/container/tf-analyze)
+[![tf-analyze score](https://tfanalyze.com/badge/ChrisAdkin8/tf-analyze.svg)](https://tfanalyze.com/scan/ChrisAdkin8/tf-analyze)
 
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 235](https://img.shields.io/badge/rules-235-brightgreen)

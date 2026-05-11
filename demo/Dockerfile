@@ -30,6 +30,7 @@ COPY catalog/ catalog/
 # resolves to the same place that `scripts/` lives in (i.e. /app).
 # Flattening these to /app/app.py would break the path resolution.
 COPY demo/app.py demo/app.py
+COPY demo/_badge.py demo/_badge.py
 COPY demo/index.html demo/index.html
 
 # Cache dir for per-SHA scan results — mounted as a Fly volume.

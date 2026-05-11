@@ -10,6 +10,7 @@ attack-graph visualiser. It is the load-bearing virality surface
 - **Fly app:** `tf-analyze` (org `personal`, region `iad`)
 - **Volume:** `tfanalyze_scan_cache` (1 GB, auto-created from `[[mounts]]`)
 - **Image source:** repo-root build context, `demo/Dockerfile`
+- **Public routes:** `GET /` (paste-and-scan UI), `GET /scan/<owner>/<repo>{,.json}` (per-SHA permalink), **`GET /badge/<owner>/<repo>.svg`** (shields.io-shape score badge reading the same cache), `GET /healthz`. The badge route has no rate limit — camo proxy IPs would burn the per-IP budget instantly on a popular README.
 
 ## One-time setup
 
@@ -211,6 +212,11 @@ done
 # 4. Public permalink (clone + scan + cache).
 curl -sI https://tfanalyze.com/scan/terraform-aws-modules/terraform-aws-vpc
 # Expected: 200 once the clone completes (~5–10 s cold, instant on cache hit).
+
+# 5. Score badge — reads the cache the permalink just wrote.
+curl -sI https://tfanalyze.com/badge/terraform-aws-modules/terraform-aws-vpc.svg
+# Expected: 200, content-type image/svg+xml, cache-control public max-age=300.
+# An unscanned repo returns 200 with a "no data" placeholder, not a 4xx.
 ```
 
 ## Hard caps and pricing

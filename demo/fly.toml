@@ -9,7 +9,11 @@ primary_region = "iad"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  # Keep one machine warm so GitHub's camo image proxy never serves a
+  # broken-badge placeholder while the machine cold-starts. The cost
+  # delta versus min_machines_running = 0 is small on a shared-cpu-1x
+  # (~$2/mo) and badges are the load-bearing virality surface.
+  min_machines_running = 1
 
 [[vm]]
   memory = "1gb"

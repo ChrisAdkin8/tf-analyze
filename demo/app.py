@@ -28,14 +28,20 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import time
 from collections import defaultdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
+
+# Sibling import — works under both `uvicorn app:app` (Docker container,
+# WORKDIR=/app/demo) and `uvicorn demo.app:app` (local dev from repo root).
+sys.path.insert(0, str(Path(__file__).parent))
+from _badge import render_badge_svg, render_unknown_badge  # noqa: E402
 
 app = FastAPI(title="tf-analyze demo", docs_url=None, redoc_url=None)
 
@@ -378,6 +384,74 @@ async def scan_public(owner: str, repo: str, request: Request):
         )
     result = _clone_and_scan(owner, repo, sha)
     return HTMLResponse(_render_public_report(result))
+
+
+# ---------------------------------------------------------------------------
+# Badge — GET /badge/{owner}/{repo}.svg
+# ---------------------------------------------------------------------------
+
+
+# Headers shared by every badge response. 5-minute Cache-Control is what
+# GitHub's camo image proxy and Cloudflare's edge cache respect — short
+# enough that post-merge score changes propagate within a sprint stand-up,
+# long enough that a viral README doesn't melt the backend.
+_BADGE_HEADERS = {
+    "Cache-Control": "public, max-age=300, s-maxage=300",
+    # Defense in depth — the badge content is server-rendered text-only,
+    # but pin CSP so a future change can't accidentally ship inline scripts.
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+def _latest_cached_scan(owner: str, repo: str) -> dict | None:
+    """Return the parsed JSON of the most-recent cached scan for this
+    repo, or None if no cache entry exists.
+
+    Cache files are named ``{owner}_{repo}_{sha}.json`` per
+    ``_clone_and_scan``; we pick the newest mtime so badges always
+    reflect the most-recent scan (which in turn reflects the most-recent
+    visit to ``/scan/<owner>/<repo>``).
+    """
+    matches = list(CACHE_DIR.glob(f"{owner}_{repo}_*.json"))
+    if not matches:
+        return None
+    latest = max(matches, key=lambda p: p.stat().st_mtime)
+    try:
+        return json.loads(latest.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+@app.get("/badge/{owner}/{repo}.svg")
+async def badge(owner: str, repo: str, label: str = "tf-analyze") -> Response:
+    """Score badge for a repo's most-recent cached scan.
+
+    No per-IP rate limit — GitHub's camo proxy fans out badge requests
+    through a small IP pool, so per-IP limits would break popular
+    READMEs. The cache-hit path is parse-and-render (sub-ms);
+    cache-miss is a fixed-cost "no data" placeholder.
+
+    Stale scores update the next time someone visits the matching
+    ``/scan/<owner>/<repo>`` permalink — README authors typically wrap
+    the badge in a link to that URL to keep the cache warm.
+    """
+    if not _OWNER_RE.match(owner) or not _REPO_RE.match(repo):
+        raise HTTPException(status_code=400, detail="Invalid owner/repo characters")
+    repo = repo.removesuffix(".git")
+    label = label[:32]  # bound the user-controlled bit before rendering
+
+    result = _latest_cached_scan(owner, repo)
+    if result is not None:
+        summary = result.get("summary") or {}
+        score = summary.get("score")
+        grade = summary.get("grade")
+        if isinstance(score, int) and isinstance(grade, str):
+            svg = render_badge_svg(label, score, grade)
+            return Response(content=svg, media_type="image/svg+xml", headers=_BADGE_HEADERS)
+
+    svg = render_unknown_badge(label)
+    return Response(content=svg, media_type="image/svg+xml", headers=_BADGE_HEADERS)
 
 
 @app.post("/scan/hcl")
