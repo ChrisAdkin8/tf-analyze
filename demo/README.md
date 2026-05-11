@@ -84,6 +84,28 @@ default branch advances. The volume is sized at 1 GB — at ~50 KB per
 cached scan that's ~20k entries before any eviction is needed; if it
 fills up, `flyctl ssh console -C "find /var/cache/tf-analyze -mtime +30 -delete"`.
 
+## What the rendered report contains
+
+`GET /scan/<owner>/<repo>` returns a single styled HTML page with:
+
+* **Score banner** — letter grade (`A` / `B` / `B-` / `C` / `D` / `F`),
+  numeric score, severity counts, and the link back to the source repo.
+* **Top findings table** — the top 10 findings ordered
+  **most-severe first** (`CRITICAL` → `HIGH` → `MEDIUM` → `LOW` →
+  `INFO`). Sort is stable within each tier, so findings sharing an
+  urgency keep their detection order (which matches file/line position
+  in the source). The earlier behaviour — first ten in detection order —
+  was misleading: a single `HIGH` could be buried below ten `LOW`s.
+* **Top fixes (`--explain-score`)** — up to five findings ranked by score
+  impact, each row showing the projected score+grade if that finding
+  were fixed.
+* **Module Reuse Advisor section** — surfaces `MOD-REUSE-*` INFO findings
+  when the repo's resource clusters match a Terraform Registry module
+  fingerprint.
+* **Attack-graph SVG** (when `--attack-graph` returned non-empty data).
+* **Open Graph metadata** — score + grade in `og:title` so Slack /
+  Twitter / HN preview cards render the headline number.
+
 ## Why a permalink and not a form?
 
 Static URLs are shareable. Posting

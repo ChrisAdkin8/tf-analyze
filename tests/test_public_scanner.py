@@ -181,3 +181,62 @@ class TestHealth:
         r = client.get("/healthz")
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
+
+
+class TestFindingOrder:
+    def test_top_findings_sorted_critical_first(self) -> None:
+        """`_render_public_report` must order the Top-findings table from
+        most-severe to least, regardless of the engine's emission order.
+        Detection order is roughly file-walk order, so without this sort
+        a HIGH finding could be hidden below ten LOWs.
+        """
+        import app as demo_app  # type: ignore
+        # Mixed-severity scan result with the most-severe items emitted
+        # last on purpose, to prove the renderer sorts them up.
+        result = {
+            "_meta": {"owner": "x", "repo": "y", "url": "u", "sha": "0" * 40},
+            "summary": {
+                "score": 50, "grade": "C",
+                "counts": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 1, "LOW": 1, "INFO": 0},
+            },
+            "findings": [
+                {"id": "LOW-1", "urgency": "LOW", "file": "a.tf", "line": 1},
+                {"id": "MED-1", "urgency": "MEDIUM", "file": "b.tf", "line": 2},
+                {"id": "HIGH-1", "urgency": "HIGH", "file": "c.tf", "line": 3},
+                {"id": "CRIT-1", "urgency": "CRITICAL", "file": "d.tf", "line": 4},
+            ],
+        }
+        html_out = demo_app._render_public_report(result)
+        # The table renders one row per finding; the row text contains the
+        # rule id. Assert their order in the HTML matches severity-desc.
+        order = []
+        for rid in ("CRIT-1", "HIGH-1", "MED-1", "LOW-1"):
+            idx = html_out.find(rid)
+            assert idx != -1, f"missing finding {rid} in rendered HTML"
+            order.append((idx, rid))
+        sorted_by_position = [rid for _, rid in sorted(order)]
+        assert sorted_by_position == ["CRIT-1", "HIGH-1", "MED-1", "LOW-1"], (
+            f"findings appeared in {sorted_by_position}, expected severity-desc"
+        )
+
+    def test_stable_within_tier(self) -> None:
+        """Two LOW findings should appear in detection order (stable sort).
+        Important when several findings share an urgency — the engine's
+        emission order matches file/line position, which is the user's
+        mental model."""
+        import app as demo_app  # type: ignore
+        result = {
+            "_meta": {"owner": "x", "repo": "y", "url": "u", "sha": "0" * 40},
+            "summary": {
+                "score": 99, "grade": "A",
+                "counts": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 2, "INFO": 0},
+            },
+            "findings": [
+                {"id": "LOW-FIRST", "urgency": "LOW", "file": "a.tf", "line": 1},
+                {"id": "LOW-SECOND", "urgency": "LOW", "file": "a.tf", "line": 9},
+            ],
+        }
+        html_out = demo_app._render_public_report(result)
+        assert html_out.find("LOW-FIRST") < html_out.find("LOW-SECOND"), (
+            "stable sort within a tier was lost — detection order should be preserved"
+        )

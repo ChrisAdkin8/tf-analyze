@@ -282,8 +282,19 @@ def _render_public_report(result: dict) -> str:
         if counts.get(tier, 0)
     ) or "<b>0</b> issues at default tiers"
 
+    # Sort by severity (CRITICAL → HIGH → MEDIUM → LOW → INFO) before slicing
+    # to top-10, so the "Top findings" table actually shows the most-severe
+    # findings rather than the first ten in detection order. Stable sort keeps
+    # secondary detection order intact within each tier, which matters when
+    # several findings share an urgency. The rank mirrors
+    # `scripts/_output.py:URGENCY_RANK_ASCENDING` (single source of truth; the
+    # engine pins this via tests, so drift would surface there first).
+    _SEVERITY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    findings_by_severity = sorted(
+        findings, key=lambda f: _SEVERITY_RANK.get(f.get("urgency", ""), 99)
+    )
     top_rows = []
-    for f in findings[:10]:
+    for f in findings_by_severity[:10]:
         rid = html.escape(f.get("id", "?"))
         loc = html.escape(f"{Path(f.get('file', '')).name}:{f.get('line', '?')}")
         urgency = html.escape(f.get("urgency", "?"))
