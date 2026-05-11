@@ -2417,427 +2417,70 @@ from _mitre import (
 )
 
 
-# ---- verify-fixed mode --------------------------------------------------
-
-_FINDING_ROW_RE = re.compile(
-    r'^\|\s*(?P<id>[A-Z]{2,4}(?:-[A-Z]+)+-\d{3})'
-    r'(?:#\d+)?\s*\|'        # optional instance number
-    r'(?P<middle>.*?)\|'      # skip urgency column(s)
-    r'\s*`?(?P<file>[\w./-]+\.tf)`?'
-    r'[:\s]*(?P<line>\d+)?'
-    r'.*\|',
-    re.MULTILINE,
+# verify-fixed mode + auto-stub + tftest gen extracted to
+# scripts/_verify.py — 17th seam. The two scanner callbacks are
+# injected so _verify.py imports nothing from detect.py.
+from _verify import (
+    parse_markdown_report,
+    reprobe_finding as _verify_reprobe_finding,
+    verify_fixed as _verify_verify_fixed,
+    write_verification_report,
+    generate_stub,
+    generate_tftest,
 )
-
-
-def parse_markdown_report(path: Path) -> list[dict]:
-    """Extract (id, file, line, resource) rows from a prior markdown report.
-
-    The report template uses a findings table with at least these columns:
-    | ID | urgency | file:line | resource | ... |
-
-    This is intentionally tolerant — any row containing a catalogue-shaped ID
-    followed by a `.tf` path is captured; delta sections ("Resolved since…")
-    are skipped via section-heading tracking.
-    """
-    text = path.read_text()
-    rows = []
-    # Skip rows inside "## Resolved" or "Resolved since" sections
-    current_section = ""
-    in_resolved = False
-    for line in text.splitlines():
-        if line.startswith("#"):
-            current_section = line.lower()
-            in_resolved = "resolved" in current_section
-            continue
-        if in_resolved:
-            continue
-        m = _FINDING_ROW_RE.match(line)
-        if not m:
-            continue
-        rows.append({
-            "id": m.group("id"),
-            "file": m.group("file"),
-            "line": int(m.group("line")) if m.group("line") else 0,
-            "resource": "",
-        })
-    return rows
 
 
 def reprobe_finding(finding: dict, catalog_by_id: dict,
                     all_files_text: dict) -> str:
-    """Return one of: STILL-PRESENT, RESOLVED, MOVED, STALE-LOCATION, AMBIGUOUS.
-
-    Strategy: re-run just this catalogue entry against the named file (or all
-    files, for corpus-level finders). If the pattern fires at the same line ±3,
-    STILL-PRESENT. If it fires in a different file, MOVED. If it doesn't fire
-    anywhere, RESOLVED. If the file is gone, STALE-LOCATION.
-    """
-    entry = catalog_by_id.get(finding["id"])
-    if not entry:
-        return "AMBIGUOUS"
-    target_file = Path(finding["file"])
-    if not target_file.exists() or str(target_file) not in {str(p) for p in all_files_text}:
-        # corpus-level finders may still fire if the file moved
-        pass
-
-    # Re-run detection entry against every loaded file (cheap — one entry).
-    hits = []
-    for fp, text in all_files_text.items():
-        hits.extend(detect_in_file(fp, text, [entry]))
-    hits.extend(detect_corpus(Path("."), all_files_text, [entry]))
-
-    same_file = [h for h in hits if str(h.get("file", "")) == str(target_file)]
-    if same_file:
-        # Within 3 lines of the original?
-        if any(abs(h["line"] - finding["line"]) <= 3 for h in same_file):
-            return "STILL-PRESENT"
-        return "MOVED"
-    if hits:
-        return "MOVED"
-    if not target_file.exists():
-        return "STALE-LOCATION"
-    return "RESOLVED"
+    """Adapter passing detect_in_file + detect_corpus to _verify."""
+    return _verify_reprobe_finding(
+        finding, catalog_by_id, all_files_text,
+        detect_in_file=detect_in_file,
+        detect_corpus=detect_corpus,
+    )
 
 
 def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
                  entries: list[dict]) -> dict:
-    """Parse prior report, re-probe each finding, return a verification dict."""
-    prior_findings = parse_markdown_report(prior_report)
-    catalog_by_id = {e["id"]: e for e in entries}
-    results: dict[str, list[dict]] = {
-        "STILL-PRESENT": [],
-        "RESOLVED": [],
-        "MOVED": [],
-        "STALE-LOCATION": [],
-        "AMBIGUOUS": [],
-    }
-    for f in prior_findings:
-        state = reprobe_finding(f, catalog_by_id, all_files_text)
-        results[state].append(f)
-    return {
-        "prior_report": str(prior_report),
-        "total_prior": len(prior_findings),
-        "results": results,
-    }
-
-
-def write_verification_report(verify: dict, out_path: Path) -> None:
-    lines = [
-        "# Terraform Code Analysis — Verification Report",
-        "",
-        f"**Prior report:** `{verify['prior_report']}`",
-        f"**Total prior findings:** {verify['total_prior']}",
-        "",
-        "## Summary",
-        "",
-        "| State | Count |",
-        "|---|---|",
-    ]
-    for state, rows in verify["results"].items():
-        lines.append(f"| {state} | {len(rows)} |")
-    lines.append("")
-    for state, rows in verify["results"].items():
-        if not rows:
-            continue
-        lines.append(f"## {state}")
-        lines.append("")
-        lines.append("| ID | File | Line |")
-        lines.append("|---|---|---|")
-        for r in rows:
-            lines.append(f"| {r['id']} | `{r['file']}` | {r.get('line','')} |")
-        lines.append("")
-    out_path.write_text("\n".join(lines))
-
-
-# ---- Auto-stub generation -----------------------------------------------
-
-def generate_stub(finding_id: str, finding: dict, stub_dir: Path) -> Path | None:
-    """Scaffold a catalogue YAML stub for an exploratory finding."""
-    safe_id = re.sub(r'[^A-Za-z0-9_-]', '_', finding_id)
-    stub_path = stub_dir / f"{safe_id}.yaml"
-    if stub_path.exists():
-        return None  # don't overwrite existing
-
-    resource = finding.get("resource", "")
-    resource_type = resource.split(".")[0] if "." in resource else ""
-
-    content = f"""id: {safe_id}
-title: "TODO: describe finding"
-section: robustness
-default_urgency: MEDIUM
-blast_radius: single-resource
-status: stub
-patterns:
-  - kind: grep
-    file_glob: "**/*.tf"
-    regex: 'TODO: add detection pattern'
-    description: TODO
-recommendation: |
-  TODO: describe recommended fix.
-verification: |
-  TODO: describe how to verify the fix.
-"""
-    stub_path.write_text(content)
-    return stub_path
-
-
-def generate_tftest(
-    findings: list[dict],
-    entries: list[dict],
-    out_dir: "Path",
-) -> list["Path"]:
-    """For each finding whose catalogue entry has a `test_template` field,
-    render and write a .tftest.hcl assertion file to out_dir."""
-    out_dir.mkdir(parents=True, exist_ok=True)
-    entry_map = {e["id"]: e for e in entries}
-    written: list[Path] = []
-    seen: set[str] = set()
-    for f in findings:
-        entry = entry_map.get(f["id"])
-        if not entry:
-            continue
-        tmpl = entry.get("test_template")
-        if not tmpl:
-            continue
-        resource = f.get("resource", "unknown")
-        safe = re.sub(r"[^a-zA-Z0-9_]", "_", resource)
-        key = f"{f['id']}_{safe}"
-        if key in seen:
-            continue
-        seen.add(key)
-        rendered = tmpl.replace("{resource}", resource).replace("{rule_id}", f["id"])
-        out_path = out_dir / f"{key}.tftest.hcl"
-        out_path.write_text(rendered)
-        written.append(out_path)
-    return written
+    """Adapter passing detect_in_file + detect_corpus to _verify."""
+    return _verify_verify_fixed(
+        prior_report, target, all_files_text, entries,
+        detect_in_file=detect_in_file,
+        detect_corpus=detect_corpus,
+    )
 
 
 # ---- Diff-mode file filtering -------------------------------------------
 
-def _auto_detect_base_branch(target: Path) -> str:
-    """Return 'main' or 'master' depending on which exists, else 'main'."""
-    for branch in ("main", "master"):
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", branch],
-            capture_output=True, cwd=str(target),
-        )
-        if result.returncode == 0:
-            return branch
-    return "main"
+# Diff / base-branch helpers extracted to scripts/_diff.py — 11th seam.
+from _diff import (
+    auto_detect_base_branch as _auto_detect_base_branch,
+    find_latest_prior,
+    get_diff_files,
+)
 
 
-def find_latest_prior(reports_dir: Path, suffix: str = ".md") -> Path | None:
-    """Return the most recent tf-analysis-YYYY-MM-DD<suffix> under reports_dir."""
-    if not reports_dir.is_dir():
-        return None
-    candidates = sorted(
-        reports_dir.glob(f"tf-analysis-*{suffix}"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    return candidates[0] if candidates else None
+# Suppression + baseline + comparison helpers extracted to
+# scripts/_baseline.py — 15th seam. The inline-suppression regex and
+# the YAML loader are injected so _baseline.py stays free of detect.py
+# grammar deps.
+from _baseline import (
+    load_suppressions as _baseline_load_suppressions,
+    load_inline_suppressions as _baseline_load_inline_suppressions,
+    apply_suppressions,
+    apply_baseline,
+    compare_reports,
+)
 
-
-def get_diff_files(target: Path, diff_base: str) -> set[Path]:
-    """Return set of .tf files changed between diff_base and HEAD."""
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", f"{diff_base}...HEAD", "--", "*.tf"],
-            capture_output=True,
-            text=True,
-            cwd=str(target),
-        )
-        if result.returncode != 0:
-            # Fall back to diff against working tree
-            result = subprocess.run(
-                ["git", "diff", "--name-only", diff_base, "--", "*.tf"],
-                capture_output=True,
-                text=True,
-                cwd=str(target),
-            )
-        # Also include untracked .tf files
-        untracked = subprocess.run(
-            ["git", "ls-files", "--others", "--exclude-standard", "--", "*.tf"],
-            capture_output=True,
-            text=True,
-            cwd=str(target),
-        )
-
-        files = set()
-        git_root_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, cwd=str(target),
-        )
-        git_root = Path(git_root_result.stdout.strip()) if git_root_result.returncode == 0 else target
-
-        for line in result.stdout.strip().splitlines():
-            if line:
-                fp = (git_root / line).resolve()
-                if fp.exists():
-                    files.add(fp)
-        for line in (untracked.stdout or "").strip().splitlines():
-            if line:
-                fp = (git_root / line).resolve()
-                if fp.exists():
-                    files.add(fp)
-        return files
-    except FileNotFoundError:
-        print("WARN: git not found, falling back to full scan", file=sys.stderr)
-        return set()
-
-
-# ---- Suppression --------------------------------------------------------
 
 def load_suppressions(target: Path) -> tuple[dict, dict]:
-    """Load suppressions from .tf-analyze-ignore.yaml if it exists.
-
-    Returns (active, expired) — both dicts of catalogue_id ->
-    {"reason": str, "expires": str|None}. Expired suppressions are not
-    silently dropped; the caller uses them to label findings that were
-    previously suppressed but are now active because the date passed.
-    """
-    active: dict[str, dict] = {}
-    expired: dict[str, dict] = {}
-    ignore_file = target / ".tf-analyze-ignore.yaml"
-    if not ignore_file.exists():
-        # Check parent directory too (repo root)
-        parent_ignore = target.parent / ".tf-analyze-ignore.yaml"
-        if parent_ignore.exists():
-            ignore_file = parent_ignore
-        else:
-            return active, expired
-
-    try:
-        data = load_yaml(ignore_file.read_text())
-        for item in data.get("suppressions") or []:
-            sid = item.get("id", "")
-            if not sid:
-                continue
-            entry = {
-                "reason": item.get("reason", ""),
-                "expires": item.get("expires"),
-            }
-            expires = entry["expires"]
-            if expires:
-                import datetime
-                try:
-                    exp_date = datetime.date.fromisoformat(str(expires))
-                    if exp_date < datetime.date.today():
-                        expired[sid] = entry
-                        continue
-                except ValueError:
-                    # Malformed date — surface loudly rather than silently
-                    # treating the suppression as active.
-                    print(
-                        f"WARN: suppression {sid} has malformed "
-                        f"expires={expires!r}; treating as active. "
-                        f"Use ISO date YYYY-MM-DD.",
-                        file=sys.stderr,
-                    )
-            active[sid] = entry
-    except Exception as e:
-        print(f"WARN: failed to load {ignore_file}: {e}", file=sys.stderr)
-    return active, expired
+    """Public shim — passes detect.py's YAML loader to _baseline."""
+    return _baseline_load_suppressions(target, load_yaml=load_yaml)
 
 
 def load_inline_suppressions(text: str) -> dict[int, set[str]]:
-    """Find # tf-analyze:ignore <ID> comments and return line->set(IDs)."""
-    result: dict[int, set[str]] = {}
-    for i, line in enumerate(text.splitlines(), 1):
-        m = INLINE_IGNORE_RE.search(line)
-        if m:
-            result.setdefault(i, set()).add(m.group(1))
-            # Also suppress on the next line (for comments above a block)
-            result.setdefault(i + 1, set()).add(m.group(1))
-    return result
-
-
-def apply_suppressions(findings: list[dict], file_suppressions: dict,
-                       global_suppressions: dict) -> tuple[list[dict], list[dict]]:
-    """Split findings into active and suppressed lists."""
-    active = []
-    suppressed = []
-    for f in findings:
-        fid = f["id"]
-        # Check global suppressions
-        if fid in global_suppressions:
-            f["suppression_reason"] = global_suppressions[fid].get("reason", "")
-            suppressed.append(f)
-            continue
-        # Check inline suppressions
-        fline = f.get("line", 0)
-        ffile = f.get("file", "")
-        inline = file_suppressions.get(ffile, {})
-        if fline in inline and fid in inline[fline]:
-            f["suppression_reason"] = "inline comment"
-            suppressed.append(f)
-            continue
-        active.append(f)
-    return active, suppressed
-
-
-# ---- Report comparison ---------------------------------------------------
-
-def apply_baseline(current: list[dict], baseline_path: Path) -> tuple[list[dict], list[dict]]:
-    """Filter `current` against a baseline JSON report.
-
-    Returns ``(retained, suppressed)`` — retained is the new-or-still-broken
-    set (these affect the exit code under --fail-on); suppressed is what was
-    already in the baseline. Match key is ``(id, file, line, resource)`` so
-    the same finding moving lines counts as new.
-
-    Wrapped exceptions: missing/invalid baseline returns ``(current, [])``
-    plus a stderr warning so a broken baseline never silently passes.
-    """
-    try:
-        data = json.loads(baseline_path.read_text())
-        prior = data if isinstance(data, list) else data.get("findings", [])
-    except Exception as e:
-        print(f"WARN: cannot load baseline {baseline_path}: {e}", file=sys.stderr)
-        return current, []
-    prior_keys = {
-        (f.get("id"), f.get("file", ""), f.get("line", 0), f.get("resource", ""))
-        for f in prior
-    }
-    retained: list[dict] = []
-    suppressed: list[dict] = []
-    for f in current:
-        key = (f.get("id"), f.get("file", ""), f.get("line", 0), f.get("resource", ""))
-        if key in prior_keys:
-            suppressed.append(f)
-        else:
-            retained.append(f)
-    return retained, suppressed
-
-
-def compare_reports(current: list[dict], prior_path: Path) -> dict:
-    """Compare current findings against a prior JSON report.
-
-    Returns {resolved: [...], new: [...], unchanged: [...]}.
-    """
-    try:
-        data = json.loads(prior_path.read_text())
-        # Handle both list format and dict format
-        if isinstance(data, list):
-            prior_findings = data
-        else:
-            prior_findings = data.get("findings", [])
-    except Exception as e:
-        print(f"WARN: cannot load prior report {prior_path}: {e}", file=sys.stderr)
-        return {"resolved": [], "new": list(current), "unchanged": []}
-
-    prior_keys = {(f["id"], f.get("file", ""), f.get("resource", "")) for f in prior_findings}
-    current_keys = {(f["id"], f.get("file", ""), f.get("resource", "")) for f in current}
-
-    resolved = [f for f in prior_findings
-                if (f["id"], f.get("file", ""), f.get("resource", "")) not in current_keys]
-    new = [f for f in current
-           if (f["id"], f.get("file", ""), f.get("resource", "")) not in prior_keys]
-    unchanged = [f for f in current
-                 if (f["id"], f.get("file", ""), f.get("resource", "")) in prior_keys]
-
-    return {"resolved": resolved, "new": new, "unchanged": unchanged}
+    """Public shim — passes detect.py's INLINE_IGNORE_RE to _baseline."""
+    return _baseline_load_inline_suppressions(text, inline_ignore_re=INLINE_IGNORE_RE)
 
 
 # ---- Catalog loading ----------------------------------------------------
@@ -2881,235 +2524,18 @@ from _scoring import (
 # resource_missing_arg, resource_present, hcl_attr) re-run against
 # resolved values.
 
-_PLAN_SUPPORTED_KINDS = {
-    "resource_arg",
-    "resource_missing_arg",
-    "resource_present",
-    "hcl_attr",
-    "data_source_present",
-}
+# Plan / state walker + evaluator extracted to scripts/_plan_state.py
+# as the 13th modularisation seam. Public names kept under their old
+# private aliases so existing call sites are untouched.
+from _plan_state import (
+    PLAN_SUPPORTED_KINDS as _PLAN_SUPPORTED_KINDS,
+    walk_plan_resources as _walk_plan_resources,
+    plan_value_at_path as _plan_value_at_path,
+    evaluate_against_resources as _evaluate_against_resources,
+    detect_in_plan,
+    detect_in_state,
+)
 
-
-def _walk_plan_resources(planned: dict) -> list[dict]:
-    """Flatten the plan tree into a list of resource dicts.
-
-    Each entry has at minimum: address, type, name, values, mode.
-    Modules' resources are inlined; the address keeps the
-    `module.foo.bar.baz` prefix so the operator can locate the source.
-    """
-    out: list[dict] = []
-
-    def walk(node: dict | None) -> None:
-        if not node:
-            return
-        for r in node.get("resources") or []:
-            if r.get("mode") == "managed" or r.get("mode") is None:
-                out.append(r)
-        for cm in node.get("child_modules") or []:
-            walk(cm)
-
-    walk((planned or {}).get("root_module"))
-    return out
-
-
-def _plan_value_at_path(values: dict, path: str):
-    """Fetch a dotted path from a resolved values dict. The provider's
-    JSON encoding nests blocks as lists of dicts (e.g.
-    `lifecycle: [{prevent_destroy: true}]`), so we traverse list-of-dict
-    by taking the first element and continuing.
-    """
-    cur: object = values
-    for part in path.split("."):
-        if isinstance(cur, list) and cur:
-            cur = cur[0]
-        if not isinstance(cur, dict):
-            return None
-        if part not in cur:
-            return None
-        cur = cur[part]
-    return cur
-
-
-def _evaluate_against_resources(
-    resources: list[dict],
-    entries: list[dict],
-    *,
-    finding_mode: str,
-    file_marker: str,
-) -> list[dict]:
-    """Re-evaluate plan-supported rule kinds against a flat resource list.
-
-    Factored out so both `detect_in_plan` (planned_values) and
-    `detect_in_state` (state values) can share the inner loop. The
-    `finding_mode` value lands on each finding's `mode` field; consumers
-    use it to disambiguate plan-time vs state-time vs static.
-    """
-    findings: list[dict] = []
-    for entry in entries:
-        eid = entry["id"]
-        for pat in entry.get("patterns") or []:
-            kind = pat.get("kind", "")
-            if kind not in _PLAN_SUPPORTED_KINDS:
-                continue
-            if kind == "resource_arg":
-                rt = pat.get("resource")
-                arg = pat.get("arg")
-                regex_str = pat.get("regex")
-                not_regex_str = pat.get("not_regex")
-                if not (rt and arg and (regex_str or not_regex_str)):
-                    continue
-                regex = re.compile(regex_str) if regex_str else None
-                not_regex = re.compile(not_regex_str) if not_regex_str else None
-                for r in resources:
-                    if r.get("type") != rt:
-                        continue
-                    val = (r.get("values") or {}).get(arg)
-                    if val is None:
-                        continue
-                    hit = False
-                    if regex and regex.search(str(val)):
-                        hit = True
-                    if not_regex and not not_regex.search(str(val)):
-                        hit = True
-                    if hit:
-                        findings.append({
-                            "id": eid,
-                            "file": file_marker,
-                            "line": 0,
-                            "resource": r.get("address", f"{rt}.?"),
-                            "mode": finding_mode,
-                        })
-            elif kind == "resource_missing_arg":
-                rt = pat.get("resource")
-                arg_path = pat.get("arg") or pat.get("nested_path")
-                if not (rt and arg_path):
-                    continue
-                suppress_if = pat.get("suppress_if")
-                for r in resources:
-                    if r.get("type") != rt:
-                        continue
-                    val = _plan_value_at_path(r.get("values") or {}, arg_path)
-                    if val in (None, [], {}):
-                        if suppress_if:
-                            s_arg = suppress_if.get("arg", "")
-                            s_val = suppress_if.get("equals")
-                            if s_arg and s_val is not None:
-                                actual = _plan_value_at_path(r.get("values") or {}, s_arg)
-                                if actual is not None and str(actual).lower() == str(s_val).lower():
-                                    continue
-                        findings.append({
-                            "id": eid,
-                            "file": file_marker,
-                            "line": 0,
-                            "resource": r.get("address", f"{rt}.?"),
-                            "mode": finding_mode,
-                        })
-            elif kind == "resource_present":
-                rt = pat.get("resource")
-                if not rt:
-                    continue
-                for r in resources:
-                    if r.get("type") == rt:
-                        findings.append({
-                            "id": eid,
-                            "file": file_marker,
-                            "line": 0,
-                            "resource": r.get("address", f"{rt}.?"),
-                            "mode": finding_mode,
-                        })
-            elif kind == "data_source_present":
-                dt = pat.get("data_source")
-                if not dt:
-                    continue
-                for r in resources:
-                    if r.get("type") == dt and r.get("mode") == "data":
-                        findings.append({
-                            "id": eid,
-                            "file": file_marker,
-                            "line": 0,
-                            "resource": r.get("address", f"data.{dt}.?"),
-                            "mode": finding_mode,
-                        })
-            elif kind == "hcl_attr":
-                rt = pat.get("resource")
-                path = pat.get("path")
-                not_equal = pat.get("not_equal")
-                if not (rt and path):
-                    continue
-                for r in resources:
-                    if r.get("type") != rt:
-                        continue
-                    val = _plan_value_at_path(r.get("values") or {}, path)
-                    if val is None:
-                        continue
-                    if not_equal is not None and str(val).lower() != str(not_equal).lower():
-                        findings.append({
-                            "id": eid,
-                            "file": file_marker,
-                            "line": 0,
-                            "resource": r.get("address", f"{rt}.?"),
-                            "mode": finding_mode,
-                        })
-    return findings
-
-
-def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
-    """Re-evaluate applicable rules against `terraform show -json` plan output.
-
-    Returns the same finding shape as `detect_in_file` so the SARIF /
-    JSON / markdown emitters need no changes. Findings are tagged with
-    `mode: plan` so reports can disambiguate plan-time vs static-time
-    triggers of the same rule ID.
-    """
-    try:
-        plan = json.loads(plan_json_path.read_text())
-    except Exception as e:
-        print(
-            f"ERROR: cannot read plan JSON {plan_json_path}: {e}",
-            file=sys.stderr,
-        )
-        return []
-    resources = _walk_plan_resources(plan.get("planned_values") or {})
-    return _evaluate_against_resources(
-        resources, entries,
-        finding_mode="plan",
-        file_marker="<plan>",
-    )
-
-
-def detect_in_state(state_json_path: Path, entries: list[dict]) -> list[dict]:
-    """Re-evaluate applicable rules against `terraform show -json` state output.
-
-    R30.12 — `tf-analyze drift`. State output's top-level shape is
-    `{"format_version": ..., "values": {"root_module": {...}}}`, so we
-    walk `values` instead of `planned_values` and tag findings with
-    `mode: state` so reports can distinguish "the static HCL claims X
-    but the state file shows Y" from plan/static-time triggers.
-
-    Drift is the gap between intent (the HCL the team wrote) and reality
-    (what `terraform apply` actually deployed). Catching it requires
-    re-running the catalogue against the state file the way plan-mode
-    re-runs against the plan file.
-    """
-    try:
-        state = json.loads(state_json_path.read_text())
-    except Exception as e:
-        print(
-            f"ERROR: cannot read state JSON {state_json_path}: {e}",
-            file=sys.stderr,
-        )
-        return []
-    # `terraform show -json plan.tfplan` puts the planned resources under
-    # `planned_values`; `terraform show -json state.tfstate` puts the
-    # actual deployed resources under `values`. Both share the same
-    # `{root_module, child_modules}` shape underneath.
-    root = state.get("values") or {}
-    resources = _walk_plan_resources(root)
-    return _evaluate_against_resources(
-        resources, entries,
-        finding_mode="state",
-        file_marker="<state>",
-    )
 
 
 # ---- Meta-commands ------------------------------------------------------
@@ -3285,212 +2711,37 @@ fixtures:
     return 0
 
 
-# ---- Fleet and trend helpers --------------------------------------------
-
-def _resolve_fleet_targets(args) -> list[Path]:
-    """Collect and resolve all target directories for fleet mode."""
-    targets: list[Path] = [Path(t).resolve() for t in (args.targets or [])]
-    if getattr(args, "targets_file", None):
-        tf_path = Path(args.targets_file)
-        if tf_path.exists():
-            for line in tf_path.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    targets.append(Path(line).resolve())
-    return targets
+# Fleet + trend modes extracted to scripts/_modes.py — 16th seam.
+# Callable-injection (read_normalized, detect_corpus, detect_in_file)
+# keeps _modes.py free of any detect.py import — same pattern as
+# _lsp.py uses for its `scanner` and `load_catalog` callbacks.
+from _modes import (
+    resolve_fleet_targets as _resolve_fleet_targets,
+    fleet_scan as _fleet_scan_raw,
+    render_fleet_report as _render_fleet_report,
+    run_trend as _run_trend_raw,
+    render_trend_table as _render_trend_table,
+)
 
 
 def _fleet_scan(targets: list[Path], entries: list[dict]) -> dict:
-    """Scan multiple repos and cross-correlate findings.
-
-    Returns:
-        {
-          "by_target": {str(target): [findings]},
-          "fleet_wide": [findings with fleet_count > 1],
-          "summary": {str(target): int},
-        }
-    """
-    by_target: dict[str, list[dict]] = {}
-    for target in targets:
-        tf_files = [p for p in target.rglob("*.tf") if ".terraform" not in p.parts]
-        all_text: dict = {}
-        for fp in tf_files:
-            try:
-                all_text[fp] = _read_normalized(fp)
-            except Exception:
-                continue
-        target_findings = detect_corpus(target, all_text, entries)
-        for fp, text in all_text.items():
-            target_findings.extend(detect_in_file(fp, text, entries))
-        by_target[str(target)] = target_findings
-
-    # Cross-correlate: same (rule_id, resource_name) across >1 target
-    # Use sets so the same finding appearing multiple times in one repo is
-    # only counted once per repo for cross-repo correlation purposes.
-    sig_targets: dict[tuple, set[str]] = {}
-    for tgt, fs in by_target.items():
-        for f in fs:
-            sig = (f["id"], f.get("resource", ""), f.get("file", "").rsplit("/", 1)[-1])
-            sig_targets.setdefault(sig, set()).add(tgt)
-
-    fleet_wide: list[dict] = []
-    seen_fleet: set[tuple] = set()
-    for tgt, fs in by_target.items():
-        for f in fs:
-            sig = (f["id"], f.get("resource", ""), f.get("file", "").rsplit("/", 1)[-1])
-            repos = list(sig_targets.get(sig, set()))
-            if len(repos) > 1 and sig not in seen_fleet:
-                seen_fleet.add(sig)
-                fleet_wide.append({
-                    **f,
-                    "fleet_count": len(repos),
-                    "fleet_repos": repos,
-                })
-
-    return {
-        "by_target": by_target,
-        "fleet_wide": fleet_wide,
-        "summary": {t: len(fs) for t, fs in by_target.items()},
-    }
-
-
-def _render_fleet_report(fleet_result: dict, fmt: str) -> str:
-    """Render fleet scan results as markdown table or JSON."""
-    if fmt == "json":
-        import json as _json
-        return _json.dumps(fleet_result, indent=2, default=str)
-
-    lines: list[str] = ["# Fleet Scan Report\n"]
-    lines.append("## Per-Repo Summary\n")
-    lines.append("| Repository | Findings |")
-    lines.append("|---|---|")
-    for tgt, count in fleet_result["summary"].items():
-        lines.append(f"| `{tgt}` | {count} |")
-
-    fleet_wide = fleet_result.get("fleet_wide", [])
-    lines.append(f"\n## Fleet-Wide Findings ({len(fleet_wide)} across multiple repos)\n")
-    if fleet_wide:
-        lines.append("| Rule | Resource | Count | Repos |")
-        lines.append("|---|---|---|---|")
-        for f in fleet_wide:
-            repos_short = ", ".join(r.rsplit("/", 1)[-1] for r in f.get("fleet_repos", []))
-            lines.append(f"| {f['id']} | `{f.get('resource','')}` | {f.get('fleet_count',0)} | {repos_short} |")
-    else:
-        lines.append("_No findings appear in more than one repository._")
-
-    # Per-repo detail
-    lines.append("\n## Per-Repo Findings\n")
-    for tgt, fs in fleet_result["by_target"].items():
-        lines.append(f"### `{tgt}` ({len(fs)} finding{'s' if len(fs) != 1 else ''})\n")
-        for f in fs[:50]:  # cap at 50 per repo to keep output readable
-            lines.append(f"- `{f['id']}` {f.get('file','').rsplit('/',2)[-1]}:{f.get('line','')} `{f.get('resource','')}`")
-        if len(fs) > 50:
-            lines.append(f"- _...and {len(fs)-50} more_")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def _trend_get_commits(target: Path, lookback_days: int) -> list[tuple[str, str]]:
-    """Return (sha, date) pairs for commits touching .tf files in last N days, oldest first."""
-    import subprocess as _sp
-    result = _sp.run(
-        ["git", "log", "--format=%H %as", f"--since={lookback_days} days ago",
-         "--reverse", "--", "*.tf"],
-        capture_output=True, text=True, cwd=str(target),
+    """detect.py-side adapter passing the heavyweight scan callables."""
+    return _fleet_scan_raw(
+        targets, entries,
+        read_normalized=_read_normalized,
+        detect_corpus=detect_corpus,
+        detect_in_file=detect_in_file,
     )
-    if result.returncode != 0:
-        return []
-    pairs: list[tuple[str, str]] = []
-    for line in result.stdout.strip().splitlines():
-        parts = line.split(" ", 1)
-        if len(parts) == 2:
-            pairs.append((parts[0], parts[1].strip()))
-    return pairs
-
-
-def _trend_tf_files_at_sha(target: Path, sha: str) -> list[str]:
-    """List .tf files tracked at a given commit SHA."""
-    import subprocess as _sp
-    result = _sp.run(
-        ["git", "ls-tree", "-r", "--name-only", sha],
-        capture_output=True, text=True, cwd=str(target),
-    )
-    return [p for p in result.stdout.strip().splitlines() if p.endswith(".tf")]
-
-
-def _trend_scan_at_sha(
-    target: Path, sha: str, entries: list[dict]
-) -> set[tuple[str, str, int]]:
-    """Return a set of (rule_id, rel_path, line) for a commit SHA.
-    Reads file content via `git show` without checkout."""
-    import subprocess as _sp
-    findings_set: set[tuple[str, str, int]] = set()
-    for rel_path in _trend_tf_files_at_sha(target, sha):
-        show = _sp.run(
-            ["git", "show", f"{sha}:{rel_path}"],
-            capture_output=True, text=True, cwd=str(target),
-        )
-        if show.returncode != 0:
-            continue
-        text = show.stdout
-        fake_path = target / rel_path
-        try:
-            for f in detect_in_file(fake_path, text, entries):
-                findings_set.add((f["id"], rel_path, f.get("line", 0)))
-        except Exception:
-            continue
-    return findings_set
 
 
 def run_trend(target: Path, entries: list[dict], lookback_days: int) -> list[dict]:
-    """Walk git history and compute per-commit finding deltas."""
-    commits = _trend_get_commits(target, lookback_days)
-    if not commits:
-        return []
-    rows: list[dict] = []
-    prev: set[tuple[str, str, int]] = set()
-    for sha, date in commits:
-        curr = _trend_scan_at_sha(target, sha, entries)
-        new_count = len(curr - prev)
-        resolved = len(prev - curr)
-        rows.append({
-            "date": date,
-            "sha": sha[:8],
-            "new": new_count,
-            "resolved": resolved,
-            "net": new_count - resolved,
-            "total": len(curr),
-        })
-        prev = curr
-    return rows
+    """detect.py-side adapter passing detect_in_file to the trend walker."""
+    return _run_trend_raw(
+        target, entries, lookback_days,
+        detect_in_file=detect_in_file,
+    )
 
 
-def _render_trend_table(rows: list[dict], fmt: str) -> str:
-    """Render trend rows as markdown table or JSON."""
-    if fmt == "json":
-        import json as _json
-        return _json.dumps(rows, indent=2)
-    if not rows:
-        return "_No commits touching .tf files found in the specified lookback window._"
-    lines = [
-        "# Risk Trend\n",
-        "| Date | SHA | New | Resolved | Net | Total |",
-        "|---|---|---|---|---|---|",
-    ]
-    for r in rows:
-        net_str = f"+{r['net']}" if r["net"] > 0 else str(r["net"])
-        lines.append(
-            f"| {r['date']} | `{r['sha']}` | +{r['new']} | -{r['resolved']} | {net_str} | {r['total']} |"
-        )
-    # Summary line
-    if rows:
-        total_new = sum(r["new"] for r in rows)
-        total_res = sum(r["resolved"] for r in rows)
-        net = total_new - total_res
-        net_str = f"+{net}" if net > 0 else str(net)
-        lines.append(f"\n**{len(rows)} commits analysed. Net change: {net_str} ({total_new} introduced, {total_res} resolved).**")
-    return "\n".join(lines)
 
 
 # ---- Feature 4: GitHub PR Review Mode ----------------------------------
@@ -3653,376 +2904,45 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
         sys.exit(2)
 
 
-# ---- Registry staleness (item 7) ----------------------------------------
-
-import urllib.request as _urllib_request
-
-_REGISTRY_SOURCE_RE = re.compile(
-    r'^"?([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)"?$'
+# Registry staleness extracted to scripts/_registry.py — 12th seam.
+# The injected `MODULE_START` regex keeps _registry.py free of any
+# detect.py grammar dependency (only `_hcl` + `_versions`).
+from _registry import (
+    query_registry_latest as _query_registry_latest,
+    check_module_registry_staleness as _check_module_registry_staleness_raw,
 )
-_MOD_VERSION_PIN_RE = re.compile(r'(?m)^\s*version\s*=\s*"([^"]+)"')
-
-
-def _query_registry_latest(namespace: str, name: str, provider: str) -> str | None:
-    """Return the latest published version string from the Terraform Registry.
-
-    Returns None on any network or parse error — callers should treat None
-    as "unknown" and skip the staleness check rather than erroring out.
-    """
-    url = f"https://registry.terraform.io/v1/modules/{namespace}/{name}/{provider}"
-    try:
-        req = _urllib_request.Request(url, headers={"User-Agent": "tf-analyze/1.0"})
-        with _urllib_request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-        return data.get("version") or None
-    except Exception:
-        return None
 
 
 def _check_module_registry_staleness(all_files_text: dict) -> list[dict]:
-    """Scan module blocks for registry-style sources and compare pinned vs latest.
-
-    Emits MOD-STALE-001 findings when the pinned version is:
-      - >= 1 major version behind latest, OR
-      - >= 3 minor versions behind latest (within the same major)
-
-    Network errors are silenced — a failed registry query does not emit a finding.
-    """
-    findings: list[dict] = []
-    seen: set[tuple[str, str, str]] = set()   # deduplicate per (ns, name, provider)
-
-    for fp, text in all_files_text.items():
-        for mblk in find_blocks(text, MODULE_START):
-            src = block_arg_value(mblk["body"], "source")
-            if not src:
-                continue
-            m = _REGISTRY_SOURCE_RE.match(src.strip())
-            if not m:
-                continue
-            ns, mod_name, provider = m.group(1), m.group(2), m.group(3)
-            key = (ns, mod_name, provider)
-            if key in seen:
-                continue
-            seen.add(key)
-
-            pin_m = _MOD_VERSION_PIN_RE.search(mblk["body"])
-            pinned = pin_m.group(1) if pin_m else None
-            latest = _query_registry_latest(ns, mod_name, provider)
-            if not pinned or not latest:
-                continue
-
-            pinned_v = _version_tuple(pinned)
-            latest_v = _version_tuple(latest)
-            if not pinned_v or not latest_v or pinned_v >= latest_v:
-                continue
-
-            # Determine staleness severity
-            major_behind = latest_v[0] - pinned_v[0] if len(pinned_v) >= 1 and len(latest_v) >= 1 else 0
-            minor_behind = (latest_v[1] - pinned_v[1]) if (
-                len(pinned_v) >= 2 and len(latest_v) >= 2 and major_behind == 0
-            ) else 0
-
-            if major_behind >= 1:
-                urgency = "MEDIUM"
-            elif minor_behind >= 3:
-                urgency = "LOW"
-            else:
-                continue   # minor drift < 3 — not worth flagging
-
-            findings.append({
-                "id": "MOD-STALE-001",
-                "file": str(fp),
-                "line": mblk["start_line"],
-                "resource": f"module.{mblk['groups'][0]}",
-                "detail": (
-                    f"{ns}/{mod_name}/{provider}: pinned={pinned}, "
-                    f"latest={latest} ({major_behind}M/{minor_behind}m behind)"
-                ),
-                "_urgency_override": urgency,
-            })
-
-    return findings
+    """Thin wrapper passing detect.py's MODULE_START regex to _registry."""
+    return _check_module_registry_staleness_raw(all_files_text, MODULE_START)
 
 
 # ---- Incremental scan cache --------------------------------------------
 
-def _corpus_hash(all_files_text: dict, entries: list) -> str:
-    """Stable 16-hex-char hash over all .tf file contents and catalogue rules.
-
-    Used by the --cache path to determine whether a full re-scan is needed.
-    If every file and every catalogue entry is byte-identical to the previous
-    run, the cached findings are returned without re-scanning.
-    """
-    fh = hashlib.sha256()
-    for fp_raw in sorted(all_files_text.keys(), key=str):
-        fh.update(str(fp_raw).encode())
-        content = all_files_text[fp_raw]
-        fh.update(content.encode() if isinstance(content, str) else content)
-    ch = hashlib.sha256()
-    for e in sorted(entries, key=lambda x: x["id"]):
-        ch.update(e["id"].encode())
-        ch.update(str(e.get("patterns", ""))[:200].encode())
-    return hashlib.sha256((fh.hexdigest() + ch.hexdigest()).encode()).hexdigest()[:16]
-
-
-def _load_scan_cache(cache_path: Path) -> dict | None:
-    """Load a scan cache file. Returns None if absent, unreadable, or wrong version."""
-    try:
-        with open(cache_path) as f:
-            data = json.load(f)
-        if data.get("version") != 1:
-            return None
-        return data
-    except Exception:
-        return None
-
-
-def _save_scan_cache(cache_path: Path, corpus_hash: str, findings: list) -> None:
-    """Persist findings to the scan cache file. Failure is silent — non-fatal."""
-    try:
-        with open(cache_path, "w") as f:
-            json.dump({"version": 1, "corpus_hash": corpus_hash, "findings": findings}, f)
-    except Exception:
-        pass
+# Cache helpers extracted to scripts/_cache.py — 10th modularisation seam.
+# Names kept as private wrappers so the existing call sites continue to
+# work without modification (the bodies are now ten-line shims into the
+# new module).
+from _cache import (
+    corpus_hash as _corpus_hash,
+    load_scan_cache as _load_scan_cache,
+    save_scan_cache as _save_scan_cache,
+)
 
 
 # ---- Auto-fix helpers ---------------------------------------------------
 
-def _fix_hcl_body(fix_hcl: str) -> str:
-    """Strip outer resource declaration from fix_hcl, returning just the body."""
-    m = re.match(r'^\s*resource\s+"[^"]+"\s+"[^"]+"\s*\{(.*)\}\s*$', fix_hcl, re.DOTALL)
-    return m.group(1) if m else fix_hcl
-
-
-def _fix_line_for_arg(fix_hcl: str, arg: str) -> str | None:
-    """Extract the `arg = value` expression from a fix_hcl snippet.
-
-    Handles single-line attributes and multi-line map literals (`arg = { ... }`).
-    Returns None if arg does not appear as an assignment (use _fix_block_for_nested_arg
-    for block syntax).
-    """
-    body = _fix_hcl_body(fix_hcl)
-    start_m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*=', body)
-    if not start_m:
-        return None
-    text = body[start_m.start():]
-    newline_pos = text.find('\n')
-    first_line = text if newline_pos == -1 else text[:newline_pos]
-    # Count unmatched opening braces on the first line — if > 0, multi-line map
-    brace_depth = first_line.count('{') - first_line.count('}')
-    if brace_depth <= 0:
-        return first_line.strip()
-    # Multi-line map literal — brace-match to find closing `}`
-    depth = 0
-    end_pos = None
-    for i, ch in enumerate(text):
-        if ch == '{':
-            depth += 1
-        elif ch == '}':
-            depth -= 1
-            if depth == 0:
-                end_pos = i + 1
-                break
-    if end_pos is None:
-        return first_line.strip()
-    # Return raw (unstripped) so _reindent_fix_snippet can use first-line base_len
-    return text[:end_pos]
-
-
-def _fix_block_for_nested_arg(fix_hcl: str, arg: str) -> str | None:
-    """Extract the `arg { ... }` nested block from a fix_hcl snippet.
-
-    Returns the raw block text with the leading whitespace of the first line
-    intact (used by _reindent_fix_snippet to determine base indentation).
-    """
-    body = _fix_hcl_body(fix_hcl)
-    start_m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*\{{', body)
-    if not start_m:
-        return None
-    text = body[start_m.start():]
-    depth = 0
-    end_pos = None
-    for i, ch in enumerate(text):
-        if ch == '{':
-            depth += 1
-        elif ch == '}':
-            depth -= 1
-            if depth == 0:
-                end_pos = i + 1
-                break
-    if end_pos is None:
-        return None
-    return text[:end_pos]
-
-
-def _reindent_fix_snippet(raw: str, indent: str) -> list[str]:
-    """Re-indent a fix snippet (single or multi-line) for insertion into a file.
-
-    Strips the base indentation of the first line from all lines, then prepends
-    `indent`. Returns a list of newline-terminated strings ready for list insertion.
-    """
-    lines = raw.split('\n')
-    base_len = len(lines[0]) - len(lines[0].lstrip())
-    base = ' ' * base_len
-    result = []
-    for line in lines:
-        stripped = line[base_len:] if line.startswith(base) else line
-        result.append(f"{indent}{stripped}\n")
-    return result
-
-
-def _find_block_end_in_lines(lines: list[str], start: int) -> int | None:
-    """Return the 0-based index of the line containing the closing '}' of the
-    block that opens at or after `start`. Handles nested braces."""
-    depth = 0
-    for i in range(start, len(lines)):
-        for ch in lines[i]:
-            if ch == '{':
-                depth += 1
-            elif ch == '}':
-                depth -= 1
-                if depth == 0:
-                    return i
-    return None
-
-
-def _block_indent(lines: list[str], start: int, end: int) -> str:
-    """Detect the indentation string used by attributes inside a resource block."""
-    for i in range(start + 1, end):
-        stripped = lines[i].lstrip()
-        if stripped and not stripped.startswith('}') and not stripped.startswith('#'):
-            return lines[i][:len(lines[i]) - len(stripped)]
-    return "  "  # fallback: 2 spaces
-
-
-def _handle_apply_fixes(
-    args: object,
-    findings: list[dict],
-    entries: list[dict],
-    dry_run: bool,
-) -> None:
-    """Apply (or preview) fix_hcl patches for every fixable finding.
-
-    Processes findings grouped by file, in reverse line order so that
-    insertions at later lines do not shift the positions of earlier ones.
-    Creates .bak backups before writing when not in dry-run mode.
-    """
-    entry_map = {e["id"]: e for e in entries}
-
-    # Group fixable findings by file. A rule with either `fix_hcl_minimal`
-    # or `fix_hcl` is patchable; `fix_hcl_minimal` (R30.10) is the
-    # preferred form when both are present — it's the stripped-down patch
-    # snippet without the surrounding resource declaration, which makes
-    # the regex-based insert/replace below more reliable.
-    by_file: dict[str, list[dict]] = {}
-    for f in findings:
-        fp = f.get("file", "")
-        if not fp:
-            continue
-        entry = entry_map.get(f["id"])
-        if not entry or not (entry.get("fix_hcl_minimal") or entry.get("fix_hcl")):
-            continue
-        by_file.setdefault(fp, []).append(f)
-
-    total_applied = 0
-
-    for file_path in sorted(by_file):
-        path = Path(file_path)
-        # is_file() is stricter than exists() — it filters out directories
-        # too. "Absent resource" findings (kind=resource_missing_arg with no
-        # corresponding declaration) carry the *target directory* in
-        # `file`, not a real source file. exists() returned True for those
-        # and we'd fall through to open(), which then raised IsADirectoryError.
-        if not path.is_file():
-            continue
-
-        with open(path) as fh:
-            original_lines = fh.readlines()
-        modified = original_lines[:]
-
-        # Process findings in reverse line order — insertions at later lines
-        # don't affect positions of earlier ones.
-        file_findings = sorted(by_file[file_path], key=lambda x: x.get("line", 0), reverse=True)
-
-        for finding in file_findings:
-            entry = entry_map.get(finding["id"])
-            # Prefer `fix_hcl_minimal` when set (R30.10) — it's the
-            # patcher-friendly form without an outer resource wrapper.
-            fix_hcl = entry.get("fix_hcl_minimal") or entry.get("fix_hcl", "")
-            if not fix_hcl:
-                continue
-
-            # Find the matching pattern to learn the kind and arg
-            resource_addr = finding.get("resource", "")
-            resource_type = resource_addr.split(".")[0] if "." in resource_addr else ""
-            pattern = None
-            for pat in entry.get("patterns", []):
-                if pat.get("resource", "") == resource_type:
-                    pattern = pat
-                    break
-
-            if not pattern:
-                continue
-
-            kind = pattern.get("kind", "")
-            arg = pattern.get("arg", "")
-            # 0-based index of the resource block start.
-            # find_blocks' RESOURCE_START has ^\s* which can match a blank line
-            # before the resource keyword, so start_line may be 1 too low. Advance
-            # to the line that actually contains the opening `{`.
-            start_idx = finding.get("line", 1) - 1
-            while start_idx < len(modified) - 1 and '{' not in modified[start_idx]:
-                start_idx += 1
-
-            if kind == "resource_missing_arg" and arg:
-                block_end = _find_block_end_in_lines(modified, start_idx)
-                if block_end is None:
-                    continue
-                indent = _block_indent(modified, start_idx, block_end)
-                raw = _fix_line_for_arg(fix_hcl, arg) or _fix_block_for_nested_arg(fix_hcl, arg)
-                if not raw:
-                    continue
-                modified[block_end:block_end] = _reindent_fix_snippet(raw, indent)
-                total_applied += 1
-
-            elif kind in ("resource_arg", "hcl_attr"):
-                # Find the line containing `arg = <wrong_value>` within the block
-                block_end = _find_block_end_in_lines(modified, start_idx)
-                if block_end is None:
-                    continue
-                fix_line = _fix_line_for_arg(fix_hcl, arg)
-                if not fix_line:
-                    continue
-                attr_re = re.compile(rf'(?m)^\s*{re.escape(arg)}\s*=')
-                for li in range(start_idx, block_end + 1):
-                    if attr_re.match(modified[li]):
-                        indent = modified[li][:len(modified[li]) - len(modified[li].lstrip())]
-                        modified[li] = f"{indent}{fix_line}\n"
-                        total_applied += 1
-                        break
-
-        if modified == original_lines:
-            continue
-
-        diff_lines = list(difflib.unified_diff(
-            original_lines, modified,
-            fromfile=f"{file_path}.orig",
-            tofile=file_path,
-            lineterm="",
-        ))
-
-        if dry_run:
-            for dl in diff_lines:
-                print(dl)
-        else:
-            shutil.copy2(path, str(path) + ".bak")
-            with open(path, "w") as fh:
-                fh.writelines(modified)
-            print(f"# patched {file_path}", file=sys.stderr)
-
-    action = "would apply" if dry_run else "applied"
-    print(f"# apply-fixes: {action} {total_applied} fix(es) across {len(by_file)} file(s)",
-          file=sys.stderr)
+# Auto-fix helpers extracted to scripts/_apply_fixes.py — 14th seam.
+from _apply_fixes import (
+    fix_hcl_body as _fix_hcl_body,
+    fix_line_for_arg as _fix_line_for_arg,
+    fix_block_for_nested_arg as _fix_block_for_nested_arg,
+    reindent_fix_snippet as _reindent_fix_snippet,
+    find_block_end_in_lines as _find_block_end_in_lines,
+    block_indent as _block_indent,
+    handle_apply_fixes as _handle_apply_fixes,
+)
 
 
 # ---- Main ---------------------------------------------------------------

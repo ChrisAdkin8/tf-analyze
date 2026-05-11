@@ -35,7 +35,20 @@ const repoRoot = path.dirname(extensionRoot);                      // tf-analyze
 // detect.py imports as a sibling. Add a name here when extracting a
 // new module from detect.py — without it, `import _mitre` (or
 // whatever) blows up at extension load time inside a packaged .vsix.
-const ENGINE_SIBLING_FILES = ['detect.py', '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py', '_output.py', '_attack_graph.py', '_cross_resource.py', '_lsp.py', '_threat_intel.py', '_blast_radius.py'];
+const ENGINE_SIBLING_FILES = [
+  'detect.py',
+  // Sessions A-G (R30.0.6 → R30.7): the original modularisation seams.
+  '_mitre.py', '_versions.py', '_scoring.py', '_hcl.py', '_catalog.py',
+  '_output.py', '_attack_graph.py', '_cross_resource.py', '_lsp.py',
+  // R30.2: threat-intel.
+  '_threat_intel.py',
+  // R30.17: blast-radius.
+  '_blast_radius.py',
+  // R30.19 (Sessions H-O): eight further seams — cache, diff, registry,
+  // plan/state, apply-fixes, baseline, fleet/trend, verify-fixed.
+  '_cache.py', '_diff.py', '_registry.py', '_plan_state.py',
+  '_apply_fixes.py', '_baseline.py', '_modes.py', '_verify.py',
+];
 
 const sourceScriptsDir = path.join(repoRoot, 'scripts');
 const sourceCatalogDir = path.join(repoRoot, 'catalog');

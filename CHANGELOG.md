@@ -5,6 +5,41 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.6 — detect.py modularisation Sessions H–O — 2026-05-11 (R30.19, ext v0.1.43)
+
+**Eight cohesive function clusters extracted from `detect.py` in a single round, taking the file from 5,458 → 4,378 LoC (-1,080, -19.8%). Cumulative reduction since modularisation began at R30.0.6 (Session A): 8,441 → 4,378 LoC (-48.1%).** Each extraction follows the established callable-injection pattern from `_lsp.py` (R30.7) so each new module imports nothing from `detect.py` and can be unit-tested in isolation.
+
+### Eight new sibling modules
+
+| Seam | File | LoC | What landed |
+|---|---|---:|---|
+| H | `scripts/_cache.py` | 76 | `corpus_hash`, `load_scan_cache`, `save_scan_cache` — versioned JSON cache for `--cache` mode. Pure file I/O, no engine deps. |
+| I | `scripts/_diff.py` | 101 | `auto_detect_base_branch`, `find_latest_prior`, `get_diff_files` — git-wrapping helpers for `--mode diff`. Tolerates missing git. |
+| J | `scripts/_registry.py` | 119 | `query_registry_latest`, `check_module_registry_staleness` — Terraform Registry version-check that emits `MOD-STALE-001`. Module-start regex injected by caller. |
+| K | `scripts/_plan_state.py` | 264 | `walk_plan_resources`, `plan_value_at_path`, `evaluate_against_resources`, `detect_in_plan`, `detect_in_state` — plan-time + drift-mode evaluation (R30.12). Self-contained; no detect.py imports. |
+| L | `scripts/_apply_fixes.py` | 274 | `fix_hcl_body`, `fix_line_for_arg`, `fix_block_for_nested_arg`, `reindent_fix_snippet`, `find_block_end_in_lines`, `block_indent`, `handle_apply_fixes` — every step of the `--apply-fixes` patcher. Pure string ops except the final write. |
+| M | `scripts/_baseline.py` | 213 | `load_suppressions`, `load_inline_suppressions`, `apply_suppressions`, `apply_baseline`, `compare_reports` — suppressions + baseline-ratchet + report-diff. YAML loader + inline-ignore regex injected by caller. |
+| N | `scripts/_modes.py` | 252 | Fleet + trend modes (`resolve_fleet_targets`, `fleet_scan`, `render_fleet_report`, `trend_get_commits`, `trend_tf_files_at_sha`, `trend_scan_at_sha`, `run_trend`, `render_trend_table`). `detect_in_file` / `detect_corpus` / `read_normalized` injected so neither mode imports detect.py. |
+| O | `scripts/_verify.py` | 256 | `parse_markdown_report`, `reprobe_finding`, `verify_fixed`, `write_verification_report`, `generate_stub`, `generate_tftest` — `--verify-fixed` + `--auto-stub` + `--gen-tftest`. Scanner callables injected. |
+
+### Why so many at once
+
+Sessions A–G each took roughly one session, but the patterns are now mechanical: lift the cohesive cluster, inject any detect.py-internal deps (regexes, loaders, scanners) as keyword args, write a thin shim under the old name to keep call sites unchanged, run the suite. Eight in one round was possible because the playbook is settled — each extraction took 5–15 minutes and the suite reported the same 798 pytest passes after every step.
+
+### Numbers
+
+| Metric                          | Pre-R30.19 | Post-R30.19 | Δ |
+|---------------------------------|-----------:|------------:|----|
+| `scripts/detect.py` LoC         |      5,458 |   **4,378** | **-1,080** |
+| Engine sibling modules          |         11 |        **19** | +8 |
+| Pytest cases                    |        798 |         798 | 0 (refactor, no behaviour change) |
+| `node:test` cases               |         59 |          59 | 0 |
+| Bundled `.vsix` engine siblings |         12 |        **19** | +7 (extension v0.1.42 → **v0.1.43**) |
+
+Cumulative `detect.py` LoC since modularisation began at Session A (R30.0.6): **8,441 → 4,378 (-48.1%)**.
+
+---
+
 ## Round 30.5 — Blast-radius reaches every integration — 2026-05-11 (R30.18 + ext v0.1.42)
 
 **Six integration surfaces ship together so blast radius — the SRE-shaped answer to "what could one `terraform apply` destroy?" — reaches every consumer of the engine: not just the CLI / JSON / HTML, but the LSP squiggle, the PR-summary callout, the public-scanner permalink, the MCP server, and the VS Code extension (five surfaces in one release).**

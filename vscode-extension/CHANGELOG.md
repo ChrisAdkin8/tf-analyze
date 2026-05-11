@@ -5,6 +5,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.43] — 2026-05-11
+
+Engine refresh only — no extension UI changes. The bundled engine inside
+the `.vsix` gains the eight new modularisation seams from R30.19
+(Sessions H–O): cache, diff, registry-staleness, plan/state, apply-fixes,
+baseline/suppressions, fleet+trend modes, and verify-fixed have all
+moved out of `detect.py` into their own files. `ENGINE_SIBLING_FILES`
+now ships **19 sibling Python files** alongside `detect.py` (was 12).
+
+### Changed
+
+- **Bundled engine: 12 sibling files → 19.** New files: `_cache.py`,
+  `_diff.py`, `_registry.py`, `_plan_state.py`, `_apply_fixes.py`,
+  `_baseline.py`, `_modes.py`, `_verify.py`. detect.py itself shrunk
+  from 5,458 → 4,378 LoC (-1,080 / **-19.8%**).
+- All eight extractions follow the established **callable-injection**
+  pattern (R30.7's `_lsp.py` seam) so each new module imports nothing
+  from `detect.py` — the seam can be unit-tested in isolation, and
+  the circular-import hazard that bit Session F never re-appears.
+- 798 pytest cases still pass (same number as v0.1.42 — extraction
+  changed file structure only, not behaviour).
+
+### Counts
+
+- Extension: v0.1.42 → **v0.1.43**
+- Bundled engine siblings: 12 → **19** (`_cache`, `_diff`, `_registry`,
+  `_plan_state`, `_apply_fixes`, `_baseline`, `_modes`, `_verify`).
+- `detect.py` LoC inside the bundled engine: 5,458 → **4,378** (-1,080).
+- Cumulative `detect.py` reduction since modularisation began
+  (R30.0.6, Session A): 8,441 → 4,378 LoC (**-48.1%**).
+
+---
+
 ## [0.1.42] — 2026-05-11
 
 The first release whose UI surface speaks to **SRE / oncall**, not just appsec.
