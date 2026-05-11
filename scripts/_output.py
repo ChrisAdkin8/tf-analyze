@@ -153,6 +153,31 @@ URGENCY_RANK_DESCENDING: dict[str, int] = {
 }
 
 
+# ---- SARIF / JSON text safety ------------------------------------------
+# SARIF message fields go through `json.dumps` so structural escapes are
+# automatic, but a literal newline / control character in an
+# engine-supplied field (resource name, file path) makes the SARIF
+# message field render across multiple lines in less-strict consumers.
+# Round-4 audit fix #19 — strip C0 control characters except tab.
+def _sarif_safe_text(s: str) -> str:
+    return "".join(c if c == "\t" or 0x20 <= ord(c) < 0x7f or ord(c) >= 0xa0 else " " for c in s)
+
+
+# ---- HTML escape alias --------------------------------------------------
+# Round-4 audit fix #1 / #2 — every engine-supplied field rendered into
+# HTML must round-trip through ``html.escape``, otherwise a custom-
+# catalogue rule title or a finding's resource name containing
+# ``<img onerror=alert(1)>`` executes JS in any browser opening the
+# rendered report. The R30.8 fix closed the same class in the VS Code
+# extension's webview but missed the Python-side HTML emitters here.
+#
+# The short alias keeps every site readable while making the discipline
+# uniform. Pass ``quote=True`` (the default) so attribute values are
+# also safe, e.g. ``<a title="{_h(title)}">`` cannot break the
+# attribute via a ``"``.
+_h = html.escape
+
+
 # ---- rule-docs canonical URL --------------------------------------------
 # Single source of truth for the per-rule docs URL — drives:
 #   - SARIF `helpUri` on every result + every rule definition
@@ -441,11 +466,18 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
             "ruleId": f["id"],
             "ruleIndex": rule_index.get(f["id"], 0),
             "level": "warning",
-            "message": {"text": f"Finding {f['id']} on {f['resource'] or 'file'}"},
+            # SARIF message goes through `json.dumps` so quote escaping
+            # is handled automatically — but a literal newline in the
+            # resource name would break some lax consumers. Strip
+            # control characters defensively.
+            "message": {"text": _sarif_safe_text(f"Finding {f['id']} on {f['resource'] or 'file'}")},
             "locations": [
                 {
                     "physicalLocation": {
-                        "artifactLocation": {"uri": f["file"]},
+                        # Audit fix #19 — URI normalization. Windows
+                        # paths emit backslashes; SARIF expects URI
+                        # form. Use forward slashes uniformly.
+                        "artifactLocation": {"uri": f["file"].replace("\\", "/")},
                         "region": {"startLine": max(f["line"], 1)},
                     }
                 }
@@ -761,21 +793,29 @@ def _render_executive_view(
             entry = entry_map.get(f["id"], {})
             urgency = _effective_urgency(f, entry)
             urg_colour = {"CRITICAL": "#7b0000", "HIGH": "#b02a2a", "MEDIUM": "#b07800", "LOW": "#5a7a00", "INFO": "#4a6a8a"}.get(urgency, "#555")
+            # Audit fix #1 — every engine-supplied field below is run
+            # through `_h` (html.escape). `urgency` and `urg_colour` are
+            # internal (urgency is one of CRITICAL/.../INFO; the colour
+            # comes from a literal dict) so they're left as-is.
             rows.append(
                 f"<li style='margin:.3em 0;font-size:13px'>"
                 f"<span style='background:{urg_colour};color:#fff;padding:1px 7px;border-radius:3px;"
-                f"font-size:11px;font-weight:700;margin-right:.5em'>{urgency}</span>"
-                f"<b>{f['id']}</b> — {entry.get('title','')}"
-                f"<span style='color:#888;margin-left:.5em'>{f.get('resource','')}</span>"
-                f"<span style='color:#aaa;font-size:11px;margin-left:.5em'>{f.get('file','').rsplit('/',2)[-1]}:{f.get('line','')}</span>"
+                f"font-size:11px;font-weight:700;margin-right:.5em'>{_h(urgency)}</span>"
+                f"<b>{_h(f['id'])}</b> — {_h(entry.get('title',''))}"
+                f"<span style='color:#888;margin-left:.5em'>{_h(f.get('resource',''))}</span>"
+                f"<span style='color:#aaa;font-size:11px;margin-left:.5em'>{_h(f.get('file','').rsplit('/',2)[-1])}:{_h(str(f.get('line','')))}</span>"
                 f"</li>"
             )
         rows_html = "\n".join(rows)
+        # `title`, `prose`, and `colour` are literal strings from the
+        # caller (the stage definitions are hard-coded). Still
+        # defensive-escape title + prose because they could be
+        # parameterised in the future.
         return (
             f"<div style='margin-bottom:1.8em'>"
-            f"<h3 style='color:{colour};margin:.6em 0 .3em'>{title} "
+            f"<h3 style='color:{colour};margin:.6em 0 .3em'>{_h(title)} "
             f"<span style='font-size:13px;font-weight:400;color:#666'>({len(stage_findings)} finding{'s' if len(stage_findings)!=1 else ''})</span></h3>"
-            f"<p style='color:#555;font-size:13px;font-style:italic;margin-bottom:.6em'>{prose}</p>"
+            f"<p style='color:#555;font-size:13px;font-style:italic;margin-bottom:.6em'>{_h(prose)}</p>"
             f"<ul style='list-style:none;padding:0;margin:0'>{rows_html}</ul>"
             f"</div>"
         )
@@ -789,7 +829,7 @@ def _render_executive_view(
             f"<b style='color:#c0392b'>Critical Attack Path detected</b> — "
             f"the shortest route from the internet to a crown jewel passes through "
             f"<b>{len(path)}</b> resource{'s' if len(path)!=1 else ''}: "
-            f"{' → '.join(f'<code>{r}</code>' for r in path)}. "
+            f"{' → '.join(f'<code>{_h(r)}</code>' for r in path)}. "
             f"Findings on these resources are promoted one urgency tier."
             f"</div>"
         )
@@ -1487,11 +1527,13 @@ def _render_fix_priority_html(scored: list[dict]) -> str:
             "INET-REACHABLE</span>"
             if item["internet_reachable"] else ""
         )
+        # Audit fix #1 — fix-priority table: `finding_id` is validated
+        # rule-id format, `resource` is user-controlled. Escape both.
         rows.append(
             f"<tr>"
             f"<td style='font-weight:700;text-align:center;width:2.5em'>{i}</td>"
-            f"<td><code>{item['finding_id']}</code></td>"
-            f"<td><code>{item['resource']}</code>{cp_badge}{ir_badge}</td>"
+            f"<td><code>{_h(item['finding_id'])}</code></td>"
+            f"<td><code>{_h(item['resource'])}</code>{cp_badge}{ir_badge}</td>"
             f"<td style='text-align:center'>{item['crowns_blocked']}</td>"
             f"<td style='text-align:center'>"
             f"<span class='u u-{score_cls}'>{score}</span></td>"
@@ -1551,19 +1593,26 @@ def to_html(
         entry_local = entry_map.get(eid, {})
         parts = []
         for f in fs:
+            # Audit fix #1 — every engine-supplied field rendered in
+            # this row is escaped. `cp_badge` is a literal string.
             cp_badge = "<span class='badge-cp'>CRITICAL-PATH</span>" if f.get("on_critical_path") else ""
             parts.append(
-                f"<tr><td><code>{f.get('file','')}</code>:{f.get('line','')}</td>"
-                f"<td><code>{f.get('resource','')}</code>{cp_badge}</td></tr>"
+                f"<tr><td><code>{_h(f.get('file',''))}</code>:{_h(str(f.get('line','')))}</td>"
+                f"<td><code>{_h(f.get('resource',''))}</code>{cp_badge}</td></tr>"
             )
             if urgency in ("HIGH", "CRITICAL"):
                 narrative = _narrative_for_finding(
                     eid, f.get("resource", ""), f.get("file", "")
                 )
                 if narrative:
+                    # Audit fix #2 — narrative templates interpolate
+                    # finding-supplied `resource` / `file` values;
+                    # escape the rendered narrative before injecting
+                    # into HTML so a resource name containing
+                    # `<script>` cannot propagate.
                     parts.append(
                         f"<tr><td colspan='2'>"
-                        f"<p class='narrative'>{narrative}</p>"
+                        f"<p class='narrative'>{_h(narrative)}</p>"
                         f"</td></tr>"
                     )
             if show_fixes and entry_local.get("fix_hcl"):
@@ -1571,7 +1620,7 @@ def to_html(
                 disruption = entry_local.get("fix_disruption", "")
                 d_badge = _disruption_badge(disruption)
                 d_note = entry_local.get("fix_disruption_note", "")
-                d_note_html = f"<p style='color:#888;font-size:11px;margin:.2em 0 .4em'>{d_note}</p>" if d_note else ""
+                d_note_html = f"<p style='color:#888;font-size:11px;margin:.2em 0 .4em'>{_h(d_note)}</p>" if d_note else ""
                 parts.append(
                     f"<tr><td colspan='2'>"
                     f"<details><summary style='cursor:pointer;color:#27ae60;font-size:12px;margin-top:.4em'>&#9654; Suggested fix{d_badge}</summary>"
@@ -1601,10 +1650,15 @@ def to_html(
         title = entry.get("title", eid)
         detail_rows = _make_detail_rows(eid, display_urgency, fs)
         docs_url = RULE_DOCS_URL_BASE.format(id=eid)
+        # Audit fix #1 — `eid` is matched against `^[A-Z][A-Z0-9-]+$`
+        # by the catalogue loader, so it's safe; `title` is engine-
+        # supplied (and could come from a user-controlled catalogue
+        # entry via `--catalog`), so it MUST be escaped. `docs_url` is
+        # built from `eid` only (no user input) so safe.
         rows.append(
-            f"<details><summary><span class='u u-{display_urgency.lower()}'>{display_urgency}</span> "
+            f"<details><summary><span class='u u-{display_urgency.lower()}'>{_h(display_urgency)}</span> "
             f"<a href='{docs_url}' target='_blank' rel='noopener' "
-            f"title='Open rule documentation'><b>{eid}</b></a> — {title} ({len(fs)})</summary>"
+            f"title='Open rule documentation'><b>{_h(eid)}</b></a> — {_h(title)} ({len(fs)})</summary>"
             f"<table class='locs'><thead><tr><th>Location</th><th>Resource</th></tr></thead>"
             f"<tbody>{detail_rows}</tbody></table></details>"
         )

@@ -5,6 +5,53 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.48] — 2026-05-11
+
+**Fourth audit pass — XSS hardening + engine correctness.** The post-R30.10
+audit (`tasks/repo-audit-2026-05-11-round4.md`) flagged a class of bug
+that the R30.8 round closed only in the VS Code extension's TypeScript
+file (`attackGraph.ts`) but missed in the Python-emitted HTML report and
+the Python-emitted standalone attack-graph HTML. This release closes
+the class everywhere, plus several engine-correctness items.
+
+### Security — HTML escape across Python-side report renderers
+
+- **HTML report XSS surface closed** (`scripts/_output.py`). Every
+  engine-supplied field rendered into HTML — rule titles, finding IDs,
+  resource names, file paths, narrative templates, fix-priority table
+  cells, executive-view rows — now routes through `html.escape()`. The
+  R30.8 fix that hardened the VS Code extension's webview is now
+  matched on the Python side. A custom-catalogue rule title containing
+  `<img onerror=alert(1)>` no longer executes JS in any browser
+  opening the rendered report.
+- **Standalone attack-graph HTML XSS closed** (`scripts/_attack_graph.py`).
+  The sidebar's `innerHTML` interpolation now defines an `esc()` helper
+  client-side and routes every node field (`n.type`, `n.file`, finding
+  IDs) through it. Same class R30.8 closed in `vscode-extension/src/attackGraph.ts`;
+  this is the missed Python equivalent.
+- **SARIF URI normalisation**. Engine-emitted file paths now have
+  backslashes converted to forward slashes before they land in SARIF
+  `artifactLocation.uri`. SARIF consumers parsing the URI form work
+  uniformly across Windows + POSIX-emitted reports.
+- **SARIF message control-character strip**. A `_sarif_safe_text()`
+  helper strips C0 control characters (except tab) from message
+  strings so a resource name with an embedded newline doesn't break
+  lax SARIF consumers.
+
+### Bundle hygiene
+
+- **`icon-mockups/` excluded from the .vsix**. 33 PNG files and ~700 KB
+  of icon-design assets were inadvertently shipping in v0.1.47. The
+  v0.1.48 bundle is back to 1.16 MB.
+
+### Counts
+
+- Extension: v0.1.47 → **v0.1.48**.
+- `node:test` cases: 62/62 (unchanged — fixes are behavioural).
+- Engine changes documented in main CHANGELOG.
+
+---
+
 ## [0.1.47] — 2026-05-11
 
 **Third audit pass — regression-of-fix sweep + remaining hardening.** The

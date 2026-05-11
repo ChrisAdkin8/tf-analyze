@@ -102,24 +102,57 @@ def _shell_block(content: str) -> str:
 
 
 def _patterns_explainer(patterns: list[dict]) -> str:
+    # Round-4 audit fix #13 — a catalogue regex containing a literal
+    # backtick (or one of the GFM code-span "tricky" characters) would
+    # close the surrounding `…` code span and leak raw markdown into
+    # the rendered docs page. Use the GFM rule that "to display a
+    # single backtick inside a code span, wrap with double backticks
+    # and pad with spaces": for any field that might contain a `,
+    # render as `` `<value>` `` with a sentinel space. For
+    # paranoia, also strip leading/trailing backticks so we never
+    # produce malformed spans.
+    def _md_code(s: str) -> str:
+        """Render `s` as a markdown code span that won't be torn open
+        by a literal backtick inside `s`. Picks a fence length one
+        longer than the longest run of backticks in `s`."""
+        if not s:
+            return "``"
+        # Longest run of consecutive backticks in s.
+        longest = 0
+        run = 0
+        for ch in s:
+            if ch == "`":
+                run += 1
+                if run > longest:
+                    longest = run
+            else:
+                run = 0
+        fence = "`" * (longest + 1)
+        # Pad with a space on each side when s starts or ends with `
+        # so the fence isn't immediately adjacent to a backtick (GFM
+        # rule).
+        pad_l = " " if s.startswith("`") else ""
+        pad_r = " " if s.endswith("`") else ""
+        return f"{fence}{pad_l}{s}{pad_r}{fence}"
+
     lines: list[str] = []
     for i, p in enumerate(patterns, 1):
         kind = p.get("kind", "?")
-        explainer = KIND_EXPLAINER.get(kind, f"a `{kind}` pattern")
+        explainer = KIND_EXPLAINER.get(kind, f"a {_md_code(kind)} pattern")
         rt = p.get("resource", "")
-        rt_part = f" on `{rt}`" if rt else ""
+        rt_part = f" on {_md_code(rt)}" if rt else ""
         arg = p.get("arg") or p.get("nested_path") or p.get("path") or ""
-        arg_part = f" (`{arg}`)" if arg else ""
+        arg_part = f" ({_md_code(arg)})" if arg else ""
         regex = p.get("regex")
-        regex_part = f" matching `/{regex}/`" if regex else ""
+        regex_part = f" matching {_md_code('/' + regex + '/')}" if regex else ""
         not_eq = p.get("not_equal")
-        not_eq_part = f" not equal to `{not_eq}`" if not_eq is not None else ""
+        not_eq_part = f" not equal to {_md_code(str(not_eq))}" if not_eq is not None else ""
         check = p.get("check")
-        check_part = f" — check: `{check}`" if check else ""
+        check_part = f" — check: {_md_code(check)}" if check else ""
         desc = (p.get("description") or "").strip()
         desc_part = f"\n  {desc}" if desc else ""
         lines.append(
-            f"{i}. **`{kind}`**{rt_part}{arg_part}{regex_part}{not_eq_part}{check_part} — "
+            f"{i}. **{_md_code(kind)}**{rt_part}{arg_part}{regex_part}{not_eq_part}{check_part} — "
             f"_{explainer}._{desc_part}"
         )
     return "\n".join(lines)

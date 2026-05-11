@@ -16,3 +16,7 @@ out/test/**
 # "command 'tf-analyze.showAttackGraph' not found" symptom because no
 # command ever got registered.
 *.vsix
+# Round-4 audit cleanup — icon-mockups/ are visual-design assets
+# kept in the repo for future icon refreshes; they should not ship
+# in the published .vsix (33 PNG files, ~700 KB of bundle bloat).
+icon-mockups/**

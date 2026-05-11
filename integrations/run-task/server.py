@@ -137,7 +137,17 @@ def _run_detect(plan_json_path: Path) -> tuple[dict, int]:
                     "id": "SYN-SCAN-FAILED",
                     "urgency": "CRITICAL",
                     "title": "tf-analyze engine crashed",
-                    "section": "engine",
+                    # Round-4 audit fix #8 — "engine" was not in
+                    # `_catalog._VALID_SECTIONS`, so downstream
+                    # renderers that validate against the constant
+                    # would reject or misclassify the synthetic
+                    # finding. The valid sections are: security,
+                    # robustness, dry, style, simplicity, ops, cicd,
+                    # module, module-reuse, stack, verification. A
+                    # scanner crash is closest to a verification
+                    # failure ("did the scan run correctly?") so we
+                    # use that.
+                    "section": "verification",
                     "file": "(engine)",
                     "line": 0,
                     "recommendation": (

@@ -283,8 +283,24 @@ def enrich_findings(
     # share its CWE. That join lives in the cache loader (kept out of
     # this hot path for cost). For now we surface `exploitability_score`
     # only when callers provide it explicitly via the catalogue.
+    #
+    # Round-4 audit fix #12 — surface findings whose ID isn't in the
+    # catalogue once per scan, instead of silently letting them flow
+    # through with empty `cwe` and no KEV promotion. Common causes: a
+    # synthetic finding from the run-task integration (e.g.
+    # `SYN-SCAN-FAILED`), a stale finding from an old cache, a custom
+    # rule loaded via `--catalog` that's no longer in `entries`. The
+    # warning emits once per unique ID so log noise stays bounded.
+    _unknown_ids: set[str] = set()
     for f in findings:
-        entry = entry_map.get(f.get("id"), {})
+        fid = f.get("id")
+        if fid and fid not in entry_map and fid not in _unknown_ids:
+            _unknown_ids.add(fid)
+            sys.stderr.write(
+                f"WARN: threat-intel: finding {fid!r} not in catalogue; "
+                f"skipping KEV/EPSS enrichment for this rule.\n"
+            )
+        entry = entry_map.get(fid, {})
         rule_cwes = {c for c in (entry.get("cwe") or []) if isinstance(c, str)}
         kev_hit = bool(rule_cwes & kev_cwes)
         f["kev"] = kev_hit

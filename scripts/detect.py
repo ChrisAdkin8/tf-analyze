@@ -360,7 +360,27 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
                 # `encrypted = false   # caller note` flows as the literal
                 # string `false   # caller note` and downstream rules miss
                 # the value match.
-                v = re.sub(r'\s*#.*$', '', raw).strip()
+                #
+                # Round-4 audit fix #7 — the locals branch 60 lines
+                # above this site uses a quote-aware comment stripper
+                # (R30.10). This sibling path still used the bare
+                # `re.sub(r'\s*#.*$', '', raw)` which is quote-blind:
+                # `count = "value # not a comment"` lost everything
+                # from `#` onward. Mirror the locals walker.
+                in_dq = in_sq = False
+                prev = ""
+                cut = None
+                for idx, ch in enumerate(raw):
+                    escaped = prev == "\\"
+                    if ch == '"' and not in_sq and not escaped:
+                        in_dq = not in_dq
+                    elif ch == "'" and not in_dq and not escaped:
+                        in_sq = not in_sq
+                    elif ch == "#" and not in_dq and not in_sq:
+                        cut = idx
+                        break
+                    prev = ch
+                v = (raw[:cut] if cut is not None else raw).rstrip()
                 if k in ("source", "version", "providers", "count", "for_each",
                          "depends_on", "lifecycle"):
                     continue
@@ -1510,7 +1530,25 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                         src = block_arg_value(mblk["body"], "source")
                         if not src or not src.startswith("."):
                             continue
-                        child_dir = (caller_dir / src).resolve()
+                        # Round-4 audit fix #6 — match the same
+                        # `try: except (OSError, ValueError):` shape
+                        # that `module_unused` uses 130 lines below.
+                        # A module source containing a symlink loop,
+                        # non-existent component, or permission error
+                        # crashed `cross_module` while `module_unused`
+                        # silently skipped — same scan, different
+                        # outcomes. Now both bail consistently.
+                        try:
+                            child_dir = (caller_dir / src).resolve()
+                            # Also guard against the resolved target
+                            # not being a directory (deleted module,
+                            # source pointing at a file): if it's not
+                            # a dir, no child .tf file will match it
+                            # anyway, so skip cleanly.
+                            if not child_dir.is_dir():
+                                continue
+                        except (OSError, ValueError):
+                            continue
                         arg_re = re.compile(
                             r'(?m)^\s*([\w-]+)\s*=\s*var\.([\w-]+)\s*(?:#.*)?$'
                         )
@@ -1524,7 +1562,10 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                             child_marked = False
                             child_found = False
                             for cfp, ctext in all_files_text.items():
-                                if Path(cfp).parent.resolve() != child_dir:
+                                try:
+                                    if Path(cfp).parent.resolve() != child_dir:
+                                        continue
+                                except (OSError, ValueError):
                                     continue
                                 for cblk in find_blocks(ctext, VARIABLE_START):
                                     if cblk["groups"][0] != child_arg:

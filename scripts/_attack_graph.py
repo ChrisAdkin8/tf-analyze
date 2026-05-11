@@ -306,22 +306,40 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
         for m in _EDGE_GCP_SA_NAME_RE.finditer(body):
             _add_edge(addr, f"google_service_account.{m.group(1)}", "service_account")
 
-    # Connect internet-reachable nodes to INTERNET
+    # Connect internet-reachable nodes to INTERNET. Round-4 audit fix
+    # #5 — track `internet_edge_targets` so subsequent SG-propagation
+    # (the next loop) can't add a duplicate `INTERNET → addr` edge.
+    # The `not nodes[src]["internet_reachable"]` guard in the SG loop
+    # *almost* prevents duplicates, but a resource that's internet-
+    # reachable BOTH directly (e.g. public S3) AND via a security
+    # group would have got two `INTERNET → addr` edges before this
+    # explicit seen-set was added.
+    internet_edge_targets: set[str] = set()
     for addr, node in list(nodes.items()):
         if addr != "INTERNET" and node["internet_reachable"]:
             edges.append({"from": "INTERNET", "to": addr, "label": "internet"})
+            internet_edge_targets.add(addr)
 
     # Propagate reachability: compute → SG (internet-reachable) → mark compute reachable
     sg_reachable = {
         e["to"] for e in edges
         if e["from"] == "INTERNET" and nodes.get(e["to"], {}).get("type") == "network"
     }
-    for e in edges:
+    # Iterate over a snapshot so the appends in the loop body don't
+    # show up in the iteration (defensive — the `label` checks would
+    # filter them out anyway, but the snapshot makes the intent
+    # explicit).
+    for e in list(edges):
         if e["label"] == "security_group" and e["to"] in sg_reachable:
             src = e["from"]
-            if src in nodes and not nodes[src]["internet_reachable"]:
+            if (
+                src in nodes
+                and not nodes[src]["internet_reachable"]
+                and src not in internet_edge_targets
+            ):
                 nodes[src]["internet_reachable"] = True
                 edges.append({"from": "INTERNET", "to": src, "label": "internet (via sg)"})
+                internet_edge_targets.add(src)
 
     # BFS: shortest path from INTERNET to each crown jewel
     adj: dict[str, list[str]] = {}
@@ -472,8 +490,30 @@ def _apply_reachability_urgency(
 
 
 def _mermaid_id(addr: str) -> str:
-    """Sanitize a resource address for use as a Mermaid node ID."""
-    return addr.replace(".", "_").replace("-", "_")
+    """Sanitize a resource address for use as a Mermaid node ID.
+
+    Round-4 audit fix #4 — the prior implementation collapsed both
+    ``.`` and ``-`` to ``_``, so distinct addresses
+    (``aws_iam_role.foo``, ``aws-iam_role.foo``, ``aws_iam.role-foo``)
+    sanitized to the same ID and rendered as one node. Mermaid would
+    silently merge edges from all three. Append a short content-derived
+    suffix when the sanitization is lossy so distinct originals
+    always produce distinct IDs.
+
+    The suffix is the first 6 hex chars of `sha256(addr)` — deterministic
+    (re-runs produce the same Mermaid output, important for snapshot
+    tests) and short enough to keep the rendered diagram readable.
+    Synthetic node IDs that don't carry separators (e.g. ``INTERNET``)
+    skip the suffix entirely.
+    """
+    import hashlib
+    sanitized = addr.replace(".", "_").replace("-", "_")
+    if sanitized == addr:
+        # No replacement happened — input was already a valid Mermaid
+        # identifier, no collision possible across other addresses.
+        return sanitized
+    digest = hashlib.sha256(addr.encode("utf-8")).hexdigest()[:6]
+    return f"{sanitized}_{digest}"
 
 
 def graph_to_mermaid(graph: dict) -> str:
@@ -794,17 +834,29 @@ def _render_graph_html(graph: dict) -> str:
   svgEl.addEventListener('mouseup',function(){{dragging=null;}});
   svgEl.addEventListener('mouseleave',function(){{dragging=null;}});
 
+  // Round-4 audit fix #3 — every node field flowing into innerHTML
+  // must be HTML-escaped client-side. Without this, a Terraform
+  // resource whose name contains an inline-event HTML attribute
+  // (e.g. an onerror payload) would execute JS in the standalone
+  // HTML report. The R30.8 fix closed this class in the VS Code
+  // extension's `attackGraph.ts` but missed the Python-emitted
+  // standalone HTML report here.
+  function esc(s){{
+    return String(s==null?'':s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }}
   // sidebar
   function showSb(n){{
     document.getElementById('ag-sb-title').textContent=n.label;
-    var html='<b>Type:</b> '+n.type+'<br>';
-    if(n.file)html+='<b>File:</b> <code style="font-size:11px">'+n.file+'</code>:'+n.line+'<br>';
+    var html='<b>Type:</b> '+esc(n.type)+'<br>';
+    if(n.file)html+='<b>File:</b> <code style="font-size:11px">'+esc(n.file)+'</code>:'+esc(n.line)+'<br>';
     if(n.is_crown_jewel)html+='<span style="color:#8b0000;font-weight:600">&#128081; Crown Jewel</span><br>';
     if(n.on_critical_path)html+='<span style="color:#c0392b;font-weight:600">&#9888; On Critical Attack Path</span><br>';
     if(n.internet_reachable&&n.id!=='INTERNET')html+='<span style="color:#d35400">&#127760; Internet-reachable</span><br>';
     if(n.findings&&n.findings.length){{
       html+='<br><b>Findings:</b><ul style="margin:.3em 0;padding-left:1.2em">';
-      n.findings.forEach(function(f){{html+='<li><code>'+f+'</code></li>';}});
+      n.findings.forEach(function(f){{html+='<li><code>'+esc(f)+'</code></li>';}});
       html+='</ul>';
     }}else{{html+='<br><i style="color:#999">No findings on this resource</i>';}}
     document.getElementById('ag-sb-body').innerHTML=html;

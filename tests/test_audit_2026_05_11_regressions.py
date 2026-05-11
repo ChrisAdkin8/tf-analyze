@@ -66,6 +66,81 @@ def test_engine_stderr_carries_no_traceback_on_clean_run() -> None:
     assert "ERROR:" not in (r.stderr or ""), r.stderr
 
 
+# ─── Round 4 audit — HTML output escapes engine-supplied fields ─────
+def test_html_report_escapes_user_controlled_fields() -> None:
+    """Round-4 audit fix #1 / #2 — every engine-supplied field rendered
+    into the HTML report must round-trip through `html.escape`. A
+    custom-catalogue rule title or a finding's resource name
+    containing ``<img onerror=alert(1)>`` would otherwise execute JS
+    in any browser opening the rendered report.
+
+    The class was closed in the VS Code extension's webview by R30.8
+    but the same shape lived in the Python-emitted HTML report
+    until R30.11 (this round).
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(REPO / "scripts"))
+    from _output import to_html  # type: ignore
+    findings = [{
+        "id": "SEC-XSS-TEST",
+        "urgency": "HIGH",
+        "section": "security",
+        "file": "<script>alert('file')</script>",
+        "line": 1,
+        "resource": "aws_s3_bucket.<script>alert('rsrc')</script>",
+        "title": "<img onerror=alert('title')>",
+    }]
+    entries = [{
+        "id": "SEC-XSS-TEST",
+        "title": "<img onerror=alert('rule-title')>",
+        "default_urgency": "HIGH",
+        "section": "security",
+    }]
+    out = to_html(findings, entries, [], graph=None, summary={
+        "score": 50, "grade": "C", "scoring_version": 1,
+        "formula": "score = 100 - sum(rule_weight)",
+        "counts": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0, "LOW": 0, "INFO": 0},
+    })
+    # The dangerous bytes must all be HTML-escaped — the literal
+    # `<script>` and `<img onerror=...>` must NOT appear in the output.
+    assert "<script>alert" not in out, "raw <script> appeared in rendered HTML"
+    assert "<img onerror=" not in out, "raw <img onerror=> appeared in rendered HTML"
+    # The escaped form must appear.
+    assert "&lt;script&gt;" in out or "&lt;img" in out, (
+        "expected escaped form of XSS payload in HTML output"
+    )
+
+
+def test_standalone_attack_graph_sidebar_escapes_node_fields() -> None:
+    """Round-4 audit fix #3 — the standalone HTML attack-graph
+    sidebar previously called `innerHTML = ... + n.type + ...`
+    without escaping. This test verifies the JS now defines `esc()`
+    and the sidebar interpolations route through it.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(REPO / "scripts"))
+    from _attack_graph import _render_graph_html  # type: ignore
+    graph = {
+        "nodes": [
+            {"id": "aws_s3.x", "label": "x", "type": "storage",
+             "file": "main.tf", "line": 5,
+             "is_crown_jewel": False, "internet_reachable": False,
+             "on_critical_path": False, "findings": []},
+        ],
+        "edges": [],
+        "critical_path": [],
+    }
+    html = _render_graph_html(graph)
+    # The escape helper must be defined and called for every node field
+    # rendered into innerHTML. We assert on the discipline rather than
+    # on a specific payload — the test in `to_html` above exercises
+    # the dangerous-payload case.
+    assert "function esc(" in html, "sidebar escape helper missing"
+    assert "esc(n.type)" in html, "n.type must route through esc()"
+    assert "esc(n.file)" in html, "n.file must route through esc()"
+    assert "esc(f)" in html, "finding IDs must route through esc()"
+
+
 # ─── Round 3 audit — strip_hcl_context preserves byte offsets ───────
 def test_strip_hcl_context_preserves_length_and_offsets() -> None:
     """The R30.9 `hcl_context` line-counting "fix" assumed comments

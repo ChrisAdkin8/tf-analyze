@@ -5,6 +5,53 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.11 — Fourth audit pass — XSS hardening + engine correctness — 2026-05-11 (ext v0.1.48)
+
+**Closes the 21-finding round-4 audit (`tasks/repo-audit-2026-05-11-round4.md`).** The most material finding: the R30.8 round closed an XSS class in the VS Code extension's webview but missed the SAME class in two Python-emitted HTML surfaces (the main HTML report from `_output.py` and the standalone attack-graph HTML from `_attack_graph.py`). This round closes the class everywhere, plus six smaller engine-correctness items.
+
+### Security — HTML escape across Python-side renderers
+
+- **`_output.py` HTML report**: every engine-supplied field — rule titles, finding IDs, resource names, file paths, narrative templates, fix-priority cells, executive-view rows — now routes through `html.escape()` via a short `_h` alias defined at module top. A custom-catalogue rule title with `<img onerror=alert(1)>` no longer executes JS. Two new regression tests in `tests/test_audit_2026_05_11_regressions.py` pin the discipline (`test_html_report_escapes_user_controlled_fields` + `test_standalone_attack_graph_sidebar_escapes_node_fields`). (Audit follow-up #1 + #2.)
+- **`_attack_graph.py` standalone HTML sidebar**: defines an `esc()` helper client-side and routes every `n.type`, `n.file`, finding ID through it before `innerHTML` injection. (Audit follow-up #3 — same class R30.8 closed in `vscode-extension/src/attackGraph.ts` but missed here.)
+- **SARIF URI normalisation**: `_output.py:463` converts backslashes to forward slashes in `artifactLocation.uri` so Windows-emitted SARIF parses uniformly. (Audit follow-up #19.)
+- **SARIF message control-character strip**: new `_sarif_safe_text()` helper drops C0 control characters (except tab) from message strings.
+
+### Engine — correctness
+
+- **`detect.py` `cross_module` matches `module_unused`'s `try/except (OSError, ValueError):`** on path resolution. A symlink loop, missing component, or permission error now skips the module consistently across both detectors instead of crashing one and silently passing the other. Also added an `is_dir()` check so a `source = "..."` pointing at a deleted directory cleanly emits no findings. (Audit follow-up #6.)
+- **`detect.py` `_extract_var_defaults_by_dir` module-flow path is now quote-aware.** R30.10 fixed the sibling locals branch 60 lines above; this round propagates the same escape-aware comment walker to the module-flow path. A module call with `count = "value # not a comment"` no longer loses everything from `#` onward. (Audit follow-up #7.)
+- **`_attack_graph._mermaid_id` collision-resistant.** Previously `addr.replace(".", "_").replace("-", "_")` collapsed `aws_iam_role.foo`, `aws-iam_role.foo`, and `aws_iam.role-foo` to the same Mermaid node ID. The new shape appends a 6-char `sha256(addr)` suffix when the sanitisation is lossy, so distinct originals always produce distinct IDs. Synthetic IDs without separators (e.g. `INTERNET`) skip the suffix. Deterministic across runs (snapshot tests safe). (Audit follow-up #4.)
+- **`_attack_graph` INTERNET → resource edges deduplicated.** A resource that's internet-reachable BOTH directly (public S3) AND via a security group could get two `INTERNET → addr` edges, inflating downstream centrality scoring. An explicit `internet_edge_targets` seen-set + iteration over a `list(edges)` snapshot makes the propagation deterministic. (Audit follow-up #5.)
+- **`_threat_intel.py` surfaces unknown finding IDs.** A finding whose `id` isn't in the catalogue (synthetic findings, stale cache, custom rule no longer loaded) now emits a once-per-unique-ID stderr WARN instead of silently flowing through with empty `cwe` and no KEV promotion. (Audit follow-up #12.)
+
+### Tooling
+
+- **`integrations/run-task/server.py` synthetic finding uses a valid `section`.** R30.10 introduced `SYN-SCAN-FAILED` with `section: "engine"` — which isn't in `_catalog._VALID_SECTIONS`. Changed to `"verification"` (the closest match: "did the scan run correctly?"). (Audit follow-up #8.)
+- **`scripts/gen_rule_docs.py` regex backtick escape.** A catalogue regex containing a literal backtick would have torn open the surrounding markdown code span and leaked raw HTML into the generated docs page. New `_md_code()` helper picks an N+1-length fence based on the longest backtick run in the rendered field. (Audit follow-up #13.)
+
+### Bundle hygiene
+
+- **`vscode-extension/.vscodeignore` excludes `icon-mockups/`.** 33 PNG files + ~700 KB of design assets were inadvertently shipping in the v0.1.47 .vsix; the v0.1.48 bundle is back to 1.16 MB.
+
+See [`vscode-extension/CHANGELOG.md`](vscode-extension/CHANGELOG.md#0148--2026-05-11) for the extension-only summary.
+
+### Subagent claims rejected on re-read
+
+- **"`_threat_intel.py` cache JSON parsing unguarded"** — all four `json.loads(cache_path.read_text())` call-sites are wrapped in `try: except Exception:`. The `entry_map` fallback IS a real concern (closed above) but the JSON parse claim is wrong.
+- **"`_lsp.py` `_check_arity` allows `**kwargs`"** (from round 3) — `**kwargs` only collects keyword arguments; positional calls work fine. The `*args` rejection is the correct boundary.
+- **"`detect.py:505-510` coordinate-space mismatch on `hcl_context`"** (from round 3) — closed by R30.10's `strip_hcl_context` newline-preservation fix; the agent's analysis predated R30.10.
+
+### Counts
+
+- Pytest cases: 825 → **827** (+2 XSS regression tests).
+- Extension `node:test` cases: 62/62 (unchanged).
+- Self-test fixtures: 238/238 positive + 146/146 clean.
+- Terragoat snapshot: in sync (gcp=85, aws=125, azure=93, total=306).
+- Audit follow-up findings closed: **17 of 21**; 3 rejected on re-read; 4 deferred (`_brace_walk` extraction, `_output.py` CSS dedup, 23 unmarked attack-graph regex constants, magic threshold `60` for graph pruning — all warrant standalone structural PRs).
+- Extension: v0.1.47 → **v0.1.48**.
+
+---
+
 ## Round 30.10 — Third audit pass — regression-of-fix + hardening — 2026-05-11 (ext v0.1.47)
 
 **Closes the 22-finding round-3 audit (`tasks/repo-audit-2026-05-11-round3.md`).** Two notable things: (a) the audit found that R30.9's `hcl_context` line-counting "fix" tried to solve a problem that didn't exist (`strip_hcl_context` already preserved byte offsets — its length-preserving contract is documented at `_hcl.py:179`); (b) the same R30.9 fix exposed a *different* real bug that had been latent for a long time — `strip_hcl_context` was preserving length but converting newlines inside block comments to spaces, so line counts after a multi-line `/* … */` were off. This round fixes the real bug at the source (`strip_hcl_context` now preserves newline positions), reverts the broken R30.9 line-counting workaround, and pins both invariants with a new property test.
