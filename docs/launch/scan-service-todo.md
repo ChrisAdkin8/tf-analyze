@@ -96,7 +96,7 @@
 
 ### Acceptance gate for week 1
 
-- [ ] `curl -X POST tf-analyze.fly.dev/scan -d 'url=https://github.com/ChrisAdkin8/tf-analyze' -H 'Content-Type: application/x-www-form-urlencoded'` returns 200 + scan_id
+- [ ] `curl -X POST tfanalyze.com/scan -d 'url=https://github.com/ChrisAdkin8/tf-analyze' -H 'Content-Type: application/x-www-form-urlencoded'` returns 200 + scan_id
 - [ ] Polling `/status/<id>` returns `done` within 30 seconds
 - [ ] `/scan/ChrisAdkin8/tf-analyze/<sha>/` returns the HTML report
 - [ ] `/badge/ChrisAdkin8/tf-analyze.svg` returns a valid SVG with the right score
@@ -171,7 +171,7 @@
 
 ## Week 4 — soft launch
 
-- [ ] Update repo `README.md` first line: "🌐 Try it: [tf-analyze.fly.dev](https://tf-analyze.fly.dev)"
+- [ ] Update repo `README.md` first line: "🌐 Try it: [tfanalyze.com](https://tfanalyze.com)"
 - [ ] Embed the badge in `README.md`
 - [ ] Add a "🌐 Web scanner" entry in the Quickstart (between Docker and VS Code) — one-line: paste URL, get report, no install
 - [ ] Record the 90-second demo video — last 5 seconds shows pasting a URL into the web scanner and getting a report

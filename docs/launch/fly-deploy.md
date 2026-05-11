@@ -5,7 +5,8 @@ attack-graph visualiser. It is the load-bearing virality surface
 (`/scan/<owner>/<repo>` permalinks) — see
 [`scan-service-plan.md`](scan-service-plan.md).
 
-- **Live URL:** https://tf-analyze.fly.dev/
+- **Canonical URL:** https://tfanalyze.com/ (also `https://www.tfanalyze.com/`)
+- **Fly fallback hostname:** https://tf-analyze.fly.dev/ (kept alive automatically; old shared links still resolve)
 - **Fly app:** `tf-analyze` (org `personal`, region `iad`)
 - **Volume:** `tfanalyze_scan_cache` (1 GB, auto-created from `[[mounts]]`)
 - **Image source:** repo-root build context, `demo/Dockerfile`
@@ -69,7 +70,7 @@ flyctl deploy --config demo/fly.toml
 
 # 3. Verify.
 flyctl status -a tf-analyze
-curl -sI https://tf-analyze.fly.dev/   # GET returns 200; HEAD returns 405 (Flask)
+curl -sI https://tfanalyze.com/   # GET returns 200; HEAD returns 405 (Flask)
 ```
 
 There are no secrets to set — the app reads no env-supplied
@@ -77,15 +78,37 @@ credentials. Rate-limit, payload-cap and scan-timeout values are
 compiled-in constants in `demo/app.py`; if you need to tune them,
 change the source and redeploy.
 
-## Custom domain (optional)
+## Custom domain
+
+`tfanalyze.com` is the canonical user-facing URL. Apex and `www`
+certificates are both registered on the `tf-analyze` app:
 
 ```sh
-flyctl certs add tfanalyze.com
-flyctl certs show tfanalyze.com   # confirms Let's Encrypt issuance
+flyctl certs list -a tf-analyze
+# Expected: tfanalyze.com and www.tfanalyze.com, both with status "Ready".
 ```
 
-Then point `tfanalyze.com` A/AAAA at the values printed by
-`flyctl ips list`. The cert resolves in ≤ 5 minutes.
+If you ever need to re-add them (e.g. after a future rename):
+
+```sh
+flyctl certs add tfanalyze.com -a tf-analyze
+flyctl certs add www.tfanalyze.com -a tf-analyze
+flyctl certs show tfanalyze.com -a tf-analyze     # confirms LE issuance
+flyctl certs show www.tfanalyze.com -a tf-analyze
+```
+
+DNS records (set at the registrar):
+
+| Type | Name | Value |
+|---|---|---|
+| `A`    | `@`   | `66.241.124.72` |
+| `AAAA` | `@`   | `2a09:8280:1::114:2170:0` |
+| `A`    | `www` | `66.241.124.72` |
+| `AAAA` | `www` | `2a09:8280:1::114:2170:0` |
+
+Run `flyctl ips list -a tf-analyze` to re-check IPs; the dedicated
+IPv6 is stable, the shared IPv4 belongs to Fly and may rotate
+(uncommon, but worth knowing).
 
 ## Renaming the app
 
@@ -116,10 +139,10 @@ of each repo.
 
 ```sh
 # 1. UI loads.
-curl -s https://tf-analyze.fly.dev/ | grep -c '<title>tf-analyze'
+curl -s https://tfanalyze.com/ | grep -c '<title>tf-analyze'
 
 # 2. /scan/hcl returns valid JSON with both `graph` and `findings`.
-curl -s -X POST https://tf-analyze.fly.dev/scan/hcl \
+curl -s -X POST https://tfanalyze.com/scan/hcl \
   -H 'Content-Type: application/json' \
   -d '{"hcl": "resource \"aws_s3_bucket\" \"x\" { bucket = \"x\" }"}' \
   | python3 -c "import sys,json; d=json.load(sys.stdin); \
@@ -130,13 +153,13 @@ curl -s -X POST https://tf-analyze.fly.dev/scan/hcl \
 # 3. Rate limit (10 req / 60 s per IP).
 for i in $(seq 1 12); do
   curl -s -o /dev/null -w "%{http_code}\n" -X POST \
-    https://tf-analyze.fly.dev/scan/hcl \
+    https://tfanalyze.com/scan/hcl \
     -H 'Content-Type: application/json' -d '{"hcl": ""}'
 done
 # Expected: ten 4xxs (400 on empty HCL) then two 429s.
 
 # 4. Public permalink (clone + scan + cache).
-curl -sI https://tf-analyze.fly.dev/scan/terraform-aws-modules/terraform-aws-vpc
+curl -sI https://tfanalyze.com/scan/terraform-aws-modules/terraform-aws-vpc
 # Expected: 200 once the clone completes (~5–10 s cold, instant on cache hit).
 ```
 

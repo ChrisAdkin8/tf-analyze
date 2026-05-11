@@ -27,8 +27,9 @@ curl -s http://localhost:8080/scan/terraform-aws-modules/terraform-aws-vpc | hea
 
 ## Deploy to Fly.io
 
-Live at **https://tf-analyze.fly.dev/**. The full runbook (first-deploy,
-redeploy, renaming, troubleshooting) lives in
+Live at **https://tfanalyze.com/** (Fly fallback: `tf-analyze.fly.dev`).
+The full runbook (first-deploy, redeploy, custom domain, renaming,
+troubleshooting) lives in
 [`docs/launch/fly-deploy.md`](../docs/launch/fly-deploy.md). The
 short version, run from the repo root:
 

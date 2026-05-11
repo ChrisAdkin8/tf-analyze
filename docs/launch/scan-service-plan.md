@@ -11,7 +11,7 @@ This is the load-bearing feature from `virality-plan.md` — every other item co
 ## Scope (MVP)
 
 **In:**
-- `tf-analyze.fly.dev/scan/<owner>/<repo>` — paste a public GitHub URL, get a scored report
+- `tfanalyze.com/scan/<owner>/<repo>` — paste a public GitHub URL, get a scored report
 - Public GitHub repos only (no auth, no private repos)
 - Cache keyed on commit SHA — re-scanning unchanged repos is free
 - Permalink per scan — sharable URL is the viral mechanic
@@ -24,7 +24,7 @@ This is the load-bearing feature from `virality-plan.md` — every other item co
 - Scheduled re-scans
 - Per-user history / dashboards
 - Subscription / billing
-- Custom domain (use `tf-analyze.fly.dev` until proven; `tfanalyze.dev` ($15/yr) once metrics justify)
+- ~~Custom domain~~ — done. `tfanalyze.com` is live, apex + `www` certs issued, Fly fallback at `tf-analyze.fly.dev`.
 - GitLab / Bitbucket support
 - Comparison views (this scan vs. prior scan)
 - API for programmatic scans (just point users at the engine + Action)
@@ -93,9 +93,9 @@ For MVP scope (cache scan metadata, store HTML reports), there's no reason to in
 
 When to migrate: when a single SQLite write blocks reads (we'll see this as request latency above ~100ms p99). For our use case, that probably never happens — writes are batched per scan completion, not per request.
 
-### Domain — `tf-analyze.fly.dev` for now
+### Domain — `tfanalyze.com` (live)
 
-Free, automatic HTTPS, perfectly fine for MVP. Move to a paid `.dev`/`.com` after proving virality. The 90-second demo video can use `tf-analyze.fly.dev` in the CTA without harming the message.
+Apex + `www` certs issued via `flyctl certs add` against the `tf-analyze` Fly app; Let's Encrypt renews automatically. The `tf-analyze.fly.dev` Fly hostname stays alive as a fallback so any pre-cutover share links keep resolving. The 90-second demo video should use `tfanalyze.com` in the CTA — the shorter, branded URL is what we paid for.
 
 ### CDN / DDoS — Cloudflare in front (free tier)
 
@@ -152,13 +152,13 @@ Reusing `demo/app.py`:
 14. Rate limiting: per-IP (Cloudflare) + per-IP at the app layer (10 scans/hour anon).
 15. Structured logging: every scan request logs (URL, SHA, scan duration, finding count, cache hit/miss). Pipe to Fly's built-in log stream.
 16. Health endpoint `/healthz` → 200 if the engine import succeeds.
-17. Cloudflare in front of `tf-analyze.fly.dev` (or whatever domain).
+17. Cloudflare in front of `tfanalyze.com` (or whatever domain).
 
 ### Week 4 — soft launch
 
 18. Submit to one curated link aggregator (Hacker News "Show HN" Tuesday 9am PT, or Lobsters).
-19. Update README with "🌐 Try it: tf-analyze.fly.dev" line at the top.
-20. Add the badge to the README itself: `[![tf-analyze](https://tf-analyze.fly.dev/badge/ChrisAdkin8/tf-analyze.svg)](...)`.
+19. Update README with "🌐 Try it: tfanalyze.com" line at the top.
+20. Add the badge to the README itself: `[![tf-analyze](https://tfanalyze.com/badge/ChrisAdkin8/tf-analyze.svg)](...)`.
 21. Demo video CTA points at the live URL.
 22. **Hard cap on the launch:** if the soft launch fires and the system survives 1k unique scans, declare MVP complete and move to week 5+ items from the broader virality plan.
 
@@ -177,7 +177,7 @@ Reusing `demo/app.py`:
 
 ## Open questions / decisions to defer
 
-1. **Custom domain timing.** Move from `tf-analyze.fly.dev` to a paid domain when? Probably after first 1k unique scans. ROI: better share-URL aesthetics, brand defensibility.
+1. **Custom domain timing.** Move from `tfanalyze.com` to a paid domain when? Probably after first 1k unique scans. ROI: better share-URL aesthetics, brand defensibility.
 2. **GitHub OAuth for higher API rate limits.** Required when the unauth 60/hour limit starts capping. Add on signal, not on speculation.
 3. **Caching tier above SQLite.** Maybe Cloudflare KV when scan metadata exceeds 100k rows. Defer until needed.
 4. **Subscription tier.** If usage takes off, "Scan private repos for $5/mo" is the obvious play. Don't build it until at least one user explicitly asks.
