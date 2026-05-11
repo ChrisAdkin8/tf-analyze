@@ -8,12 +8,12 @@
 ### Setup + verify the existing Fly app still works
 
 - [ ] `flyctl auth login` (one-time on this machine)
-- [ ] `flyctl apps list` — confirm `tf-analyze-demo` exists and `flyctl logs -a tf-analyze-demo` works
+- [ ] `flyctl apps list` — confirm `tf-analyze` exists and `flyctl logs -a tf-analyze` works
 - [ ] `flyctl deploy -c demo/fly.toml` against current `main` to verify the existing pipeline is healthy before any changes
 - [ ] Curl the deployed app — confirm it responds with the old demo HTML
 - [ ] Add a Fly volume for persistent storage:
   ```
-  flyctl volumes create scans_data --size 3 --region iad -a tf-analyze-demo
+  flyctl volumes create scans_data --size 3 --region iad -a tf-analyze
   ```
   3 GB free; mount at `/data` in the next step
 - [ ] Update `demo/fly.toml` with the volume mount + bump `memory = "1024mb"` (engine + clones need headroom):
@@ -23,7 +23,7 @@
     destination = "/data"
   ```
 - [ ] Add `git` to the Dockerfile: `RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*`
-- [ ] Re-deploy, confirm volume mounted: `flyctl ssh console -a tf-analyze-demo -C "ls -la /data"`
+- [ ] Re-deploy, confirm volume mounted: `flyctl ssh console -a tf-analyze -C "ls -la /data"`
 
 ### SQLite schema + helpers
 
@@ -96,7 +96,7 @@
 
 ### Acceptance gate for week 1
 
-- [ ] `curl -X POST tfanalyze.fly.dev/scan -d 'url=https://github.com/ChrisAdkin8/tf-analyze' -H 'Content-Type: application/x-www-form-urlencoded'` returns 200 + scan_id
+- [ ] `curl -X POST tf-analyze.fly.dev/scan -d 'url=https://github.com/ChrisAdkin8/tf-analyze' -H 'Content-Type: application/x-www-form-urlencoded'` returns 200 + scan_id
 - [ ] Polling `/status/<id>` returns `done` within 30 seconds
 - [ ] `/scan/ChrisAdkin8/tf-analyze/<sha>/` returns the HTML report
 - [ ] `/badge/ChrisAdkin8/tf-analyze.svg` returns a valid SVG with the right score
@@ -171,7 +171,7 @@
 
 ## Week 4 — soft launch
 
-- [ ] Update repo `README.md` first line: "🌐 Try it: [tfanalyze.fly.dev](https://tfanalyze.fly.dev)"
+- [ ] Update repo `README.md` first line: "🌐 Try it: [tf-analyze.fly.dev](https://tf-analyze.fly.dev)"
 - [ ] Embed the badge in `README.md`
 - [ ] Add a "🌐 Web scanner" entry in the Quickstart (between Docker and VS Code) — one-line: paste URL, get report, no install
 - [ ] Record the 90-second demo video — last 5 seconds shows pasting a URL into the web scanner and getting a report

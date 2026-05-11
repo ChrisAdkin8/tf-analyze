@@ -1,8 +1,8 @@
-app = "tf-analyze-demo"
+app = "tf-analyze"
 primary_region = "iad"
 
 [build]
-  dockerfile = "demo/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [http_service]
   internal_port = 8080
@@ -12,5 +12,14 @@ primary_region = "iad"
   min_machines_running = 0
 
 [[vm]]
-  memory = "512mb"
+  memory = "1gb"
   cpus = 1
+
+# Per-SHA scan cache. A stranger linking
+# `tfanalyze.com/scan/<owner>/<repo>` hits this volume before we re-clone.
+# Survives machine restarts, scales horizontally with one volume per
+# machine (Fly auto-mounts the right one).
+[[mounts]]
+  source = "tfanalyze_scan_cache"
+  destination = "/var/cache/tf-analyze"
+  initial_size = "1gb"

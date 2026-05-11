@@ -4,14 +4,14 @@
 
 ## Executive summary
 
-Extend the existing `demo/` FastAPI app into a public web scanner: paste a GitHub repo URL, get a permalink to a styled report. **Cheapest viable infrastructure: Fly.io's existing `tf-analyze-demo` machine, scale-to-zero, ~$0–5/month at first-thousand-users traffic.** No new infrastructure to provision; we already have the deployment shape, the Docker image, and the scan engine.
+Extend the existing `demo/` FastAPI app into a public web scanner: paste a GitHub repo URL, get a permalink to a styled report. **Cheapest viable infrastructure: Fly.io's existing `tf-analyze` machine, scale-to-zero, ~$0–5/month at first-thousand-users traffic.** No new infrastructure to provision; we already have the deployment shape, the Docker image, and the scan engine.
 
 This is the load-bearing feature from `virality-plan.md` — every other item compounds from it (badge service, demo video CTA, state-of-IaC report data pipeline). MVP at **week 4** of the 90-day plan.
 
 ## Scope (MVP)
 
 **In:**
-- `tfanalyze.fly.dev/scan/<owner>/<repo>` — paste a public GitHub URL, get a scored report
+- `tf-analyze.fly.dev/scan/<owner>/<repo>` — paste a public GitHub URL, get a scored report
 - Public GitHub repos only (no auth, no private repos)
 - Cache keyed on commit SHA — re-scanning unchanged repos is free
 - Permalink per scan — sharable URL is the viral mechanic
@@ -24,7 +24,7 @@ This is the load-bearing feature from `virality-plan.md` — every other item co
 - Scheduled re-scans
 - Per-user history / dashboards
 - Subscription / billing
-- Custom domain (use `tfanalyze.fly.dev` until proven; `tfanalyze.dev` ($15/yr) once metrics justify)
+- Custom domain (use `tf-analyze.fly.dev` until proven; `tfanalyze.dev` ($15/yr) once metrics justify)
 - GitLab / Bitbucket support
 - Comparison views (this scan vs. prior scan)
 - API for programmatic scans (just point users at the engine + Action)
@@ -39,7 +39,7 @@ The discipline here is "what does the viral mechanic *require*?" — and the ans
 └────────┬────────┘
          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Fly machine (existing tf-analyze-demo, 512 MB, scale-0)    │
+│  Fly machine (existing tf-analyze, 1 GB, scale-0)           │
 │                                                              │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐ │
 │  │  FastAPI     │──▶│  scan queue  │──▶│  worker (asyncio)│ │
@@ -68,7 +68,7 @@ When to split: when scan queue depth p99 exceeds 30 seconds, or when a single sc
 
 ### Compute — Fly.io
 
-The existing `tf-analyze-demo` Fly app is already optimised for this:
+The existing `tf-analyze` Fly app is already optimised for this:
 - `auto_stop_machines = "stop"` + `min_machines_running = 0` → costs **$0** when nobody's scanning
 - Cold-start ~3-5 seconds (the engine needs to load the catalogue) — acceptable for an interactive scan UX with a polling status page
 - 512 MB RAM is enough for the engine + a single 100 MB shallow clone
@@ -93,9 +93,9 @@ For MVP scope (cache scan metadata, store HTML reports), there's no reason to in
 
 When to migrate: when a single SQLite write blocks reads (we'll see this as request latency above ~100ms p99). For our use case, that probably never happens — writes are batched per scan completion, not per request.
 
-### Domain — `tfanalyze.fly.dev` for now
+### Domain — `tf-analyze.fly.dev` for now
 
-Free, automatic HTTPS, perfectly fine for MVP. Move to a paid `.dev`/`.com` after proving virality. The 90-second demo video can use `tfanalyze.fly.dev` in the CTA without harming the message.
+Free, automatic HTTPS, perfectly fine for MVP. Move to a paid `.dev`/`.com` after proving virality. The 90-second demo video can use `tf-analyze.fly.dev` in the CTA without harming the message.
 
 ### CDN / DDoS — Cloudflare in front (free tier)
 
@@ -152,13 +152,13 @@ Reusing `demo/app.py`:
 14. Rate limiting: per-IP (Cloudflare) + per-IP at the app layer (10 scans/hour anon).
 15. Structured logging: every scan request logs (URL, SHA, scan duration, finding count, cache hit/miss). Pipe to Fly's built-in log stream.
 16. Health endpoint `/healthz` → 200 if the engine import succeeds.
-17. Cloudflare in front of `tfanalyze.fly.dev` (or whatever domain).
+17. Cloudflare in front of `tf-analyze.fly.dev` (or whatever domain).
 
 ### Week 4 — soft launch
 
 18. Submit to one curated link aggregator (Hacker News "Show HN" Tuesday 9am PT, or Lobsters).
-19. Update README with "🌐 Try it: tfanalyze.fly.dev" line at the top.
-20. Add the badge to the README itself: `[![tf-analyze](https://tfanalyze.fly.dev/badge/ChrisAdkin8/tf-analyze.svg)](...)`.
+19. Update README with "🌐 Try it: tf-analyze.fly.dev" line at the top.
+20. Add the badge to the README itself: `[![tf-analyze](https://tf-analyze.fly.dev/badge/ChrisAdkin8/tf-analyze.svg)](...)`.
 21. Demo video CTA points at the live URL.
 22. **Hard cap on the launch:** if the soft launch fires and the system survives 1k unique scans, declare MVP complete and move to week 5+ items from the broader virality plan.
 
@@ -177,7 +177,7 @@ Reusing `demo/app.py`:
 
 ## Open questions / decisions to defer
 
-1. **Custom domain timing.** Move from `tfanalyze.fly.dev` to a paid domain when? Probably after first 1k unique scans. ROI: better share-URL aesthetics, brand defensibility.
+1. **Custom domain timing.** Move from `tf-analyze.fly.dev` to a paid domain when? Probably after first 1k unique scans. ROI: better share-URL aesthetics, brand defensibility.
 2. **GitHub OAuth for higher API rate limits.** Required when the unauth 60/hour limit starts capping. Add on signal, not on speculation.
 3. **Caching tier above SQLite.** Maybe Cloudflare KV when scan metadata exceeds 100k rows. Defer until needed.
 4. **Subscription tier.** If usage takes off, "Scan private repos for $5/mo" is the obvious play. Don't build it until at least one user explicitly asks.

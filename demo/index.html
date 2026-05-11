@@ -151,7 +151,7 @@ async function scanHcl() {
     if (!resp.ok) { const e = await resp.json(); setStatus('Error: ' + e.detail, 'error'); return; }
     const data = await resp.json();
     renderFindings(data.findings ?? []);
-    renderGraph(data.attack_graph ?? {nodes:[], edges:[]});
+    renderGraph(data.graph ?? {nodes:[], edges:[]});
     setStatus((data.findings?.length ?? 0) + ' finding(s)', 'success');
   } catch(e) { setStatus('Request failed: ' + e.message, 'error'); }
 }
@@ -168,7 +168,7 @@ async function scanRepo() {
     if (!resp.ok) { const e = await resp.json(); setStatus('Error: ' + e.detail, 'error'); return; }
     const data = await resp.json();
     renderFindings(data.findings ?? []);
-    renderGraph(data.attack_graph ?? {nodes:[], edges:[]});
+    renderGraph(data.graph ?? {nodes:[], edges:[]});
     setStatus((data.findings?.length ?? 0) + ' finding(s)', 'success');
   } catch(e) { setStatus('Request failed: ' + e.message, 'error'); }
 }
@@ -202,7 +202,8 @@ function renderGraph(graph) {
   if (!graph.nodes?.length) return;
 
   const nodes = graph.nodes.map(n => ({...n}));
-  const edges = graph.edges.map(e => ({...e}));
+  // Engine emits {from,to,label}; d3.forceLink resolves {source,target}.id
+  const edges = graph.edges.map(e => ({...e, source: e.from, target: e.to}));
 
   const svg = d3.select('#graph-svg');
   const zoom = d3.zoom().scaleExtent([0.1,4]).on('zoom', e => root.attr('transform', e.transform));

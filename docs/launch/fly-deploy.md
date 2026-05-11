@@ -1,91 +1,214 @@
 # Fly.io deployment for the web demo
 
-The web demo (`demo/`) is a FastAPI app + CodeMirror 6 + d3 attack
-graph. `demo/Dockerfile` and `demo/fly.toml` already exist; this is
-the operator runbook for the first deploy.
+The web demo (`demo/`) is a FastAPI app + CodeMirror 6 editor + D3
+attack-graph visualiser. It is the load-bearing virality surface
+(`/scan/<owner>/<repo>` permalinks) — see
+[`scan-service-plan.md`](scan-service-plan.md).
 
-## One-time
+- **Live URL:** https://tf-analyze.fly.dev/
+- **Fly app:** `tf-analyze` (org `personal`, region `iad`)
+- **Volume:** `tfanalyze_scan_cache` (1 GB, auto-created from `[[mounts]]`)
+- **Image source:** repo-root build context, `demo/Dockerfile`
+
+## One-time setup
 
 ```sh
 brew install flyctl
 flyctl auth login
 ```
 
-Get a `flyctl` API token if you want to wire the deploy into CI:
+Optionally grab a CI token:
 
 ```sh
 flyctl auth token
-# Save as FLY_API_TOKEN secret in the repo settings.
+# Save as FLY_API_TOKEN secret in the repo settings if wiring to GHA.
 ```
 
-## First deploy
+## Routine redeploy
+
+The app is already created and configured. Day-to-day, you only run:
 
 ```sh
-cd demo
-flyctl launch --name tf-analyze-demo --region lhr --no-deploy
-flyctl secrets set RATE_LIMIT_PER_MIN=10 SCAN_TIMEOUT_S=30 MAX_PAYLOAD_KB=50
-flyctl deploy
-flyctl status                # confirm the app is healthy
-flyctl ips list              # note the public IPv4 + IPv6
+# From the REPO ROOT — not from demo/.
+flyctl deploy --config demo/fly.toml
 ```
 
-## Domain
+That's it. Fly reads `demo/fly.toml`, builds the image with the repo
+root as context, pushes to the registry, and rolls the running machine.
+Auto-stop kicks back in when traffic drains; cost stays at $0.
+
+### Why deploy from the repo root
+
+`demo/Dockerfile` copies repo-root paths:
+
+```dockerfile
+COPY demo/requirements.txt requirements.txt
+COPY scripts/detect.py scripts/detect.py
+COPY scripts/_*.py scripts/         # all engine helpers
+COPY catalog/ catalog/
+COPY demo/app.py demo/index.html demo/
+```
+
+If you `cd demo && flyctl deploy`, the build context is just `demo/`
+and every `COPY scripts/...` / `COPY catalog/...` fails with
+`failed to compute cache key: ... not found`. The `--config` flag
+keeps the config path pointed at the subdir while leaving the build
+context at the root, which is the only way the Dockerfile resolves.
+
+## First deploy (from scratch)
+
+If the app is ever destroyed and you need to recreate it:
 
 ```sh
-# Add an A + AAAA record at tf-analyze.dev (or whatever subdomain).
-flyctl certs add demo.tf-analyze.dev
-flyctl certs show demo.tf-analyze.dev   # confirms LE issuance
+# 1. Reserve the app name (global namespace across all Fly users).
+flyctl apps create tf-analyze --org personal
+
+# 2. Deploy. The [[mounts]] block in fly.toml auto-creates the
+#    tfanalyze_scan_cache volume on the first machine boot.
+flyctl deploy --config demo/fly.toml
+
+# 3. Verify.
+flyctl status -a tf-analyze
+curl -sI https://tf-analyze.fly.dev/   # GET returns 200; HEAD returns 405 (Flask)
 ```
 
-Once the cert resolves (≤ 5 minutes), update README hero CTA to
-"Try the demo" pointing at the public URL.
+There are no secrets to set — the app reads no env-supplied
+credentials. Rate-limit, payload-cap and scan-timeout values are
+compiled-in constants in `demo/app.py`; if you need to tune them,
+change the source and redeploy.
+
+## Custom domain (optional)
+
+```sh
+flyctl certs add tfanalyze.com
+flyctl certs show tfanalyze.com   # confirms Let's Encrypt issuance
+```
+
+Then point `tfanalyze.com` A/AAAA at the values printed by
+`flyctl ips list`. The cert resolves in ≤ 5 minutes.
+
+## Renaming the app
+
+Fly does not support in-place renames — the app name *is* the
+hostname. To change the URL:
+
+```sh
+# 1. Edit demo/fly.toml — change `app = "<old>"` to `app = "<new>"`.
+# 2. Reserve the new name.
+flyctl apps create <new> --org personal
+
+# 3. Deploy. A fresh tfanalyze_scan_cache volume is created on the
+#    new app from [[mounts]] initial_size.
+flyctl deploy --config demo/fly.toml
+
+# 4. Smoke-test https://<new>.fly.dev/.
+# 5. Once happy, destroy the old app. The scan cache on the old
+#    volume is per-SHA — it will rebuild on demand on the new app.
+flyctl apps destroy <old>
+```
+
+The volume does *not* migrate. The scan cache is a per-SHA
+opportunistic cache (`/var/cache/tf-analyze/<owner>_<repo>_<sha>.json`),
+so the new app starts cold and warms back up after the first scan
+of each repo.
 
 ## Post-deploy validation
 
 ```sh
-# Smoke-test the JSON API
-curl -X POST https://demo.tf-analyze.dev/scan/hcl \
-  -H 'Content-Type: application/json' \
-  -d '{"hcl": "resource \"aws_iam_user\" \"x\" { name = \"admin\" }"}' \
-  | jq '.summary.score'
-# Expected: a number in [0, 100], typically ≤ 90 for that input.
+# 1. UI loads.
+curl -s https://tf-analyze.fly.dev/ | grep -c '<title>tf-analyze'
 
-# Rate limit
+# 2. /scan/hcl returns valid JSON with both `graph` and `findings`.
+curl -s -X POST https://tf-analyze.fly.dev/scan/hcl \
+  -H 'Content-Type: application/json' \
+  -d '{"hcl": "resource \"aws_s3_bucket\" \"x\" { bucket = \"x\" }"}' \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); \
+                print('score:', d['summary']['score']); \
+                print('findings:', len(d['findings'])); \
+                print('graph nodes:', len(d['graph']['nodes']))"
+
+# 3. Rate limit (10 req / 60 s per IP).
 for i in $(seq 1 12); do
   curl -s -o /dev/null -w "%{http_code}\n" -X POST \
-    https://demo.tf-analyze.dev/scan/hcl \
-    -H 'Content-Type: application/json' \
-    -d '{"hcl": ""}'
+    https://tf-analyze.fly.dev/scan/hcl \
+    -H 'Content-Type: application/json' -d '{"hcl": ""}'
 done
-# Expected: ten 200s then two 429s.
+# Expected: ten 4xxs (400 on empty HCL) then two 429s.
+
+# 4. Public permalink (clone + scan + cache).
+curl -sI https://tf-analyze.fly.dev/scan/terraform-aws-modules/terraform-aws-vpc
+# Expected: 200 once the clone completes (~5–10 s cold, instant on cache hit).
 ```
 
-## Resource limits
+## Hard caps and pricing
 
-The demo intentionally caps payload size, scan time, and per-IP rate
-to prevent abuse. Defaults in `demo/app.py`:
+`demo/fly.toml` pins one `shared-cpu-1x` machine with 1 GB RAM and a
+1 GB volume. With `auto_stop_machines = "stop"` and
+`min_machines_running = 0`, the app idles at $0 and ramps to a few
+dollars/month under sustained traffic.
 
-- `RATE_LIMIT_PER_MIN=10` per IP
-- `SCAN_TIMEOUT_S=30`
-- `MAX_PAYLOAD_KB=50`
-- Repo-scan validation: only `github.com` and `gitlab.com` URLs accepted
+Compiled-in safety nets (see `demo/app.py`):
 
-These are env vars; bump for a presentation, then `flyctl secrets set`
-them back to defaults afterward.
+- 10 req / 60 s per-IP rate limit
+- 30 s subprocess timeout on the scanner
+- 60 s subprocess timeout on the shallow clone
+- 50 KB cap on pasted HCL
+- 500 `.tf` file cap and 50 MB content cap on cloned repos
+- Owner/repo strings validated against strict regex before reaching `git clone`
 
-## Cost ceiling
+## Logs and troubleshooting
 
-`fly.toml` pins `[[vm]]` to a single shared-cpu-1x instance with
-256 MB RAM, scaling to zero. Free-tier eligible at this size; the
-upper bound on accidental bills is a few dollars even if traffic
-spikes.
+```sh
+flyctl logs -a tf-analyze                                # live stream
+flyctl logs -a tf-analyze --no-tail | tail -50           # last 50 lines
+flyctl ssh console -a tf-analyze                         # shell into the machine
+flyctl ssh console -a tf-analyze -C "ls /var/cache/tf-analyze | wc -l"
+```
 
-## Cutover
+Common failure modes:
 
-Once the demo URL is live, update three places in the project:
+| Symptom | Diagnosis | Fix |
+|---|---|---|
+| Build fails with `COPY ... not found` | Deployed from `demo/`, not repo root | Re-run from repo root with `--config demo/fly.toml` |
+| `Request failed: node not found: undefined` in the browser | D3 wants `{source,target}` but engine emits `{from,to}` | Already fixed in `demo/index.html`; redeploy |
+| Empty attack graph | Frontend reading wrong JSON key | `demo/index.html` reads `data.graph` (not `data.attack_graph`) — already correct as of May 2026 |
+| `Could not find App` from `flyctl status` | App was destroyed or `--org` mismatch | Re-run `flyctl apps create tf-analyze --org personal` |
+| 503 on first request after long idle | Cold start (machine resumed from stop) | Normal; ~3–5 s as the engine catalogue loads |
 
-1. README hero — replace static banner with a "Try it now" CTA linked
-   to the demo.
-2. The `tf-analyze.dev` homepage redirect (if a TLD is registered).
-3. The Hacker News / Reddit launch posts in `docs/launch/` — they
-   should reference the live URL.
+## Cache hygiene
+
+The 1 GB `tfanalyze_scan_cache` volume holds one JSON file per
+`(owner, repo, sha)` tuple (~50 KB each → headroom for ~20k entries).
+If it ever fills up:
+
+```sh
+flyctl ssh console -a tf-analyze \
+  -C "find /var/cache/tf-analyze -mtime +30 -delete"
+```
+
+Entries are immutable per SHA, so eviction is just "delete the oldest" —
+no consistency hazard.
+
+## Rollback
+
+```sh
+flyctl releases -a tf-analyze                  # list deploys, copy a prior image tag
+flyctl deploy --image registry.fly.io/tf-analyze:deployment-<sha>
+```
+
+The image tags are visible in `flyctl releases`; each successful deploy
+prints the new tag. Roll forward, not back, unless you genuinely need
+the old image — re-deploying a known-good `main` commit is usually
+faster.
+
+## When to graduate off Fly
+
+The plan in `scan-service-plan.md` projects ~$0–5/month at the
+first-thousand-users tier. Signals to revisit infrastructure:
+
+- Scan queue depth p99 > 30 s (Fly metrics) → split worker process
+- Sustained outbound > 100 GB/month → consider Cloudflare in front
+- Single-region latency complaints from EU/APAC users → add a second
+  Fly region (the `[[mounts]]` model gives you one volume per region)
+
+None of these are imminent. Stay monolith until the metrics force the move.
