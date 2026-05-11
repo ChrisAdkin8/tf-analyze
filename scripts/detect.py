@@ -1583,6 +1583,13 @@ class CorpusCtx:
     var_refs_by_dir: dict[str, set[str]]
     output_refs: set
     module_sources: dict[str, str]
+    # Lazy-built caches the graph_check + registry_fingerprint
+    # handlers need. Pre-built once per scan in detect_corpus (the
+    # cost is negligible; previously this used a `"X" not in locals()`
+    # check inside the elif loop, which doesn't translate cleanly to
+    # standalone handler functions).
+    resource_index_cache: dict
+    module_clusters_cache: dict
     entry: dict
     eid: str
     pat: dict
@@ -1638,12 +1645,21 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                 child_dir = (caller_dir / src).resolve()
                 module_sources[mod_name] = str(child_dir)
 
+    # Round 30.14 — pre-build the lazy caches once. Cheap (sub-ms on
+    # multi-thousand-file workspaces) and avoids the per-handler
+    # `"X" not in locals()` check the legacy elif chain used.
+    _resource_index_cache: dict = _build_resource_index(all_files_text)
+    _module_clusters_cache: dict = _build_module_clusters(all_files_text)
+
     for entry in entries:
         eid = entry["id"]
         for pat in entry.get("patterns", []) or []:
             kind = pat.get("kind", "")
-            # Round 30.14 — registry dispatch FIRST. Falls through to
-            # the legacy elif chain for kinds not yet migrated.
+            # Round 30.14 — registry dispatch. Every corpus kind is
+            # now registered in `_CORPUS_HANDLERS`. Unknown kinds
+            # (in-file kinds or malformed catalogue entries) fall
+            # through; catalogue typos are caught at load time by
+            # `_catalog.validate_catalog_entry`.
             _handler = _CORPUS_HANDLERS.get(kind)
             if _handler is not None:
                 _ctx = CorpusCtx(
@@ -1654,763 +1670,849 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                     var_refs_by_dir=var_refs_by_dir,
                     output_refs=output_refs,
                     module_sources=module_sources,
+                    resource_index_cache=_resource_index_cache,
+                    module_clusters_cache=_module_clusters_cache,
                     entry=entry,
                     eid=eid,
                     pat=pat,
                 )
                 findings.extend(_handler(_ctx))
                 continue
-            if kind == "resource_absent":
-                if "resource" not in pat:
-                    continue
-                rt = pat["resource"]
-                # when_present: only fire if a prerequisite resource type exists
-                prerequisite = pat.get("when_present")
-                if prerequisite:
-                    prereq_seen = False
-                    for _, text in all_files_text.items():
-                        for blk in find_blocks(text, RESOURCE_START):
-                            if blk["groups"][0] == prerequisite:
-                                prereq_seen = True
-                                break
-                        if prereq_seen:
-                            break
-                    if not prereq_seen:
-                        continue
-                seen = False
-                for _, text in all_files_text.items():
-                    for blk in find_blocks(text, RESOURCE_START):
-                        if blk["groups"][0] == rt:
-                            seen = True
-                            break
-                    if seen:
-                        break
-                if not seen:
-                    findings.append(
-                        {
-                            "id": eid,
-                            "file": str(target),
-                            "line": 0,
-                            "resource": f"<absent: {rt}>",
-                        }
-                    )
-            elif kind == "output_sensitive_leak":
-                for fp, text in all_files_text.items():
-                    dirkey = str(Path(fp).parent)
-                    for blk in find_blocks(text, OUTPUT_START):
-                        if SENSITIVE_TRUE_RE.search(blk["body"]):
-                            continue
-                        for vm in VAR_REF_RE.finditer(blk["body"]):
-                            vname = vm.group(1)
-                            if sensitive_vars.get((dirkey, vname)):
-                                findings.append(
-                                    {
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": blk["start_line"],
-                                        "resource": f"output.{blk['groups'][0]}",
-                                    }
-                                )
-                                break
-            elif kind == "cross_module":
-                for fp, text in all_files_text.items():
-                    caller_dir = Path(fp).parent
-                    for mblk in find_blocks(text, MODULE_START):
-                        src = block_arg_value(mblk["body"], "source")
-                        if not src or not src.startswith("."):
-                            continue
-                        # Round-4 audit fix #6 — match the same
-                        # `try: except (OSError, ValueError):` shape
-                        # that `module_unused` uses 130 lines below.
-                        # A module source containing a symlink loop,
-                        # non-existent component, or permission error
-                        # crashed `cross_module` while `module_unused`
-                        # silently skipped — same scan, different
-                        # outcomes. Now both bail consistently.
-                        try:
-                            child_dir = (caller_dir / src).resolve()
-                            # Also guard against the resolved target
-                            # not being a directory (deleted module,
-                            # source pointing at a file): if it's not
-                            # a dir, no child .tf file will match it
-                            # anyway, so skip cleanly.
-                            if not child_dir.is_dir():
-                                continue
-                        except (OSError, ValueError):
-                            continue
-                        arg_re = re.compile(
-                            r'(?m)^\s*([\w-]+)\s*=\s*var\.([\w-]+)\s*(?:#.*)?$'
-                        )
-                        for am in arg_re.finditer(mblk["body"]):
-                            child_arg = am.group(1)
-                            caller_var = am.group(2)
-                            if child_arg == "source":
-                                continue
-                            if not sensitive_vars.get((str(caller_dir), caller_var)):
-                                continue
-                            child_marked = False
-                            child_found = False
-                            for cfp, ctext in all_files_text.items():
-                                try:
-                                    if Path(cfp).parent.resolve() != child_dir:
-                                        continue
-                                except (OSError, ValueError):
-                                    continue
-                                for cblk in find_blocks(ctext, VARIABLE_START):
-                                    if cblk["groups"][0] != child_arg:
-                                        continue
-                                    child_found = True
-                                    if re.search(
-                                        r'(?m)^\s*sensitive\s*=\s*true\s*$',
-                                        cblk["body"],
-                                    ):
-                                        child_marked = True
-                                    break
-                            if child_found and not child_marked:
-                                findings.append(
-                                    {
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": mblk["start_line"],
-                                        "resource": f"module.{mblk['groups'][0]}.{child_arg}",
-                                    }
-                                )
-            elif kind == "variable_unused":
-                for fp, text in all_files_text.items():
-                    dirkey = str(Path(fp).parent)
-                    refs = var_refs_by_dir.get(dirkey, set())
-                    for blk in find_blocks(text, VARIABLE_START):
-                        vname = blk["groups"][0]
-                        if vname not in refs:
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": blk["start_line"],
-                                    "resource": f"var.{vname}",
-                                }
-                            )
-            elif kind == "output_unused":
-                # For each child module directory, check if its outputs are
-                # consumed by any caller via module.X.output_name
-                for fp, text in all_files_text.items():
-                    fp_dir = str(Path(fp).parent)
-                    # Find module names whose source resolves to this dir
-                    consuming_mod_names = [
-                        mn for mn, sd in module_sources.items() if sd == fp_dir
-                    ]
-                    if not consuming_mod_names:
-                        continue  # root module outputs — skip
-                    for blk in find_blocks(text, OUTPUT_START):
-                        oname = blk["groups"][0]
-                        consumed = any(
-                            (mn, oname) in output_refs
-                            for mn in consuming_mod_names
-                        )
-                        if not consumed:
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": blk["start_line"],
-                                    "resource": f"output.{oname}",
-                                }
-                            )
-            elif kind == "module_missing_tests":
-                # Fire once per module directory that has .tf files but no .tftest.hcl
-                checked_dirs: set[str] = set()
-                for fp in all_files_text:
-                    dirkey = str(Path(fp).parent)
-                    if dirkey in checked_dirs:
-                        continue
-                    checked_dirs.add(dirkey)
-                    dir_path = Path(dirkey)
-                    test_files = list(dir_path.glob("*.tftest.hcl"))
-                    # Also check tests/ subdirectory
-                    tests_subdir = dir_path / "tests"
-                    if tests_subdir.is_dir():
-                        test_files.extend(tests_subdir.glob("*.tftest.hcl"))
-                    if not test_files:
-                        # Pick the first .tf file in this dir for line reference
-                        first_tf = None
-                        for f in all_files_text:
-                            if str(Path(f).parent) == dirkey:
-                                first_tf = f
-                                break
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(first_tf or dirkey),
-                                "line": 1,
-                                "resource": f"<module:{dir_path.name}>",
-                            }
-                        )
-            elif kind == "module_unused":
-                # Fire once per local-module directory that nobody references
-                # via `module { source = "<relpath>" }`. A directory counts as
-                # a "module-like" dir only if it declares at least one
-                # variable {} or output {} block (the reusability contract);
-                # raw resource collections without inputs aren't modules.
-                #
-                # The check is deliberately conservative: false positives here
-                # would be loud (telling someone to delete code), so we err
-                # toward silence on ambiguous cases.
-                referenced_dirs: set[str] = set()
-                module_like_dirs: dict[str, str] = {}  # dirkey -> first_tf
-                _VAR_OR_OUT = re.compile(
-                    r'(?m)^\s*(?:variable|output)\s+"[\w-]+"\s*\{'
-                )
-                # Pass 1 — discover module-like dirs and collect every
-                # caller's source = "<relpath>" reference.
-                for fp, text in all_files_text.items():
-                    caller_dir = Path(fp).parent
-                    dirkey = str(caller_dir)
-                    if _VAR_OR_OUT.search(text):
-                        module_like_dirs.setdefault(dirkey, str(fp))
-                    for mblk in find_blocks(text, MODULE_START):
-                        src = block_arg_value(mblk["body"], "source")
-                        if not src or not src.startswith((".", "/")):
-                            continue
-                        try:
-                            target_dir = str((caller_dir / src).resolve())
-                        except (OSError, ValueError):
-                            continue
-                        referenced_dirs.add(target_dir)
-                # Pass 2 — every module-like dir not in `referenced_dirs`
-                # is an orphan. Skip the scan target itself (the root
-                # module is supposed to have variables/outputs without
-                # being module-called).
-                target_root = str(target.resolve()) if isinstance(target, Path) else ""
-                for dirkey, first_tf in module_like_dirs.items():
-                    if dirkey == target_root:
-                        continue
-                    if dirkey in referenced_dirs:
-                        continue
-                    findings.append({
-                        "id": eid,
-                        "file": first_tf,
-                        "line": 1,
-                        "resource": f"<module:{Path(dirkey).name}>",
-                        "context": (
-                            f"module dir {dirkey} declares variables/outputs "
-                            f"but is not referenced by any `module {{ source = ... }}` "
-                            f"in the scan corpus"
-                        ),
+    return findings
+
+
+# ---- Corpus detector handlers (Round 30.14 dispatch table) --------------
+# Each handler below was previously an ``elif kind == "..."`` arm inside
+# `detect_corpus`. Same migration discipline as `_INFILE_HANDLERS`. Once
+# all 26 are registered, the elif chain in detect_corpus is dead code
+# (the dispatch hook fires first and continues past it); the legacy chain
+# will be removed in a follow-up cleanup commit.
+
+
+@_register_corpus("resource_absent")
+def _corpus_resource_absent(c: CorpusCtx) -> list[dict]:
+    """``resource_absent`` — fire once if no resource of the named type
+    exists anywhere in the workspace. Used by rules that mandate a
+    specific resource type be present (e.g. ``aws_cloudtrail.*``).
+    ``when_present`` optionally gates the check on a prerequisite type.
+    """
+    pat = c.pat
+    if "resource" not in pat:
+        return []
+    rt = pat["resource"]
+    prerequisite = pat.get("when_present")
+    if prerequisite:
+        prereq_seen = False
+        for _, text in c.all_files_text.items():
+            for blk in find_blocks(text, RESOURCE_START):
+                if blk["groups"][0] == prerequisite:
+                    prereq_seen = True
+                    break
+            if prereq_seen:
+                break
+        if not prereq_seen:
+            return []
+    seen = False
+    for _, text in c.all_files_text.items():
+        for blk in find_blocks(text, RESOURCE_START):
+            if blk["groups"][0] == rt:
+                seen = True
+                break
+        if seen:
+            break
+    if seen:
+        return []
+    return [{
+        "id": c.eid,
+        "file": str(c.target),
+        "line": 0,
+        "resource": f"<absent: {rt}>",
+    }]
+
+
+@_register_corpus("output_sensitive_leak")
+def _corpus_output_sensitive_leak(c: CorpusCtx) -> list[dict]:
+    """``output_sensitive_leak`` — fire on every ``output`` block that
+    references a sensitive variable but lacks ``sensitive = true``.
+    """
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        dirkey = str(Path(fp).parent)
+        for blk in find_blocks(text, OUTPUT_START):
+            if SENSITIVE_TRUE_RE.search(blk["body"]):
+                continue
+            for vm in VAR_REF_RE.finditer(blk["body"]):
+                vname = vm.group(1)
+                if c.sensitive_vars.get((dirkey, vname)):
+                    out.append({
+                        "id": c.eid,
+                        "file": str(fp),
+                        "line": blk["start_line"],
+                        "resource": f"output.{blk['groups'][0]}",
                     })
-            elif kind == "backend_inconsistency":
-                # Collect all backend blocks across root modules
-                backend_re = re.compile(
-                    r'^\s*backend\s+"([\w-]+)"\s*\{', re.MULTILINE
-                )
-                backends: list[tuple[str, str, int]] = []  # (type, file, line)
-                for fp, text in all_files_text.items():
-                    for m in backend_re.finditer(text):
-                        btype = m.group(1)
-                        line = text.count("\n", 0, m.start()) + 1
-                        backends.append((btype, str(fp), line))
-                if len(backends) >= 2:
-                    types = set(b[0] for b in backends)
-                    if len(types) > 1:
-                        # Different backend types — flag all but the first
-                        for btype, bfile, bline in backends[1:]:
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": bfile,
-                                    "line": bline,
-                                    "resource": f"backend.{btype}",
-                                }
-                            )
-            elif kind == "backend_missing_arg":
-                # Fire when a backend block of the specified type exists but lacks
-                # a required argument. Used to catch S3 backends without state locking.
-                backend_type = pat.get("backend_type")
-                arg = pat.get("arg")
-                if not backend_type or not arg:
+                    break
+    return out
+
+
+@_register_corpus("cross_module")
+def _corpus_cross_module(c: CorpusCtx) -> list[dict]:
+    """``cross_module`` — fire when a sensitive variable flows from
+    caller into a child module whose corresponding variable lacks
+    ``sensitive = true``. Round-4 audit fix #6: tolerates symlink loops
+    / permission errors via try/except (OSError, ValueError).
+    """
+    out: list[dict] = []
+    arg_re = re.compile(r'(?m)^\s*([\w-]+)\s*=\s*var\.([\w-]+)\s*(?:#.*)?$')
+    for fp, text in c.all_files_text.items():
+        caller_dir = Path(fp).parent
+        for mblk in find_blocks(text, MODULE_START):
+            src = block_arg_value(mblk["body"], "source")
+            if not src or not src.startswith("."):
+                continue
+            try:
+                child_dir = (caller_dir / src).resolve()
+                if not child_dir.is_dir():
                     continue
-                backend_re = re.compile(
-                    r'^\s*backend\s+"' + re.escape(backend_type) + r'"\s*\{',
-                    re.MULTILINE,
-                )
-                arg_re = re.compile(r'\b' + re.escape(arg) + r'\s*=')
-                for fp, text in all_files_text.items():
-                    for m in backend_re.finditer(text):
-                        # Round-30.13 — shared walker.
-                        end_after = brace_walk(text, m.end() - 1)
-                        if end_after is None:
+            except (OSError, ValueError):
+                continue
+            for am in arg_re.finditer(mblk["body"]):
+                child_arg = am.group(1)
+                caller_var = am.group(2)
+                if child_arg == "source":
+                    continue
+                if not c.sensitive_vars.get((str(caller_dir), caller_var)):
+                    continue
+                child_marked = False
+                child_found = False
+                for cfp, ctext in c.all_files_text.items():
+                    try:
+                        if Path(cfp).parent.resolve() != child_dir:
                             continue
-                        end = end_after - 1
-                        body = text[m.end():end]
-                        if not arg_re.search(body):
-                            line = text.count("\n", 0, m.start()) + 1
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": line,
-                                    "resource": f"backend.{backend_type}",
-                                }
-                            )
-            elif kind == "templatefile_sensitive_leak":
-                # Find templatefile() calls that reference sensitive variables
-                tf_call_re = re.compile(
-                    r'templatefile\s*\([^,]+,\s*\{([^}]*)\}', re.DOTALL
-                )
-                var_ref_re = re.compile(r'\bvar\.([\w-]+)')
-                for fp, text in all_files_text.items():
-                    dirkey = str(Path(fp).parent)
-                    for m in tf_call_re.finditer(text):
-                        arg_block = m.group(1)
-                        for vm in var_ref_re.finditer(arg_block):
-                            vname = vm.group(1)
-                            if sensitive_vars.get((dirkey, vname)):
-                                line = text.count("\n", 0, m.start()) + 1
-                                findings.append(
-                                    {
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": line,
-                                        "resource": f"templatefile(var.{vname})",
-                                    }
-                                )
-            elif kind == "remote_state_present":
-                for fp, text in all_files_text.items():
-                    for blk in find_blocks(text, DATA_START):
-                        dtype, dname = blk["groups"]
-                        if dtype == "terraform_remote_state":
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": blk["start_line"],
-                                    "resource": f"data.terraform_remote_state.{dname}",
-                                }
-                            )
-            elif kind == "provider_alias_unused":
-                # Collect (alias_name, file, line) from provider blocks with alias
-                alias_decls: list[tuple[str, str, str, int]] = []
-                for fp, text in all_files_text.items():
-                    for blk in find_blocks(text, PROVIDER_START):
-                        pname = blk["groups"][0]
-                        alias = block_arg_value(blk["body"], "alias")
-                        if alias:
-                            alias_decls.append((pname, alias, str(fp), blk["start_line"]))
-                # Scan all files for `provider = pname.alias` or
-                # `providers = { ... = pname.alias }` references.
-                ref_re = re.compile(r'\b([\w-]+)\.([\w-]+)\b')
-                refs: set[tuple[str, str]] = set()
-                for text in all_files_text.values():
-                    # Strip comments so a reference mentioned in a fixture
-                    # header like `# google.eu declared but never used` is
-                    # not counted as a real HCL reference.
-                    stripped = strip_hcl_context(text)
-                    for m in ref_re.finditer(stripped):
-                        refs.add((m.group(1), m.group(2)))
-                for pname, alias, fp, line in alias_decls:
-                    if (pname, alias) not in refs:
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": fp,
-                                "line": line,
-                                "resource": f"provider.{pname}.{alias}",
-                            }
-                        )
-            elif kind == "provider_alias_module_mismatch":
-                # Collect declared aliases per file-scope, then check module
-                # `providers = { … = pname.alias }` references resolve.
-                declared: set[tuple[str, str]] = set()
-                for text in all_files_text.values():
-                    for blk in find_blocks(text, PROVIDER_START):
-                        pname = blk["groups"][0]
-                        alias = block_arg_value(blk["body"], "alias")
-                        if alias:
-                            declared.add((pname, alias))
-                providers_block_re = re.compile(
-                    r'(?m)^\s*providers\s*=\s*\{([^}]*)\}', re.DOTALL
-                )
-                entry_re = re.compile(r'=\s*([\w-]+)\.([\w-]+)')
-                for fp, text in all_files_text.items():
-                    for mblk in find_blocks(text, MODULE_START):
-                        pm = providers_block_re.search(mblk["body"])
-                        if not pm:
+                    except (OSError, ValueError):
+                        continue
+                    for cblk in find_blocks(ctext, VARIABLE_START):
+                        if cblk["groups"][0] != child_arg:
                             continue
-                        for em in entry_re.finditer(pm.group(1)):
-                            pname, alias = em.group(1), em.group(2)
-                            if (pname, alias) not in declared:
-                                findings.append(
-                                    {
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": mblk["start_line"],
-                                        "resource": f"module.{mblk['groups'][0]}:{pname}.{alias}",
-                                    }
-                                )
-            elif kind == "foreach_over_list":
-                list_rhs_re = re.compile(
-                    r'(?m)^\s*for_each\s*=\s*(\[|tolist\(|toset\s*\(\s*\[)'
-                )
-                for fp, text in all_files_text.items():
-                    for blk in find_blocks(text, RESOURCE_START):
-                        m = list_rhs_re.search(blk["body"])
-                        # toset([...]) is the idiomatic fix; flag only raw
-                        # list literal or tolist(...) calls
-                        if m and m.group(1) != "toset ([":
-                            if m.group(1).startswith("toset"):
-                                continue
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": blk["start_line"],
-                                    "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
-                                }
-                            )
-            elif kind == "foreach_keyset_unstable":
-                # Detects `for_each` whose keyset is derived from another
-                # resource's attribute. Each plan that mutates the upstream
-                # resource set re-keys this resource, forcing destroy/create
-                # on every existing instance — classic apply-flicker bug.
-                #
-                # Forms caught:
-                #   for_each = aws_subnet.this[*].id
-                #   for_each = toset(aws_subnet.this[*].id)
-                #   for_each = toset([for s in aws_subnet.this : s.id])
-                #   for_each = { for k, v in aws_subnet.this : k => v }
-                #
-                # The leading identifier is checked against a deny-list of
-                # safe scopes (var, local, data, module, each, count) so
-                # references to those don't fire — only direct references
-                # to managed resources do.
-                _SAFE_SCOPES = {"var", "local", "data", "module", "each", "count", "self", "path", "terraform"}
-                splat_re = re.compile(
-                    r'(?m)^\s*for_each\s*=\s*(?:toset\s*\(\s*)?([\w-]+)\.([\w-]+)\[\*\]'
-                )
-                comprehension_re = re.compile(
-                    r'(?m)^\s*for_each\s*='
-                    r'\s*(?:toset\s*\(|tolist\s*\(|setunion\s*\()?'
-                    r'\s*\{?\s*\[?\s*for\s+[\w,\s]+\s+in\s+([\w-]+)\.([\w-]+)'
-                )
-                for fp, text in all_files_text.items():
-                    for blk in find_blocks(text, RESOURCE_START):
-                        body = blk["body"]
-                        leading_ident: str | None = None
-                        m = splat_re.search(body)
-                        if m:
-                            leading_ident = m.group(1)
-                        else:
-                            m2 = comprehension_re.search(body)
-                            if m2:
-                                leading_ident = m2.group(1)
-                        if not leading_ident or leading_ident in _SAFE_SCOPES:
-                            continue
-                        findings.append({
-                            "id": eid,
+                        child_found = True
+                        if re.search(r'(?m)^\s*sensitive\s*=\s*true\s*$', cblk["body"]):
+                            child_marked = True
+                        break
+                if child_found and not child_marked:
+                    out.append({
+                        "id": c.eid,
+                        "file": str(fp),
+                        "line": mblk["start_line"],
+                        "resource": f"module.{mblk['groups'][0]}.{child_arg}",
+                    })
+    return out
+
+
+@_register_corpus("variable_unused")
+def _corpus_variable_unused(c: CorpusCtx) -> list[dict]:
+    """``variable_unused`` — fire on every ``variable`` whose name is
+    not referenced via ``var.X`` anywhere in the same directory.
+    """
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        dirkey = str(Path(fp).parent)
+        refs = c.var_refs_by_dir.get(dirkey, set())
+        for blk in find_blocks(text, VARIABLE_START):
+            vname = blk["groups"][0]
+            if vname not in refs:
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"var.{vname}",
+                })
+    return out
+
+
+@_register_corpus("output_unused")
+def _corpus_output_unused(c: CorpusCtx) -> list[dict]:
+    """``output_unused`` — fire on a child-module output that no caller
+    consumes via ``module.X.output_name``. Skips root-module outputs.
+    """
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        fp_dir = str(Path(fp).parent)
+        consuming_mod_names = [
+            mn for mn, sd in c.module_sources.items() if sd == fp_dir
+        ]
+        if not consuming_mod_names:
+            continue
+        for blk in find_blocks(text, OUTPUT_START):
+            oname = blk["groups"][0]
+            consumed = any(
+                (mn, oname) in c.output_refs for mn in consuming_mod_names
+            )
+            if not consumed:
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"output.{oname}",
+                })
+    return out
+
+
+@_register_corpus("module_missing_tests")
+def _corpus_module_missing_tests(c: CorpusCtx) -> list[dict]:
+    """``module_missing_tests`` — fire once per directory that has .tf
+    files but no ``.tftest.hcl`` (TF 1.6+ native tests).
+    """
+    out: list[dict] = []
+    checked_dirs: set[str] = set()
+    for fp in c.all_files_text:
+        dirkey = str(Path(fp).parent)
+        if dirkey in checked_dirs:
+            continue
+        checked_dirs.add(dirkey)
+        dir_path = Path(dirkey)
+        test_files = list(dir_path.glob("*.tftest.hcl"))
+        tests_subdir = dir_path / "tests"
+        if tests_subdir.is_dir():
+            test_files.extend(tests_subdir.glob("*.tftest.hcl"))
+        if not test_files:
+            first_tf = None
+            for f in c.all_files_text:
+                if str(Path(f).parent) == dirkey:
+                    first_tf = f
+                    break
+            out.append({
+                "id": c.eid,
+                "file": str(first_tf or dirkey),
+                "line": 1,
+                "resource": f"<module:{dir_path.name}>",
+            })
+    return out
+
+
+@_register_corpus("module_unused")
+def _corpus_module_unused(c: CorpusCtx) -> list[dict]:
+    """``module_unused`` — fire once per local-module directory that no
+    caller references via ``module { source = "<relpath>" }``. A
+    directory counts as "module-like" only if it declares at least one
+    variable or output block. Deliberately conservative (false
+    positives here would be loud).
+    """
+    referenced_dirs: set[str] = set()
+    module_like_dirs: dict[str, str] = {}
+    _VAR_OR_OUT = re.compile(r'(?m)^\s*(?:variable|output)\s+"[\w-]+"\s*\{')
+    for fp, text in c.all_files_text.items():
+        caller_dir = Path(fp).parent
+        dirkey = str(caller_dir)
+        if _VAR_OR_OUT.search(text):
+            module_like_dirs.setdefault(dirkey, str(fp))
+        for mblk in find_blocks(text, MODULE_START):
+            src = block_arg_value(mblk["body"], "source")
+            if not src or not src.startswith((".", "/")):
+                continue
+            try:
+                target_dir = str((caller_dir / src).resolve())
+            except (OSError, ValueError):
+                continue
+            referenced_dirs.add(target_dir)
+    target_root = str(c.target.resolve()) if isinstance(c.target, Path) else ""
+    out: list[dict] = []
+    for dirkey, first_tf in module_like_dirs.items():
+        if dirkey == target_root:
+            continue
+        if dirkey in referenced_dirs:
+            continue
+        out.append({
+            "id": c.eid,
+            "file": first_tf,
+            "line": 1,
+            "resource": f"<module:{Path(dirkey).name}>",
+            "context": (
+                f"module dir {dirkey} declares variables/outputs "
+                f"but is not referenced by any `module {{ source = ... }}` "
+                f"in the scan corpus"
+            ),
+        })
+    return out
+
+
+@_register_corpus("backend_inconsistency")
+def _corpus_backend_inconsistency(c: CorpusCtx) -> list[dict]:
+    """``backend_inconsistency`` — fire when the workspace declares two
+    or more ``backend "X" {}`` blocks of different types. Flags all
+    but the first.
+    """
+    backend_re = re.compile(r'^\s*backend\s+"([\w-]+)"\s*\{', re.MULTILINE)
+    backends: list[tuple[str, str, int]] = []
+    for fp, text in c.all_files_text.items():
+        for m in backend_re.finditer(text):
+            btype = m.group(1)
+            line = text.count("\n", 0, m.start()) + 1
+            backends.append((btype, str(fp), line))
+    out: list[dict] = []
+    if len(backends) >= 2:
+        types = set(b[0] for b in backends)
+        if len(types) > 1:
+            for btype, bfile, bline in backends[1:]:
+                out.append({
+                    "id": c.eid,
+                    "file": bfile,
+                    "line": bline,
+                    "resource": f"backend.{btype}",
+                })
+    return out
+
+
+@_register_corpus("backend_missing_arg")
+def _corpus_backend_missing_arg(c: CorpusCtx) -> list[dict]:
+    """``backend_missing_arg`` — fire when a backend block of the
+    specified type exists but lacks a required argument (e.g. S3
+    backend without state locking via ``dynamodb_table``).
+    """
+    pat = c.pat
+    backend_type = pat.get("backend_type")
+    arg = pat.get("arg")
+    if not backend_type or not arg:
+        return []
+    backend_re = re.compile(
+        r'^\s*backend\s+"' + re.escape(backend_type) + r'"\s*\{',
+        re.MULTILINE,
+    )
+    arg_re = re.compile(r'\b' + re.escape(arg) + r'\s*=')
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for m in backend_re.finditer(text):
+            end_after = brace_walk(text, m.end() - 1)
+            if end_after is None:
+                continue
+            end = end_after - 1
+            body = text[m.end():end]
+            if not arg_re.search(body):
+                line = text.count("\n", 0, m.start()) + 1
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": line,
+                    "resource": f"backend.{backend_type}",
+                })
+    return out
+
+
+@_register_corpus("templatefile_sensitive_leak")
+def _corpus_templatefile_sensitive_leak(c: CorpusCtx) -> list[dict]:
+    """``templatefile_sensitive_leak`` — find ``templatefile()`` calls
+    that interpolate sensitive variables.
+    """
+    tf_call_re = re.compile(r'templatefile\s*\([^,]+,\s*\{([^}]*)\}', re.DOTALL)
+    var_ref_re = re.compile(r'\bvar\.([\w-]+)')
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        dirkey = str(Path(fp).parent)
+        for m in tf_call_re.finditer(text):
+            arg_block = m.group(1)
+            for vm in var_ref_re.finditer(arg_block):
+                vname = vm.group(1)
+                if c.sensitive_vars.get((dirkey, vname)):
+                    line = text.count("\n", 0, m.start()) + 1
+                    out.append({
+                        "id": c.eid,
+                        "file": str(fp),
+                        "line": line,
+                        "resource": f"templatefile(var.{vname})",
+                    })
+    return out
+
+
+@_register_corpus("remote_state_present")
+def _corpus_remote_state_present(c: CorpusCtx) -> list[dict]:
+    """``remote_state_present`` — fire on every
+    ``data "terraform_remote_state" "x"`` block.
+    """
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for blk in find_blocks(text, DATA_START):
+            dtype, dname = blk["groups"]
+            if dtype == "terraform_remote_state":
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"data.terraform_remote_state.{dname}",
+                })
+    return out
+
+
+@_register_corpus("provider_alias_unused")
+def _corpus_provider_alias_unused(c: CorpusCtx) -> list[dict]:
+    """``provider_alias_unused`` — fire on every provider alias declared
+    via ``alias = "..."`` that no resource / module references.
+    """
+    alias_decls: list[tuple[str, str, str, int]] = []
+    for fp, text in c.all_files_text.items():
+        for blk in find_blocks(text, PROVIDER_START):
+            pname = blk["groups"][0]
+            alias = block_arg_value(blk["body"], "alias")
+            if alias:
+                alias_decls.append((pname, alias, str(fp), blk["start_line"]))
+    ref_re = re.compile(r'\b([\w-]+)\.([\w-]+)\b')
+    refs: set[tuple[str, str]] = set()
+    for text in c.all_files_text.values():
+        stripped = strip_hcl_context(text)
+        for m in ref_re.finditer(stripped):
+            refs.add((m.group(1), m.group(2)))
+    out: list[dict] = []
+    for pname, alias, fp, line in alias_decls:
+        if (pname, alias) not in refs:
+            out.append({
+                "id": c.eid,
+                "file": fp,
+                "line": line,
+                "resource": f"provider.{pname}.{alias}",
+            })
+    return out
+
+
+@_register_corpus("provider_alias_module_mismatch")
+def _corpus_provider_alias_module_mismatch(c: CorpusCtx) -> list[dict]:
+    """``provider_alias_module_mismatch`` — fire when a
+    ``module { providers = { ... = name.alias } }`` references a
+    provider alias the workspace doesn't declare.
+    """
+    declared: set[tuple[str, str]] = set()
+    for text in c.all_files_text.values():
+        for blk in find_blocks(text, PROVIDER_START):
+            pname = blk["groups"][0]
+            alias = block_arg_value(blk["body"], "alias")
+            if alias:
+                declared.add((pname, alias))
+    providers_block_re = re.compile(r'(?m)^\s*providers\s*=\s*\{([^}]*)\}', re.DOTALL)
+    entry_re = re.compile(r'=\s*([\w-]+)\.([\w-]+)')
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for mblk in find_blocks(text, MODULE_START):
+            pm = providers_block_re.search(mblk["body"])
+            if not pm:
+                continue
+            for em in entry_re.finditer(pm.group(1)):
+                pname, alias = em.group(1), em.group(2)
+                if (pname, alias) not in declared:
+                    out.append({
+                        "id": c.eid,
+                        "file": str(fp),
+                        "line": mblk["start_line"],
+                        "resource": f"module.{mblk['groups'][0]}:{pname}.{alias}",
+                    })
+    return out
+
+
+@_register_corpus("foreach_over_list")
+def _corpus_foreach_over_list(c: CorpusCtx) -> list[dict]:
+    """``foreach_over_list`` — fire when a resource uses ``for_each`` with
+    a list literal or ``tolist(...)`` — the idiomatic fix is
+    ``toset([...])``. A list-keyed for_each silently re-orders on
+    upstream changes; toset stabilises.
+    """
+    list_rhs_re = re.compile(
+        r'(?m)^\s*for_each\s*=\s*(\[|tolist\(|toset\s*\(\s*\[)'
+    )
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for blk in find_blocks(text, RESOURCE_START):
+            m = list_rhs_re.search(blk["body"])
+            if m and m.group(1) != "toset ([":
+                if m.group(1).startswith("toset"):
+                    continue
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
+                })
+    return out
+
+
+_FOREACH_SAFE_SCOPES = {
+    "var", "local", "data", "module", "each", "count",
+    "self", "path", "terraform",
+}
+_FOREACH_SPLAT_RE = re.compile(
+    r'(?m)^\s*for_each\s*=\s*(?:toset\s*\(\s*)?([\w-]+)\.([\w-]+)\[\*\]'
+)
+_FOREACH_COMPREHENSION_RE = re.compile(
+    r'(?m)^\s*for_each\s*='
+    r'\s*(?:toset\s*\(|tolist\s*\(|setunion\s*\()?'
+    r'\s*\{?\s*\[?\s*for\s+[\w,\s]+\s+in\s+([\w-]+)\.([\w-]+)'
+)
+
+
+@_register_corpus("foreach_keyset_unstable")
+def _corpus_foreach_keyset_unstable(c: CorpusCtx) -> list[dict]:
+    """``foreach_keyset_unstable`` — fire when a ``for_each`` keyset is
+    derived from another resource's attribute. Each plan that mutates
+    the upstream resource set re-keys this one, forcing destroy/create
+    on every existing instance. Classic apply-flicker bug.
+    """
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for blk in find_blocks(text, RESOURCE_START):
+            body = blk["body"]
+            leading_ident: str | None = None
+            m = _FOREACH_SPLAT_RE.search(body)
+            if m:
+                leading_ident = m.group(1)
+            else:
+                m2 = _FOREACH_COMPREHENSION_RE.search(body)
+                if m2:
+                    leading_ident = m2.group(1)
+            if not leading_ident or leading_ident in _FOREACH_SAFE_SCOPES:
+                continue
+            out.append({
+                "id": c.eid,
+                "file": str(fp),
+                "line": blk["start_line"],
+                "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
+                "context": (
+                    f"for_each keyset derived from "
+                    f"{leading_ident}.* — re-keys on upstream "
+                    f"resource-set change"
+                ),
+            })
+    return out
+
+
+@_register_corpus("count_length_unguarded")
+def _corpus_count_length_unguarded(c: CorpusCtx) -> list[dict]:
+    """``count_length_unguarded`` — resources declared with
+    ``count = length(X)`` whose ``[N]`` / ``[count.index]`` references
+    elsewhere are not guarded by length/try/ternary.
+    """
+    counted: dict[str, int] = {}
+    length_count_re = re.compile(r'(?m)^\s*count\s*=\s*length\s*\(')
+    for fp, text in c.all_files_text.items():
+        for blk in find_blocks(text, RESOURCE_START):
+            if length_count_re.search(blk["body"]):
+                key = f"{blk['groups'][0]}.{blk['groups'][1]}"
+                counted[key] = blk["start_line"]
+    out: list[dict] = []
+    if not counted:
+        return out
+    idx_re = re.compile(r'([\w-]+\.[\w-]+)\[(\d+|count\.index)\]')
+    for fp, text in c.all_files_text.items():
+        for i, line_text in enumerate(text.splitlines(), 1):
+            if "length(" in line_text or "try(" in line_text:
+                continue
+            if re.search(r'\?\s*', line_text):
+                continue
+            for m in idx_re.finditer(line_text):
+                if m.group(1) in counted:
+                    out.append({
+                        "id": c.eid,
+                        "file": str(fp),
+                        "line": i,
+                        "resource": m.group(1),
+                    })
+    return out
+
+
+@_register_corpus("count_foreach_mix")
+def _corpus_count_foreach_mix(c: CorpusCtx) -> list[dict]:
+    """``count_foreach_mix`` — per-directory: does any file use ``count``
+    AND ``for_each`` on different resources? Anti-pattern that makes
+    module consumers deal with both splat and dynamic refs. Flags the
+    count users.
+    """
+    per_dir: dict[str, dict[str, list[dict]]] = {}
+    for fp, text in c.all_files_text.items():
+        dirkey = str(Path(fp).parent)
+        per_dir.setdefault(dirkey, {"count": [], "foreach": []})
+        for blk in find_blocks(text, RESOURCE_START):
+            if COUNT_ATTR_RE.search(blk["body"]):
+                per_dir[dirkey]["count"].append({
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
+                })
+            if FOREACH_ATTR_RE.search(blk["body"]):
+                per_dir[dirkey]["foreach"].append({
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
+                })
+    out: list[dict] = []
+    for dirkey, buckets in per_dir.items():
+        if buckets["count"] and buckets["foreach"]:
+            for f in buckets["count"]:
+                out.append({"id": c.eid, **f})
+    return out
+
+
+@_register_corpus("data_external_injection")
+def _corpus_data_external_injection(c: CorpusCtx) -> list[dict]:
+    """``data_external_injection`` — fire on ``data "external"`` blocks
+    whose ``program = [ ... var.X ... ]`` interpolates a variable into
+    the spawned subprocess argv.
+    """
+    prog_re = re.compile(r'(?m)^\s*program\s*=\s*\[(.*?)\]', re.DOTALL)
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for blk in find_blocks(text, DATA_START):
+            if blk["groups"][0] != "external":
+                continue
+            pm = prog_re.search(blk["body"])
+            if pm and re.search(r'var\.[\w-]+', pm.group(1)):
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"data.external.{blk['groups'][1]}",
+                })
+    return out
+
+
+@_register_corpus("tfstate_in_repo")
+def _corpus_tfstate_in_repo(c: CorpusCtx) -> list[dict]:
+    """``tfstate_in_repo`` — walk the workspace once for ``*.tfstate*``
+    files. Such files in a repo are usually accidents (state should
+    live in a backend, never a git repo).
+    """
+    out: list[dict] = []
+    seen_dirs: set[str] = set()
+    for fp in c.all_files_text:
+        d = Path(fp).parent
+        if str(d) in seen_dirs:
+            continue
+        seen_dirs.add(str(d))
+        for p in d.rglob("*.tfstate*"):
+            if ".terraform" in p.parts:
+                continue
+            out.append({
+                "id": c.eid,
+                "file": str(p),
+                "line": 1,
+                "resource": p.name,
+            })
+        break  # walk from the outermost target once
+    return out
+
+
+@_register_corpus("submodule_version_missing")
+def _corpus_submodule_version_missing(c: CorpusCtx) -> list[dict]:
+    """``submodule_version_missing`` — a directory containing .tf files
+    but lacking ``required_version`` anywhere — common in submodules
+    that inherit the root's constraint only implicitly.
+    """
+    dirs_with_tf: dict[str, list[str]] = {}
+    for fp, text in c.all_files_text.items():
+        dirs_with_tf.setdefault(str(Path(fp).parent), []).append(fp)
+    out: list[dict] = []
+    for d, files in dirs_with_tf.items():
+        has_req = any(
+            re.search(r'required_version\s*=', c.all_files_text[f])
+            for f in files
+        )
+        if not has_req:
+            out.append({
+                "id": c.eid,
+                "file": str(files[0]),
+                "line": 1,
+                "resource": f"<module:{Path(d).name}>",
+            })
+    return out
+
+
+@_register_corpus("providers_version_missing")
+def _corpus_providers_version_missing(c: CorpusCtx) -> list[dict]:
+    """``providers_version_missing`` — find ``terraform { required_providers
+    { ... } }`` blocks and flag any provider entry that lacks a version
+    constraint.
+    """
+    tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
+    rp_block_re = re.compile(r"required_providers\s*\{")
+    entry_re = re.compile(r"(\w[\w-]*)\s*=\s*\{([^{}]+)\}", re.DOTALL)
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for tf_m in tf_block_re.finditer(text):
+            tf_end_after = brace_walk(text, tf_m.end() - 1)
+            if tf_end_after is None:
+                continue
+            tf_end = tf_end_after - 1
+            tf_body = text[tf_m.end():tf_end]
+            rp = rp_block_re.search(tf_body)
+            if not rp:
+                continue
+            rp_start = tf_m.end() + rp.end()
+            rp_end_after = brace_walk(text, rp_start - 1)
+            if rp_end_after is None:
+                continue
+            rp_end = rp_end_after - 1
+            rp_body = text[rp_start:rp_end]
+            for em in entry_re.finditer(rp_body):
+                provider_name = em.group(1)
+                entry_body = em.group(2)
+                if not re.search(r"\bversion\s*=", entry_body):
+                    entry_pos = rp_start + em.start()
+                    line_no = text.count("\n", 0, entry_pos) + 1
+                    out.append({
+                        "id": c.eid,
+                        "file": str(fp),
+                        "line": line_no,
+                        "resource": f"<provider:{provider_name}>",
+                    })
+    return out
+
+
+_PROD_PROTECTED_TYPES = {
+    "google_sql_database_instance",
+    "google_compute_instance",
+    "google_bigquery_dataset",
+    "google_container_cluster",
+    "google_storage_bucket",
+}
+
+
+@_register_corpus("prod_no_deletion_protection")
+def _corpus_prod_no_deletion_protection(c: CorpusCtx) -> list[dict]:
+    """``prod_no_deletion_protection`` — heuristic: resources in a path
+    containing "prod" or labelled ``environment = "prod*"``, on a
+    protected type, with ``deletion_protection = false`` or absent.
+    Honours ``lifecycle.prevent_destroy = true`` as equivalent.
+    """
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        path_is_prod = "prod" in str(fp).lower()
+        for blk in find_blocks(text, RESOURCE_START):
+            btype, bname = blk["groups"]
+            if btype not in _PROD_PROTECTED_TYPES:
+                continue
+            body = blk["body"]
+            label_prod = bool(re.search(r'environment\s*=\s*"prod', body))
+            if not (path_is_prod or label_prod):
+                continue
+            dp = block_arg_value(body, "deletion_protection")
+            prevent_destroy = block_has_nested_path(body, "lifecycle.prevent_destroy")
+            if (dp is None or str(dp).lower() == "false") and not prevent_destroy:
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"{btype}.{bname}",
+                })
+    return out
+
+
+@_register_corpus("deprecated_datasource")
+def _corpus_deprecated_datasource(c: CorpusCtx) -> list[dict]:
+    """``deprecated_datasource`` — fire on every data source whose type
+    is in the ``types`` comma-separated list (default ``template_file``).
+    """
+    deprecated_types = set((c.pat.get("types") or "").split(",")) or {"template_file"}
+    out: list[dict] = []
+    for fp, text in c.all_files_text.items():
+        for blk in find_blocks(text, DATA_START):
+            if blk["groups"][0] in deprecated_types:
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": blk["start_line"],
+                    "resource": f"data.{blk['groups'][0]}.{blk['groups'][1]}",
+                })
+    return out
+
+
+@_register_corpus("intent_gap")
+def _corpus_intent_gap(c: CorpusCtx) -> list[dict]:
+    """``intent_gap`` — meta-detector with four ``subkind`` branches
+    that compare a declaration's intent (variable name, description
+    text, tag) against its enforcement (validation block, deletion
+    protection, etc.). Closes the "you said X but didn't enforce X"
+    failure class.
+    """
+    subkind = c.pat.get("subkind", "")
+    out: list[dict] = []
+    if subkind == "var_name_false_default":
+        for fp, ftext in c.all_files_text.items():
+            for blk in find_blocks(ftext, VARIABLE_START):
+                name = blk["groups"][0]
+                desc = block_arg_value(blk["body"], "description") or ""
+                if _INTENT_SECURITY_NAME_RE.search(name) or _INTENT_SECURITY_NAME_RE.search(desc):
+                    if _INTENT_FALSE_DEFAULT_RE.search(blk["body"]):
+                        out.append({
+                            "id": c.eid,
                             "file": str(fp),
                             "line": blk["start_line"],
-                            "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
-                            "context": (
-                                f"for_each keyset derived from "
-                                f"{leading_ident}.* — re-keys on upstream "
-                                f"resource-set change"
-                            ),
+                            "resource": f"variable.{name}",
                         })
-            elif kind == "count_length_unguarded":
-                # Resources with count = length(X); flag any [N]/[count.index]
-                # reference that isn't guarded by length()/try()/ternary.
-                counted: dict[str, int] = {}  # "type.name" -> declaration line
-                for fp, text in all_files_text.items():
-                    length_count_re = re.compile(
-                        r'(?m)^\s*count\s*=\s*length\s*\('
-                    )
-                    for blk in find_blocks(text, RESOURCE_START):
-                        if length_count_re.search(blk["body"]):
-                            key = f"{blk['groups'][0]}.{blk['groups'][1]}"
-                            counted[key] = blk["start_line"]
-                if counted:
-                    idx_re = re.compile(
-                        r'([\w-]+\.[\w-]+)\[(\d+|count\.index)\]'
-                    )
-                    for fp, text in all_files_text.items():
-                        for i, line_text in enumerate(text.splitlines(), 1):
-                            if "length(" in line_text or "try(" in line_text:
-                                continue
-                            if re.search(r'\?\s*', line_text):
-                                continue
-                            for m in idx_re.finditer(line_text):
-                                if m.group(1) in counted:
-                                    findings.append(
-                                        {
-                                            "id": eid,
-                                            "file": str(fp),
-                                            "line": i,
-                                            "resource": m.group(1),
-                                        }
-                                    )
-            elif kind == "count_foreach_mix":
-                # Per-directory: does any file use count AND for_each on
-                # different resources? This is an anti-pattern that makes
-                # module consumers deal with both splat and dynamic refs.
-                per_dir: dict[str, dict[str, list[dict]]] = {}
-                for fp, text in all_files_text.items():
-                    dirkey = str(Path(fp).parent)
-                    per_dir.setdefault(dirkey, {"count": [], "foreach": []})
-                    for blk in find_blocks(text, RESOURCE_START):
-                        if COUNT_ATTR_RE.search(blk["body"]):
-                            per_dir[dirkey]["count"].append(
-                                {"file": str(fp), "line": blk["start_line"],
-                                 "resource": f"{blk['groups'][0]}.{blk['groups'][1]}"}
-                            )
-                        if FOREACH_ATTR_RE.search(blk["body"]):
-                            per_dir[dirkey]["foreach"].append(
-                                {"file": str(fp), "line": blk["start_line"],
-                                 "resource": f"{blk['groups'][0]}.{blk['groups'][1]}"}
-                            )
-                for dirkey, buckets in per_dir.items():
-                    if buckets["count"] and buckets["foreach"]:
-                        # Flag the `count` users (for_each is the idiomatic form).
-                        for f in buckets["count"]:
-                            findings.append({"id": eid, **f})
-            elif kind == "data_external_injection":
-                for fp, text in all_files_text.items():
-                    for blk in find_blocks(text, DATA_START):
-                        if blk["groups"][0] != "external":
-                            continue
-                        # Look for `program = [ ... var.X ... ]`
-                        prog_re = re.compile(
-                            r'(?m)^\s*program\s*=\s*\[(.*?)\]', re.DOTALL
-                        )
-                        pm = prog_re.search(blk["body"])
-                        if pm and re.search(r'var\.[\w-]+', pm.group(1)):
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": blk["start_line"],
-                                    "resource": f"data.external.{blk['groups'][1]}",
-                                }
-                            )
-            elif kind == "tfstate_in_repo":
-                # Directory walk once per target
-                seen_dirs: set[str] = set()
-                for fp in all_files_text:
-                    d = Path(fp).parent
-                    if str(d) in seen_dirs:
-                        continue
-                    seen_dirs.add(str(d))
-                    for p in d.rglob("*.tfstate*"):
-                        if ".terraform" in p.parts:
-                            continue
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(p),
-                                "line": 1,
-                                "resource": p.name,
-                            }
-                        )
-                    break  # walk from the outermost target once
-            elif kind == "submodule_version_missing":
-                # A directory containing .tf but lacking required_version
-                # anywhere — common in submodules that inherit the root's
-                # constraint only implicitly.
-                dirs_with_tf: dict[str, list[str]] = {}
-                for fp, text in all_files_text.items():
-                    dirs_with_tf.setdefault(str(Path(fp).parent), []).append(fp)
-                for d, files in dirs_with_tf.items():
-                    has_req = any(
-                        re.search(r'required_version\s*=', all_files_text[f])
-                        for f in files
-                    )
-                    if not has_req:
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(files[0]),
-                                "line": 1,
-                                "resource": f"<module:{Path(d).name}>",
-                            }
-                        )
-            elif kind == "providers_version_missing":
-                # Find terraform { required_providers { ... } } blocks and
-                # flag any provider entry that lacks a version constraint.
-                tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
-                rp_block_re = re.compile(r"required_providers\s*\{")
-                # Matches a provider entry: name = { ... }
-                entry_re = re.compile(
-                    r"(\w[\w-]*)\s*=\s*\{([^{}]+)\}", re.DOTALL
-                )
-                for fp, text in all_files_text.items():
-                    for tf_m in tf_block_re.finditer(text):
-                        # Round-30.13 — shared walker for both the
-                        # outer `terraform {}` block and the inner
-                        # `required_providers {}` block.
-                        tf_end_after = brace_walk(text, tf_m.end() - 1)
-                        if tf_end_after is None:
-                            continue
-                        tf_end = tf_end_after - 1
-                        tf_body = text[tf_m.end():tf_end]
-                        rp = rp_block_re.search(tf_body)
-                        if not rp:
-                            continue
-                        # `rp.end()` is one past the opening brace of
-                        # required_providers within tf_body. Convert to
-                        # an absolute offset in `text` and walk from
-                        # the brace itself (one before rp.end()).
-                        rp_start = tf_m.end() + rp.end()
-                        rp_end_after = brace_walk(text, rp_start - 1)
-                        if rp_end_after is None:
-                            continue
-                        rp_end = rp_end_after - 1
-                        rp_body = text[rp_start:rp_end]
-                        for em in entry_re.finditer(rp_body):
-                            provider_name = em.group(1)
-                            entry_body = em.group(2)
-                            if not re.search(r"\bversion\s*=", entry_body):
-                                # Find the line number
-                                entry_pos = rp_start + em.start()
-                                line_no = text.count("\n", 0, entry_pos) + 1
-                                findings.append({
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": line_no,
-                                    "resource": f"<provider:{provider_name}>",
-                                })
-            elif kind == "prod_no_deletion_protection":
-                # Heuristic: resources in a file path containing 'prod' or
-                # labels mentioning prod, with deletion_protection=false or
-                # absent on supported resources.
-                protected_types = {
-                    "google_sql_database_instance",
-                    "google_compute_instance",
-                    "google_bigquery_dataset",
-                    "google_container_cluster",
-                    "google_storage_bucket",
-                }
-                for fp, text in all_files_text.items():
-                    path_is_prod = "prod" in str(fp).lower()
-                    for blk in find_blocks(text, RESOURCE_START):
-                        btype, bname = blk["groups"]
-                        if btype not in protected_types:
-                            continue
-                        body = blk["body"]
-                        label_prod = bool(re.search(
-                            r'environment\s*=\s*"prod', body
-                        ))
-                        if not (path_is_prod or label_prod):
-                            continue
-                        dp = block_arg_value(body, "deletion_protection")
-                        # Catalogue accepts `lifecycle.prevent_destroy = true`
-                        # as equivalent — required for buckets/datasets which
-                        # don't expose `deletion_protection` at the top level.
-                        prevent_destroy = block_has_nested_path(
-                            body, "lifecycle.prevent_destroy"
-                        )
-                        if (dp is None or str(dp).lower() == "false") and not prevent_destroy:
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": blk["start_line"],
-                                    "resource": f"{btype}.{bname}",
-                                }
-                            )
-            elif kind == "deprecated_datasource":
-                deprecated_types = set(
-                    (pat.get("types") or "").split(",")
-                ) or {"template_file"}
-                for fp, text in all_files_text.items():
-                    for blk in find_blocks(text, DATA_START):
-                        if blk["groups"][0] in deprecated_types:
-                            findings.append(
-                                {
-                                    "id": eid,
-                                    "file": str(fp),
-                                    "line": blk["start_line"],
-                                    "resource": f"data.{blk['groups'][0]}.{blk['groups'][1]}",
-                                }
-                            )
-            elif kind == "intent_gap":
-                subkind = pat.get("subkind", "")
-                if subkind == "var_name_false_default":
-                    for fp, ftext in all_files_text.items():
-                        for blk in find_blocks(ftext, VARIABLE_START):
-                            name = blk["groups"][0]
-                            desc = block_arg_value(blk["body"], "description") or ""
-                            if _INTENT_SECURITY_NAME_RE.search(name) or _INTENT_SECURITY_NAME_RE.search(desc):
-                                if _INTENT_FALSE_DEFAULT_RE.search(blk["body"]):
-                                    findings.append({
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": blk["start_line"],
-                                        "resource": f"variable.{name}",
-                                    })
-                elif subkind == "var_desc_must_no_validation":
-                    for fp, ftext in all_files_text.items():
-                        for blk in find_blocks(ftext, VARIABLE_START):
-                            name = blk["groups"][0]
-                            desc = block_arg_value(blk["body"], "description") or ""
-                            if _INTENT_MUST_TRUE_RE.search(desc):
-                                if not _INTENT_VALIDATION_RE.search(blk["body"]):
-                                    findings.append({
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": blk["start_line"],
-                                        "resource": f"variable.{name}",
-                                    })
-                elif subkind == "prod_tag_no_deletion_protection":
-                    for fp, ftext in all_files_text.items():
-                        for blk in find_blocks(ftext, RESOURCE_START):
-                            btype, bname = blk["groups"]
-                            if _INTENT_PROD_TAG_RE.search(blk["body"]):
-                                if _INTENT_DEL_PROT_FALSE_RE.search(blk["body"]):
-                                    addr = f"{btype}.{bname}"
-                                    findings.append({
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": blk["start_line"],
-                                        "resource": addr,
-                                    })
-                elif subkind == "prod_tag_force_destroy":
-                    for fp, ftext in all_files_text.items():
-                        for blk in find_blocks(ftext, RESOURCE_START):
-                            btype, bname = blk["groups"]
-                            if _INTENT_PROD_TAG_RE.search(blk["body"]):
-                                if _INTENT_FORCE_DESTROY_TRUE_RE.search(blk["body"]):
-                                    addr = f"{btype}.{bname}"
-                                    findings.append({
-                                        "id": eid,
-                                        "file": str(fp),
-                                        "line": blk["start_line"],
-                                        "resource": addr,
-                                    })
-            elif kind == "graph_check":
-                # Cross-resource detector. The pattern names a registered
-                # graph function; we dispatch to it with a uniform index of
-                # all resources keyed by `<type>.<name>` → block dict.
-                fn_name = pat.get("function")
-                fn = _GRAPH_CHECKS.get(fn_name)
-                if not fn:
-                    continue
-                if "_resource_index_cache" not in locals():
-                    _resource_index_cache = _build_resource_index(all_files_text)
-                for finding in fn(_resource_index_cache, all_files_text):
-                    finding["id"] = eid
-                    findings.append(finding)
-            elif kind == "registry_fingerprint":
-                # Module-reuse detector: a directory whose resource cluster
-                # matches the shape of a public-registry module. Fingerprint
-                # comes from the catalogue entry's top-level `fingerprint`
-                # block (one fingerprint per rule).
-                fp = entry.get("fingerprint") or {}
-                if not fp:
-                    continue
-                if "_module_clusters_cache" not in locals():
-                    _module_clusters_cache = _build_module_clusters(all_files_text)
-                for finding in _check_registry_fingerprint(fp, _module_clusters_cache):
-                    finding["id"] = eid
-                    findings.append(finding)
-    return findings
+    elif subkind == "var_desc_must_no_validation":
+        for fp, ftext in c.all_files_text.items():
+            for blk in find_blocks(ftext, VARIABLE_START):
+                name = blk["groups"][0]
+                desc = block_arg_value(blk["body"], "description") or ""
+                if _INTENT_MUST_TRUE_RE.search(desc):
+                    if not _INTENT_VALIDATION_RE.search(blk["body"]):
+                        out.append({
+                            "id": c.eid,
+                            "file": str(fp),
+                            "line": blk["start_line"],
+                            "resource": f"variable.{name}",
+                        })
+    elif subkind == "prod_tag_no_deletion_protection":
+        for fp, ftext in c.all_files_text.items():
+            for blk in find_blocks(ftext, RESOURCE_START):
+                btype, bname = blk["groups"]
+                if _INTENT_PROD_TAG_RE.search(blk["body"]):
+                    if _INTENT_DEL_PROT_FALSE_RE.search(blk["body"]):
+                        out.append({
+                            "id": c.eid,
+                            "file": str(fp),
+                            "line": blk["start_line"],
+                            "resource": f"{btype}.{bname}",
+                        })
+    elif subkind == "prod_tag_force_destroy":
+        for fp, ftext in c.all_files_text.items():
+            for blk in find_blocks(ftext, RESOURCE_START):
+                btype, bname = blk["groups"]
+                if _INTENT_PROD_TAG_RE.search(blk["body"]):
+                    if _INTENT_FORCE_DESTROY_TRUE_RE.search(blk["body"]):
+                        out.append({
+                            "id": c.eid,
+                            "file": str(fp),
+                            "line": blk["start_line"],
+                            "resource": f"{btype}.{bname}",
+                        })
+    return out
+
+
+@_register_corpus("graph_check")
+def _corpus_graph_check(c: CorpusCtx) -> list[dict]:
+    """``graph_check`` — cross-resource detector. The pattern names a
+    registered graph function (from ``_cross_resource._GRAPH_CHECKS``);
+    we dispatch to it with a uniform index of all resources keyed by
+    ``<type>.<name>`` → block dict.
+    """
+    fn_name = c.pat.get("function")
+    fn = _GRAPH_CHECKS.get(fn_name)
+    if not fn:
+        return []
+    out: list[dict] = []
+    for finding in fn(c.resource_index_cache, c.all_files_text):
+        finding["id"] = c.eid
+        out.append(finding)
+    return out
+
+
+@_register_corpus("registry_fingerprint")
+def _corpus_registry_fingerprint(c: CorpusCtx) -> list[dict]:
+    """``registry_fingerprint`` — module-reuse detector. A directory
+    whose resource cluster matches the shape of a public-registry
+    module (e.g. ``terraform-aws-modules/vpc/aws``). Fingerprint comes
+    from the catalogue entry's top-level ``fingerprint`` block.
+    """
+    fp = c.entry.get("fingerprint") or {}
+    if not fp:
+        return []
+    out: list[dict] = []
+    for finding in _check_registry_fingerprint(fp, c.module_clusters_cache):
+        finding["id"] = c.eid
+        out.append(finding)
+    return out
 
 
 # ---- Graph-based checks (cross-resource detection helpers) -------------

@@ -5,6 +5,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.52] — 2026-05-11
+
+**Engine refresh — R30.14 dispatch-table refactor complete.** The
+detector-engine god functions (`detect_in_file` 700 LoC, `detect_corpus`
+600 LoC with 51 `elif kind ==` branches between them) have been
+collapsed to 25-LoC dispatch loops backed by two parallel registries
+of small handler functions. No user-visible behaviour change beyond
+the latent correctness wins from R30.13 (quote-aware brace walking
+now applied uniformly via the shared helper).
+
+### Bundled engine refresh
+
+- 51 detector kinds now live as registered handlers in
+  `_INFILE_HANDLERS` (27 kinds, registered at module load via
+  `@_register_infile(kind)`) or `_CORPUS_HANDLERS` (24 kinds, via
+  `@_register_corpus(kind)`).
+- Each handler is an independently-testable function with a
+  docstring describing its catalogue contract.
+- `detect_in_file` and `detect_corpus` are now both ~25-LoC
+  dispatch loops: build the per-(entry × pat) ctx, look up the
+  handler, call it, extend findings.
+
+### Counts
+
+- Extension: v0.1.51 → **v0.1.52**.
+- `node:test` cases: 62/62 (unchanged).
+- Bundled engine pytest tests: 840/840 (unchanged — pure refactor).
+- Bundle: 1.16 MB (unchanged).
+
+---
+
 ## [0.1.51] — 2026-05-11
 
 **R30.13 follow-up — two missed migration sites in `_cross_resource.py`.**

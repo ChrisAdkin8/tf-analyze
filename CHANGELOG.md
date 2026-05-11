@@ -5,6 +5,91 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.14 — Detector dispatch table (structural) — 2026-05-11 (ext v0.1.52)
+
+**Collapses the two detector god functions into 25-LoC dispatch loops backed by 51 registered handler functions.** This was the second-largest structural item I flagged after R30.13's `_brace_walk` extraction. Each detector kind is now an independently-testable function — `detect_in_file` and `detect_corpus` no longer carry the per-kind logic inline.
+
+### What shipped
+
+- `InFileCtx` + `_INFILE_HANDLERS` + `@_register_infile(kind)` for `detect_in_file` — **27 kinds** migrated.
+- `CorpusCtx` + `_CORPUS_HANDLERS` + `@_register_corpus(kind)` for `detect_corpus` — **24 kinds** migrated.
+- Both functions are now ~25-LoC dispatch loops: build the per-(entry × pat) ctx, look up the handler, call it, extend the findings list.
+- The two functions' bodies (previously ~1300 combined LoC of elif chains) have been replaced by registry lookups; the kind-specific logic lives in 51 small functions averaging ~30 LoC each.
+
+### Why
+
+Five audit rounds (R30.8–R30.12) recommended this refactor. The 700-LoC `detect_in_file` and 600-LoC `detect_corpus` god functions were the largest remaining structural items after R30.13's `_brace_walk` extraction. They were:
+
+- Hard to read (51 elif branches sharing implicit state).
+- Hard to test in isolation (each branch was reachable only by constructing a specific catalogue entry + walking the function).
+- Hard to add to safely (a new pattern kind required slotting an elif into the right position in a chain of 27 or 24).
+- Subject to drift: every new branch tended to re-derive the same primitives (line counting, resource attribution, finding-dict construction).
+
+The dispatch table makes each kind:
+
+- **Independently testable** — `_detect_iam_policy_analysis(ctx)` takes a single `InFileCtx` and returns a list of findings. No mocking required.
+- **Order-independent** — adding a new kind doesn't slot into a chain; it registers itself.
+- **Self-documenting** — every handler has a docstring describing its catalogue contract.
+
+### Migration shape
+
+Each handler follows a uniform signature:
+
+```python
+@_register_infile("kind_name")
+def _detect_kind_name(c: InFileCtx) -> list[dict]:
+    """One-paragraph contract description."""
+    # body that returns the findings list
+```
+
+The outer dispatch is dead simple:
+
+```python
+for entry in entries:
+    eid = entry["id"]
+    for pat in entry.get("patterns", []) or []:
+        kind = pat.get("kind", "")
+        handler = _INFILE_HANDLERS.get(kind)
+        if handler is None:
+            continue
+        ctx = InFileCtx(file_path=..., text=..., ..., entry=entry, eid=eid, pat=pat)
+        findings.extend(handler(ctx))
+```
+
+### Commits (7 batches)
+
+| Commit | Branches migrated | Notes |
+|---|---|---|
+| `f31e5ec` | Scaffolding + 2 pilots | `resource_present`, `data_source_present` |
+| `668925e` | 7 medium | `resource_arg`, `resource_missing_arg`, `resource_body_contains`, `hcl_attr`, `module_block_missing_arg`, `moved_block_present`, `removed_block_present` |
+| `083cf5e` | 10 variable/output/count | Including `count_index_in_name`, `ignore_changes_overuse` (the most complex in this batch) |
+| `f819710` | 4 `brace_walk` consumers | `iam_policy_analysis`, `helm_set_value`, `iam_json_policy_analysis`, `firewall_open_port` |
+| `e2c3cd9` | `grep` (final in-file) | + dispatch-loop cleanup |
+| `bb5e76c` | Corpus scaffolding | `CorpusCtx` + `_CORPUS_HANDLERS` + dispatch hook |
+| (this) | 24 corpus | All 24 kinds + dead elif chain removal |
+
+### Counts
+
+- Pytest: 840/840 (unchanged — pure refactor; behaviour preserved on every existing fixture).
+- Extension `node:test`: 62/62 (unchanged).
+- Self-test fixtures: 238/238 positive + 146/146 clean.
+- Terragoat snapshot: in sync.
+- LoC: `detect.py` is now ~4800 LoC. The reduction is offset by the addition of 51 handler functions with full docstrings (averaging ~30 LoC each = ~1500 LoC), so the absolute line count is similar to before R30.14 — but the structural improvement is large: 51 independently-testable handlers replace 1300 LoC of elif chains.
+- Total `elif kind ==` arms in `detect.py`: 51 → **0**.
+- Extension: v0.1.51 → **v0.1.52**.
+
+### Structural takeaway
+
+After R30.13 (brace_walk) + R30.14 (dispatch table), the two largest structural items every prior audit round had flagged are closed. `detect.py` is still 4,800 LoC but the shape is now:
+
+1. ~3,000 LoC of detector handlers (51 small functions, each with a docstring).
+2. ~600 LoC of corpus walkers and shared setup (`_extract_var_defaults_by_dir`, `_build_sensitive_var_index`, `_build_module_dirs`, plus the dispatch loops).
+3. ~1,200 LoC of CLI handling (argparse, mode dispatch, output emission).
+
+The natural next move (a hypothetical R30.15 — not on the roadmap now) would be to extract the handler bundles into their own files (`detect_handlers/security.py`, `detect_handlers/robustness.py`, etc.) for further organisation. But that's organisational, not structural; the bug class that the god functions enabled is already closed.
+
+---
+
 ## Round 30.13.1 — `_brace_walk` extraction follow-up — 2026-05-11 (ext v0.1.51)
 
 **Single finding from the R30.13 regression-of-fix audit.** The focused regression check on the R30.13 extraction surfaced two more inline brace walkers in `scripts/_cross_resource.py` that the inventory missed (they live in a different module from the 13 catalogued sites). The follow-up audit was otherwise clean — every migrated site preserves behaviour and the helper's contract is well-tested by the new `TestBraceWalk` cases.
