@@ -24,6 +24,7 @@ COPY scripts/_output.py scripts/_output.py
 COPY scripts/_cross_resource.py scripts/_cross_resource.py
 COPY scripts/_lsp.py scripts/_lsp.py
 COPY scripts/_threat_intel.py scripts/_threat_intel.py
+COPY scripts/_blast_radius.py scripts/_blast_radius.py
 COPY catalog/ catalog/
 
 # Web app — keep `demo/` layout so app.py's `Path(__file__).parent.parent`

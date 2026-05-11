@@ -429,6 +429,15 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
             result_tags.append("exploitability:kev")
             if f.get("exploitability_score"):
                 result_props["epss_score"] = f["exploitability_score"]
+        # R30.17 — per-finding blast radius, populated when the engine
+        # ran with --attack-graph. SARIF consumers (GitHub Code Scanning,
+        # Sonatype, internal dashboards) can rank or filter by downstream
+        # impact independently of urgency: a HIGH finding on a leaf
+        # resource is less urgent on apply than a MEDIUM on a 30-downstream
+        # VPC.
+        if "blast_radius" in f and f["blast_radius"]:
+            result_props = result.setdefault("properties", {})
+            result_props["blastRadius"] = int(f["blast_radius"])
         results.append(result)
 
     taxonomies = _sarif_taxonomies(entries)
@@ -1601,6 +1610,22 @@ def to_html(
         )
         graph_tab_style = "display:none"
         graph_panel_html = _render_graph_html(graph)
+        # R30.17 — Append a blast-radius table to the Attack Graph tab so
+        # the SRE persona (the one who cares which resource a typo would
+        # destroy) lands on the answer beside the visual graph that shows
+        # *why*. Self-contained HTML; only fires when there are
+        # non-leaf nodes (top_blast_radius_resources filters min_radius=1).
+        try:
+            from _blast_radius import (
+                compute_blast_radius,
+                top_blast_radius_resources,
+                render_blast_radius_html,
+            )
+            _blast_map = compute_blast_radius(graph)
+            _blast_top = top_blast_radius_resources(graph, _blast_map, top_n=10)
+            graph_panel_html += render_blast_radius_html(_blast_top)
+        except ImportError:
+            pass  # blast-radius is opt-in alongside attack-graph
         tab_js = (
             "<script>"
             "function showTab(name,btn){"

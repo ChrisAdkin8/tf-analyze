@@ -1,0 +1,99 @@
+id: ROB-COUNTNAME-001
+title: "Resource external name embeds count.index — renumber-risk on apply"
+section: robustness
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1485"
+cwe:
+  - "CWE-1188"
+d3fend:
+  - "D3-CSPP"
+nist_csf:
+  - "PR.IP-3"
+nist_800_53:
+  - "CM-6"
+  - "SI-7"
+csa_ccm:
+  - "CCC-04"
+slsa:
+  - "source"
+patterns:
+  - kind: count_index_in_name
+    description: |
+      Resource declares ``count = N`` AND has a name-like attribute
+      (``name``, ``bucket``, ``identifier``, ``hostname``,
+      ``db_name``, ``instance_name``, ``cluster_identifier``,
+      ``function_name``, ``topic_name``, ``queue_name``,
+      ``table_name``, ``role_name``, ``user_name``,
+      ``repository_name``, ``key_name``) whose value interpolates
+      ``${count.index}`` or ``count.index``. Changing ``count``
+      from N to M (with M < N) destroys instance ``[M..N-1]``;
+      reordering destroys-and-recreates every instance whose
+      index shifts. The external name encodes that index, so
+      Terraform can't even rebuild the same resource on a different
+      slot — the apply *will* destroy real infrastructure.
+recommendation: |
+  Migrate to ``for_each`` with a stable map/set key derived from
+  business identity rather than positional index:
+
+      # Before — renumber-fragile:
+      resource "aws_instance" "web" {
+        count         = 3
+        ami           = data.aws_ami.al2.id
+        instance_type = "t3.micro"
+        tags          = { Name = "web-${count.index}" }
+      }
+
+      # After — stable identity:
+      resource "aws_instance" "web" {
+        for_each      = toset(["alpha", "beta", "gamma"])
+        ami           = data.aws_ami.al2.id
+        instance_type = "t3.micro"
+        tags          = { Name = "web-${each.key}" }
+      }
+
+  After ``for_each``, removing ``"beta"`` only destroys
+  ``aws_instance.web["beta"]``. The other two instances retain
+  their state addresses *and* their external names. With the
+  count form, removing one in the middle destroys-and-recreates
+  every instance with a higher index.
+
+  If the resource is already deployed and you can't migrate
+  without a destroy, add ``lifecycle.prevent_destroy = true`` as
+  a tripwire and use ``terraform state mv`` for any index
+  reordering. Both are operational toil — for_each is the
+  durable fix.
+verification: |
+  Run ``terraform plan`` after a one-line count decrement (e.g.
+  ``count = N`` → ``count = N - 1``). If the plan says ``destroy``
+  for instances beyond the new count *and* the external name
+  embedded ``count.index``, the rule fires correctly.
+
+  Confirm the migration target by running plan against the
+  ``for_each`` form with the same set membership — Terraform should
+  produce zero changes.
+fix_disruption: forces_replacement
+fix_disruption_note: |
+  The migration itself requires ``moved`` blocks or
+  ``terraform state mv`` to remap ``aws_x.foo[0]`` → ``aws_x.foo["alpha"]``
+  for every existing instance, or Terraform will plan-destroy
+  everything and rebuild. The blocks below cover a 3-instance
+  example; generate one ``moved`` per existing instance::
+
+      moved {
+        from = aws_instance.web[0]
+        to   = aws_instance.web["alpha"]
+      }
+
+related:
+  - ROB-COUNT-001
+  - ROB-COUNT-002
+  - ROB-COUNTREF-001
+  - ROB-FOREACH-001
+  - ROB-FOREACH-002
+applies_when:
+  terraform: ">= 0.12"
+fixtures:
+  - rob_countname

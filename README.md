@@ -118,6 +118,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | **`--mode drift` against `terraform show -json state.tfstate`** | ✅ | ❌ | ❌ | ⚠️ live API only |
 | **Compliance PDF export for CISOs** (`--pdf-output`) | ✅ | ❌ | ❌ | ❌ |
 | **Public web scanner** (paste a GitHub URL, get a permalink) | ✅ ([tfanalyze.com/scan/&lt;owner&gt;/&lt;repo&gt;](https://tfanalyze.com)) | ❌ | ❌ | ❌ |
+| **Blast-radius analysis** — "what could one `terraform apply` destroy?" | ✅ (`--blast-radius`; per-finding + per-node + top-N) | ❌ | ❌ | ❌ |
 | OSCAL Assessment Results JSON output | ✅ | ❌ | ❌ | ❌ |
 | Compliance frameworks shipped (with real per-rule data) | **13** (CIS, PCI-DSS, SOC 2, OWASP IaC, NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA, OWASP Top 10 / API / CICD / LLM / K8s / ASVS) | 1 (CIS) | 6 | 5 |
 | Baseline ratcheting (`--baseline prior.json`) | ✅ | ⚠️ via filter | ✅ | ❌ |

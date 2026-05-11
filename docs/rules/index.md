@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**237 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**238 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -56,7 +56,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`OPS-GCP-LABELS-001`](./OPS-GCP-LABELS-001.md) | MEDIUM | GCP resource missing labels block |
 | [`OPS-AWS-CWL-001`](./OPS-AWS-CWL-001.md) | LOW | CloudWatch log group has no retention policy |
 
-## robustness (43)
+## robustness (44)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -68,6 +68,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-AWS-RDS-002`](./ROB-AWS-RDS-002.md) | HIGH | RDS instance or Aurora cluster skips final snapshot on deletion |
 | [`ROB-AWS-RDS-003`](./ROB-AWS-RDS-003.md) | HIGH | RDS instance or Aurora cluster missing deletion protection |
 | [`ROB-AZURE-LIFECYCLE-001`](./ROB-AZURE-LIFECYCLE-001.md) | HIGH | Stateful Azure resource missing lifecycle.prevent_destroy |
+| [`ROB-COUNTNAME-001`](./ROB-COUNTNAME-001.md) | HIGH | Resource external name embeds count.index — renumber-risk on apply |
 | [`ROB-COUNTREF-002`](./ROB-COUNTREF-002.md) | HIGH | Unguarded indexed reference to count = length(...) resource |
 | [`ROB-DRIFT-001`](./ROB-DRIFT-001.md) | HIGH | Resource uses ignore_changes = all |
 | [`ROB-FOREACH-002`](./ROB-FOREACH-002.md) | HIGH | for_each keyset is derived from another resource's attributes (apply-flicker) |

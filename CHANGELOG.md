@@ -5,6 +5,45 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.4 — Blast-radius analysis + renumber-risk rule — 2026-05-11 (R30.15 + R30.16 + R30.17)
+
+**Three changes that compound: the unified score badge route at `tfanalyze.com/badge/<owner>/<repo>.svg` (R30.15, prior commit), the paste-and-scan demo UI surfacing score + top-fixes + module-reuse alongside the attack graph (R30.16, prior commit), and blast-radius analysis + a new producer-side count.index rule that together answer the SRE question no other static IaC scanner answers: "what could a single `terraform apply` destroy?"**
+
+### R30.17 — Blast radius (`scripts/_blast_radius.py` + `--blast-radius`)
+
+A BFS over the attack-graph DAG counts distinct downstream resources for each node. Same edge direction works for both attack propagation (compromise spreads downward) and destroy propagation (`aws_vpc` going away breaks `aws_subnet`), so no second graph is needed.
+
+Three surfaces in the JSON output:
+
+* `output.blast_radius` — top-N (default 10) sorted by downstream count; synthetic INTERNET node and zero-blast leaves filtered; deterministic tie-break on resource id.
+* `output.graph.nodes[i].blast_radius` — every node carries the integer; demo UI scales D3 node radius by it.
+* `f.blast_radius` per finding — downstream count for the resource that finding cites. SARIF `properties.blastRadius` propagates this so GitHub Code Scanning consumers can rank by impact orthogonally to urgency.
+
+Text format gates the section on `--blast-radius` (avoid PR-log noise); HTML always appends a heat-coloured table to the Attack Graph tab when the graph is built.
+
+### R30.17 — ROB-COUNTNAME-001 — Resource external name embeds `count.index`
+
+Companion to `ROB-COUNTREF-001` (consumer side). Fires when a resource declares `count = N` *and* a name-like attribute (`name`, `bucket`, `Name` tag, `identifier`, `hostname`, `db_name`, `instance_name`, `cluster_identifier`, `function_name`, `topic_name`, `queue_name`, `table_name`, `role_name`, `user_name`, `repository_name`, `key_name`) interpolates `count.index`. The external name encodes the positional index, so decrementing `count` destroys real infrastructure — Terraform can't even rebuild on a different slot. Default urgency HIGH; recommends migration to `for_each` with stable string keys + `moved` blocks for state remap.
+
+### Numbers
+
+| Metric                       | Pre-R30.4 | Post-R30.4 | Δ |
+|------------------------------|-----------|------------|----|
+| Active rules                 | 215       | **216**    | +1 (ROB-COUNTNAME-001) |
+| Pattern kinds in engine      | 36        | **37**     | +1 (`count_index_in_name`) |
+| Pytest cases                 | 789       | **811**    | +22 (14 blast-radius unit + 5 countname + 3 demo regressions) |
+| Engine modules in scripts/   | 11        | **12**     | +1 (`_blast_radius.py`) |
+| JSON output keys (when --attack-graph) | summary, findings, graph, score_explanation | + **`blast_radius`** | +1 |
+
+### What's already covered (no new rule needed)
+
+* **`prevent_destroy` missing on stateful resources** — `ROB-AWS-LIFECYCLE-001`, `ROB-AZURE-LIFECYCLE-001`, `ROB-GCP-LIFECYCLE-001` already span 18 stateful types across RDS, S3, ElastiCache, Spanner, Cloud SQL, GCS, Compute Disk, Key Vault, MSSQL/MySQL/PostgreSQL, Azure Storage.
+* **Mixed backend types across modules (S3 vs. GCS vs. local)** — `ROB-BACKEND-001` (`kind: backend_inconsistency`) already fires when modules don't agree on a backend.
+
+Design note + integration-surface advice at [`docs/blast-radius.md`](docs/blast-radius.md).
+
+---
+
 ## Round 30.3 — Public web scanner + drift mode + compliance PDF + composition flags + `fix_hcl_minimal` — 2026-05-11 (R30.10 + R30.11 + R30.12 + R30.13 + R30.14)
 
 **Six paired changes ship together: the load-bearing public-scanner permalink that turns every share into an organic referral, the drift mode that finally separates "HCL intent" from "deployed reality" for oncalls, the CISO-targetable compliance PDF, the `--apply-fixes × --baseline` and `--mode diff × --baseline` compositions that close the "snapshot today, fix only new stuff" UX, and the `fix_hcl_minimal` catalogue field that makes the auto-patcher robust on complex rules.**

@@ -43,6 +43,7 @@ Pattern kinds supported:
     output_sensitive_leak     output referencing sensitive var without sensitive=true
     cross_module              sensitive var passed to child module input not marked sensitive
     count_index_ref           unguarded [0] reference to count-conditional resource
+    count_index_in_name       resource external name embeds count.index (renumber risk)
     count_bool_pattern        count = var.x ? 1 : 0 (should use for_each)
     backend_inconsistency     multiple backend blocks with different types
     templatefile_sensitive_leak  templatefile() call referencing sensitive var
@@ -1143,6 +1144,52 @@ def detect_in_file(
                                             "resource": ref_parts,
                                         }
                                     )
+            elif kind == "count_index_in_name":
+                # R30.17 — flag resources where ``count = N`` AND a
+                # name-like attribute interpolates ``count.index``. The
+                # external name encodes the positional index, so
+                # decrementing count destroys real infrastructure
+                # (Terraform can't even rebuild on a different slot
+                # because the external name embeds the old index).
+                # Companion to ROB-COUNTREF-001 (consumer-side guard).
+                _NAME_LIKE = (
+                    "name", "bucket", "identifier", "hostname",
+                    "db_name", "instance_name", "cluster_identifier",
+                    "function_name", "topic_name", "queue_name",
+                    "table_name", "role_name", "user_name",
+                    "repository_name", "key_name",
+                )
+                # Match `<name-like> = <value-containing-count.index>` in
+                # any position inside the resource body — handles both
+                # block-attribute form (``name = "x-${count.index}"`` on
+                # its own line) and inline-map form
+                # (``tags = { Name = "x-${count.index}" }``). The negated
+                # char class confines the match to a single attribute
+                # value (stops at `,`, `}`, or newline) so we don't
+                # straddle attribute boundaries. Case-insensitive
+                # because the Name tag key is what AWS Console shows
+                # as the deployed identity for many resource types.
+                _name_re = re.compile(
+                    r'\b(' + "|".join(_NAME_LIKE) + r')\s*=\s*'
+                    r'[^,}\n]*?count\.index[^,}\n]*',
+                    re.IGNORECASE,
+                )
+                for blk in resources:
+                    if not block_has_arg(blk["body"], "count"):
+                        continue
+                    btype, bname = blk["groups"]
+                    body = blk["body"]
+                    m = _name_re.search(body)
+                    if m:
+                        # Map the byte offset to an absolute file line.
+                        preceding = body[:m.start()]
+                        line_no = blk["start_line"] + preceding.count("\n")
+                        findings.append({
+                            "id": eid,
+                            "file": str(file_path),
+                            "line": line_no,
+                            "resource": f"{btype}.{bname}",
+                        })
             elif kind == "count_bool_pattern":
                 # Detect count = <expr> ? 1 : 0 on resources and modules
                 for blk in resources:
@@ -4283,6 +4330,20 @@ def main():
         ),
     )
     ap.add_argument(
+        "--blast-radius",
+        action="store_true",
+        default=False,
+        help=(
+            "Surface the top-N resources sorted by downstream blast "
+            "radius — 'what would a single terraform apply destroy?'. "
+            "Implied by --attack-graph; this flag adds a dedicated text "
+            "table when --format text. JSON output always carries the "
+            "`blast_radius` block when the attack graph is built. "
+            "Findings on high-blast-radius resources also carry a "
+            "per-finding `blast_radius` integer."
+        ),
+    )
+    ap.add_argument(
         "--rank-by",
         choices=["urgency", "exploitability", "hybrid"],
         default="urgency",
@@ -4981,6 +5042,7 @@ def main():
 
     # Build attack graph when requested (consumes all_text + findings)
     attack_graph: dict | None = None
+    blast_radius_top: list[dict] = []
     if getattr(args, "attack_graph", False):
         _ri_for_graph = _build_resource_index(all_text)
         attack_graph = build_attack_graph(_ri_for_graph, findings)
@@ -4992,6 +5054,31 @@ def main():
             file=sys.stderr,
         )
         _apply_reachability_urgency(findings, attack_graph, {e["id"]: e for e in entries})
+        # R30.17 — Blast-radius traversal reuses the attack-graph DAG.
+        # Same edge direction works for both attack propagation and
+        # destroy propagation: aws_vpc → aws_subnet means VPC compromise
+        # spreads to subnet AND VPC destruction breaks subnet. Annotate
+        # findings + build a top-N report; JSON always carries it.
+        from _blast_radius import (
+            compute_blast_radius,
+            annotate_findings_with_blast_radius,
+            top_blast_radius_resources,
+        )
+        _blast = compute_blast_radius(attack_graph)
+        annotate_findings_with_blast_radius(findings, _blast)
+        # Decorate each graph node so the demo UI / VS Code attack-graph
+        # panel can scale node radius by downstream impact without a
+        # second top-N lookup. Keeps JSON shape backwards-compatible —
+        # consumers that ignore the field see no change.
+        for _node in attack_graph.get("nodes") or []:
+            _node["blast_radius"] = int(_blast.get(_node.get("id", ""), 0))
+        blast_radius_top = top_blast_radius_resources(attack_graph, _blast, top_n=10)
+        if blast_radius_top:
+            print(
+                f"# blast radius: top resource '{blast_radius_top[0]['resource']}' "
+                f"affects {blast_radius_top[0]['blast_radius']} downstream",
+                file=sys.stderr,
+            )
 
     # Fix centrality scoring (requires attack graph)
     centrality_scores: list[dict] | None = None
@@ -5193,6 +5280,8 @@ def main():
             }
             if attack_graph:
                 output["graph"] = attack_graph
+            if blast_radius_top:
+                output["blast_radius"] = blast_radius_top
             if getattr(args, "explain_score", False):
                 output["score_explanation"] = explain_score(findings, summary)
             _emit(json.dumps(output, indent=2))
@@ -5238,6 +5327,9 @@ def main():
             if attack_graph:
                 _emit("\n## Attack Graph\n")
                 _emit(graph_to_mermaid(attack_graph))
+            if blast_radius_top and getattr(args, "blast_radius", False):
+                from _blast_radius import render_blast_radius_text
+                _emit("\n" + render_blast_radius_text(blast_radius_top))
             if compliance_report and args.format == "text":
                 _emit("\n")
                 _emit(_render_compliance_text(compliance_report))
@@ -5260,6 +5352,8 @@ def main():
                 output_data["suppressed_by_baseline"] = suppressed_by_baseline
             if attack_graph:
                 output_data["graph"] = attack_graph
+            if blast_radius_top:
+                output_data["blast_radius"] = blast_radius_top
             if score_explanation:
                 output_data["score_explanation"] = score_explanation
             _emit(json.dumps(output_data, indent=2))
@@ -5337,6 +5431,9 @@ def main():
             if attack_graph:
                 _emit("\n## Attack Graph\n")
                 _emit(graph_to_mermaid(attack_graph))
+            if blast_radius_top and getattr(args, "blast_radius", False):
+                from _blast_radius import render_blast_radius_text
+                _emit("\n" + render_blast_radius_text(blast_radius_top))
             if compliance_report and args.format == "text":
                 _emit("\n")
                 _emit(_render_compliance_text(compliance_report))

@@ -89,6 +89,16 @@
   .mod-reuse-row .mod-reuse-recommendation { display: none; margin-top: 6px; padding: 6px 8px; background: #0d1b2a; border-radius: 3px; font-family: monospace; font-size: 10.5px; white-space: pre-wrap; color: #a8cc8c; }
   .mod-reuse-row.expanded .mod-reuse-recommendation { display: block; }
 
+  /* Blast radius — answers "what would a single terraform apply destroy?".
+     SRE/oncall view; uses the same DAG as the attack graph. */
+  #blast-radius-section { padding: 10px 14px; border-bottom: 1px solid #0f3460; background: #0f1a2e; }
+  #blast-radius-section .section-title { font-size: 11px; font-weight: 600; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .blast-row { display: flex; gap: 8px; font-size: 11px; padding: 3px 0; align-items: center; }
+  .blast-radius-bar { background: #1a2a4e; height: 14px; border-radius: 2px; flex: 1; position: relative; overflow: hidden; }
+  .blast-radius-fill { background: linear-gradient(90deg, #fef3c7, #fb923c, #ef4444); height: 100%; border-radius: 2px; transition: width 0.3s ease; }
+  .blast-radius-count { font-family: monospace; font-size: 11px; color: #fbbf24; font-weight: 600; min-width: 28px; text-align: right; }
+  .blast-row .blast-resource { font-family: monospace; font-size: 10.5px; color: #e0e0e0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* Collapsed group for non-MOD-REUSE INFO findings (style/format/etc). */
   #info-group-section { padding: 10px 14px; border-top: 1px solid #0f3460; background: #0f1a2e; cursor: pointer; }
   #info-group-section .section-title { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -127,6 +137,7 @@
     <div class="panel-body">
       <div id="score-banner" style="display:none"></div>
       <div id="top-fixes-section" style="display:none"></div>
+      <div id="blast-radius-section" style="display:none"></div>
       <div id="module-reuse-section" style="display:none"></div>
       <div id="findings-list"><div id="empty-state">Run a scan to see findings</div></div>
       <div id="info-group-section" style="display:none" onclick="this.classList.toggle('expanded')">
@@ -267,6 +278,7 @@ function renderScanResult(data) {
   const explanation = data.score_explanation ?? {};
   renderScoreBanner(summary);
   renderTopFixes(explanation.top ?? []);
+  renderBlastRadius(data.blast_radius ?? []);
   // Module-reuse findings carry urgency=LOW but live in their own section.
   // INFO is reserved for style/format hints; collapse those so they don't
   // crowd the actionable security findings.
@@ -306,6 +318,24 @@ function renderTopFixes(top) {
     </div>`).join('');
   el.style.display = 'block';
   el.innerHTML = `<div class="section-title">Top fixes by score impact</div>${rows}`;
+}
+
+function renderBlastRadius(top) {
+  const el = document.getElementById('blast-radius-section');
+  if (!top.length) { el.style.display = 'none'; return; }
+  const max = Math.max(...top.map(r => r.blast_radius), 1);
+  el.style.display = 'block';
+  el.innerHTML = `<div class="section-title">🌊 Blast radius — what one apply could touch</div>` +
+    top.slice(0, 5).map(r => {
+      const pct = Math.round((r.blast_radius / max) * 100);
+      const flag = r.is_crown_jewel ? ' 💎' : r.internet_reachable ? ' 🌐' : '';
+      return `
+      <div class="blast-row" title="${r.resource} affects ${r.blast_radius} downstream resource(s)">
+        <span class="blast-resource">${r.resource.split('.').slice(-1)[0]}${flag}</span>
+        <span class="blast-radius-bar"><span class="blast-radius-fill" style="width:${pct}%"></span></span>
+        <span class="blast-radius-count">${r.blast_radius}</span>
+      </div>`;
+    }).join('');
 }
 
 function renderModuleReuse(findings) {
@@ -396,9 +426,15 @@ function renderGraph(graph) {
       .on('drag',(e,d)=>{ d.fx=e.x; d.fy=e.y; })
       .on('end',(e,d)=>{ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
 
+  // Scale node radius by blast radius so the SRE eye lands on the
+  // resources whose destruction would cascade furthest. Capped so a
+  // single mega-blast doesn't dwarf everything else.
+  const maxBlast = Math.max(1, ...nodes.map(n => n.blast_radius || 0));
   node.each(function(d) {
     const g = d3.select(this);
-    const r = d.is_crown_jewel ? 14 : 9;
+    const base = d.is_crown_jewel ? 14 : 9;
+    const blastBonus = Math.round(((d.blast_radius || 0) / maxBlast) * 6);
+    const r = base + blastBonus;
     const c = COLOR[d.type]||COLOR.unknown;
     if (d.internet_reachable) g.append('circle').attr('r',r+5).attr('fill','none').attr('stroke',c).attr('stroke-width',1.5).attr('stroke-dasharray','4,3').attr('class','inet-ring');
     if (d.is_crown_jewel) g.append('circle').attr('r',r+3).attr('fill','none').attr('stroke','#b8860b').attr('stroke-width',1.5);
