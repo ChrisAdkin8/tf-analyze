@@ -427,6 +427,71 @@ def _resource_is_count_zero(body: str, var_defaults: dict) -> bool:
 
 # ---- Detection ----------------------------------------------------------
 
+# ---- Detector dispatch (Round 30.14) ------------------------------------
+# Two parallel registries replace the 27 + 24 = 51 ``elif kind == "..."``
+# branches that previously lived inside ``detect_in_file`` and
+# ``detect_corpus``. Each pattern kind now has a dedicated handler that
+# takes a ``ctx`` carrying the loop-invariant state, returns the findings
+# it produced. The outer function keeps the corpus walks and shared setup
+# but the per-kind logic is a registered function — independently
+# testable, independently swappable, and far easier to reason about than
+# a 700-LoC ``elif`` chain.
+#
+# Migration is incremental: the dispatch table is consulted FIRST; if no
+# handler is registered for a kind, control falls through to the legacy
+# elif chain. That lets each branch be migrated one at a time with tests
+# passing at every step.
+
+from dataclasses import dataclass
+from typing import Callable as _Callable
+
+
+@dataclass
+class InFileCtx:
+    """Per-(entry × pat) state for in-file detector handlers.
+
+    Built once per (entry, pat) tuple inside :func:`detect_in_file`'s
+    loop, then passed to the handler registered under the pat's
+    ``kind`` key. Handlers return their findings; the outer loop
+    collects them via ``findings.extend(handler(ctx))``.
+    """
+    file_path: Path
+    text: str
+    var_defaults: dict
+    resources: list[dict]
+    modules: list[dict]
+    variables: list[dict]
+    entry: dict
+    eid: str
+    pat: dict
+
+
+_INFILE_HANDLERS: dict[str, _Callable[["InFileCtx"], list[dict]]] = {}
+
+
+def _register_infile(kind: str):
+    """Register a handler for the given in-file pattern ``kind``.
+
+    Used as a decorator::
+
+        @_register_infile("resource_present")
+        def _detect_resource_present(c: InFileCtx) -> list[dict]: ...
+
+    Duplicate registrations raise — the catalogue's ``kind`` values are
+    a small, deliberately-curated set, and a typo is worth surfacing
+    at module load rather than letting one handler silently shadow
+    another.
+    """
+    def deco(fn):
+        if kind in _INFILE_HANDLERS:
+            raise RuntimeError(
+                f"duplicate in-file handler registration for kind={kind!r}"
+            )
+        _INFILE_HANDLERS[kind] = fn
+        return fn
+    return deco
+
+
 def detect_in_file(
     file_path: Path,
     text: str,
@@ -455,6 +520,25 @@ def detect_in_file(
         eid = entry["id"]
         for pat in entry.get("patterns", []) or []:
             kind = pat.get("kind", "")
+            # Round 30.14 — registry dispatch FIRST; falls through to
+            # the legacy `elif` chain when no handler is registered.
+            # Each kind that gets migrated below is removed from the
+            # elif chain, so over time the chain shrinks to zero.
+            _handler = _INFILE_HANDLERS.get(kind)
+            if _handler is not None:
+                _ctx = InFileCtx(
+                    file_path=file_path,
+                    text=text,
+                    var_defaults=_vd,
+                    resources=resources,
+                    modules=modules,
+                    variables=variables,
+                    entry=entry,
+                    eid=eid,
+                    pat=pat,
+                )
+                findings.extend(_handler(_ctx))
+                continue
             if kind == "grep":
                 if "regex" not in pat:
                     continue
@@ -637,34 +721,8 @@ def detect_in_file(
                                 "resource": f"{btype}.{bname}",
                             }
                         )
-            elif kind == "resource_present":
-                if "resource" not in pat:
-                    continue
-                rt = pat["resource"]
-                for blk in resources:
-                    if blk["groups"][0] == rt:
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
-                            }
-                        )
-            elif kind == "data_source_present":
-                if "data_source" not in pat:
-                    continue
-                dt = pat["data_source"]
-                for blk in find_blocks(text, DATA_START):
-                    if blk["groups"][0] == dt:
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"data.{blk['groups'][0]}.{blk['groups'][1]}",
-                            }
-                        )
+            # `resource_present` and `data_source_present` migrated to
+            # `_INFILE_HANDLERS`. See the registered handlers below.
             elif kind == "iam_policy_analysis":
                 # Walk every `data "aws_iam_policy_document"` block, then each
                 # nested `statement { ... }`. The pattern's `check` field
@@ -1364,6 +1422,65 @@ def detect_in_file(
                         )
             # corpus-level kinds handled in detect_corpus
     return findings
+
+
+# ---- In-file detector handlers (Round 30.14 dispatch table) -------------
+# Each handler below was previously an ``elif kind == "..."`` arm inside
+# the loop above. Migrating to a registered handler:
+#   * Makes each kind independently testable (one handler, one input ctx,
+#     one return list of findings).
+#   * Removes the implicit dependency on positional order in the elif
+#     chain — a registry lookup is order-independent.
+#   * Shrinks ``detect_in_file`` itself to the corpus-walk setup +
+#     dispatch loop, with the 27+ branches now small functions.
+#
+# Migration is incremental — the legacy elif chain still handles any
+# kind not yet migrated. Each PR can move 1+ kinds at a time with the
+# tests passing throughout.
+
+
+@_register_infile("resource_present")
+def _detect_resource_present(c: InFileCtx) -> list[dict]:
+    """``resource_present`` — emit a finding for every resource block
+    whose type matches ``pat["resource"]``. Used by catalogue rules
+    that flag the mere presence of a forbidden resource type
+    (e.g. ``aws_s3_bucket_public_access_block`` defaulting to permissive).
+    """
+    rt = c.pat.get("resource")
+    if not rt:
+        return []
+    out: list[dict] = []
+    for blk in c.resources:
+        if blk["groups"][0] == rt:
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
+            })
+    return out
+
+
+@_register_infile("data_source_present")
+def _detect_data_source_present(c: InFileCtx) -> list[dict]:
+    """``data_source_present`` — same shape as ``resource_present`` but
+    for ``data "..." "..." { ... }`` blocks. Catalogue rules use this
+    to flag data sources that read sensitive material into state
+    (e.g. ``data "aws_secretsmanager_secret_version"``).
+    """
+    dt = c.pat.get("data_source")
+    if not dt:
+        return []
+    out: list[dict] = []
+    for blk in find_blocks(c.text, DATA_START):
+        if blk["groups"][0] == dt:
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"data.{blk['groups'][0]}.{blk['groups'][1]}",
+            })
+    return out
 
 
 OUTPUT_START = re.compile(r'^\s*output\s+"([\w-]+)"\s*\{', re.MULTILINE)
