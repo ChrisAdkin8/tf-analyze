@@ -6,6 +6,7 @@
 
 > Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE ATT&CK mapping, and one-click PR fix suggestions. **Drop into CI in under 5 minutes.**
 
+<!-- Status row — is this project alive? -->
 [![CI](https://github.com/ChrisAdkin8/tf-analyze/actions/workflows/ci.yml/badge.svg)](https://github.com/ChrisAdkin8/tf-analyze/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/ChrisAdkin8/tf-analyze?include_prereleases&sort=semver)](https://github.com/ChrisAdkin8/tf-analyze/releases)
 [![GitHub Marketplace](https://img.shields.io/badge/marketplace-tf--analyze-blue?logo=githubactions)](https://github.com/marketplace/actions/tf-analyze)
@@ -13,19 +14,20 @@
 [![Open VSX](https://img.shields.io/open-vsx/v/tfanalyze/tf-analyze?label=open%20vsx&logo=eclipseide)](https://open-vsx.org/extension/tfanalyze/tf-analyze)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/ChrisAdkin8/tf-analyze/pkgs/container/tf-analyze)
 [![tf-analyze score](https://tfanalyze.com/badge/ChrisAdkin8/tf-analyze.svg)](https://tfanalyze.com/scan/ChrisAdkin8/tf-analyze)
+![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
+<!-- Content row — what does it cover? -->
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 238](https://img.shields.io/badge/rules-238-brightgreen)
 ![fix_hcl: 89%](https://img.shields.io/badge/fix__hcl-89%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
-![Tests: 840](https://img.shields.io/badge/tests-840%20passing-brightgreen)
+![Tests: 844](https://img.shields.io/badge/tests-844%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-238%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
-![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
 
-**[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Repo layout](#repository-layout)**
+**[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Integrations](#integrations) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Demo corpora](#demo-corpora--examples) · [Repo layout](#repository-layout) · [Contributing](#contributing--maintenance) · [Provenance](#provenance) · [License](#license)**
 
-`tf-analyze` runs as a Claude Code skill (`/tf-analyze`), as a standalone Python CLI, as a GitHub Action, in a Docker container, as a pre-commit hook, as an LSP server, as a VS Code extension, as an HCP Terraform Run Task, as an [MCP server](integrations/mcp-server/) for any AI agent (Cursor, Claude Desktop, Continue.dev, …), and as a [native Terraform provider](terraform-provider/) (`data "tfanalyze_scan"`). Same engine, ten surfaces.
+Same engine, ten surfaces — Claude Code skill, Python CLI, GitHub Action, Docker, pre-commit hook, LSP server, VS Code extension, HCP Run Task, [MCP server](integrations/mcp-server/) for AI agents, [native Terraform provider](terraform-provider/). Pick the one that fits your workflow; the rule catalogue, score, and `fix_hcl` are identical across all of them.
 
 ---
 
@@ -71,7 +73,7 @@ Live diagnostics, Quick Fix, attack graph, Module Reuse Advisor, and a `vscode:/
 code --install-extension tfanalyze.tf-analyze
 
 # Or from a downloaded .vsix (current path until the Marketplace listing publishes)
-code --install-extension tf-analyze-0.1.39.vsix
+code --install-extension tf-analyze-0.1.53.vsix
 ```
 
 Open any Terraform workspace and the six status-bar shortcuts appear bottom-left:
@@ -102,6 +104,20 @@ See [`integrations/github-action.yml`](integrations/github-action.yml) for the f
 
 A scanner is only as good as the actions it provokes. Where comparable tools stop at "here is a finding", `tf-analyze` ranks findings by attack-path centrality, ships an HCL fix, and surfaces the adversarial scenario on hover.
 
+### The six things only tf-analyze ships
+
+| | tf-analyze | tfsec | checkov | Prowler |
+|---|---|---|---|---|
+| Attack-path graph promoting findings on the critical path | ✅ | ❌ | ❌ | ❌ |
+| Blast-radius analysis (`--blast-radius`; per-finding + top-N) | ✅ | ❌ | ❌ | ❌ |
+| CISA KEV + FIRST.org EPSS exploitability ranking (`--rank-by`) | ✅ | ❌ | ❌ | ❌ |
+| Drift mode against `terraform show -json state.tfstate` | ✅ | ❌ | ❌ | ⚠️ live API only |
+| Public web scanner — paste a GitHub URL, get a permalink | ✅ [tfanalyze.com](https://tfanalyze.com) | ❌ | ❌ | ❌ |
+| Module Reuse Advisor with lines-saved ROI | ✅ | ❌ | ❌ | ❌ |
+
+<details>
+<summary><b>Full feature matrix (26 rows) — click to expand</b></summary>
+
 | | tf-analyze | tfsec | checkov | Prowler |
 |---|---|---|---|---|
 | Static HCL analysis | ✅ | ✅ | ✅ | ❌ (live) |
@@ -114,11 +130,11 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | MITRE ATT&CK mapping (technique + tactic-grouped output) | ✅ pinned to v17 | ❌ | ⚠️ partial | ⚠️ via plugin |
 | MITRE D3FEND defensive-technique tagging | ✅ | ❌ | ❌ | ❌ |
 | CWE taxonomy in SARIF output | ✅ | ❌ | ⚠️ partial | ❌ |
-| **CISA KEV + FIRST.org EPSS exploitability ranking** (`--rank-by exploitability`) | ✅ | ❌ | ❌ | ❌ |
-| **`--mode drift` against `terraform show -json state.tfstate`** | ✅ | ❌ | ❌ | ⚠️ live API only |
-| **Compliance PDF export for CISOs** (`--pdf-output`) | ✅ | ❌ | ❌ | ❌ |
-| **Public web scanner** (paste a GitHub URL, get a permalink) | ✅ ([tfanalyze.com/scan/&lt;owner&gt;/&lt;repo&gt;](https://tfanalyze.com)) | ❌ | ❌ | ❌ |
-| **Blast-radius analysis** — "what could one `terraform apply` destroy?" | ✅ (`--blast-radius`; per-finding + per-node + top-N) | ❌ | ❌ | ❌ |
+| CISA KEV + FIRST.org EPSS exploitability ranking (`--rank-by exploitability`) | ✅ | ❌ | ❌ | ❌ |
+| `--mode drift` against `terraform show -json state.tfstate` | ✅ | ❌ | ❌ | ⚠️ live API only |
+| Compliance PDF export for CISOs (`--pdf-output`) | ✅ | ❌ | ❌ | ❌ |
+| Public web scanner (paste a GitHub URL, get a permalink) | ✅ ([tfanalyze.com/scan/&lt;owner&gt;/&lt;repo&gt;](https://tfanalyze.com)) | ❌ | ❌ | ❌ |
+| Blast-radius analysis — "what could one `terraform apply` destroy?" | ✅ (`--blast-radius`; per-finding + per-node + top-N) | ❌ | ❌ | ❌ |
 | OSCAL Assessment Results JSON output | ✅ | ❌ | ❌ | ❌ |
 | Compliance frameworks shipped (with real per-rule data) | **11** (CIS, PCI-DSS, SOC 2, OWASP IaC, NIST CSF 2.0, NIST SP 800-53, CSA CCM v4, SLSA, OWASP Top 10, OWASP API, OWASP K8s); 3 more CLI modes (OWASP CICD / LLM / ASVS) ship as flags but have no tagged rules yet | 1 (CIS) | 6 | 5 |
 | Baseline ratcheting (`--baseline prior.json`) | ✅ | ⚠️ via filter | ✅ | ❌ |
@@ -130,6 +146,8 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Stdlib-only core (optional fast-path) | ✅ | n/a | ❌ (pip) | ❌ (pip) |
 
 > Comparison reflects features documented as of 2026-05; corrections welcome via issue.
+
+</details>
 
 ### What makes tf-analyze different
 
@@ -147,7 +165,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-235 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+238 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -158,7 +176,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Cross-resource | `INT-*`, `graph_check` | Intent–implementation gaps, KMS location parity, IAM breadth |
 | Module reuse (advisory) | `MOD-REUSE-*` | Hand-rolled scaffolding that mirrors a popular Terraform Registry module — INFO tier, never gates CI. Pass `--show-info` to render |
 
-**Per-cloud breakdown:** AWS 86 · GCP 43 · Azure 34 · Kubernetes/Helm 5 · cross-cloud 49.
+**Per-cloud breakdown:** AWS 91 · GCP 43 · Azure 34 · Kubernetes/Helm 8 · cross-cloud 62.
 
 ### Execution modes
 
@@ -218,12 +236,12 @@ Suppressed and baseline-suppressed findings count at half weight (acknowledged, 
 | `--diff-base REF` | Limit to `.tf` files changed since `REF` |
 | `--no-hcl2` | Disable the python-hcl2 fast-path (env: `TF_ANALYZE_NO_HCL2=1`) |
 | `--show-info` | Render INFO-tier findings (e.g. `MOD-REUSE-*` module-reuse advisories). Default off — INFO is counted in `summary.counts.INFO` but not displayed |
-| `--rank-by exploitability\|hybrid` | **NEW (R30.2)** — promote findings whose rule touches a CISA KEV-listed CWE one urgency tier; surface 🔥 KEV badge in text/PR-summary/SARIF. Daily-cached at `~/.cache/tf-analyze/`. Pair with `--no-threat-intel` for air-gapped CI. |
-| `--explain-score` | **NEW (R30.8)** — top-5 findings ranked by score impact, with projected score/grade if each is fixed. Tells you which fix is worth most. Surfaces as a header block in text output and a structured `score_explanation` field in JSON. |
-| `--mode drift --state-json PATH` | **NEW (R30.12)** — diff the static-HCL findings against `terraform show -json state.tfstate` output. Findings tagged `mode='state'` so oncalls can spot the gap between the HCL the team wrote and what's actually deployed. |
-| `--pdf-output PATH` | **NEW (R30.13)** — render the compliance gap report to a CISO-targetable PDF via weasyprint (optional dep). Pair with `--compliance --compliance-framework <name>`. |
-| `--apply-fixes × --baseline` | **NEW (R30.11)** — when both are set, `--apply-fixes` skips findings already in baseline. Closes the "snapshot today, fix only new stuff" UX. |
-| `--mode diff × --baseline` | **NEW (R30.11)** — narrow to changed files AND filter against baseline tuples. Compose the two layers cleanly. |
+| `--rank-by exploitability\|hybrid` | Promote findings whose rule touches a CISA KEV-listed CWE one urgency tier; surface 🔥 KEV badge in text/PR-summary/SARIF. Daily-cached at `~/.cache/tf-analyze/`. Pair with `--no-threat-intel` for air-gapped CI. |
+| `--explain-score` | Top-5 findings ranked by score impact, with projected score/grade if each is fixed. Tells you which fix is worth most. Surfaces as a header block in text output and a structured `score_explanation` field in JSON. |
+| `--mode drift --state-json PATH` | Diff the static-HCL findings against `terraform show -json state.tfstate` output. Findings tagged `mode='state'` so oncalls can spot the gap between the HCL the team wrote and what's actually deployed. |
+| `--pdf-output PATH` | Render the compliance gap report to a CISO-targetable PDF via weasyprint (optional dep). Pair with `--compliance --compliance-framework <name>`. |
+| `--apply-fixes × --baseline` | When both are set, `--apply-fixes` skips findings already in baseline. Closes the "snapshot today, fix only new stuff" UX. |
+| `--mode diff × --baseline` | Narrow to changed files AND filter against baseline tuples. Compose the two layers cleanly. |
 
 Full CLI reference: [`docs/cli.md`](docs/cli.md).
 
@@ -232,7 +250,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | | Path | Doc |
 |---|------|-----|
 | GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks + engine-rendered PR summary (`--format pr-summary`); optional `compliance-framework` / `attack-graph` / `show-info` inputs; pin via `ref` for reproducible CI |
-| VS Code extension (v0.1.53) | [`vscode-extension/`](vscode-extension/) | [`docs/vscode-extension.md`](docs/vscode-extension.md) — self-contained `.vsix` (bundles its own engine; ships 24 sibling Python files including `_lsp.py`, `_threat_intel.py`, `_blast_radius.py`, the eight R30.19 seams `_cache`/`_diff`/`_registry`/`_plan_state`/`_apply_fixes`/`_baseline`/`_modes`/`_verify`, and the five R30.15 detector topic-modules `_handlers_generic`/`_handlers_security`/`_handlers_robustness`/`_handlers_modules`/`_handlers_infra`), LSP-driven real-time diagnostics with blast-radius severity uplift + `🌊 blast: N` hover, Quick Fix, status-bar score+grade badge (`82 (B) · 7 findings`) with attack-graph / delta / compliance / remediate / module-reuse / **🌊 blast-radius** shortcuts, **🌊 Blast Radius tree view** (top-N expandable to downstream), **🌊 CodeLens above high-blast resources**, bulk apply-fixes with diff preview, baseline suppression UI, MITRE ATT&CK view, rule explainer + 4-verb `vscode://` deep-link handler (`/rule`, `/scan`, `/explain`, `/suppress`) |
+| VS Code extension (v0.1.53) | [`vscode-extension/`](vscode-extension/) | Self-contained `.vsix` (engine + catalogue bundled). LSP-driven diagnostics, Quick Fix, status-bar score+grade badge, attack-graph + 🌊 blast-radius + module-reuse panels, bulk apply-fixes with diff preview, baseline suppression UI, `vscode://` URI handler. Full feature list: [`docs/vscode-extension.md`](docs/vscode-extension.md). |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
@@ -317,7 +335,7 @@ Three corpora that double as engine smoke tests and end-to-end demos for the sur
 python3 scripts/detect.py --target examples/terragoat --format html > demo.html
 ```
 
-The single-rule fixtures under [`fixtures/`](fixtures/) (218 positive + 140 clean) complement these corpora — they isolate one rule each so a self-test failure points at exactly which detector broke. Drift on the demo corpora is gated by [`tests/test_examples_demos.py`](tests/test_examples_demos.py) so a catalogue change that shifts the documented finding counts fails the local pytest run instead of silently breaking the README screenshots.
+The single-rule fixtures under [`fixtures/`](fixtures/) (239 positive + 146 clean) complement these corpora — they isolate one rule each so a self-test failure points at exactly which detector broke. Drift on the demo corpora is gated by [`tests/test_examples_demos.py`](tests/test_examples_demos.py) so a catalogue change that shifts the documented finding counts fails the local pytest run instead of silently breaking the README screenshots.
 
 ---
 
@@ -336,22 +354,29 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (218 positive + 140 clea
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration
 ├── .github/workflows/          # CI (ci.yml, docker.yml)
-├── catalog/                    # 217 rule definitions (one YAML per rule)
+├── catalog/                    # 238 rule definitions (one YAML per rule)
 │   └── README.md               # Schema reference
-├── fixtures/                   # 218 positive + 140 clean (negative) fixtures
+├── fixtures/                   # 239 positive + 146 clean (negative) fixtures
 ├── examples/                   # Showcase corpora
 │   ├── terragoat/              #   • Multi-cloud deliberately-vulnerable corpus
 │   ├── module-reuse-demo/      #   • Module Reuse Advisor showcase (3 clouds)
 │   └── attack-graph-demo/      #   • Multi-tier AWS app for the Attack Graph
 ├── scripts/
-│   ├── detect.py               # Detection engine (~7,800 LoC; optional python-hcl2)
+│   ├── detect.py               # Detection engine orchestrator (~3,000 LoC after R30.15 split)
+│   ├── _handlers_*.py          # 51 detector handlers in 5 topic modules (generic / security /
+│   │                           #   robustness / modules / infra) — registered into the engine
+│   │                           #   by side-effect import
+│   ├── _hcl.py                 # HCL-parsing primitives (find_blocks, brace_walk, …)
+│   ├── _lsp.py                 # `--lsp` server entry point
+│   ├── _attack_graph.py        # Attack-graph BFS + Mermaid render
+│   ├── _blast_radius.py        # Blast-radius graph walker
 │   ├── self_test.py            # Walks fixtures/ vs catalog/, asserts expected IDs
 │   ├── test_schema.py          # Catalogue schema regression tests
 │   ├── stub-status.py          # Reports stale `status: stub` entries
 │   ├── gen-cli-docs.py         # Regenerates docs/cli.md from argparse
 │   ├── gen_clean_fixtures.py   # Auto-scaffolds clean fixtures from fix_hcl
 │   └── apply_mitre.py          # Idempotent MITRE ATT&CK mapper
-├── tests/                      # pytest suite (364 tests)
+├── tests/                      # pytest suite (844 passing, 2 skipped)
 ├── docs/                       # User-facing documentation
 ├── integrations/
 │   ├── github-action.yml
@@ -390,7 +415,7 @@ CI gate (`.github/workflows/ci.yml`) runs the pytest suite, the schema validator
 
 ## Provenance
 
-Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design and runs across AWS (86 rules), GCP (43 rules), Azure (34 rules), Kubernetes/Helm (5), and 49 cross-cloud rules — total 217 active. Full CIS Foundations Benchmark coverage on GCP; growing parity on AWS and Azure. Compliance output covers CIS, PCI-DSS v4.0, SOC 2 Trust Services Criteria, and the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html).
+Built and exercised inside an HCP Vault + Consul + GKE platform engineering project; many catalogue rules trace to real audit findings on that infra. The skill is provider-agnostic in design — see the per-cloud breakdown under [Detection](#detection) for the current split. Full CIS Foundations Benchmark coverage on GCP; growing parity on AWS and Azure. Compliance output covers CIS, PCI-DSS v4.0, SOC 2 Trust Services Criteria, and the [OWASP IaC Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html).
 
 ---
 
