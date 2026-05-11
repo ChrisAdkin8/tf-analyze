@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="tf-analyze" width="100%">
+  <img src="https://raw.githubusercontent.com/ChrisAdkin8/tf-analyze/main/assets/banner.svg" alt="tf-analyze" width="100%">
 </p>
 
 # tf-analyze
