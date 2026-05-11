@@ -927,304 +927,15 @@ def detect_in_file(
                         })
             # `resource_body_contains`, `hcl_attr`, `module_block_missing_arg`
             # migrated to `_INFILE_HANDLERS`. See the registered handlers below.
-            elif kind == "variable_type":
-                rgx_str = pat.get("type_regex") or pat.get("regex")
-                if not rgx_str:
-                    continue
-                regex = re.compile(rgx_str)
-                for blk in variables:
-                    val = block_arg_value(blk["body"], "type")
-                    if val is not None and regex.search(val):
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"var.{blk['groups'][0]}",
-                            }
-                        )
-            elif kind == "variable_missing_validation":
-                name_re = re.compile(pat.get("name_regex", ".*"))
-                for blk in variables:
-                    if not name_re.search(blk["groups"][0]):
-                        continue
-                    if not VALIDATION_BLOCK_RE.search(blk["body"]):
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"var.{blk['groups'][0]}",
-                            }
-                        )
-            # `moved_block_present`, `removed_block_present` migrated to
-            # `_INFILE_HANDLERS`. See the registered handlers below.
-            elif kind == "check_block_missing_assert":
-                # TF 1.5+ check {} block must contain at least one assert {}.
-                # Without one the block is a no-op — usually a half-finished
-                # author-time assertion the writer forgot to fill in.
-                for cblk in find_blocks(text, CHECK_START):
-                    if not re.search(r'(?m)^\s*assert\s*\{', cblk["body"]):
-                        findings.append({
-                            "id": eid,
-                            "file": str(file_path),
-                            "line": cblk["start_line"],
-                            "resource": f"check.{cblk['groups'][0]}",
-                        })
-            elif kind == "precondition_missing_error_message":
-                # precondition / postcondition blocks should always carry
-                # an `error_message`. The TF runtime accepts the block
-                # without one, but the failure mode is a generic
-                # "condition failed" with no diagnostic — useless on call.
-                pre_re = re.compile(
-                    r'(?m)^\s*(precondition|postcondition)\s*\{'
-                )
-                for m in pre_re.finditer(text):
-                    # Round-30.13 — shared walker.
-                    end_after = brace_walk(text, m.end() - 1)
-                    if end_after is None:
-                        continue
-                    end = end_after - 1
-                    body = text[m.end():end]
-                    if not re.search(r'(?m)^\s*error_message\s*=', body):
-                        line_no = text.count("\n", 0, m.start()) + 1
-                        findings.append({
-                            "id": eid,
-                            "file": str(file_path),
-                            "line": line_no,
-                            "resource": m.group(1),
-                        })
-            elif kind == "count_index_ref":
-                # Find resources/modules with count, then look for [0]
-                # references to them that aren't inside a conditional guard
-                counted_names = set()
-                for blk in resources:
-                    if block_has_arg(blk["body"], "count"):
-                        btype, bname = blk["groups"]
-                        counted_names.add(f"{btype}.{bname}")
-                for blk in modules:
-                    if block_has_arg(blk["body"], "count"):
-                        counted_names.add(f"module.{blk['groups'][0]}")
-                if counted_names:
-                    # Search for unguarded [0] references
-                    idx_ref_re = re.compile(
-                        r'((?:[\w-]+\.[\w-]+(?:\.[\w-]+)?)\[0\]\.[\w-]+)'
-                    )
-                    for line_no, line_text in enumerate(text.splitlines(), 1):
-                        stripped_line = line_text.lstrip()
-                        # Skip resource/module declarations, count lines,
-                        # comments, and lifecycle blocks
-                        if stripped_line.startswith(("#", "//", "resource ", "module ", "count ")):
-                            continue
-                        for m in idx_ref_re.finditer(line_text):
-                            ref = m.group(1)
-                            # Extract the base resource name (type.name)
-                            ref_parts = ref.split("[")[0]
-                            if ref_parts in counted_names:
-                                # Check if this line has a conditional guard
-                                # (ternary ? or try() or length() > 0)
-                                if not COUNT_GUARD_RE.search(line_text):
-                                    findings.append(
-                                        {
-                                            "id": eid,
-                                            "file": str(file_path),
-                                            "line": line_no,
-                                            "resource": ref_parts,
-                                        }
-                                    )
-            elif kind == "count_index_in_name":
-                # R30.17 — flag resources where ``count = N`` AND a
-                # name-like attribute interpolates ``count.index``. The
-                # external name encodes the positional index, so
-                # decrementing count destroys real infrastructure
-                # (Terraform can't even rebuild on a different slot
-                # because the external name embeds the old index).
-                # Companion to ROB-COUNTREF-001 (consumer-side guard).
-                _NAME_LIKE = (
-                    "name", "bucket", "identifier", "hostname",
-                    "db_name", "instance_name", "cluster_identifier",
-                    "function_name", "topic_name", "queue_name",
-                    "table_name", "role_name", "user_name",
-                    "repository_name", "key_name",
-                )
-                # Match `<name-like> = <value-containing-count.index>` in
-                # any position inside the resource body — handles both
-                # block-attribute form (``name = "x-${count.index}"`` on
-                # its own line) and inline-map form
-                # (``tags = { Name = "x-${count.index}" }``). The negated
-                # char class confines the match to a single attribute
-                # value (stops at `,`, `}`, or newline) so we don't
-                # straddle attribute boundaries. Case-insensitive
-                # because the Name tag key is what AWS Console shows
-                # as the deployed identity for many resource types.
-                _name_re = re.compile(
-                    r'\b(' + "|".join(_NAME_LIKE) + r')\s*=\s*'
-                    r'[^,}\n]*?count\.index[^,}\n]*',
-                    re.IGNORECASE,
-                )
-                for blk in resources:
-                    if not block_has_arg(blk["body"], "count"):
-                        continue
-                    btype, bname = blk["groups"]
-                    body = blk["body"]
-                    m = _name_re.search(body)
-                    if m:
-                        # Map the byte offset to an absolute file line.
-                        preceding = body[:m.start()]
-                        line_no = blk["start_line"] + preceding.count("\n")
-                        findings.append({
-                            "id": eid,
-                            "file": str(file_path),
-                            "line": line_no,
-                            "resource": f"{btype}.{bname}",
-                        })
-            elif kind == "count_bool_pattern":
-                # Detect count = <expr> ? 1 : 0 on resources and modules
-                for blk in resources:
-                    if BOOL_COUNT_RE.search(blk["body"]):
-                        btype, bname = blk["groups"]
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"{btype}.{bname}",
-                            }
-                        )
-                for blk in modules:
-                    if BOOL_COUNT_RE.search(blk["body"]):
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"module.{blk['groups'][0]}",
-                            }
-                        )
-            elif kind == "variable_missing_description":
-                for blk in variables:
-                    if not DESC_RE.search(blk["body"]):
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"var.{blk['groups'][0]}",
-                            }
-                        )
-            elif kind == "output_missing_description":
-                outputs = find_blocks(text, OUTPUT_START)
-                for blk in outputs:
-                    if not DESC_RE.search(blk["body"]):
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"output.{blk['groups'][0]}",
-                            }
-                        )
-            elif kind == "variable_credential_pattern":
-                # Variables whose name suggests they hold a credential
-                # (`*_password`, `*_token`, `*_secret`, `*_key`, …) MUST
-                # have `sensitive = true` — without it, `terraform plan`
-                # / `terraform output` print the value into CI logs.
-                # Catalog supplies the regex via `name_regex` so the
-                # rule definition can extend the pattern set later.
-                raw_re = pat.get("name_regex") or (
-                    r"^.*_(password|passwd|pwd|token|secret|secrets|"
-                    r"apikey|api_key|access_key|private_key|credential|"
-                    r"credentials|auth|oauth)$"
-                )
-                try:
-                    name_re = re.compile(raw_re, re.IGNORECASE)
-                except re.error:
-                    continue
-                for blk in variables:
-                    var_name = blk["groups"][0]
-                    if not name_re.match(var_name):
-                        continue
-                    if re.search(
-                        r"(?m)^\s*sensitive\s*=\s*true\s*$", blk["body"]
-                    ):
-                        continue
-                    findings.append(
-                        {
-                            "id": eid,
-                            "file": str(file_path),
-                            "line": blk["start_line"],
-                            "resource": f"var.{var_name}",
-                        }
-                    )
-            elif kind == "ignore_changes_overuse":
-                # Resources whose `lifecycle.ignore_changes = [...]`
-                # block lists more than `max_attrs` attributes are
-                # likely disabling drift detection by attrition rather
-                # than declaring a targeted exception. ROB-DRIFT-002
-                # already catches `["*"]`; this catches the next
-                # failure mode at LOW so reviewers see the signal
-                # without it gating CI.
-                max_attrs = int(pat.get("max_attrs", 5))
-                for blk in find_blocks(text, RESOURCE_START):
-                    body = blk["body"]
-                    # Find the lifecycle { ... ignore_changes = [...] ... } shape.
-                    lc = re.search(
-                        r"(?ms)lifecycle\s*\{(.*?)^\s*\}",
-                        body,
-                    )
-                    if not lc:
-                        continue
-                    ic = re.search(
-                        r"ignore_changes\s*=\s*\[(.*?)\]",
-                        lc.group(1),
-                        re.DOTALL,
-                    )
-                    if not ic:
-                        continue
-                    inner = ic.group(1)
-                    # ROB-DRIFT-002 owns the wildcard case; skip here.
-                    if re.search(r"['\"]\*['\"]", inner) or "[*]" in inner:
-                        continue
-                    # Audit follow-up #20 — a bare `inner.split(",")` is
-                    # quote-blind; a value like `["a,b", "c"]` would
-                    # split into three items instead of two and a
-                    # threshold-based finding would misfire. Walk the
-                    # characters and only split on commas outside
-                    # `"…"` regions. Single-quoted strings aren't
-                    # valid HCL string syntax so we don't track them.
-                    items: list[str] = []
-                    buf: list[str] = []
-                    in_dq = False
-                    prev = ""
-                    for ch in inner:
-                        if ch == '"' and prev != "\\":
-                            in_dq = not in_dq
-                            buf.append(ch)
-                        elif ch == "," and not in_dq:
-                            piece = "".join(buf).strip()
-                            if piece:
-                                items.append(piece)
-                            buf.clear()
-                        else:
-                            buf.append(ch)
-                        prev = ch
-                    tail = "".join(buf).strip()
-                    if tail:
-                        items.append(tail)
-                    if len(items) > max_attrs:
-                        btype, bname = blk["groups"]
-                        findings.append(
-                            {
-                                "id": eid,
-                                "file": str(file_path),
-                                "line": blk["start_line"],
-                                "resource": f"{btype}.{bname}",
-                                "context": (
-                                    f"ignore_changes lists {len(items)} "
-                                    f"attributes (threshold: {max_attrs})"
-                                ),
-                            }
-                        )
+            # `variable_type`, `variable_missing_validation`,
+            # `check_block_missing_assert`, `precondition_missing_error_message`
+            # migrated to `_INFILE_HANDLERS`. See registered handlers below.
+            # `count_index_ref`, `count_index_in_name`, `count_bool_pattern`
+            # migrated to `_INFILE_HANDLERS`.
+            # `variable_missing_description`, `output_missing_description`
+            # migrated to `_INFILE_HANDLERS`.
+            # `variable_credential_pattern` migrated to `_INFILE_HANDLERS`.
+            # `ignore_changes_overuse` migrated to `_INFILE_HANDLERS`.
             # corpus-level kinds handled in detect_corpus
     return findings
 
@@ -1541,6 +1252,329 @@ def _detect_removed_block_present(c: InFileCtx) -> list[dict]:
             "line": rblk["start_line"],
             "resource": "removed",
         })
+    return out
+
+
+@_register_infile("variable_type")
+def _detect_variable_type(c: InFileCtx) -> list[dict]:
+    """``variable_type`` — fire when a variable's declared ``type`` matches the
+    rule regex (e.g. catch ``type = any`` or untyped variables).
+    """
+    rgx_str = c.pat.get("type_regex") or c.pat.get("regex")
+    if not rgx_str:
+        return []
+    regex = re.compile(rgx_str)
+    out: list[dict] = []
+    for blk in c.variables:
+        val = block_arg_value(blk["body"], "type")
+        if val is not None and regex.search(val):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"var.{blk['groups'][0]}",
+            })
+    return out
+
+
+@_register_infile("variable_missing_validation")
+def _detect_variable_missing_validation(c: InFileCtx) -> list[dict]:
+    """``variable_missing_validation`` — fire when a variable whose name
+    matches ``name_regex`` has no ``validation { ... }`` block.
+    """
+    name_re = re.compile(c.pat.get("name_regex", ".*"))
+    out: list[dict] = []
+    for blk in c.variables:
+        if not name_re.search(blk["groups"][0]):
+            continue
+        if not VALIDATION_BLOCK_RE.search(blk["body"]):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"var.{blk['groups'][0]}",
+            })
+    return out
+
+
+@_register_infile("check_block_missing_assert")
+def _detect_check_block_missing_assert(c: InFileCtx) -> list[dict]:
+    """``check_block_missing_assert`` — TF 1.5+ ``check {}`` block must
+    contain at least one ``assert {}``. Without one the block is a
+    no-op — usually a half-finished author-time assertion the writer
+    forgot to fill in.
+    """
+    out: list[dict] = []
+    for cblk in find_blocks(c.text, CHECK_START):
+        if not re.search(r'(?m)^\s*assert\s*\{', cblk["body"]):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": cblk["start_line"],
+                "resource": f"check.{cblk['groups'][0]}",
+            })
+    return out
+
+
+@_register_infile("precondition_missing_error_message")
+def _detect_precondition_missing_error_message(c: InFileCtx) -> list[dict]:
+    """``precondition_missing_error_message`` — precondition /
+    postcondition blocks should always carry an ``error_message``. The
+    TF runtime accepts the block without one, but the failure mode is
+    a generic "condition failed" with no diagnostic — useless on call.
+    """
+    pre_re = re.compile(r'(?m)^\s*(precondition|postcondition)\s*\{')
+    out: list[dict] = []
+    for m in pre_re.finditer(c.text):
+        end_after = brace_walk(c.text, m.end() - 1)
+        if end_after is None:
+            continue
+        end = end_after - 1
+        body = c.text[m.end():end]
+        if not re.search(r'(?m)^\s*error_message\s*=', body):
+            line_no = c.text.count("\n", 0, m.start()) + 1
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": line_no,
+                "resource": m.group(1),
+            })
+    return out
+
+
+@_register_infile("count_index_ref")
+def _detect_count_index_ref(c: InFileCtx) -> list[dict]:
+    """``count_index_ref`` — find ``X.Y[0].Z`` references to count-using
+    resources/modules that aren't guarded by a conditional (ternary,
+    try(), length() > 0). Decrementing the count destroys the resource
+    at index 0, so unguarded references will fail at apply time.
+    """
+    counted_names: set[str] = set()
+    for blk in c.resources:
+        if block_has_arg(blk["body"], "count"):
+            btype, bname = blk["groups"]
+            counted_names.add(f"{btype}.{bname}")
+    for blk in c.modules:
+        if block_has_arg(blk["body"], "count"):
+            counted_names.add(f"module.{blk['groups'][0]}")
+    if not counted_names:
+        return []
+    idx_ref_re = re.compile(
+        r'((?:[\w-]+\.[\w-]+(?:\.[\w-]+)?)\[0\]\.[\w-]+)'
+    )
+    out: list[dict] = []
+    for line_no, line_text in enumerate(c.text.splitlines(), 1):
+        stripped_line = line_text.lstrip()
+        if stripped_line.startswith(("#", "//", "resource ", "module ", "count ")):
+            continue
+        for m in idx_ref_re.finditer(line_text):
+            ref = m.group(1)
+            ref_parts = ref.split("[")[0]
+            if ref_parts in counted_names:
+                if not COUNT_GUARD_RE.search(line_text):
+                    out.append({
+                        "id": c.eid,
+                        "file": str(c.file_path),
+                        "line": line_no,
+                        "resource": ref_parts,
+                    })
+    return out
+
+
+_COUNT_NAME_LIKE_ATTRS = (
+    "name", "bucket", "identifier", "hostname",
+    "db_name", "instance_name", "cluster_identifier",
+    "function_name", "topic_name", "queue_name",
+    "table_name", "role_name", "user_name",
+    "repository_name", "key_name",
+)
+_COUNT_NAME_RE = re.compile(
+    r'\b(' + "|".join(_COUNT_NAME_LIKE_ATTRS) + r')\s*=\s*'
+    r'[^,}\n]*?count\.index[^,}\n]*',
+    re.IGNORECASE,
+)
+
+
+@_register_infile("count_index_in_name")
+def _detect_count_index_in_name(c: InFileCtx) -> list[dict]:
+    """``count_index_in_name`` (R30.17) — flag resources where ``count = N``
+    AND a name-like attribute interpolates ``count.index``. The external
+    name encodes the positional index, so decrementing count destroys
+    real infrastructure (Terraform can't even rebuild on a different
+    slot because the external name embeds the old index). Companion to
+    ROB-COUNTREF-001 (consumer-side guard).
+    """
+    out: list[dict] = []
+    for blk in c.resources:
+        if not block_has_arg(blk["body"], "count"):
+            continue
+        btype, bname = blk["groups"]
+        body = blk["body"]
+        m = _COUNT_NAME_RE.search(body)
+        if m:
+            preceding = body[:m.start()]
+            line_no = blk["start_line"] + preceding.count("\n")
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": line_no,
+                "resource": f"{btype}.{bname}",
+            })
+    return out
+
+
+@_register_infile("count_bool_pattern")
+def _detect_count_bool_pattern(c: InFileCtx) -> list[dict]:
+    """``count_bool_pattern`` — detect ``count = <expr> ? 1 : 0`` on
+    resources and modules. ROB-COUNTBOOL-001 flags the anti-pattern
+    because changing the predicate destroys the resource instead of
+    leaving it in place.
+    """
+    out: list[dict] = []
+    for blk in c.resources:
+        if BOOL_COUNT_RE.search(blk["body"]):
+            btype, bname = blk["groups"]
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+            })
+    for blk in c.modules:
+        if BOOL_COUNT_RE.search(blk["body"]):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"module.{blk['groups'][0]}",
+            })
+    return out
+
+
+@_register_infile("variable_missing_description")
+def _detect_variable_missing_description(c: InFileCtx) -> list[dict]:
+    """``variable_missing_description`` — fire on every ``variable`` block
+    that has no ``description = "..."`` attribute.
+    """
+    out: list[dict] = []
+    for blk in c.variables:
+        if not DESC_RE.search(blk["body"]):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"var.{blk['groups'][0]}",
+            })
+    return out
+
+
+@_register_infile("output_missing_description")
+def _detect_output_missing_description(c: InFileCtx) -> list[dict]:
+    """``output_missing_description`` — fire on every ``output`` block
+    that has no ``description`` attribute.
+    """
+    out: list[dict] = []
+    for blk in find_blocks(c.text, OUTPUT_START):
+        if not DESC_RE.search(blk["body"]):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"output.{blk['groups'][0]}",
+            })
+    return out
+
+
+@_register_infile("variable_credential_pattern")
+def _detect_variable_credential_pattern(c: InFileCtx) -> list[dict]:
+    """``variable_credential_pattern`` — variables whose name suggests
+    they hold a credential (``*_password``, ``*_token``, ``*_secret``,
+    ``*_key``, …) MUST have ``sensitive = true`` — without it,
+    ``terraform plan`` / ``terraform output`` print the value into CI
+    logs. The catalogue can override the name regex via ``name_regex``.
+    """
+    raw_re = c.pat.get("name_regex") or (
+        r"^.*_(password|passwd|pwd|token|secret|secrets|"
+        r"apikey|api_key|access_key|private_key|credential|"
+        r"credentials|auth|oauth)$"
+    )
+    try:
+        name_re = re.compile(raw_re, re.IGNORECASE)
+    except re.error:
+        return []
+    out: list[dict] = []
+    for blk in c.variables:
+        var_name = blk["groups"][0]
+        if not name_re.match(var_name):
+            continue
+        if re.search(r"(?m)^\s*sensitive\s*=\s*true\s*$", blk["body"]):
+            continue
+        out.append({
+            "id": c.eid,
+            "file": str(c.file_path),
+            "line": blk["start_line"],
+            "resource": f"var.{var_name}",
+        })
+    return out
+
+
+@_register_infile("ignore_changes_overuse")
+def _detect_ignore_changes_overuse(c: InFileCtx) -> list[dict]:
+    """``ignore_changes_overuse`` — resources whose
+    ``lifecycle.ignore_changes = [...]`` block lists more than
+    ``max_attrs`` attributes are likely disabling drift detection by
+    attrition rather than declaring a targeted exception. ROB-DRIFT-002
+    catches the wildcard ``["*"]`` case; this catches the next failure
+    mode at LOW so reviewers see the signal without gating CI.
+
+    Round-30.9 audit fix #20 — the comma-split is quote-aware so a
+    value like ``["a,b", "c"]`` correctly counts as two items.
+    """
+    max_attrs = int(c.pat.get("max_attrs", 5))
+    out: list[dict] = []
+    for blk in find_blocks(c.text, RESOURCE_START):
+        body = blk["body"]
+        lc = re.search(r"(?ms)lifecycle\s*\{(.*?)^\s*\}", body)
+        if not lc:
+            continue
+        ic = re.search(r"ignore_changes\s*=\s*\[(.*?)\]", lc.group(1), re.DOTALL)
+        if not ic:
+            continue
+        inner = ic.group(1)
+        # ROB-DRIFT-002 owns the wildcard case.
+        if re.search(r"['\"]\*['\"]", inner) or "[*]" in inner:
+            continue
+        items: list[str] = []
+        buf: list[str] = []
+        in_dq = False
+        prev = ""
+        for ch in inner:
+            if ch == '"' and prev != "\\":
+                in_dq = not in_dq
+                buf.append(ch)
+            elif ch == "," and not in_dq:
+                piece = "".join(buf).strip()
+                if piece:
+                    items.append(piece)
+                buf.clear()
+            else:
+                buf.append(ch)
+            prev = ch
+        tail = "".join(buf).strip()
+        if tail:
+            items.append(tail)
+        if len(items) > max_attrs:
+            btype, bname = blk["groups"]
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+                "context": (
+                    f"ignore_changes lists {len(items)} "
+                    f"attributes (threshold: {max_attrs})"
+                ),
+            })
     return out
 
 
