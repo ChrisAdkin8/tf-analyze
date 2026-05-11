@@ -59,6 +59,7 @@ from _hcl import (
     find_blocks,
     block_arg_value,
     block_has_arg,
+    brace_walk,
 )
 
 # `RESOURCE_START` regex lives in detect.py — it's the pervasive
@@ -350,20 +351,16 @@ def _graph_dynamodb_pitr(index: dict, all_files_text: dict) -> list[dict]:
         if not pitr_m:
             out.append({"file": res["file"], "line": res["line"], "resource": addr})
             continue
-        depth, k, end = 0, pitr_m.end() - 1, None
-        while k < len(body):
-            c = body[k]
-            if c == '{':
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    end = k
-                    break
-            k += 1
-        if end is None:
+        # Round-30.13 follow-up — the R30.13 inventory missed two
+        # walkers in this module (they live outside `detect.py` and
+        # `_apply_fixes.py`). Migrating to the shared `brace_walk`
+        # closes the consistency gap and gains quote-awareness on the
+        # PITR block boundary.
+        end_after = brace_walk(body, pitr_m.end() - 1)
+        if end_after is None:
             out.append({"file": res["file"], "line": res["line"], "resource": addr})
             continue
+        end = end_after - 1
         pitr_body = body[pitr_m.end():end]
         enabled = block_arg_value(pitr_body, "enabled")
         if not enabled or enabled.lower() != "true":
@@ -388,20 +385,12 @@ def _graph_dynamodb_sse(index: dict, all_files_text: dict) -> list[dict]:
         if not sse_m:
             out.append({"file": res["file"], "line": res["line"], "resource": addr})
             continue
-        depth, k, end = 0, sse_m.end() - 1, None
-        while k < len(body):
-            c = body[k]
-            if c == '{':
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    end = k
-                    break
-            k += 1
-        if end is None:
+        # Round-30.13 follow-up — see PITR walker above; same migration.
+        end_after = brace_walk(body, sse_m.end() - 1)
+        if end_after is None:
             out.append({"file": res["file"], "line": res["line"], "resource": addr})
             continue
+        end = end_after - 1
         sse_body = body[sse_m.end():end]
         if not block_has_arg(sse_body, "kms_key_arn"):
             out.append({"file": res["file"], "line": res["line"], "resource": addr})

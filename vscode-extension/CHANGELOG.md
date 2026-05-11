@@ -5,6 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.51] — 2026-05-11
+
+**R30.13 follow-up — two missed migration sites in `_cross_resource.py`.**
+A focused regression-of-fix audit on R30.13 found that the inventory of
+13 brace-walker sites missed two more in `_cross_resource.py`:
+
+- `_graph_dynamodb_pitr` (line ~353) — point-in-time-recovery block extractor.
+- `_graph_dynamodb_sse` (line ~391) — server-side encryption block extractor.
+
+Both now route through `brace_walk` for consistency with the 13 sites
+migrated in R30.13, gaining quote-awareness on the DynamoDB block
+boundary detection. The only remaining inline depth walker is
+`_apply_fixes.find_block_end_in_lines`, which operates on a list of
+strings (not a single string) and is intentionally not migrated.
+
+### Counts
+
+- Extension: v0.1.50 → **v0.1.51**.
+- `node:test` cases: 62/62 (unchanged).
+- Pytest: 840/840 (unchanged — migration preserves behaviour).
+- Bundle: 1.16 MB (unchanged).
+
+---
+
 ## [0.1.50] — 2026-05-11
 
 **Engine refresh — `_brace_walk` extraction.** Pulls the structural item

@@ -5,6 +5,34 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 30.13.1 — `_brace_walk` extraction follow-up — 2026-05-11 (ext v0.1.51)
+
+**Single finding from the R30.13 regression-of-fix audit.** The focused regression check on the R30.13 extraction surfaced two more inline brace walkers in `scripts/_cross_resource.py` that the inventory missed (they live in a different module from the 13 catalogued sites). The follow-up audit was otherwise clean — every migrated site preserves behaviour and the helper's contract is well-tested by the new `TestBraceWalk` cases.
+
+### Two more migrations
+
+- `_cross_resource._graph_dynamodb_pitr` (line ~353) — extracts the `point_in_time_recovery {}` block body from an `aws_dynamodb_table` resource. Was quote-blind; a PITR block whose value contained `}` in a quoted string (rare in practice) would have closed prematurely.
+- `_cross_resource._graph_dynamodb_sse` (line ~391) — same shape for `server_side_encryption {}`.
+
+Both now go through `brace_walk`, matching the 13 R30.13 sites and gaining the same quote-awareness wins.
+
+### Remaining unmigrated walkers (confirmed intentional)
+
+- `_apply_fixes.find_block_end_in_lines` — takes `list[str]` (already-split file lines), not a single string. Different domain; the helper would need a separate line-array signature. Deliberately left.
+- `_hcl.find_blocks` and `_hcl.find_simple_blocks` — top-level block locators. Operate on full HCL files where braces inside strings at top scope are vanishingly rare (HCL discourages them; ARNs use `*` or `\${}` interpolation). Migrating these would risk regressions on the 200+ catalogue rules that depend on them; deferred until a separate testing pass.
+- `_hcl._expand_dynamic_blocks` — structural rewrite, not value extraction. Quote-awareness doesn't apply at the same level.
+
+### Counts
+
+- Pytest: 840/840 (unchanged — pure refactor).
+- Extension `node:test`: 62/62 (unchanged).
+- Self-test: 238/238 positive + 146/146 clean.
+- Terragoat snapshot: in sync.
+- Total `brace_walk` consumers: 13 → **15** (added `_cross_resource.py` × 2).
+- Extension: v0.1.50 → **v0.1.51**.
+
+---
+
 ## Round 30.13 — `_brace_walk` extraction (structural) — 2026-05-11 (ext v0.1.50)
 
 **Pulls the structural item every prior audit round (1 through 5) recommended.** Five audits, all flagged the same 13+ sites duplicating brace-depth tracking across `detect.py` and `_apply_fixes.py`; this round consolidates them into one quote-aware helper in `_hcl.py`. The audit-cycle pause recommendation at the end of round 5 was conditional on this PR landing — it's the load-bearing structural seam that closes the bug class no audit round could close one-by-one without re-recommending the same extraction.
