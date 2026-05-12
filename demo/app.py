@@ -584,6 +584,351 @@ async def scan_repo(body: ScanRepo, request: Request) -> dict:
         return _run_scan(d)
 
 
+# ---------------------------------------------------------------------------
+# Trend dashboard — GET /trend/{owner}/{repo}  (R31.4)
+# ---------------------------------------------------------------------------
+# The engine already emits per-commit new/resolved/net deltas via
+# `--mode trend --lookback N` (see scripts/_modes.py:run_trend). Until R31.4
+# that data lived only in CLI output. This route renders it as a styled HTML
+# page so a permalink at /trend/<owner>/<repo> is shareable the same way
+# /scan/<owner>/<repo> is.
+#
+# Caching: per-(owner, repo, HEAD-sha, lookback) — keyed on the HEAD SHA
+# so each commit gets a fresh trend without re-walking history for every
+# visit. File name shape mirrors the scan cache: ``trend-{owner}_{repo}_{sha}_{lookback}.json``.
+
+MAX_TREND_LOOKBACK_DAYS = 365  # cap on `?lookback=` query param
+DEFAULT_TREND_LOOKBACK_DAYS = 90
+
+
+def _resolve_trend_lookback(raw: str | None) -> int:
+    """Validate `?lookback=N` query param.
+
+    Defaults to 90 days. Clamped to ``[7, 365]`` so a runaway request
+    can't ask for 10 years of history (would dominate the worker).
+    Falls back to default on any parse failure rather than 400'ing —
+    the dashboard is for casual sharing, not API rigour.
+    """
+    if not raw:
+        return DEFAULT_TREND_LOOKBACK_DAYS
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_TREND_LOOKBACK_DAYS
+    return max(7, min(MAX_TREND_LOOKBACK_DAYS, n))
+
+
+def _clone_and_trend(owner: str, repo: str, sha: str, lookback_days: int) -> dict:
+    """Clone the repo at ``sha`` (full history) and run ``--mode trend``.
+
+    Unlike ``_clone_and_scan`` which uses ``--depth 1`` (one commit's
+    files), trend mode walks git log — so we need full history. Clones
+    *with* tag/branch refs intact via ``--no-single-branch`` but still
+    depth-limited to ``lookback_days * 2`` commits as a guard (most
+    repos under a year of work fit comfortably under this).
+
+    Cache hit returns immediately. Cache key includes ``lookback_days``
+    so changing the window doesn't serve a stale narrower result.
+    """
+    cache_file = CACHE_DIR / f"trend-{owner}_{repo}_{sha}_{lookback_days}.json"
+    if cache_file.exists():
+        try:
+            return json.loads(cache_file.read_text())
+        except json.JSONDecodeError:
+            cache_file.unlink(missing_ok=True)
+
+    url = f"https://github.com/{owner}/{repo}.git"
+    # Heuristic commit cap: 5 commits/day average ceiling. Most repos sit
+    # well below 1 commit/day so this is generous. Hard floor of 200 so
+    # very-quiet repos still see history.
+    commit_cap = max(200, lookback_days * 5)
+    with tempfile.TemporaryDirectory() as d:
+        clone = subprocess.run(
+            ["git", "clone", f"--depth={commit_cap}", "--no-single-branch",
+             "--filter=blob:limit=1m", url, d],
+            capture_output=True, text=True, timeout=120,
+        )
+        if clone.returncode != 0:
+            raise HTTPException(status_code=404, detail="Could not clone repository")
+
+        proc = subprocess.run(
+            [
+                "python3", str(DETECT),
+                "--target", d,
+                "--catalog", str(CATALOG),
+                "--mode", "trend",
+                "--lookback", str(lookback_days),
+                "--format", "json",
+            ],
+            capture_output=True, text=True,
+            timeout=300,  # trend can be slow on long histories
+        )
+        if proc.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Trend scan failed: {proc.stderr.strip()[:200]}",
+            )
+        try:
+            rows = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=500,
+                detail="Trend scan emitted unparseable JSON",
+            )
+    if not isinstance(rows, list):
+        rows = []
+
+    result = {
+        "rows": rows,
+        "_meta": {
+            "owner": owner,
+            "repo": repo,
+            "sha": sha,
+            "lookback_days": lookback_days,
+            "url": f"https://github.com/{owner}/{repo}",
+            "scanned_at": int(time.time()),
+            "commits_analysed": len(rows),
+        },
+    }
+    try:
+        cache_file.write_text(json.dumps(result, default=str))
+    except OSError:
+        pass
+    return result
+
+
+def _trend_summary(rows: list[dict]) -> dict:
+    """Aggregate stats from a trend row list for the headline / OG card."""
+    if not rows:
+        return {
+            "total_new": 0, "total_resolved": 0, "net": 0,
+            "first_total": 0, "last_total": 0, "biggest_jump": None,
+        }
+    total_new = sum(r["new"] for r in rows)
+    total_res = sum(r["resolved"] for r in rows)
+    net = total_new - total_res
+    first_total = rows[0]["total"]
+    last_total = rows[-1]["total"]
+    # Biggest absolute-net row (one commit that moved the needle hardest).
+    biggest = max(rows, key=lambda r: abs(r["net"])) if rows else None
+    return {
+        "total_new": total_new,
+        "total_resolved": total_res,
+        "net": net,
+        "first_total": first_total,
+        "last_total": last_total,
+        "biggest_jump": biggest,
+    }
+
+
+def _trend_sparkline_svg(rows: list[dict], *, width: int = 900, height: int = 160) -> str:
+    """Inline SVG sparkline of the ``total`` curve across commits.
+
+    No external dependencies — plain SVG `<path>`. Trend over time of
+    "how many findings exist at this commit", linearly mapped to canvas.
+    Bigger area = more findings; downward slope = good.
+    """
+    if not rows:
+        return f'<svg width="{width}" height="{height}"></svg>'
+    totals = [r["total"] for r in rows]
+    lo = min(totals)
+    hi = max(totals) or 1
+    span = hi - lo or 1
+    n = len(rows)
+
+    def x_at(i: int) -> float:
+        return 20 + (width - 40) * (i / max(1, n - 1))
+
+    def y_at(v: int) -> float:
+        # Invert y so higher findings → lower on screen.
+        return height - 30 - (height - 60) * ((v - lo) / span)
+
+    points = " ".join(f"{x_at(i):.1f},{y_at(t):.1f}" for i, t in enumerate(totals))
+    # Area fill underneath the line for the "weight of debt" visual.
+    area_points = f"{x_at(0):.1f},{height - 30:.1f} {points} {x_at(n - 1):.1f},{height - 30:.1f}"
+    # X-axis labels: first + last commit dates, plus midpoint.
+    label_first = html.escape(rows[0]["date"])
+    label_last = html.escape(rows[-1]["date"])
+    label_mid = html.escape(rows[n // 2]["date"]) if n >= 3 else ""
+    return (
+        f'<svg viewBox="0 0 {width} {height}" preserveAspectRatio="none" '
+        f'style="width:100%;max-width:{width}px;height:{height}px">'
+        f'<polygon points="{area_points}" fill="#7B42BC" opacity="0.15"/>'
+        f'<polyline points="{points}" fill="none" stroke="#7B42BC" stroke-width="2.5"/>'
+        f'<text x="20" y="{height - 8}" font-size="11" fill="#8B949E">{label_first}</text>'
+        + (f'<text x="{width / 2:.0f}" y="{height - 8}" font-size="11" '
+           f'fill="#8B949E" text-anchor="middle">{label_mid}</text>' if label_mid else "")
+        + f'<text x="{width - 20}" y="{height - 8}" font-size="11" '
+        f'fill="#8B949E" text-anchor="end">{label_last}</text>'
+        f'<text x="20" y="14" font-size="11" fill="#8B949E">{hi} max</text>'
+        f'<text x="20" y="{height - 32:.0f}" font-size="11" fill="#8B949E">{lo} min</text>'
+        f'</svg>'
+    )
+
+
+def _trend_velocity_table(rows: list[dict]) -> str:
+    """Markdown-ish HTML table of per-commit new/resolved/net.
+
+    Sorted oldest-first so the eye-trail matches the sparkline.
+    """
+    if not rows:
+        return "<p>No commits touching .tf files in the analysed window.</p>"
+    out = [
+        "<table><thead><tr>"
+        "<th>Date</th><th>SHA</th><th>New</th><th>Resolved</th>"
+        "<th>Net</th><th>Total</th></tr></thead><tbody>"
+    ]
+    for r in rows:
+        sha = html.escape(r["sha"])
+        net = r["net"]
+        net_str = f"+{net}" if net > 0 else str(net)
+        net_color = "#cf222e" if net > 0 else ("#1a7f37" if net < 0 else "#666")
+        out.append(
+            f"<tr><td>{html.escape(r['date'])}</td>"
+            f"<td><code>{sha}</code></td>"
+            f"<td style='color:#cf222e'>+{r['new']}</td>"
+            f"<td style='color:#1a7f37'>-{r['resolved']}</td>"
+            f"<td style='color:{net_color}'><b>{net_str}</b></td>"
+            f"<td>{r['total']}</td></tr>"
+        )
+    out.append("</tbody></table>")
+    return "".join(out)
+
+
+def _render_trend_report(result: dict) -> str:
+    """Render a styled HTML trend page — sparkline + velocity table + OG card."""
+    meta = result.get("_meta", {})
+    rows = result.get("rows") or []
+    summary = _trend_summary(rows)
+    repo_label = html.escape(f"{meta.get('owner','?')}/{meta.get('repo','?')}")
+    repo_url = html.escape(meta.get("url", "#"))
+    lookback = meta.get("lookback_days", DEFAULT_TREND_LOOKBACK_DAYS)
+    n_commits = summary and len(rows)
+    net = summary["net"]
+    net_str = f"+{net}" if net > 0 else str(net)
+    # OG title is the share-bait: surface the headline number a Slack/Twitter
+    # preview card will show. Phrased to be honest in either direction.
+    if net < 0:
+        og_headline = f"tf-analyze trend: {abs(net)} findings resolved over {lookback} days"
+    elif net > 0:
+        og_headline = f"tf-analyze trend: {net} findings introduced over {lookback} days"
+    else:
+        og_headline = f"tf-analyze trend: net-zero across {n_commits} commits ({lookback} days)"
+    og_title = html.escape(f"{repo_label} — {og_headline}")
+    og_desc = html.escape(
+        f"{summary['total_new']} introduced · {summary['total_resolved']} resolved · "
+        f"{n_commits} commits analysed"
+    )
+    sparkline = _trend_sparkline_svg(rows)
+    velocity = _trend_velocity_table(rows)
+    biggest = summary["biggest_jump"]
+    biggest_html = ""
+    if biggest:
+        sha_short = html.escape(biggest["sha"])
+        date = html.escape(biggest["date"])
+        b_net = biggest["net"]
+        b_net_str = f"+{b_net}" if b_net > 0 else str(b_net)
+        biggest_html = (
+            f"<p class='meta'>Biggest single-commit jump: "
+            f"<code>{sha_short}</code> on {date} "
+            f"({b_net_str} net findings).</p>"
+        )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{og_title}</title>
+<meta property="og:title" content="{og_title}">
+<meta property="og:description" content="{og_desc}">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 980px;
+          margin: 2rem auto; padding: 0 1rem; color: #1f2328; background: #fff; }}
+  h1 {{ margin: 0 0 0.5rem; font-size: 1.6rem; }}
+  h2 {{ font-size: 1.15rem; margin: 2rem 0 0.5rem; }}
+  .headline {{ font-size: 2.2rem; margin: 0.5rem 0; font-weight: 700; }}
+  .headline.up   {{ color: #cf222e; }}
+  .headline.down {{ color: #1a7f37; }}
+  .headline.flat {{ color: #57606a; }}
+  .meta {{ color: #57606a; font-size: 0.92rem; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }}
+  th, td {{ text-align: left; padding: 0.35rem 0.55rem; border-bottom: 1px solid #d0d7de; }}
+  th {{ background: #f6f8fa; font-weight: 600; }}
+  code {{ background: #f6f8fa; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }}
+  .footer {{ margin-top: 3rem; color: #8b949e; font-size: 0.85rem; }}
+</style>
+</head>
+<body>
+<h1>{repo_label} — risk trend</h1>
+<p class='meta'><a href='{repo_url}'>{repo_url}</a> · {lookback}-day window · {n_commits} commits analysed</p>
+<div class='headline {"up" if net > 0 else "down" if net < 0 else "flat"}'>{net_str} net findings</div>
+<p class='meta'>{summary['total_new']} introduced · {summary['total_resolved']} resolved.
+Started at {summary['first_total']} findings, ended at {summary['last_total']}.</p>
+<h2>Total findings over time</h2>
+{sparkline}
+{biggest_html}
+<h2>Per-commit velocity</h2>
+{velocity}
+<div class='footer'>
+  Generated by <a href='https://github.com/ChrisAdkin8/tf-analyze'>tf-analyze</a>
+  · See also: <a href='/scan/{html.escape(meta.get('owner','?'))}/{html.escape(meta.get('repo','?'))}'>current scan</a>
+</div>
+</body>
+</html>"""
+
+
+@app.get("/trend/{owner}/{repo}.json")
+async def trend_public_json(owner: str, repo: str, request: Request,
+                            lookback: str | None = None) -> JSONResponse:
+    """JSON form of the trend permalink — same caching, machine-friendly.
+
+    Declared **before** the HTML route so FastAPI matches it first (the
+    HTML route would otherwise capture ``/trend/foo/bar.json`` with
+    ``repo="bar.json"`` — same pattern as the scan routes above).
+    """
+    ip = request.client.host if request.client else "unknown"
+    if not _rate_check(ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded (10 req/min)")
+    if not _OWNER_RE.match(owner) or not _REPO_RE.match(repo):
+        raise HTTPException(status_code=400, detail="Invalid owner/repo characters")
+    repo = repo.removesuffix(".git")
+    lookback_days = _resolve_trend_lookback(lookback)
+    sha = _resolve_head_sha(owner, repo)
+    if sha is None:
+        raise HTTPException(status_code=404, detail="repo not found")
+    return JSONResponse(_clone_and_trend(owner, repo, sha, lookback_days))
+
+
+@app.get("/trend/{owner}/{repo}", response_class=HTMLResponse)
+async def trend_public(owner: str, repo: str, request: Request,
+                       lookback: str | None = None):
+    """Public trend-dashboard permalink (R31.4).
+
+    Example: ``/trend/terraform-aws-modules/terraform-aws-vpc?lookback=180``.
+    Resolves HEAD, clones the full-history view, walks per-commit new/
+    resolved/net findings, and renders a styled HTML page with a
+    sparkline + velocity table + OG card.
+    """
+    ip = request.client.host if request.client else "unknown"
+    if not _rate_check(ip):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded (10 req/min)")
+    if not _OWNER_RE.match(owner) or not _REPO_RE.match(repo):
+        raise HTTPException(status_code=400, detail="Invalid owner/repo characters")
+    repo = repo.removesuffix(".git")
+    lookback_days = _resolve_trend_lookback(lookback)
+    sha = _resolve_head_sha(owner, repo)
+    if sha is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not resolve HEAD for github.com/{owner}/{repo}",
+        )
+    result = _clone_and_trend(owner, repo, sha, lookback_days)
+    return HTMLResponse(_render_trend_report(result))
+
+
 @app.get("/healthz")
 async def healthz() -> dict:
     return {"status": "ok", "cache_dir": str(CACHE_DIR)}

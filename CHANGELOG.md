@@ -5,6 +5,60 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 31.4 + R31.2 — Trend dashboard + auto-remediation PR bot — 2026-05-12
+
+First slice of the Round 31 "beyond static" plan, shipping the two PLAN-recommended first items together. R30 closed the static-scan completeness story; R31 unlocks new user modes against the engine that already exists.
+
+### R31.4 — Trend dashboard at `tfanalyze.com/trend/<owner>/<repo>`
+
+The engine has emitted `--mode trend` data since R26; nothing rendered it. New routes on `demo/app.py`:
+
+- `GET /trend/<owner>/<repo>` → styled HTML with sparkline + biggest-jump annotation + per-commit velocity table + OG metadata.
+- `GET /trend/<owner>/<repo>.json` → raw row list.
+- `?lookback=N` query param, clamped to 7–365 days (default 90).
+
+Caching mirrors the `/scan/` route pattern — keyed on the HEAD SHA *plus* the lookback window so changing the window doesn't serve a stale narrower result. Cache filename shape: `trend-{owner}_{repo}_{sha}_{lookback}.json`.
+
+The sparkline is plain inline SVG `<polyline>` — no d3 dependency, OG-card-previewable, mobile-renderable. The biggest-jump annotation surfaces the single commit whose `|net|` was largest, which is the share-bait framing ("this one PR moved the needle").
+
+### R31.2 — Auto-remediation PR bot
+
+New GitHub Actions workflow at `integrations/github-action-bot.yml` that consumers copy into their own `.github/workflows/`. Runs on a schedule (Mondays 03:00 UTC by default), applies the safest tier of `fix_hcl` patches, opens a single PR per repo.
+
+Engine change supporting it: new `--apply-fixes-max-disruption {none|plan_required|forces_replacement}` flag (default: `forces_replacement` — no cap, backward-compatible). The bot defaults to `none` so it never auto-applies a fix that forces resource replacement.
+
+The bot ships safe-by-default at multiple layers:
+
+- **Disruption ceiling** — `none` by default; the workflow's `workflow_dispatch` input lets operators raise it to `plan_required` per-invocation but never bakes the higher cap into the schedule.
+- **One PR per repo** — force-pushes to `tf-analyze-bot/auto-fixes` and edits the existing PR body in place if one already exists. No PR sprawl.
+- **Actor guard** — `if: github.actor != 'tf-analyze-bot[bot]'` prevents the bot's own commits from re-triggering the workflow.
+- **Minimum permissions** — `contents: write` + `pull-requests: write` only. No SARIF upload scope, no actions:write (which would let the bot rewrite workflow files).
+- **Concurrency group** — `tf-analyze-bot` ensures only one bot run at a time across the repo.
+
+PR body composition is a separate Python script (`integrations/github-action-bot/render_pr_body.py`) so the body shape can be unit-tested in isolation. The body groups fixes by rule family (`SEC-AWS-IAM-*`, `ROB-DRIFT-*`, …) and explicitly names what the bot deliberately skipped — reviewers see both the work done and the work they still need to do.
+
+### Tests
+
+- `tests/test_public_scanner.py::TestTrendDashboard` — 6 tests covering render shape, JSON form, lookback clamping, 404 on missing repo, empty-history degrade-gracefully, biggest-jump annotation presence.
+- `tests/test_github_action_bot.py` — 16 tests across two classes: `TestWorkflowShape` (9 drift gates on the YAML — triggers, permissions, actor guard, concurrency, force-push semantics, disruption-cap default) + `TestComposeBody` (7 unit tests on the renderer — family grouping, headline parsing, skipped section, score/grade display, non-disruptive filter, empty input, edge case in `family_of()`).
+
+**872 pytest pass, 2 skipped** (was 850 — +22 new). VS Code extension 62/62 still pass.
+
+### Files
+
+- New: `demo/app.py` ← trend routes, `integrations/github-action-bot.yml`, `integrations/github-action-bot/render_pr_body.py`, `integrations/github-action-bot/README.md`, `tests/test_github_action_bot.py`.
+- Engine: `scripts/detect.py` ← `--apply-fixes-max-disruption` flag + pre-filter in the apply path.
+- Tests: `tests/test_public_scanner.py` (TestTrendDashboard class), `tests/test_github_action_bot.py`.
+- Docs: this changelog, `README.md` (Surfaces table — two new rows), `demo/README.md` (routes table + trend-page contents section), `PLAN.md` (R31.4 + R31.2 status → ✅ shipped), `TODO.md` (moved to shipped).
+
+### What's still queued from R31
+
+- **R31.5 — Cost impact** (per-finding `cost_of_fix_usd` via new `cost_model:` catalogue field). Sized L; needs live pricing-API integration that's tricky to test offline.
+- **R31.3 — Cloud-provider depth** (+30 Azure, +15 K8s/Helm, +10 HashiCorp). Three parallelisable sub-pushes, each L; the bulk of the work is fixture authoring.
+- **R31.1 — Live cloud comparison** (`--mode drift-live --cloud aws`). XL; needs real SDK integration and live-cloud testing.
+
+---
+
 ## Round 30.15 — Detector topic-module split — 2026-05-11 (ext v0.1.53)
 
 **Follow-up to R30.14.** The 51 dispatch-table handlers that R30.14 introduced into `detect.py` are now organised into five topic modules under `scripts/_handlers_*.py`. `detect.py` shrinks from 4377 → 3052 lines and each detection family is independently readable.

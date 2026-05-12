@@ -21,7 +21,7 @@
 ![fix_hcl: 89%](https://img.shields.io/badge/fix__hcl-89%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
-![Tests: 844](https://img.shields.io/badge/tests-844%20passing-brightgreen)
+![Tests: 872](https://img.shields.io/badge/tests-872%20passing-brightgreen)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-238%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Integrations](#integrations) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Demo corpora](#demo-corpora--examples) · [Repo layout](#repository-layout) · [Contributing](#contributing--maintenance) · [Provenance](#provenance) · [License](#license)**
@@ -258,6 +258,8 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | HCP Terraform Run Task | [`integrations/run-task/`](integrations/run-task/) | [`docs/run-task.md`](docs/run-task.md) |
 | MCP server (Cursor / Claude Desktop / Continue / …) | [`integrations/mcp-server/`](integrations/mcp-server/) | FastMCP wrapper — `scan_workspace`, `explain_rule`, `apply_fixes`, `attack_graph`, `compliance_report` tools + `tfanalyze://catalogue` resource. stdio transport. Hardened against agent-side abuse: `TFA_REPO_ROOT` containment, `<tf-analyze-output>` envelope on every tool, finding/byte truncation caps. See [`integrations/mcp-server/README.md#hardening`](integrations/mcp-server/README.md#hardening). |
 | Terraform provider | [`terraform-provider/`](terraform-provider/) | `data "tfanalyze_scan"` data source — gates `terraform plan`/`apply` on a clean scan via `precondition` blocks, no external CI required. |
+| Trend dashboard (R31.4) | [`tfanalyze.com/trend/<owner>/<repo>`](https://tfanalyze.com/) | Hosted permalink rendering `--mode trend` output as a per-commit findings sparkline + new/resolved/net velocity table + biggest-jump annotation + OG preview card. Same per-SHA cache pattern as `/scan/`. `?lookback=N` query param (clamped 7-365 days). |
+| Auto-remediation bot (R31.2) | [`integrations/github-action-bot.yml`](integrations/github-action-bot.yml) | GitHub Actions workflow that runs on a schedule, applies non-disruptive `fix_hcl` patches via the new `--apply-fixes-max-disruption none` engine flag, opens a single PR per repo (force-pushes `tf-analyze-bot/auto-fixes`). PR body groups fixes by rule family + names what was deliberately skipped. See [`integrations/github-action-bot/README.md`](integrations/github-action-bot/README.md). |
 
 ---
 
@@ -375,7 +377,7 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (239 positive + 146 clea
 │   ├── gen-cli-docs.py         # Regenerates docs/cli.md from argparse
 │   ├── gen_clean_fixtures.py   # Auto-scaffolds clean fixtures from fix_hcl
 │   └── apply_mitre.py          # Idempotent MITRE ATT&CK mapper
-├── tests/                      # pytest suite (844 passing, 2 skipped)
+├── tests/                      # pytest suite (872 passing, 2 skipped)
 ├── docs/                       # User-facing documentation
 ├── integrations/
 │   ├── github-action.yml

@@ -2052,6 +2052,21 @@ def main():
         ),
     )
     ap.add_argument(
+        "--apply-fixes-max-disruption",
+        default="forces_replacement",
+        choices=["none", "plan_required", "forces_replacement"],
+        metavar="LEVEL",
+        help=(
+            "Cap which findings --apply-fixes will touch by their "
+            "fix_disruption tier. Default is 'forces_replacement' "
+            "(no cap — every fixable finding is applied). 'none' applies "
+            "only non-disruptive fixes (the auto-remediation-bot default). "
+            "'plan_required' applies non-disruptive plus changes visible in "
+            "`terraform plan` but not forcing replacement. Tier ordering: "
+            "none < plan_required < forces_replacement."
+        ),
+    )
+    ap.add_argument(
         "--cache",
         action="store_true",
         default=False,
@@ -2607,6 +2622,35 @@ def main():
                         file=sys.stderr,
                     )
                 fixable_findings = _retained
+
+        # R31.2 — disruption-tier cap. Used by the auto-remediation PR bot
+        # to limit itself to fixes that don't force replacement. The entry's
+        # `fix_disruption` field is the source of truth (`none` <
+        # `plan_required` < `forces_replacement`). Default of
+        # `forces_replacement` means no cap — backward-compatible.
+        _max_disr = getattr(args, "apply_fixes_max_disruption", "forces_replacement")
+        if _max_disr != "forces_replacement":
+            _disr_rank = {"none": 0, "plan_required": 1, "forces_replacement": 2}
+            _cap_rank = _disr_rank[_max_disr]
+            _entry_disr = {
+                e["id"]: e.get("fix_disruption", "forces_replacement")
+                for e in entries
+            }
+            _before = len(fixable_findings)
+            fixable_findings = [
+                f for f in fixable_findings
+                if _disr_rank.get(_entry_disr.get(f["id"], "forces_replacement"), 2)
+                <= _cap_rank
+            ]
+            _skipped_disr = _before - len(fixable_findings)
+            if _skipped_disr:
+                print(
+                    f"# apply-fixes: skipping {_skipped_disr} finding(s) above "
+                    f"disruption cap '{_max_disr}' "
+                    f"({len(fixable_findings)} eligible for auto-patch)",
+                    file=sys.stderr,
+                )
+
         _handle_apply_fixes(
             args, fixable_findings, entries,
             dry_run=(args.apply_fixes == "dry-run"),

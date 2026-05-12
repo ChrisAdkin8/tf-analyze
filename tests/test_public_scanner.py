@@ -240,3 +240,127 @@ class TestFindingOrder:
         assert html_out.find("LOW-FIRST") < html_out.find("LOW-SECOND"), (
             "stable sort within a tier was lost — detection order should be preserved"
         )
+
+
+# ---------------------------------------------------------------------------
+# R31.4 — trend dashboard tests
+# ---------------------------------------------------------------------------
+
+def _fake_clone_and_trend(owner: str, repo: str, sha: str, lookback_days: int):
+    """Synthetic trend result for the dashboard render path."""
+    return {
+        "rows": [
+            {"date": "2026-01-15", "sha": "a1b2c3d4", "new": 12, "resolved": 0,
+             "net": 12, "total": 12},
+            {"date": "2026-02-01", "sha": "e5f6a7b8", "new": 3, "resolved": 5,
+             "net": -2, "total": 10},
+            {"date": "2026-03-10", "sha": "c9d0e1f2", "new": 1, "resolved": 8,
+             "net": -7, "total": 3},
+        ],
+        "_meta": {
+            "owner": owner,
+            "repo": repo,
+            "sha": sha,
+            "lookback_days": lookback_days,
+            "url": f"https://github.com/{owner}/{repo}",
+            "scanned_at": 0,
+            "commits_analysed": 3,
+        },
+    }
+
+
+class TestTrendDashboard:
+    def test_html_render_shape(self, client) -> None:
+        """End-to-end: GET /trend/<owner>/<repo> returns styled HTML with
+        the sparkline SVG + per-commit velocity table + OG metadata."""
+        with patch("app._resolve_head_sha", _fake_resolve_head), \
+             patch("app._clone_and_trend", _fake_clone_and_trend):
+            r = client.get("/trend/terraform-aws-modules/terraform-aws-vpc")
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/html")
+        body = r.text
+        # Sparkline SVG present.
+        assert "<svg" in body
+        assert "polyline" in body
+        # All three commit SHAs appear in the velocity table.
+        for sha in ("a1b2c3d4", "e5f6a7b8", "c9d0e1f2"):
+            assert sha in body, f"missing sha {sha}"
+        # OG card on the page — preview-ready.
+        assert 'property="og:title"' in body
+        # Net negative (3 resolved net) → headline should say "resolved".
+        assert "resolved" in body
+        # Repo back-link.
+        assert "github.com/terraform-aws-modules/terraform-aws-vpc" in body
+
+    def test_json_form_returns_rows(self, client) -> None:
+        """``.json`` sibling route returns the raw rows + meta dict."""
+        with patch("app._resolve_head_sha", _fake_resolve_head), \
+             patch("app._clone_and_trend", _fake_clone_and_trend):
+            r = client.get("/trend/foo/bar.json")
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data["rows"]) == 3
+        assert data["_meta"]["owner"] == "foo"
+        assert data["_meta"]["repo"] == "bar"
+
+    def test_lookback_query_param_clamped(self, client) -> None:
+        """``?lookback=`` must be clamped to ``[7, 365]`` — silly values
+        fall back to default rather than 400'ing."""
+        captured: dict = {}
+
+        def capture(owner, repo, sha, lookback_days):
+            captured["lookback_days"] = lookback_days
+            return _fake_clone_and_trend(owner, repo, sha, lookback_days)
+
+        with patch("app._resolve_head_sha", _fake_resolve_head), \
+             patch("app._clone_and_trend", capture):
+            # Above cap → 365.
+            client.get("/trend/foo/bar?lookback=9999")
+            assert captured["lookback_days"] == 365
+            # Below min → 7.
+            client.get("/trend/foo/bar?lookback=1")
+            assert captured["lookback_days"] == 7
+            # Garbage → default 90.
+            client.get("/trend/foo/bar?lookback=not-a-number")
+            assert captured["lookback_days"] == 90
+
+    def test_404_when_head_unresolvable(self, client) -> None:
+        """Same 404 contract as /scan/ — bad repo, no cloning attempt."""
+        with patch("app._resolve_head_sha", lambda *a, **k: None):
+            r = client.get("/trend/nonexistent/nonexistent")
+        assert r.status_code == 404
+
+    def test_empty_history_renders_without_crashing(self, client) -> None:
+        """A repo with zero commits in the lookback window must still
+        render a sensible page (not 500). Headline collapses to net-zero;
+        velocity table prints a helpful placeholder."""
+        def empty_trend(owner, repo, sha, lookback_days):
+            return {
+                "rows": [],
+                "_meta": {
+                    "owner": owner, "repo": repo, "sha": sha,
+                    "lookback_days": lookback_days,
+                    "url": f"https://github.com/{owner}/{repo}",
+                    "scanned_at": 0, "commits_analysed": 0,
+                },
+            }
+        with patch("app._resolve_head_sha", _fake_resolve_head), \
+             patch("app._clone_and_trend", empty_trend):
+            r = client.get("/trend/quiet/repo")
+        assert r.status_code == 200
+        # Sparkline still renders (just empty).
+        assert "<svg" in r.text
+        # Placeholder explains the empty state.
+        assert "No commits" in r.text
+
+    def test_biggest_jump_annotation_appears(self, client) -> None:
+        """The biggest |net| commit gets called out separately —
+        share-bait is the "this one commit moved the needle" framing."""
+        with patch("app._resolve_head_sha", _fake_resolve_head), \
+             patch("app._clone_and_trend", _fake_clone_and_trend):
+            r = client.get("/trend/foo/bar")
+        body = r.text
+        # The third commit had net=-7 (biggest |net|); its SHA must
+        # appear in the dedicated annotation line.
+        assert "Biggest single-commit jump" in body
+        assert "c9d0e1f2" in body

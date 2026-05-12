@@ -9,6 +9,8 @@ A FastAPI app exposing three surfaces:
 | `POST /scan/repo` | JSON body `{repo: "<url>"}` — legacy API |
 | **`GET /scan/<owner>/<repo>`** | **Public permalink (R30.14).** Resolves HEAD, scans, returns styled HTML. Cached by commit SHA. |
 | `GET /scan/<owner>/<repo>.json` | Machine-readable form of the same permalink. |
+| **`GET /trend/<owner>/<repo>`** | **Trend dashboard (R31.4).** Walks the repo's git history, runs `--mode trend`, renders a styled HTML page with per-commit findings sparkline + new/resolved/net velocity table + biggest-jump annotation + OG card. Cached per-(repo, HEAD-sha, lookback). Accepts `?lookback=N` (clamped 7–365, default 90). |
+| `GET /trend/<owner>/<repo>.json` | Machine-readable form — the raw row list plus `_meta`. |
 | **`GET /badge/<owner>/<repo>.svg`** | **Score badge (R30.15).** shields.io-shape SVG. Reads the same per-SHA cache the permalink writes; renders a "no data" placeholder if the repo has never been scanned. Wrap in a link to the matching `/scan/...` permalink so the first click populates the cache. |
 | `GET /healthz` | Liveness probe |
 
@@ -105,6 +107,31 @@ fills up, `flyctl ssh console -C "find /var/cache/tf-analyze -mtime +30 -delete"
 * **Attack-graph SVG** (when `--attack-graph` returned non-empty data).
 * **Open Graph metadata** — score + grade in `og:title` so Slack /
   Twitter / HN preview cards render the headline number.
+
+### What the trend page contains
+
+`GET /trend/<owner>/<repo>?lookback=90` returns a styled HTML page with:
+
+* **Headline** — net change over the window (`+N` or `-N` findings),
+  coloured red for regression and green for improvement. The Open
+  Graph card uses the same number so a Slack/Twitter preview reads
+  "tf-analyze trend: 12 findings resolved over 90 days".
+* **Sparkline** — inline SVG `<polyline>` of the per-commit total
+  findings curve. No d3 dependency — server-rendered, works on
+  mobile, OG-previewable.
+* **Biggest-jump annotation** — the single commit whose net delta had
+  the largest absolute value, called out by SHA and date. The "this
+  one PR moved the needle" framing is the share-bait.
+* **Per-commit velocity table** — every commit in the window with
+  `new` (introduced), `resolved`, `net`, `total` columns. Sorted
+  oldest-first so the eye-trail follows the sparkline.
+* **Back-link** to `/scan/<owner>/<repo>` so a visitor can pivot from
+  "how is this repo trending?" to "what does it look like right now?"
+
+Cache shape: `trend-{owner}_{repo}_{sha}_{lookback}.json` keyed on the
+HEAD SHA at request time plus the lookback window. Each new commit
+gets a fresh trend; the same SHA + lookback combo serves from cache
+on every revisit.
 
 ## Why a permalink and not a form?
 

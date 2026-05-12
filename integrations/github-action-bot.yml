@@ -1,0 +1,141 @@
+name: tf-analyze-bot — auto-remediation PR
+
+# R31.2 — auto-remediation bot.
+#
+# Runs on a schedule against the consuming repo, applies safe (non-disruptive)
+# fix_hcl patches via `--apply-fixes apply --apply-fixes-max-disruption none`,
+# and opens a single PR grouped by rule family. Idempotent: the bot reuses
+# branch `tf-analyze-bot/auto-fixes` and force-pushes on each run so a stale
+# proposed-fix PR is overwritten rather than spawning duplicates.
+#
+# Copy this file to `.github/workflows/tf-analyze-bot.yml` in your repo, and
+# the bot will run weekly. Customise the schedule + max-disruption tier
+# below if you want a different cadence or higher trust level.
+
+on:
+  schedule:
+    # Mondays 03:00 UTC. Adjust to taste; weekly is the sane default —
+    # daily produces too many PRs, monthly lets fixes pile up.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      max-disruption:
+        description: "Maximum fix_disruption tier to apply (none | plan_required)"
+        required: false
+        default: "none"
+      ref:
+        description: "tf-analyze ref to install (branch / tag / SHA)"
+        required: false
+        default: "main"
+
+permissions:
+  # The bot writes a new branch + opens a PR. No security-events scope
+  # needed since this workflow doesn't upload SARIF.
+  contents: write
+  pull-requests: write
+
+# Guard against the bot triggering itself when CI on the bot's own PR
+# runs (which it shouldn't given the schedule trigger above, but cheap
+# insurance against future changes). `tf-analyze-bot[bot]` is the
+# username GitHub Apps installed under this workflow would use; the
+# GITHUB_ACTOR for a scheduled run is `github-actions[bot]`.
+concurrency:
+  group: tf-analyze-bot
+  cancel-in-progress: false
+
+jobs:
+  remediate:
+    if: github.actor != 'tf-analyze-bot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Required so the bot can push the auto-fixes branch back.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch tf-analyze
+        run: |
+          ref="${{ github.event.inputs.ref || 'main' }}"
+          git clone --depth 1 --branch "$ref" https://github.com/ChrisAdkin8/tf-analyze.git /tmp/tf-analyze
+          pip install python-hcl2  # optional fast-path
+
+      - name: Run scan (capture JSON for the PR body)
+        id: scan
+        run: |
+          python3 /tmp/tf-analyze/scripts/detect.py \
+            --target . \
+            --catalog /tmp/tf-analyze/catalog \
+            --format json \
+            > /tmp/scan-before.json || true
+
+      - name: Apply non-disruptive fixes
+        id: apply
+        run: |
+          max_disruption="${{ github.event.inputs.max-disruption || 'none' }}"
+          python3 /tmp/tf-analyze/scripts/detect.py \
+            --target . \
+            --catalog /tmp/tf-analyze/catalog \
+            --apply-fixes apply \
+            --apply-fixes-max-disruption "$max_disruption" \
+            2> /tmp/apply.stderr || true
+          cat /tmp/apply.stderr
+          # The apply-fixes diagnostic line ("# apply-fixes: would apply N
+          # fix(es) across M file(s)") tells us how many actually landed.
+          # Capture for the PR body.
+          grep -E "apply-fixes:" /tmp/apply.stderr > /tmp/apply-summary.txt || true
+
+      - name: Check whether anything changed
+        id: diff
+        run: |
+          # Reset .bak files the engine wrote — keep the diff clean.
+          find . -name '*.bak' -delete
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No non-disruptive fixes available; skipping PR."
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Compose PR body
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          python3 /tmp/tf-analyze/integrations/github-action-bot/render_pr_body.py \
+            --scan-json /tmp/scan-before.json \
+            --apply-summary /tmp/apply-summary.txt \
+            --output /tmp/pr-body.md
+          cat /tmp/pr-body.md
+
+      - name: Open or update PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="tf-analyze-bot/auto-fixes"
+          git config user.name  "tf-analyze-bot"
+          git config user.email "tf-analyze-bot@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -m "[tf-analyze] Auto-apply non-disruptive fixes"
+          # Force-push so a stale fix branch from a prior run is replaced
+          # rather than rejected as non-fast-forward.
+          git push --force origin "$BRANCH"
+          # Open a new PR if none exists for this branch; otherwise edit
+          # the existing one's body in place. Either way, exactly one PR
+          # exists per run.
+          existing=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' || echo "")
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "$BRANCH" \
+              --title "[tf-analyze] Auto-apply non-disruptive fixes" \
+              --body-file /tmp/pr-body.md
+          else
+            gh pr edit "$existing" --body-file /tmp/pr-body.md
+            echo "Updated existing PR #$existing"
+          fi
