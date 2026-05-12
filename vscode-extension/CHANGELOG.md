@@ -5,6 +5,64 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.54] — 2026-05-12
+
+**Engine refresh — `ignore_paths` config + `--apply-fixes-max-disruption` flag.**
+Two new engine features land in the bundled engine: an `ignore_paths`
+list in `.tf-analyze.yaml` is honoured by the file walker, and
+`--apply-fixes` gains a `--apply-fixes-max-disruption` cap that lets
+callers limit which findings get auto-patched by their `fix_disruption`
+tier. No extension-side wiring changes — both features are
+engine-internal.
+
+### `ignore_paths` honoured by the file walker
+
+The engine now reads an optional `ignore_paths:` list from
+`.tf-analyze.yaml` and skips matching directories during the `.tf`
+walk. Component-prefix matching (so `examples/` matches
+`examples/foo/main.tf` but never `examples-clean/main.tf`). Two
+walking sites are filtered: the main scan and `--mode verify-fixed`.
+`_collect_extra_files` (workflow YAML / tfvars discovery) honours
+it too. Opt-in — absent `.tf-analyze.yaml` or absent key leaves
+behaviour unchanged.
+
+Why now: the public scanner at `tfanalyze.com/scan/<owner>/<repo>`
+scans the whole repo, including any deliberately-vulnerable
+training corpora the repo ships under `examples/` or `fixtures/`.
+Without an exclude mechanism, scanning a security-tool repo
+against itself reports an F grade based on the intentional
+vulnerabilities. With this feature, the badge reflects the engine
+code only.
+
+### `--apply-fixes-max-disruption` flag (supports R31.2 PR bot)
+
+New CLI flag `--apply-fixes-max-disruption {none|plan_required|forces_replacement}`.
+Default `forces_replacement` (no cap — backward-compatible). When
+set to a lower tier, findings whose catalogue entry has a higher
+`fix_disruption` are excluded from the patcher before
+`_handle_apply_fixes` is called. Stderr reports the skip count
+alongside the existing baseline-skip line.
+
+Built primarily to support the new R31.2 auto-remediation PR bot
+(see `integrations/github-action-bot.yml`), but generally useful
+for any apply-fixes consumer that wants to limit the blast radius
+of an automated remediation pass.
+
+### Bundled engine refresh
+
+The `bundle-engine.js` glob (`scripts/_*.py`) picks up the engine
+changes automatically; no Dockerfile edits or sibling-file list
+maintenance was needed. Bundle ships 24 sibling Python files, same
+as v0.1.53 — the changes are in `detect.py` itself.
+
+### Counts
+
+- 872 pytest cases pass (was 850 at v0.1.53 — +22 from the new
+  trend-dashboard + bot-renderer tests).
+- 62 / 62 VS Code extension smoke tests pass.
+
+---
+
 ## [0.1.53] — 2026-05-11
 
 **Engine refresh — R30.15 topic-module split.** Follow-up to R30.14.

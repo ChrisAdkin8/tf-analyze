@@ -227,6 +227,10 @@ Disable the python-hcl2 fast-path and use the regex parser exclusively. Useful f
 
 Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying.
 
+### `--apply-fixes-max-disruption`
+
+Cap which findings --apply-fixes will touch by their fix_disruption tier. Default is 'forces_replacement' (no cap — every fixable finding is applied). 'none' applies only non-disruptive fixes (the auto-remediation-bot default). 'plan_required' applies non-disruptive plus changes visible in `terraform plan` but not forcing replacement. Tier ordering: none < plan_required < forces_replacement.
+
 ### `--cache`
 
 Enable incremental scan caching. Stores findings keyed on a hash of all .tf file contents + catalogue entries in .tf-analyze-cache.json inside the target directory. Subsequent runs on unchanged code return the cached findings instantly. Cache is invalidated automatically when any .tf file or catalogue rule changes. Use --cache-file to override the path.

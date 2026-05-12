@@ -34,6 +34,14 @@ def _load_argparse() -> argparse.ArgumentParser:
     """
     spec = importlib.util.spec_from_file_location("detect", DETECT_PY)
     mod = importlib.util.module_from_spec(spec)
+    # Register in sys.modules BEFORE exec. Python 3.14's stricter
+    # `dataclasses._is_type` calls `sys.modules.get(cls.__module__).__dict__`
+    # on every @dataclass decoration; if the module isn't registered, it
+    # crashes with `'NoneType' has no attribute '__dict__'`. detect.py
+    # defines InFileCtx + CorpusCtx as dataclasses at module load time
+    # (R30.14 dispatch-table refactor), so the registration has to happen
+    # before exec_module fires.
+    sys.modules["detect"] = mod
     spec.loader.exec_module(mod)  # type: ignore
 
     captured: dict = {}
