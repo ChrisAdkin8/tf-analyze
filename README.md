@@ -11,7 +11,6 @@
 [![Release](https://img.shields.io/github/v/release/ChrisAdkin8/tf-analyze?include_prereleases&sort=semver)](https://github.com/ChrisAdkin8/tf-analyze/releases)
 [![GitHub Marketplace](https://img.shields.io/badge/marketplace-tf--analyze-blue?logo=githubactions)](https://github.com/marketplace/actions/tf-analyze)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/tfanalyze.tf-analyze?label=vs%20code%20marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze)
-[![Open VSX](https://img.shields.io/open-vsx/v/tfanalyze/tf-analyze?label=open%20vsx&logo=eclipseide)](https://open-vsx.org/extension/tfanalyze/tf-analyze)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/ChrisAdkin8/tf-analyze/pkgs/container/tf-analyze)
 [![tf-analyze score](https://tfanalyze.com/badge/ChrisAdkin8/tf-analyze.svg)](https://tfanalyze.com/scan/ChrisAdkin8/tf-analyze)
 ![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
