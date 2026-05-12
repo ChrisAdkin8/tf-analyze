@@ -14,6 +14,18 @@ State at last sync (2026-05-12): **238 rules · 840 tests** + 62 node:test · ex
 
 ---
 
+## Round 31 sprint — Beyond static (drift / remediation / depth / trend / cost) — 🟡 planned (2026-05-12)
+
+Round 31 stops adding rules and starts unlocking new user modes. Five items, each a separate "value to a different reader" lever:
+
+- [ ] **P1 · L** **R31.4** Trend dashboard — `tfanalyze.com/trend/<owner>/<repo>` renders `--mode trend` output as a score-over-time sparkline + finding-velocity chart + biggest-jumps annotations. Engine already emits the data; needs a render layer in `demo/`. **Recommended ship order: 1st** (smallest effort × largest share-bait). → `PLAN.md§R31.4`
+- [ ] **P1 · M** **R31.2** Auto-remediation PR bot — new `integrations/github-action-bot.yml` runs on schedule, applies non-disruptive `fix_hcl` snippets, opens one PR grouped by rule family. Turns the existing 89% `fix_hcl` corpus from documentation into active output. **Recommended ship order: 2nd.** → `PLAN.md§R31.2`
+- [ ] **P2 · L** **R31.5** Cost impact — per-finding `cost_of_fix_usd` + `cost_of_breach_estimate_usd` via new `cost_model:` catalogue field. AWS Pricing API / GCP SKU API / Azure Retail Prices API daily-cached. New `--explain-cost` flag (top-5 by ROI of fix). Highest differentiation; nobody else does this. → `PLAN.md§R31.5`
+- [ ] **P2 · L** **R31.3** Cloud-provider depth — three parallelisable sub-pushes: Azure +30 rules, K8s/Helm +15 rules, HashiCorp stack +10 rules. Closes the AWS/Azure 2.5× imbalance and the HashiCorp gap that's surprising given Provenance. → `PLAN.md§R31.3`
+- [ ] **P2 · XL** **R31.1** Live cloud comparison — `--mode drift-live --cloud <aws\|gcp\|azure>` queries live cloud via SDKs, synthesises state-like view, runs existing drift-comparison code. Ship AWS first; GCP + Azure follow. Biggest single item — last because it depends on the user base R31.2 / R31.4 build. → `PLAN.md§R31.1`
+
+---
+
 ## Round 30 sprint — OWASP + multi-framework coverage — sub-rounds 0–0.5 ✅ shipped, 1–2 + 6–9 ✅ shipped, 3–5 queued
 
 ### Shipped
