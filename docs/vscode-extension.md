@@ -26,7 +26,7 @@ against their working copy of `detect.py`), not user features.
 
 **From the `.vsix` (the only supported user path):**
 ```bash
-code --install-extension tf-analyze-0.1.49.vsix
+code --install-extension tf-analyze-0.1.54.vsix
 ```
 
 That's it. Open any Terraform workspace and the status-bar items

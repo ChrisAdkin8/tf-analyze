@@ -24,6 +24,14 @@ Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE AT
 - 🏃 [**HCP Terraform Run Task**](run-task.md) — pre-apply gate inside HCP.
 - 🧠 [**MCP server**](mcp-server.md) — `scan_workspace` / `explain_rule` / `apply_fixes` / `attack_graph` / `compliance_report` / `blast_radius_report` tools for Claude Desktop, Cursor, Continue.dev, and other MCP-aware agents. Hardened against agent-side abuse (LLM01/05/06/10).
 - 🪛 [**Terraform provider**](terraform-provider.md) — `data "tfanalyze_scan"` for gating `terraform apply` on a clean scan via `precondition` blocks, no external CI required.
+- 🌊 [**Blast-radius analysis**](blast-radius.md) — `--blast-radius` answers the SRE question "what could one `terraform apply` destroy?" Per-finding + per-node + top-N rendered in CLI / PR summary / VS Code panel.
+
+### Hosted surfaces — tfanalyze.com
+
+- 🔗 [**Public scanner permalink**](https://tfanalyze.com/) — `tfanalyze.com/scan/<owner>/<repo>` resolves the GitHub repo's HEAD SHA, scans, and renders a styled HTML report with score banner, top findings (severity-ordered), top fixes, attack graph + module-reuse panels, and an Open Graph card so Slack/Twitter/HN preview cards show the score. JSON sibling at `.json`. Per-SHA cached.
+- 📈 [**Trend dashboard**](https://tfanalyze.com/) — `tfanalyze.com/trend/<owner>/<repo>` walks the repo's git history (default 90 days), runs `--mode trend`, and renders a styled HTML page with per-commit findings sparkline + new/resolved/net velocity table + biggest-jump annotation + OG card. `?lookback=N` clamped 7-365 days.
+- 🛡️ [**Score badge**](https://tfanalyze.com/) — `tfanalyze.com/badge/<owner>/<repo>.svg` is a shields.io-shape SVG embeddable in any README, reading the same per-SHA cache the permalink writes.
+- 🤖 [**Auto-remediation PR bot**](https://github.com/ChrisAdkin8/tf-analyze/blob/main/integrations/github-action-bot/README.md) — Dependabot-style GitHub Action that runs on a schedule, applies non-disruptive `fix_hcl` patches, and opens a single PR per repo grouped by rule family. Safe-by-default (caps at `fix_disruption: none`).
 
 ### Authoring
 
