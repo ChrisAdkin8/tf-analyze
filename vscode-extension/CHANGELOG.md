@@ -5,6 +5,63 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.57] — 2026-05-13
+
+**Bundled engine refreshed for R32.1 — K8s/Helm rule coverage 8 → 18 (343 → 353 active rules).**
+
+The bundled rule catalogue grows from 343 → 353 rules. The K8s/Helm
+family — flat at 8 rules since Round 30 while the three hyperscalers
+sat at 91 each — moves to 18 with ten new rules. Filter applied:
+declarative HCL misconfiguration that runtime scanners (kubescape /
+polaris / kube-bench) cannot catch as cleanly. Live-cluster scanners
+stay authoritative for runtime drift; tf-analyze owns the plan-time
+HCL surface.
+
+### Added (catalogue, via bundled engine refresh)
+
+- **SEC-K8S-HELM-003** — `helm_release` `verify = false` or unpinned
+  `version` (chart supply-chain).
+- **SEC-K8S-HELM-004** — `helm_release` `disable_webhooks = true` or
+  `skip_crds = true` (admission / CRD bypass).
+- **SEC-K8S-NETPOL-002** — `kubernetes_network_policy` with
+  `0.0.0.0/0` cidr or empty rule (permissive policy that lulls
+  operators into "secured").
+- **SEC-K8S-RBAC-002** — RoleBinding subject `system:masters` /
+  `system:unauthenticated` (CRITICAL — bypasses RBAC at the
+  apiserver level).
+- **SEC-K8S-SA-001** — ServiceAccount automounts the API token
+  (explicit `= true` or omitted).
+- **SEC-K8S-SECRET-001** — literal `data` block on `kubernetes_secret`
+  (base64 is encoding, not encryption).
+- **SEC-K8S-SECRET-002** — `kubernetes.io/dockerconfigjson` carrying
+  literal data (CRITICAL — leaks private image-registry creds).
+- **STK-K8S-INGRESS-001** — `kubernetes_ingress_v1` without `tls`
+  block (plaintext HTTP exposure).
+- **STK-K8S-PSA-002** — Pod Security Admission `enforce = "privileged"`
+  (weakest level — functionally identical to no PSA at all).
+- **STK-K8S-PSP-001** — `kubernetes_pod_security_policy` resource
+  declared (deprecated 1.21, removed 1.25).
+
+### What you see
+
+After installing v0.1.57 the status-bar chip will report **353 rules**
+on a workspace where the previous build reported 343. The 🛡 Findings
+panel and Quick Fix surface the new rules immediately; the
+`vscode://tfanalyze.tf-analyze/rule/<ID>` deep-link handler resolves
+to the canonical docs pages at
+[chrisadkin8.github.io/tf-analyze/rules](https://chrisadkin8.github.io/tf-analyze/rules/).
+
+### Build notes
+
+Bundled engine smoke test confirms `python3 detect.py --list-rules`
+returns 353 active rules from the packaged catalogue. `scripts/_mitre.py`
+also picks up three new ATT&CK techniques cited by the new rules
+(`T1041`, `T1078.001`, `T1528`) so SARIF taxonomies + the `--format
+mitre` output stay in sync. No extension-side TypeScript change; the
+panels, URI handler, and Quick Fix code paths are unchanged from v0.1.56.
+
+---
+
 ## [0.1.56] — 2026-05-13
 
 **Bundled engine refreshed for R32 — numerical parity across AWS / GCP / Azure (343 active rules).**
