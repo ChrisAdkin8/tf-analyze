@@ -28,6 +28,19 @@
 
 Same engine, ten surfaces — Claude Code skill, Python CLI, GitHub Action, Docker, pre-commit hook, LSP server, VS Code extension, HCP Run Task, [MCP server](integrations/mcp-server/) for AI agents, [native Terraform provider](terraform-provider/). Pick the one that fits your workflow; the rule catalogue, score, and `fix_hcl` are identical across all of them.
 
+### Rules at a glance
+
+| Cloud | Security | Hardening | Ops & Reuse | **Total** |
+|---|---:|---:|---:|---:|
+| AWS | 62 | 25 | 4 | **91** |
+| GCP | 41 | 47 | 3 | **91** |
+| Azure | 56 | 32 | 3 | **91** |
+| K8s / Helm | 5 | 3 | 0 | **8** |
+| Cross-cloud / engine | 21 | 27 | 14 | **62** |
+| **Total** | **185** | **134** | **24** | **343** |
+
+Hardening = `ROB-*` + `STK-*`; Ops & Reuse = `OPS-*` + `COST-*` + `MOD-*` + `MOD-REUSE-*` + `INT-*` + `CI-*` + `STYLE-*`. Full per-family breakdown and shape-by-cloud commentary in [Detection ↓](#detection).
+
 ---
 
 ## Quickstart

@@ -6,6 +6,12 @@ runs tf-analyze in CI, posts an engine-rendered summary to the PR,
 attaches inline `suggestion` blocks on changed lines, uploads SARIF to
 Code Scanning, and stores an HTML report as a build artifact.
 
+<p align="center">
+  <img src="images/github-action-findings.png" alt="tf-analyze GitHub Action PR comment showing score banner, top findings table, top fix, attack graph, and compliance summary" width="640" />
+  <br />
+  <sub><strong>PR summary comment</strong> — engine-rendered <code>--format pr-summary</code>: score + grade, urgency counts, top findings table linked to the rule docs site, a ready-to-paste fix, and collapsible attack-graph / compliance sections.</sub>
+</p>
+
 It is the surface most external users encounter first, so the contract
 is locked down by 17 drift-gate tests in `tests/test_github_action.py`
 — particularly the clone URL (Round 30 P0.2 fixed a publish-blocking
@@ -61,6 +67,12 @@ Or reference it as a composite action from any workflow:
 - **Inline suggestions** — every finding with a `fix_hcl` snippet that
   lands on a changed line gets a `suggestion` block comment so reviewers
   can click **Apply suggestion** and commit the fix in one click.
+
+<p align="center">
+  <img src="images/github-action-remediation.png" alt="GitHub PR inline suggestion block from tf-analyze with a Commit suggestion button" width="640" />
+  <br />
+  <sub><strong>One-click remediation</strong> — a finding (here <code>OPS-AWS-TAGS-001</code>) attaches a native GitHub <code>suggestion</code> block on the changed line; reviewers click <strong>Commit suggestion</strong> to merge the <code>fix_hcl</code> patch directly. Urgency and disruption (<em>Non-disruptive</em> / <em>Plan required</em> / <em>Forces replacement</em>) are surfaced in the comment header.</sub>
+</p>
 - **HTML artifact** — the full HTML report is uploaded with 30-day
   retention, downloadable from the workflow run page for offline review.
 
