@@ -5,6 +5,49 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 31.5 — Composite-action input parity (`compliance-framework`, `ref`) — 2026-05-13
+
+Fixes a README↔implementation gap that pre-dated `v1`. The marketplace-facing README snippet at L89-95 has advertised the following workflow shape since R29:
+
+```yaml
+- uses: ChrisAdkin8/tf-analyze@v1
+  with:
+    fail-on: HIGH
+    post-pr-comment: true
+    compliance-framework: owasp_iac   # ← was a no-op
+    attack-graph: true
+    ref: v0.2.1                       # ← was a no-op
+```
+
+…but the top-level `action.yml` (the composite action that ships at `@v1`) only declared `target`, `fail-on`, `mode`, `section`, `attack-graph`, `baseline`, `post-pr-comment`, `upload-sarif`, `upload-html-artifact`, `image`, and `extra-args`. The two highlighted inputs only existed on `integrations/github-action.yml`, which is a reference *workflow template*, not the published composite.
+
+Net effect for every external user who copy-pasted the snippet: a runtime `Unexpected input(s) 'compliance-framework', 'ref'` warning in their Actions log, no compliance gap report, and the engine pulled `:latest` instead of the requested tag.
+
+This round wires both inputs through `action.yml` so the advertised contract is honest:
+
+- **`compliance-framework`** (default `''`; one of `cis | pci_dss | soc2 | owasp_iac | all`). When set, the engine receives `--compliance --compliance-framework <value>` and the engine-rendered `--format pr-summary` block grows a collapsible compliance section. A new pre-args step validates the value against the allowed set; an unknown framework fails the action with a `::error::` annotation rather than propagating to a confusing engine traceback.
+- **`ref`** (default `''`). A convenience alias for the image tag — `ref: v0.2.2` is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:v0.2.2`. Setting both `ref` and an explicit `image:` is a hard error (ambiguous signal). The "Resolve image" step computes the final image once and threads it through both the `docker pull` and `docker run` steps via `steps.resolve_image.outputs.image`.
+
+Both inputs flow through `env:` rather than GitHub Actions templating, matching the R5 injection-hardening pattern established in audit round 5.
+
+### Drift gate
+
+A new `tests/test_action_yml.py` parses the published composite action and asserts:
+
+- Every input the README snippet names exists in `action.yml` (the parity gate proper).
+- `compliance-framework` description advertises all five accepted values.
+- The validate / resolve-image / forward-flag steps exist.
+- Pull and run both consume `steps.resolve_image.outputs.image` (i.e. `ref:` is actually wired).
+- Both new inputs flow through `env:` (R5 hardening parity).
+
+The existing `tests/test_github_action.py` keeps targeting `integrations/github-action.yml` unchanged; the two files now cover the two surfaces independently.
+
+### Migration
+
+Existing workflows are unaffected — the new inputs default to empty strings, so behavior is unchanged for anyone not setting them. The README snippet now does what it always claimed.
+
+---
+
 ## Round 31.4 + R31.2 — Trend dashboard + auto-remediation PR bot — 2026-05-12
 
 First slice of the Round 31 "beyond static" plan, shipping the two PLAN-recommended first items together. R30 closed the static-scan completeness story; R31 unlocks new user modes against the engine that already exists.
