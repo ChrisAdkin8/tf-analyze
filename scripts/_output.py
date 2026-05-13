@@ -1192,13 +1192,138 @@ def _append_attack_graph_block(parts: list[str], attack_graph: dict) -> None:
     parts.append("</details>")
 
 
+def _append_compliance_block(parts: list[str], compliance: dict) -> None:
+    """Append a collapsible compliance gap report block to `parts`.
+
+    R31.8 (issue #12): factored out so both the clean-repo path and
+    the findings-present path render the same compliance shape. The
+    `compliance` dict comes from the engine's `--compliance` pass and
+    has the shape:
+
+        {"<framework>": [{"control": "…", "status": "PASS"|"FAIL",
+                          "rules": [...], "failed_rules": [...]}, ...]}
+
+    Failures sort to the top of each control list; rules that fired
+    are bolded so reviewers spot them without expanding more sections.
+    """
+    for fw in sorted(compliance):
+        controls = compliance[fw] or []
+        if not controls:
+            continue
+        total = len(controls)
+        passed = sum(1 for c in controls if c.get("status") == "PASS")
+        failed = total - passed
+        pct = int(100 * passed / total) if total else 0
+        indicator = "🟢" if pct >= 80 else ("🟡" if pct >= 50 else "🔴")
+        parts.append(
+            f"<details><summary>📋 Compliance ({fw}): "
+            f"{indicator} {passed}/{total} PASS · {failed} FAIL</summary>"
+        )
+        parts.append("")
+        parts.append("| Control | Status | Mapped rules |")
+        parts.append("|---|---|---|")
+        ordered = sorted(
+            controls,
+            key=lambda c: (0 if c.get("status") == "FAIL" else 1, c.get("control", "")),
+        )
+        for ctrl in ordered:
+            status_emoji = "❌ FAIL" if ctrl.get("status") == "FAIL" else "✅ PASS"
+            rules = ctrl.get("rules") or []
+            failed_rules = set(ctrl.get("failed_rules") or [])
+            rule_cells = []
+            for r in rules:
+                link = f"[`{r}`]({RULE_DOCS_URL_BASE.format(id=r)})"
+                rule_cells.append(f"**{link}**" if r in failed_rules else link)
+            rule_str = ", ".join(rule_cells) or "—"
+            parts.append(
+                f"| `{ctrl.get('control', '?')}` | {status_emoji} | {rule_str} |"
+            )
+        parts.append("")
+        parts.append("</details>")
+        parts.append("")
+
+
+def _render_pr_summary_minimal_fallback(summary: dict, *, reason: str = "") -> str:
+    """Tiny pr-summary fallback shape — counts table only.
+
+    Used by the public ``_render_pr_summary`` wrapper when the full
+    renderer raises (R31.8 — issue #13). Producing a non-empty
+    Markdown string here means the GitHub Action's downstream
+    github-script step doesn't have to make up a fallback of its own
+    — engine output is always renderable.
+    """
+    score = summary.get("score", 0)
+    grade = summary.get("grade", "?")
+    counts = summary.get("counts", {})
+    lines = [
+        f"## tf-analyze: {score} ({grade})",
+        "",
+        "| Urgency | Count |",
+        "|---------|------:|",
+        f"| 🚨 CRITICAL | {counts.get('CRITICAL', 0)} |",
+        f"| ⚠️ HIGH | {counts.get('HIGH', 0)} |",
+        f"| 💡 MEDIUM | {counts.get('MEDIUM', 0)} |",
+        f"| ℹ️ LOW | {counts.get('LOW', 0)} |",
+        "",
+    ]
+    if reason:
+        # Make the degraded shape visible to humans reading the PR
+        # comment, so a renderer regression doesn't pass for "looks
+        # normal, just terser".
+        lines.append(f"<sub>⚠️ pr-summary fallback — renderer error: {reason}</sub>")
+    return "\n".join(lines) + "\n"
+
+
 def _render_pr_summary(
     findings: list[dict],
     entries: list[dict],
     summary: dict,
     *,
     attack_graph: dict | None = None,
-    centrality: dict | None = None,
+    centrality: list[dict] | dict | None = None,
+    compliance: dict | None = None,
+) -> str:
+    """Public entry point — never raises.
+
+    R31.8 (issue #13): the real renderer (`_render_pr_summary_impl`)
+    used to crash silently with `AttributeError: 'list' object has no
+    attribute 'get'` when called from `detect.py` with the
+    `_score_fix_centrality` list shape — the engine then wrote an
+    empty pr-summary.md and the downstream GitHub Action's
+    github-script step had to make up its own fallback. This wrapper
+    catches any exception, emits a `::warning::` annotation, and
+    returns the minimal fallback shape so the engine never silently
+    produces empty pr-summary output.
+    """
+    try:
+        return _render_pr_summary_impl(
+            findings, entries, summary,
+            attack_graph=attack_graph,
+            centrality=centrality,
+            compliance=compliance,
+        )
+    except Exception as exc:  # noqa: BLE001 — broad on purpose; this IS the safety net
+        import sys
+        sys.stderr.write(
+            f"::warning::tf-analyze: pr-summary rendering failed "
+            f"({type(exc).__name__}: {exc}); emitting minimal fallback. "
+            f"Please file an issue at "
+            f"https://github.com/ChrisAdkin8/tf-analyze/issues "
+            f"with the engine inputs that triggered this.\n"
+        )
+        return _render_pr_summary_minimal_fallback(
+            summary, reason=f"{type(exc).__name__}: {exc}"
+        )
+
+
+def _render_pr_summary_impl(
+    findings: list[dict],
+    entries: list[dict],
+    summary: dict,
+    *,
+    attack_graph: dict | None = None,
+    centrality: list[dict] | dict | None = None,
+    compliance: dict | None = None,
 ) -> str:
     """Concise GitHub-flavoured Markdown sized for PR descriptions and
     PR-bot summary comments.
@@ -1218,9 +1343,17 @@ def _render_pr_summary(
       ```mermaid …```
       </details>
 
+      <details><summary>📋 Compliance gap report (framework)</summary>
+      | Control | Status | Mapped Rules |
+      …
+      </details>
+
     Distinct from `--format text` (verbose, CLI-shaped) and `--format
     json` (machine-shaped). Designed to be pasted directly into a PR
     description or appended to the GitHub Action's comment summaryBody.
+
+    Never call this directly — go through `_render_pr_summary` so the
+    safety-net wrapper catches any renderer regression.
     """
     score = summary.get("score", 0)
     grade = summary.get("grade", "?")
@@ -1246,6 +1379,11 @@ def _render_pr_summary(
         if attack_graph and attack_graph.get("edges"):
             parts.append("")
             _append_attack_graph_block(parts, attack_graph)
+        # Compliance gap report — even on a clean repo this is the
+        # positive signal users want to see ("N/N controls PASS").
+        if compliance:
+            parts.append("")
+            _append_compliance_block(parts, compliance)
         parts.append("")
         parts.append(
             "<sub>🛡 Generated by [tf-analyze]"
@@ -1258,12 +1396,37 @@ def _render_pr_summary(
     # (graph wasn't built); treat missing as 0 so urgency dominates.
     # Audit fix #11 — share the single source of truth at module top.
     URG_RANK = URGENCY_RANK_ASCENDING
-    cent = centrality or {}
+
+    # R31.8 (issue #13): `centrality` comes from `_score_fix_centrality`
+    # which returns `list[dict]` — one row per finding-resource with an
+    # `impact` score (`crowns_blocked × 10 + critical-path/internet
+    # bonuses`). Older callers passed a `{file:line: float}` dict; we
+    # accept both shapes and produce a single `{finding_id: impact}`
+    # lookup. Without this normalisation, `cent.get(...)` raised
+    # `AttributeError: 'list' object has no attribute 'get'` and the
+    # whole renderer fell back to the safety-net wrapper above.
+    cent_impact: dict[str, float] = {}
+    if isinstance(centrality, list):
+        for c in centrality:
+            fid = c.get("finding_id", "")
+            if fid:
+                cent_impact[fid] = float(c.get("impact", 0))
+    elif isinstance(centrality, dict):
+        # Legacy {file:line: score} dict, kept for back-compat with any
+        # external caller that still hands the older shape.
+        cent_impact = {}  # populated lazily inside _rank_key
+        _legacy_cent = centrality
+    else:
+        _legacy_cent = {}
 
     def _rank_key(f: dict) -> tuple:
         urg = entry_map.get(f["id"], {}).get("default_urgency", "INFO")
         # Higher centrality → smaller key value (sort ascending).
-        c = -cent.get(f"{f.get('file','')}:{f.get('line',0)}", 0.0)
+        if cent_impact:
+            c = -cent_impact.get(f["id"], 0.0)
+        else:
+            c = -_legacy_cent.get(f"{f.get('file','')}:{f.get('line',0)}", 0.0) \
+                if isinstance(centrality, dict) else 0.0
         return (URG_RANK.get(urg, 9), c, f["id"])
 
     ranked = sorted(findings, key=_rank_key)
@@ -1356,6 +1519,15 @@ def _render_pr_summary(
     if attack_graph and attack_graph.get("edges"):
         _append_attack_graph_block(parts, attack_graph)
         parts.append("")
+
+    # R31.8 (issue #12): compliance gap report, collapsed by default.
+    # Only rendered when `--compliance-framework <name>` was passed
+    # (the engine then populates the `compliance` dict). This was the
+    # missing piece that left the engine-rendered comment silently
+    # incomplete vs. what `compliance-framework:` set on the action
+    # led users to expect.
+    if compliance:
+        _append_compliance_block(parts, compliance)
 
     parts.append(
         "<sub>🛡 Generated by [tf-analyze]"
