@@ -27,12 +27,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pytest + hypothesis + pytest-timeout
+      - name: Install pytest + hypothesis + pytest-timeout + pyyaml
         # hypothesis enables the property-based tests added for
         # `_blast_radius` cycle handling. pytest-timeout caps any
         # single test at 300s (audit follow-up #17) so a hung
-        # subprocess can't stall the whole matrix slot.
-        run: pip install pytest pytest-xdist pytest-timeout hypothesis --quiet
+        # subprocess can't stall the whole matrix slot. pyyaml is
+        # required by test_compliance_owasp_iac.py and
+        # test_readme_drift.py (both `import yaml` directly, not via
+        # `pytest.importorskip`, so a missing dep halts collection).
+        run: pip install pytest pytest-xdist pytest-timeout hypothesis pyyaml --quiet
       - name: Run full pytest suite
         # Audit item 31 — previously this step ran three named files,
         # leaving 43 test modules unexercised in CI. The full suite is
