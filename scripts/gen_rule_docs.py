@@ -714,8 +714,13 @@ def render_index(entries: list[dict]) -> str:
         out.append("|------|---------|-------|")
         for e in rules:
             urg = e.get("default_urgency", "?")
+            # Pre-escape pipes so the f-string expression doesn't contain
+            # a backslash — py3.10 + py3.11 reject backslashes inside
+            # f-string expressions, py3.12+ accept them. The CI matrix
+            # spans 3.10–3.13 so we need the older-version-compatible form.
+            title = e.get("title", "").replace("|", "\\|")
             out.append(
-                f"| [`{e['id']}`](./{e['id']}.md) | {urg} | {e.get('title', '').replace('|', '\\|')} |"
+                f"| [`{e['id']}`](./{e['id']}.md) | {urg} | {title} |"
             )
         out.append("")
     return "\n".join(out) + "\n"
