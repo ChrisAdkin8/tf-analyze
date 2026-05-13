@@ -5,6 +5,34 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 31.6 — `ref` accepts both `v0.2.3` and `0.2.3` forms — 2026-05-13
+
+Fix-forward to R31.5. The newly-wired `ref:` input forwarded its value verbatim to the image tag — `ref: v0.2.3` resolved to `ghcr.io/chrisadkin8/tf-analyze:v0.2.3`. But `docker/metadata-action` (configured in `.github/workflows/docker.yml`) strips the `v` from semver tags by default, so the published images are `:0.2.3`, `:0.2`, and `:latest` — *not* `:v0.2.3`. Users pasting `ref: v0.2.3` from a release URL hit `manifest unknown` at `docker pull` time.
+
+This round teaches the `Resolve image` step to accept both forms. When `ref` matches `^v[0-9]` the leading `v` is stripped via bash parameter expansion (`${TFA_REF#v}`) before the image tag is built; otherwise the ref passes through untouched. So:
+
+| `ref:` input | Resolved image |
+|---|---|
+| `v0.2.3` | `ghcr.io/chrisadkin8/tf-analyze:0.2.3` |
+| `0.2.3` | `ghcr.io/chrisadkin8/tf-analyze:0.2.3` |
+| `main` | `ghcr.io/chrisadkin8/tf-analyze:main` (404s — by design) |
+| `latest` | `ghcr.io/chrisadkin8/tf-analyze:latest` |
+| `vault` | `ghcr.io/chrisadkin8/tf-analyze:vault` (no truncation — the `^v[0-9]` guard) |
+
+The guard is deliberate: a hypothetical `ref: vault` (or any non-semver name starting with `v`) would not get truncated to `ault`. Only `v` followed by a digit triggers the strip.
+
+The input description is updated to advertise both accepted forms so users don't need to read the action source to discover the convention.
+
+### Drift gate
+
+`tests/test_action_yml.py` grows a `TestRefVPrefixHandling` class — three assertions covering the `^v[0-9]` guard pattern, the parameter-expansion idiom (regression-locks against a `sed s/^v//` rewrite that would break R5 hardening), and the description advertising both forms.
+
+### Migration
+
+The README snippet at L89-95 bumps to `ref: v0.2.3`. Anyone on the v0.2.2 action with `ref: v0.2.X` was hitting a `manifest unknown` error; they should see clean pulls after `v1` moves to v0.2.3. No behavior change for callers not setting `ref:`.
+
+---
+
 ## Round 31.5 — Composite-action input parity (`compliance-framework`, `ref`) — 2026-05-13
 
 Fixes a README↔implementation gap that pre-dated `v1`. The marketplace-facing README snippet at L89-95 has advertised the following workflow shape since R29:
