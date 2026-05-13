@@ -92,10 +92,10 @@ To see the deeper panels render against rich input, open one of the showcase cor
     post-pr-comment: true                # inline `suggestion` blocks on every PR
     compliance-framework: owasp_iac      # optional — adds a collapsible compliance gap report
     attack-graph: true                   # optional — embeds Mermaid attack graph in PR summary
-    ref: v0.2.1                          # optional — pin the engine version (default: main)
+    ref: v0.2.1                          # optional — shorthand for image tag (default: :latest)
 ```
 
-See [`integrations/github-action.yml`](integrations/github-action.yml) for the full workflow with SARIF upload, engine-rendered PR summary (R28.1), and HTML artefact.
+`ref:` is a convenience alias — `ref: v0.2.2` is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:v0.2.2`; set one or the other, not both. See [`action.yml`](action.yml) for the full input reference, and [`integrations/github-action.yml`](integrations/github-action.yml) for an alternative install-from-source workflow that adds SARIF upload + HTML artefact.
 
 ---
 
@@ -248,7 +248,8 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 
 | | Path | Doc |
 |---|------|-----|
-| GitHub Action | [`integrations/github-action.yml`](integrations/github-action.yml) | SARIF + inline PR `suggestion` blocks + engine-rendered PR summary (`--format pr-summary`); optional `compliance-framework` / `attack-graph` / `show-info` inputs; pin via `ref` for reproducible CI |
+| GitHub Action (marketplace) | [`action.yml`](action.yml) | Published composite action — `uses: ChrisAdkin8/tf-analyze@v1`. SARIF upload, inline PR `suggestion` blocks, engine-rendered PR summary (`--format pr-summary`), optional `compliance-framework` / `attack-graph` inputs, pin via `ref:` or `image:` for reproducible CI. |
+| GitHub Action (workflow template) | [`integrations/github-action.yml`](integrations/github-action.yml) | Alternative reference workflow that installs the engine from source instead of pulling the Docker image. Adds `show-info` input. Copy into your own `.github/workflows/`. |
 | VS Code extension (v0.1.54) | [`vscode-extension/`](vscode-extension/) | Self-contained `.vsix` (engine + catalogue bundled). LSP-driven diagnostics, Quick Fix, status-bar score+grade badge, attack-graph + 🌊 blast-radius + module-reuse panels, bulk apply-fixes with diff preview, baseline suppression UI, `vscode://` URI handler. Full feature list: [`docs/vscode-extension.md`](docs/vscode-extension.md). |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |

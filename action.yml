@@ -40,6 +40,12 @@ inputs:
   extra-args:
     description: 'Additional CLI flags appended verbatim to detect.py (e.g. "--check-registry --compliance").'
     default: ''
+  compliance-framework:
+    description: 'Optional compliance framework for the gap report (cis, pci_dss, soc2, owasp_iac, all). Empty = disabled. When set, the engine runs the compliance gap report and the PR comment gains a collapsible compliance section.'
+    default: ''
+  ref:
+    description: 'Shorthand for pinning the engine image tag — equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:<ref>`. Mutually exclusive with an explicit `image:`.'
+    default: ''
 
 outputs:
   score:
@@ -102,6 +108,7 @@ runs:
         TFA_BASELINE: ${{ inputs.baseline }}
         TFA_EXTRA_ARGS: ${{ inputs.extra-args }}
         TFA_FAIL_ON: ${{ inputs.fail-on }}
+        TFA_COMPLIANCE_FW: ${{ inputs.compliance-framework }}
       run: |
         ARGS=(--target "/workspace/${TFA_TARGET}" --mode "${TFA_MODE_OUT}")
         if [ -n "${TFA_SECTION}" ]; then
@@ -113,6 +120,9 @@ runs:
         if [ -n "${TFA_BASELINE}" ]; then
           ARGS+=(--baseline "/workspace/${TFA_BASELINE}")
         fi
+        if [ -n "${TFA_COMPLIANCE_FW}" ]; then
+          ARGS+=(--compliance --compliance-framework "${TFA_COMPLIANCE_FW}")
+        fi
         if [ -n "${TFA_EXTRA_ARGS}" ]; then
           # `read -ra` does whitespace tokenisation but no command
           # substitution. Same array effect as before, without the
@@ -123,15 +133,55 @@ runs:
         printf '%s\n' "${ARGS[@]}" > /tmp/tf-analyze-base-args
         echo "fail-on=${TFA_FAIL_ON}" >> "$GITHUB_OUTPUT"
 
+    - name: Validate compliance-framework
+      if: inputs.compliance-framework != ''
+      shell: bash
+      env:
+        TFA_COMPLIANCE_FW: ${{ inputs.compliance-framework }}
+      run: |
+        case "${TFA_COMPLIANCE_FW}" in
+          cis|pci_dss|soc2|owasp_iac|all) ;;
+          *)
+            echo "::error::tf-analyze: compliance-framework must be one of cis, pci_dss, soc2, owasp_iac, all (got '${TFA_COMPLIANCE_FW}')"
+            exit 1
+            ;;
+        esac
+
+    - name: Resolve image
+      id: resolve_image
+      shell: bash
+      # `ref` is a convenience alias for the image tag — `ref: v0.2.2`
+      # is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:v0.2.2`.
+      # We fail loudly when both are set explicitly because they're two
+      # signals fighting over the same field; better to surface the
+      # ambiguity than pick one silently.
+      env:
+        TFA_REF: ${{ inputs.ref }}
+        TFA_IMAGE: ${{ inputs.image }}
+      run: |
+        DEFAULT_IMAGE="ghcr.io/chrisadkin8/tf-analyze:latest"
+        if [ -n "${TFA_REF}" ] && [ "${TFA_IMAGE}" != "${DEFAULT_IMAGE}" ]; then
+          echo "::error::tf-analyze: 'ref' and 'image' are mutually exclusive — set one, not both."
+          exit 1
+        fi
+        if [ -n "${TFA_REF}" ]; then
+          RESOLVED="ghcr.io/chrisadkin8/tf-analyze:${TFA_REF}"
+        else
+          RESOLVED="${TFA_IMAGE}"
+        fi
+        echo "image=${RESOLVED}" >> "$GITHUB_OUTPUT"
+
     - name: Pull tf-analyze image
       shell: bash
-      run: docker pull "${{ inputs.image }}"
+      env:
+        TFA_IMAGE: ${{ steps.resolve_image.outputs.image }}
+      run: docker pull "${TFA_IMAGE}"
 
     - name: Run tf-analyze (JSON)
       id: scan
       shell: bash
       env:
-        TFA_IMAGE: ${{ inputs.image }}
+        TFA_IMAGE: ${{ steps.resolve_image.outputs.image }}
       run: |
         BASE_ARGS=()
         while IFS= read -r line; do BASE_ARGS+=("$line"); done < /tmp/tf-analyze-base-args

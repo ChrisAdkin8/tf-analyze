@@ -31,7 +31,7 @@ Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE AT
 - 🔗 [**Public scanner permalink**](https://tfanalyze.com/) — `tfanalyze.com/scan/<owner>/<repo>` resolves the GitHub repo's HEAD SHA, scans, and renders a styled HTML report with score banner, top findings (severity-ordered), top fixes, attack graph + module-reuse panels, and an Open Graph card so Slack/Twitter/HN preview cards show the score. JSON sibling at `.json`. Per-SHA cached.
 - 📈 [**Trend dashboard**](https://tfanalyze.com/) — `tfanalyze.com/trend/<owner>/<repo>` walks the repo's git history (default 90 days), runs `--mode trend`, and renders a styled HTML page with per-commit findings sparkline + new/resolved/net velocity table + biggest-jump annotation + OG card. `?lookback=N` clamped 7-365 days.
 - 🛡️ [**Score badge**](https://tfanalyze.com/) — `tfanalyze.com/badge/<owner>/<repo>.svg` is a shields.io-shape SVG embeddable in any README, reading the same per-SHA cache the permalink writes.
-- 🤖 [**Auto-remediation PR bot**](https://github.com/ChrisAdkin8/tf-analyze/blob/main/integrations/github-action-bot/README.md) — Dependabot-style GitHub Action that runs on a schedule, applies non-disruptive `fix_hcl` patches, and opens a single PR per repo grouped by rule family. Safe-by-default (caps at `fix_disruption: none`).
+- 🤖 [**Auto-remediation PR bot**](github-action-bot.md) — Dependabot-style GitHub Action that runs on a schedule, applies non-disruptive `fix_hcl` patches, and opens a single PR per repo grouped by rule family. Safe-by-default (caps at `fix_disruption: none`). [Live demo repo](https://github.com/ChrisAdkin8/tf-analyze-bot-demo) with an open bot PR you can inspect.
 
 ### Authoring
 
