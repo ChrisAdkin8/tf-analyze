@@ -5,6 +5,43 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 31.8 — pr-summary compliance section + safety-net wrapper — 2026-05-13
+
+Closes upstream issues [#12](https://github.com/ChrisAdkin8/tf-analyze/issues/12) and [#13](https://github.com/ChrisAdkin8/tf-analyze/issues/13). Both surfaced while documenting `tf-analyze-action-demo` PR #1 — the engine emitted an empty `tf-analyze-pr-summary.md` under one input combination (mode static + attack-graph + compliance + many findings) and never embedded the compliance gap section in pr-summary even when `--compliance-framework` was set. The action's github-script fallback masked the first bug; the second one was an outright feature gap.
+
+### Issue #13 — empty pr-summary fix + safety-net wrapper
+
+**Root cause**: `scripts/_output.py:_render_pr_summary._rank_key` did `cent.get(f"{file}:{line}")`. `centrality` is the `list[dict]` returned by `_score_fix_centrality` (one row per finding-resource with an `impact` score) — not the `{file:line: float}` dict the renderer expected. Calling `.get` on a list raised `AttributeError`, the engine wrote zero bytes to `tf-analyze-pr-summary.md`, and the Action's downstream github-script step kicked in its counts-only fallback. The existing test suite passed because every test called `_render_pr_summary` with `centrality=None` (or omitted it), which bypassed the buggy code path.
+
+**Fix**: `_rank_key` now normalises `centrality` into a `{finding_id: impact}` lookup. Both shapes are accepted — `list[dict]` (current engine output) and `{file:line: float}` (legacy / external callers) — so the change is backwards-compatible.
+
+**Safety net**: `_render_pr_summary` is now a thin wrapper around `_render_pr_summary_impl`. The wrapper catches any exception, writes a `::warning::` annotation to stderr, and returns the minimal counts-table fallback shape from a new `_render_pr_summary_minimal_fallback` helper. Engine output is now always non-empty even if a future renderer change regresses again — the Action's github-script fallback becomes a last-line defence rather than the load-bearing safety net.
+
+### Issue #12 — compliance section embedded in pr-summary
+
+The engine's `--compliance --compliance-framework <name>` pass already builds the gap report; `_render_pr_summary` just never embedded it. The action's `compliance-framework:` input (R31.5) effectively did nothing on the published composite's PR comment surface as a result.
+
+`_render_pr_summary_impl` now accepts a `compliance: dict | None` kwarg. When non-empty, the new `_append_compliance_block` helper renders a collapsible `<details><summary>📋 Compliance ({framework}): 🟢/🟡/🔴 N/M PASS · K FAIL</summary>` block with:
+
+- One row per control, **failures sorted to the top** (most actionable rows lead).
+- `❌ FAIL` / `✅ PASS` cells with emoji + word.
+- Mapped rules as code-linked badges to the canonical docs page; rules that actually fired are **bolded** so the visual scan surfaces them.
+- Threshold indicator emoji: 🟢 ≥80% PASS, 🟡 50-79%, 🔴 <50%.
+
+The block renders on both the findings-present path and the clean-repo path — even a clean repo's "all controls PASS" is a strong positive signal worth surfacing.
+
+`detect.py:main` passes `compliance=compliance_report` to both pr-summary call sites.
+
+### Drift gate
+
+`tests/test_pr_summary.py` grows three new classes — `TestCentralityListShape` (3 tests: list, legacy dict, None all work without falling back), `TestSafetyNetFallback` (2 tests: synthetic crash via monkey-patching the impl returns the fallback shape with the failure reason embedded), and `TestComplianceSection` (5 tests: presence, omission, clean-repo path, failure-first sort order, bolded-fired-rules). 24 pr-summary tests total, all passing.
+
+### Migration
+
+No action.yml change. No new input. Anyone already using `compliance-framework: owasp_iac` will see the compliance section start appearing in PR comments once `@v1` moves to v0.2.5. Workflows pinning a specific tag (`ref: v0.2.4`) need to bump to `v0.2.5` to opt in.
+
+---
+
 ## Round 31.7 — Dockerfile copies every sibling module — 2026-05-13
 
 Fixes a critical regression that pre-dated R31.5 by two days: the R30.13–R30.15 refactor split `detect.py` into 24 `_*.py` sibling modules (`_versions.py`, `_attack_graph.py`, `_handlers_*.py`, …) but the Dockerfile kept the pre-refactor single-file `COPY scripts/detect.py .` line. Every docker build since 2026-05-11 failed at the in-build smoke test step with `ModuleNotFoundError: No module named '_versions'`. **20+ consecutive failures** because nothing gates the docker workflow's status.

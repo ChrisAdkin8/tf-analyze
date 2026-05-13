@@ -2978,6 +2978,7 @@ def main():
                 findings, entries, summary,
                 attack_graph=attack_graph,
                 centrality=centrality_scores,
+                compliance=compliance_report,
             ))
         else:
             _c = summary["counts"]
@@ -3050,6 +3051,7 @@ def main():
                 findings, entries, summary,
                 attack_graph=attack_graph,
                 centrality=centrality_scores,
+                compliance=compliance_report,
             ))
         else:
             # Text format: lead with a one-line summary score, then the

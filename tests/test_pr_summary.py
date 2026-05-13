@@ -218,6 +218,251 @@ class TestRenderPrSummaryUnit:
 
 
 # ---------------------------------------------------------------------------
+# R31.8 — regression tests for the bugs that closed issues #12 and #13.
+# ---------------------------------------------------------------------------
+
+
+class TestCentralityListShape:
+    """Issue #13: detect.py passes the ``list[dict]`` returned by
+    ``_score_fix_centrality`` as the ``centrality`` argument; the
+    renderer previously assumed a ``{file:line: float}`` dict and
+    crashed with ``AttributeError: 'list' object has no attribute
+    'get'``. The whole renderer fell back to empty output, then the
+    Action's github-script step had to invent a fallback shape of
+    its own. These tests lock the list-shape path.
+    """
+
+    def test_list_shape_does_not_crash(self) -> None:
+        findings = [
+            {"id": "R1", "file": "main.tf", "line": 10, "resource": "aws.r1"},
+            {"id": "R2", "file": "main.tf", "line": 20, "resource": "aws.r2"},
+        ]
+        entries = [
+            {"id": "R1", "title": "R1", "default_urgency": "HIGH"},
+            {"id": "R2", "title": "R2", "default_urgency": "HIGH"},
+        ]
+        # Exact shape returned by _score_fix_centrality: list of dicts
+        # with finding_id + impact + crowns_blocked + ...
+        centrality = [
+            {"finding_id": "R1", "resource": "aws.r1", "impact": 15,
+             "crowns_blocked": 1, "on_critical_path": True,
+             "internet_reachable": True},
+            {"finding_id": "R2", "resource": "aws.r2", "impact": 5,
+             "crowns_blocked": 0, "on_critical_path": False,
+             "internet_reachable": False},
+        ]
+        out = detect._render_pr_summary(
+            findings=findings, entries=entries,
+            summary={"score": 50, "grade": "C",
+                     "counts": {"CRITICAL": 0, "HIGH": 2, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            centrality=centrality,
+        )
+        assert "## tf-analyze:" in out
+        # If the safety net had to fire, we'd see the fallback marker;
+        # this assertion proves the real renderer ran.
+        assert "pr-summary fallback" not in out
+        # Higher-impact finding (R1) should outrank R2 in the top-findings
+        # table even though they have identical urgency.
+        idx_r1 = out.find("`R1`")
+        idx_r2 = out.find("`R2`")
+        assert 0 <= idx_r1 < idx_r2, (
+            "centrality must break urgency ties — higher impact finding "
+            "appears first"
+        )
+
+    def test_legacy_dict_shape_still_works(self) -> None:
+        # Back-compat: any external caller passing a `{file:line: float}`
+        # dict should still get a sensible ranking. We accept either
+        # shape so a downstream tool wrapping the engine doesn't break.
+        findings = [
+            {"id": "R1", "file": "main.tf", "line": 10, "resource": "r1"},
+            {"id": "R2", "file": "main.tf", "line": 20, "resource": "r2"},
+        ]
+        entries = [
+            {"id": "R1", "title": "R1", "default_urgency": "HIGH"},
+            {"id": "R2", "title": "R2", "default_urgency": "HIGH"},
+        ]
+        out = detect._render_pr_summary(
+            findings=findings, entries=entries,
+            summary={"score": 50, "grade": "C",
+                     "counts": {"CRITICAL": 0, "HIGH": 2, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            centrality={"main.tf:10": 10.0, "main.tf:20": 1.0},
+        )
+        assert "pr-summary fallback" not in out
+
+    def test_none_centrality_still_works(self) -> None:
+        # The pre-R31.8 default path: caller passes no centrality at all
+        # (or None). Urgency-only ranking must still work.
+        out = detect._render_pr_summary(
+            findings=[{"id": "R1", "file": "main.tf", "line": 1,
+                       "resource": "r"}],
+            entries=[{"id": "R1", "title": "R1", "default_urgency": "HIGH"}],
+            summary={"score": 90, "grade": "A",
+                     "counts": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            centrality=None,
+        )
+        assert "## tf-analyze:" in out
+        assert "pr-summary fallback" not in out
+
+
+class TestSafetyNetFallback:
+    """Issue #13: if the renderer raises for any reason, the wrapper
+    must catch it, emit a `::warning::` annotation, and produce a
+    minimal but non-empty pr-summary so the GitHub Action's
+    github-script step doesn't have to invent a fallback shape of
+    its own.
+    """
+
+    def test_renderer_exception_returns_minimal_fallback(self) -> None:
+        # Force a crash by handing a summary that's missing required
+        # keys. The wrapper should catch it and emit the minimal shape
+        # with a degraded-mode marker.
+        from scripts import _output  # noqa: PLC0415
+
+        # Monkey-patch the impl to always throw — proves the wrapper
+        # path, independent of any specific bug in the renderer.
+        original_impl = _output._render_pr_summary_impl
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("synthetic renderer failure")
+        _output._render_pr_summary_impl = _boom
+        try:
+            out = _output._render_pr_summary(
+                findings=[{"id": "R1"}],
+                entries=[{"id": "R1", "default_urgency": "HIGH"}],
+                summary={"score": 0, "grade": "F",
+                         "counts": {"CRITICAL": 1, "HIGH": 0, "MEDIUM": 0,
+                                    "LOW": 0, "INFO": 0}},
+            )
+        finally:
+            _output._render_pr_summary_impl = original_impl
+
+        assert "## tf-analyze:" in out
+        # The degraded-mode marker so a human reading the PR comment
+        # can tell the rich shape wasn't rendered.
+        assert "pr-summary fallback" in out
+        assert "synthetic renderer failure" in out
+
+    def test_fallback_includes_counts_table(self) -> None:
+        # The minimal fallback must still surface the headline counts so
+        # the comment isn't useless even in degraded mode.
+        from scripts import _output  # noqa: PLC0415
+        out = _output._render_pr_summary_minimal_fallback(
+            summary={"score": 25, "grade": "C",
+                     "counts": {"CRITICAL": 3, "HIGH": 1, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            reason="test",
+        )
+        assert "## tf-analyze: 25 (C)" in out
+        assert "| 🚨 CRITICAL | 3 |" in out
+        assert "| ⚠️ HIGH | 1 |" in out
+
+
+class TestComplianceSection:
+    """Issue #12: when `--compliance-framework` is set (i.e. the
+    engine passes a non-empty `compliance` dict), the pr-summary
+    Markdown gains a collapsible compliance gap section. Previously
+    the engine ran the gap report internally but never embedded the
+    result in pr-summary, so the action's `compliance-framework:`
+    input was effectively a no-op in the PR comment surface."""
+
+    COMPLIANCE = {
+        "owasp_iac": [
+            {"control": "Secrets Detection", "status": "FAIL",
+             "rules": ["SEC-SECRETS-001", "SEC-SENSITIVE-001"],
+             "failed_rules": ["SEC-SECRETS-001"]},
+            {"control": "Version Control Discipline", "status": "PASS",
+             "rules": ["ROB-VERSION-001"], "failed_rules": []},
+        ],
+    }
+
+    def test_compliance_block_appears_when_set(self) -> None:
+        out = detect._render_pr_summary(
+            findings=[{"id": "SEC-SECRETS-001", "file": "main.tf",
+                       "line": 1, "resource": "r"}],
+            entries=[{"id": "SEC-SECRETS-001", "title": "Hardcoded secret",
+                      "default_urgency": "CRITICAL"}],
+            summary={"score": 0, "grade": "F",
+                     "counts": {"CRITICAL": 1, "HIGH": 0, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            compliance=self.COMPLIANCE,
+        )
+        assert "📋 Compliance (owasp_iac)" in out
+        assert "1/2 PASS · 1 FAIL" in out
+        assert "<details><summary>📋 Compliance" in out
+
+    def test_compliance_block_omitted_when_unset(self) -> None:
+        out = detect._render_pr_summary(
+            findings=[{"id": "R1", "file": "main.tf", "line": 1, "resource": "r"}],
+            entries=[{"id": "R1", "default_urgency": "HIGH"}],
+            summary={"score": 90, "grade": "A",
+                     "counts": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            compliance=None,
+        )
+        assert "📋 Compliance" not in out
+
+    def test_compliance_renders_on_clean_repo_too(self) -> None:
+        # Even with no findings, the compliance block surfaces because
+        # "all controls PASS" is a strong positive signal.
+        out = detect._render_pr_summary(
+            findings=[], entries=[],
+            summary={"score": 100, "grade": "A",
+                     "counts": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            compliance={"cis": [
+                {"control": "1.1", "status": "PASS",
+                 "rules": ["SEC-AWS-IAM-001"], "failed_rules": []},
+            ]},
+        )
+        assert "📋 Compliance (cis)" in out
+        assert "✅ Clean" in out
+
+    def test_failed_controls_sort_to_top(self) -> None:
+        # Reviewers want to see what's broken before what's passing.
+        out = detect._render_pr_summary(
+            findings=[{"id": "R1", "file": "main.tf", "line": 1, "resource": "r"}],
+            entries=[{"id": "R1", "default_urgency": "HIGH"}],
+            summary={"score": 50, "grade": "C",
+                     "counts": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            compliance={"owasp_iac": [
+                {"control": "AAA-passes", "status": "PASS", "rules": ["P1"],
+                 "failed_rules": []},
+                {"control": "ZZZ-fails", "status": "FAIL", "rules": ["F1"],
+                 "failed_rules": ["F1"]},
+            ]},
+        )
+        # ZZZ-fails (FAIL) must appear before AAA-passes (PASS) despite
+        # alphabetical ordering pulling the opposite way.
+        idx_fail = out.find("ZZZ-fails")
+        idx_pass = out.find("AAA-passes")
+        assert 0 <= idx_fail < idx_pass
+
+    def test_failed_rules_bolded(self) -> None:
+        # Rules that fired (in `failed_rules`) get bold; others stay
+        # regular weight so the visual scan surfaces the actionable rows.
+        out = detect._render_pr_summary(
+            findings=[{"id": "R1", "file": "main.tf", "line": 1, "resource": "r"}],
+            entries=[{"id": "R1", "default_urgency": "HIGH"}],
+            summary={"score": 50, "grade": "C",
+                     "counts": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0,
+                                "LOW": 0, "INFO": 0}},
+            compliance={"owasp_iac": [
+                {"control": "C1", "status": "FAIL",
+                 "rules": ["FIRED", "QUIET"],
+                 "failed_rules": ["FIRED"]},
+            ]},
+        )
+        # FIRED is in failed_rules → bold; QUIET is not → not bold.
+        assert "**[`FIRED`]" in out
+        assert "**[`QUIET`]" not in out
+
+
+# ---------------------------------------------------------------------------
 # CLI integration: --format pr-summary works end-to-end.
 # ---------------------------------------------------------------------------
 
