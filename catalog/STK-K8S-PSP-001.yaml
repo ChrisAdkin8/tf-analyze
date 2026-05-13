@@ -1,0 +1,95 @@
+id: STK-K8S-PSP-001
+title: "kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25)"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.2.1"
+pci_dss:
+  - "Req-6.3.1"
+soc2_cc:
+  - "CC8.1"
+mitre:
+  - "T1611"
+cwe:
+  - "CWE-477"
+  - "CWE-269"
+nist_csf:
+  - "PR.IP-1"
+nist_800_53:
+  - "CM-7"
+  - "SI-2"
+csa_ccm:
+  - "AIS-07"
+owasp:
+  - "K01"
+# PodSecurityPolicy was deprecated in Kubernetes 1.21 (2021-04) and
+# *removed* in 1.25 (2022-08). Any cluster that upgrades past 1.25
+# rejects PSPs at apply time; the workload immediately loses its
+# baseline security posture. Pod Security Admission (PSA) is the
+# replacement and ships as a built-in admission controller — no
+# per-PSP resource needed, just namespace labels (SEC-K8S-PSA-001
+# and STK-K8S-PSA-002 cover the PSA shape).
+patterns:
+  - kind: resource_present
+    resource: kubernetes_pod_security_policy
+    description: |
+      `kubernetes_pod_security_policy` resource declared in Terraform
+      sources. PSP was removed from the Kubernetes API in 1.25 — any
+      cluster on a current K8s minor will reject the apply with an
+      "unknown resource type" error. Even on older clusters, PSP's
+      attribution model (default deny vs explicit allow) is widely
+      acknowledged as broken; PSA is the supported replacement.
+  - kind: resource_present
+    resource: kubernetes_pod_security_policy_v1beta1
+    description: |
+      `kubernetes_pod_security_policy_v1beta1` — explicit API-version
+      alias, same deprecation story. The v1beta1 endpoint was the
+      only stable PSP API and was removed together with the rest in
+      Kubernetes 1.25.
+recommendation: |
+  Migrate to Pod Security Admission. The replacement shape is two
+  Terraform changes:
+
+  1. Delete every `kubernetes_pod_security_policy` resource.
+  2. Add PSA labels to each namespace whose PSP they replace:
+
+      resource "kubernetes_namespace" "app" {
+        metadata {
+          name = "app"
+          labels = {
+            "pod-security.kubernetes.io/enforce"         = "restricted"
+            "pod-security.kubernetes.io/enforce-version" = "latest"
+            "pod-security.kubernetes.io/warn"            = "restricted"
+            "pod-security.kubernetes.io/audit"           = "restricted"
+          }
+        }
+      }
+
+  Three PSA levels approximate PSP intent — `privileged` (no
+  enforcement, equivalent to no PSP), `baseline` (the worst-known
+  foot-guns are blocked), `restricted` (defense-in-depth). Most
+  legacy PSPs map cleanly to `baseline`.
+verification: |
+  `kubectl api-versions | grep policy/v1beta1.PodSecurityPolicy`
+  must return empty on every cluster.
+  `terraform state list | grep kubernetes_pod_security_policy` must
+  return empty.
+fix_hcl: |
+  # Replace the PSP resource with PSA labels on the target namespace.
+  resource "kubernetes_namespace" "replaces_psp" {
+    metadata {
+      name = "app"
+      labels = {
+        "pod-security.kubernetes.io/enforce"         = "restricted"
+        "pod-security.kubernetes.io/enforce-version" = "latest"
+        "pod-security.kubernetes.io/warn"            = "restricted"
+        "pod-security.kubernetes.io/audit"           = "restricted"
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Removing the PSP and switching to PSA changes the enforcement model from per-Pod attribution (PSP) to per-namespace admission (PSA). Test with the `warn` and `audit` levels first to identify which pods will be rejected before flipping `enforce`."
+fixtures:
+  - k8s_pod_security_policy

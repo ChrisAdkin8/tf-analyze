@@ -144,6 +144,8 @@ must return empty.
 See also rules in the `SEC-K8S-HELM-*` family:
 
 - [`SEC-K8S-HELM-001`](./SEC-K8S-HELM-001.md) — helm_release sets `service.type=LoadBalancer` (publicly exposed)
+- [`SEC-K8S-HELM-003`](./SEC-K8S-HELM-003.md) — helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)
+- [`SEC-K8S-HELM-004`](./SEC-K8S-HELM-004.md) — helm_release bypasses chart safety (`disable_webhooks = true` OR `skip_crds = true`)
 
 ---
 

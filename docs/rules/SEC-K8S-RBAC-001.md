@@ -183,6 +183,12 @@ should not include any ServiceAccount in a workload namespace.
 **Source**
   - [`catalog/SEC-K8S-RBAC-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-RBAC-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-K8S-RBAC-*` family:
+
+- [`SEC-K8S-RBAC-002`](./SEC-K8S-RBAC-002.md) — RoleBinding / ClusterRoleBinding subject targets a broad system Group
+
 ---
 
 ## Run this check

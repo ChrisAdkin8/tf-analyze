@@ -136,6 +136,12 @@ should not be empty.
 **Source**
   - [`catalog/SEC-K8S-NETPOL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-K8S-NETPOL-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-K8S-NETPOL-*` family:
+
+- [`SEC-K8S-NETPOL-002`](./SEC-K8S-NETPOL-002.md) — kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)
+
 ---
 
 ## Run this check

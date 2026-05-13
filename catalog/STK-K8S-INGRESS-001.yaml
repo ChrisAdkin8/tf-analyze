@@ -1,0 +1,128 @@
+id: STK-K8S-INGRESS-001
+title: "kubernetes_ingress_v1 has no `tls` block (HTTP traffic exposed in clear)"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.3.2"
+pci_dss:
+  - "Req-4.2.1"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1040"
+  - "T1557"
+cwe:
+  - "CWE-319"
+  - "CWE-523"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+  - "SC-13"
+csa_ccm:
+  - "EKM-04"
+  - "IVS-09"
+owasp:
+  - "K06"
+# An `Ingress` resource with no `tls` block exposes every routed host
+# over plaintext HTTP. Browsers strip auth cookies before HTTP-only
+# requests, but the request body, headers, and URL path leak to any
+# party on the path (coffee-shop wifi, ISP transit, compromised CDN
+# edge). PCI-DSS Req-4.2.1 explicitly bans transmitting cardholder
+# data over open public networks without strong cryptography.
+patterns:
+  - kind: resource_missing_arg
+    resource: kubernetes_ingress_v1
+    arg: tls
+    description: |
+      `kubernetes_ingress_v1` has no `tls` block. Every host this
+      Ingress routes is reachable over plaintext HTTP — auth tokens
+      in headers, form bodies, and URL parameters are exposed to
+      anyone on the network path. The 2018 British Airways breach
+      (Magecart) pivoted on the assumption that internal traffic was
+      "safe" without TLS; the 2017 Equifax customer-portal breach
+      exposed traffic that the ops team believed was TLS-terminated
+      upstream but wasn't.
+  - kind: resource_missing_arg
+    resource: kubernetes_ingress
+    arg: tls
+    description: |
+      `kubernetes_ingress` is the legacy v1beta1 alias. Same anti-pattern,
+      same fix.
+recommendation: |
+  Add a `tls` block referencing a Secret that holds the cert+key (or
+  use cert-manager + an `ExternalSecret` pulling from Vault). For
+  ingress-nginx + cert-manager, the canonical shape is an Ingress
+  with `tls.secretName` plus a `cert-manager.io/cluster-issuer`
+  annotation that triggers cert issuance.
+
+      resource "kubernetes_ingress_v1" "app" {
+        metadata {
+          name      = "app"
+          namespace = "app"
+          annotations = {
+            "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
+          }
+        }
+        spec {
+          tls {
+            hosts       = ["app.example.com"]
+            secret_name = "app-tls"
+          }
+          rule {
+            host = "app.example.com"
+            http {
+              path {
+                path      = "/"
+                path_type = "Prefix"
+                backend {
+                  service {
+                    name = "app"
+                    port { number = 80 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+verification: |
+  `kubectl get ingress -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"/"}{.metadata.name}{"\t"}{.spec.tls}{"\n"}{end}'`
+  must show a non-empty `tls` for every Ingress that routes public hosts.
+fix_hcl: |
+  resource "kubernetes_ingress_v1" "example" {
+    metadata {
+      name      = "example"
+      namespace = "app"
+      annotations = {
+        "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
+      }
+    }
+    spec {
+      tls {
+        hosts       = ["app.example.com"]
+        secret_name = "app-tls"
+      }
+      rule {
+        host = "app.example.com"
+        http {
+          path {
+            path      = "/"
+            path_type = "Prefix"
+            backend {
+              service {
+                name = "app"
+                port { number = 80 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Adding TLS requires a cert Secret in place before apply (or cert-manager issuing one). HTTP→HTTPS redirect should be enabled at the ingress-controller level to avoid breaking existing HTTP clients."
+fixtures:
+  - k8s_ingress_no_tls

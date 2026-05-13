@@ -17,12 +17,12 @@
 
 <!-- Content row — what does it cover? -->
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 343](https://img.shields.io/badge/rules-343-brightgreen)
+![Rules: 353](https://img.shields.io/badge/rules-353-brightgreen)
 ![fix_hcl: 93%](https://img.shields.io/badge/fix__hcl-93%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
-![Tests: 872](https://img.shields.io/badge/tests-872%20passing-brightgreen)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-343%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+![Tests: 1153](https://img.shields.io/badge/tests-1153%20passing-brightgreen)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-353%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Integrations](#integrations) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Demo corpora](#demo-corpora--examples) · [Repo layout](#repository-layout) · [Contributing](#contributing--maintenance) · [Provenance](#provenance) · [License](#license)**
 
@@ -35,9 +35,9 @@ Same engine, ten surfaces — Claude Code skill, Python CLI, GitHub Action, Dock
 | AWS | 62 | 25 | 4 | **91** |
 | GCP | 41 | 47 | 3 | **91** |
 | Azure | 56 | 32 | 3 | **91** |
-| K8s / Helm | 5 | 3 | 0 | **8** |
+| K8s / Helm | 12 | 6 | 0 | **18** |
 | Cross-cloud / engine | 21 | 27 | 14 | **62** |
-| **Total** | **185** | **134** | **24** | **343** |
+| **Total** | **192** | **137** | **24** | **353** |
 
 Hardening = `ROB-*` + `STK-*`; Ops & Reuse = `OPS-*` + `COST-*` + `MOD-*` + `MOD-REUSE-*` + `INT-*` + `CI-*` + `STYLE-*`. Full per-family breakdown and shape-by-cloud commentary in [Detection ↓](#detection).
 
@@ -105,10 +105,10 @@ To see the deeper panels render against rich input, open one of the showcase cor
     post-pr-comment: true                # inline `suggestion` blocks on every PR
     compliance-framework: owasp_iac      # optional — adds a collapsible compliance gap report
     attack-graph: true                   # optional — embeds Mermaid attack graph in PR summary
-    ref: v0.2.3                          # optional — shorthand for image tag (default: :latest)
+    ref: v0.2.6                          # optional — shorthand for image tag (default: :latest)
 ```
 
-`ref:` is a convenience alias — `ref: v0.2.3` is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:0.2.3` (the leading `v` is stripped before building the docker tag, since `docker/metadata-action` publishes semver tags without it). Both `v0.2.3` and `0.2.3` work; non-semver values like `main` or `latest` pass through untouched. Set `ref:` or `image:`, not both. See [`action.yml`](action.yml) for the full input reference, and [`integrations/github-action.yml`](integrations/github-action.yml) for an alternative install-from-source workflow that adds SARIF upload + HTML artefact.
+`ref:` is a convenience alias — `ref: v0.2.6` is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:0.2.6` (the leading `v` is stripped before building the docker tag, since `docker/metadata-action` publishes semver tags without it). Both `v0.2.6` and `0.2.6` work; non-semver values like `main` or `latest` pass through untouched. Set `ref:` or `image:`, not both. See [`action.yml`](action.yml) for the full input reference, and [`integrations/github-action.yml`](integrations/github-action.yml) for an alternative install-from-source workflow that adds SARIF upload + HTML artefact.
 
 ---
 
@@ -137,7 +137,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Built-in attack-path graph | ✅ | ❌ | ❌ | ❌ |
 | Module Reuse Advisor with lines-saved ROI | ✅ | ❌ | ❌ | ❌ |
 | Aggregate risk score + letter grade (A–F) | ✅ | ❌ | ❌ | ❌ |
-| `fix_hcl` snippet on every fixable rule | ✅ (89%; remaining 11% are module-reuse / advisory / version-bump rules where no single HCL edit is correct) | ⚠️ partial | ⚠️ partial | n/a |
+| `fix_hcl` snippet on every fixable rule | ✅ (93%; remaining 7% are module-reuse / advisory / version-bump rules where no single HCL edit is correct) | ⚠️ partial | ⚠️ partial | n/a |
 | Inline GitHub PR `suggestion` blocks | ✅ | ❌ | ❌ | n/a |
 | MITRE ATT&CK mapping (technique + tactic-grouped output) | ✅ pinned to v17 | ❌ | ⚠️ partial | ⚠️ via plugin |
 | MITRE D3FEND defensive-technique tagging | ✅ | ❌ | ❌ | ❌ |
@@ -177,7 +177,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-343 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+353 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -195,7 +195,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | AWS    | 62  | 13  | 12  | 2   | 1    | 1         | **91**    |
 | GCP    | 41  | 5   | 42  | 1   | 1    | 1         | **91**    |
 | Azure  | 56  | 7   | 25  | 1   | 1    | 1         | **91**    |
-| K8s/Helm | 5 | —   | 3   | —   | —    | —         | **8**     |
+| K8s/Helm | 12 | —  | 6   | —   | —    | —         | **18**    |
 | Cross-cloud / engine | — | — | — | — | — | — | **62** |
 
 **Why the per-section shapes differ at the same headline count.** Each cloud puts services in different boxes, and the catalogue follows the provider taxonomy rather than forcing a synthetic split:
@@ -281,7 +281,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 |---|------|-----|
 | GitHub Action (marketplace) | [`action.yml`](action.yml) | Published composite action — `uses: ChrisAdkin8/tf-analyze@v1`. SARIF upload, inline PR `suggestion` blocks, engine-rendered PR summary (`--format pr-summary`), optional `compliance-framework` / `attack-graph` inputs, pin via `ref:` or `image:` for reproducible CI. |
 | GitHub Action (workflow template) | [`integrations/github-action.yml`](integrations/github-action.yml) | Alternative reference workflow that installs the engine from source instead of pulling the Docker image. Adds `show-info` input. Copy into your own `.github/workflows/`. |
-| VS Code extension (v0.1.54) | [`vscode-extension/`](vscode-extension/) | Self-contained `.vsix` (engine + catalogue bundled). LSP-driven diagnostics, Quick Fix, status-bar score+grade badge, attack-graph + 🌊 blast-radius + module-reuse panels, bulk apply-fixes with diff preview, baseline suppression UI, `vscode://` URI handler. Full feature list: [`docs/vscode-extension.md`](docs/vscode-extension.md). |
+| VS Code extension (v0.1.56) | [`vscode-extension/`](vscode-extension/) | Self-contained `.vsix` (engine + catalogue bundled). LSP-driven diagnostics, Quick Fix, status-bar score+grade badge, attack-graph + 🌊 blast-radius + module-reuse panels, bulk apply-fixes with diff preview, baseline suppression UI, `vscode://` URI handler. Full feature list: [`docs/vscode-extension.md`](docs/vscode-extension.md). |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |

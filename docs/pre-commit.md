@@ -14,8 +14,8 @@ tf-analyze ships as a [pre-commit](https://pre-commit.com) hook so every
 2. **Add `.pre-commit-config.yaml`** to your repo root (or append to an existing one):
    ```yaml
    repos:
-     - repo: https://github.com/example/tf-analyze   # replace with real URL after publish
-       rev: v0.1.0
+     - repo: https://github.com/ChrisAdkin8/tf-analyze
+       rev: v0.2.6                   # pin to a release tag; bump as new tags ship
        hooks:
          - id: tf-analyze          # all findings, fail on HIGH+
    ```
@@ -43,8 +43,8 @@ tf-analyze ships as a [pre-commit](https://pre-commit.com) hook so every
 Override `args` in your `.pre-commit-config.yaml`:
 ```yaml
 repos:
-  - repo: https://github.com/example/tf-analyze
-    rev: v0.1.0
+  - repo: https://github.com/ChrisAdkin8/tf-analyze
+    rev: v0.2.6
     hooks:
       - id: tf-analyze
         args: ["--target", ".", "--fail-on", "MEDIUM"]

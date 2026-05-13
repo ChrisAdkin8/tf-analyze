@@ -140,6 +140,8 @@ should not list workload services.
 See also rules in the `SEC-K8S-HELM-*` family:
 
 - [`SEC-K8S-HELM-002`](./SEC-K8S-HELM-002.md) — helm_release sets `securityContext.privileged=true`
+- [`SEC-K8S-HELM-003`](./SEC-K8S-HELM-003.md) — helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)
+- [`SEC-K8S-HELM-004`](./SEC-K8S-HELM-004.md) — helm_release bypasses chart safety (`disable_webhooks = true` OR `skip_crds = true`)
 
 ---
 

@@ -99,7 +99,7 @@ Production CI should pin `ref` to a release tag rather than tracking
 ```yaml
 - uses: ChrisAdkin8/tf-analyze@v1
   with:
-    ref: v0.2.1                     # or a 7+ char commit SHA
+    ref: v0.2.6                     # or a 7+ char commit SHA
 ```
 
 The fetch step uses `--depth 1 --branch <ref>` for branch/tag refs and
@@ -120,7 +120,7 @@ jobs:
       fail-on: HIGH
       compliance-framework: owasp_iac
       attack-graph: true
-      ref: v0.2.1
+      ref: v0.2.6
 ```
 
 Reviewers see the engine's PR summary (score + grade emoji + top-3

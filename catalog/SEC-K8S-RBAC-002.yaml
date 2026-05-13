@@ -1,0 +1,115 @@
+id: SEC-K8S-RBAC-002
+title: "RoleBinding / ClusterRoleBinding subject targets a broad system Group"
+section: security
+default_urgency: CRITICAL
+blast_radius: infrastructure-wide
+status: active
+cis:
+  - "5.1.1"
+  - "5.1.5"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1078.001"
+  - "T1078.004"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-3"
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
+owasp:
+  - "K03"
+# Complements SEC-K8S-RBAC-001. RBAC-001 covers the *role* side
+# (cluster-admin reference, wildcard verbs, system:authenticated
+# binding). This rule covers the *subject* side — RoleBindings whose
+# subject is a broad system Group, which grants the bound role to
+# every member of that group.
+patterns:
+  - kind: resource_body_contains
+    resource: kubernetes_role_binding
+    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:masters"'
+    description: |
+      `kubernetes_role_binding` has a subject `kind = "Group"` with
+      `name = "system:masters"`. `system:masters` is a hard-coded
+      group in kube-apiserver that bypasses RBAC entirely — every
+      member is treated as cluster-admin regardless of which role
+      this binding references. Used legitimately only by the bootstrap
+      kubeconfig.
+  - kind: resource_body_contains
+    resource: kubernetes_cluster_role_binding
+    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:masters"'
+    description: |
+      Same as above, but at cluster scope. `kubernetes_cluster_role_binding`
+      with `system:masters` as a subject grants the referenced role
+      to every kubeconfig that asserts the `system:masters` group —
+      typically the original bootstrap credential plus any cluster
+      operator who copy-pasted that kubeconfig.
+  - kind: resource_body_contains
+    resource: kubernetes_role_binding
+    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:unauthenticated"'
+    description: |
+      Subject `Group: system:unauthenticated` grants the role to every
+      request without a valid token. Effectively makes the role
+      reachable by any pod that can reach the API server, including
+      pods without service-account tokens mounted.
+  - kind: resource_body_contains
+    resource: kubernetes_cluster_role_binding
+    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:unauthenticated"'
+    description: |
+      Same as above at cluster scope. The 2018 Tesla Kubernetes
+      breach pivoted on an `system:unauthenticated`-readable dashboard
+      ClusterRoleBinding; the same anti-pattern is still common in
+      legacy installs of cluster-monitoring stacks.
+recommendation: |
+  Drop the system-Group subject. If a workload needs the bound role,
+  bind it to a scoped ServiceAccount in the workload's namespace
+  rather than to a broad system Group. Reserve `system:masters` for
+  the kubeadm-bootstrap kubeconfig only.
+
+      resource "kubernetes_role_binding" "app" {
+        metadata {
+          name      = "app"
+          namespace = "app"
+        }
+        role_ref {
+          api_group = "rbac.authorization.k8s.io"
+          kind      = "ClusterRole"
+          name      = "view"
+        }
+        subject {
+          kind      = "ServiceAccount"
+          name      = "app"
+          namespace = "app"
+        }
+      }
+verification: |
+  `kubectl get clusterrolebindings -o json | jq '.items[] | select(.subjects[]?.name | IN("system:masters","system:unauthenticated"))'`
+  should not list any binding outside `kube-system`.
+fix_hcl: |
+  resource "kubernetes_role_binding" "scoped" {
+    metadata {
+      name      = "app-scoped"
+      namespace = "app"
+    }
+    role_ref {
+      api_group = "rbac.authorization.k8s.io"
+      kind      = "ClusterRole"
+      name      = "view"
+    }
+    subject {
+      kind      = "ServiceAccount"
+      name      = "app"
+      namespace = "app"
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Removing the system-Group subject drops access for every principal in that group. Stage a replacement ServiceAccount binding first, then rotate kubeconfigs off the broad group."
+fixtures:
+  - k8s_rbac_system_masters

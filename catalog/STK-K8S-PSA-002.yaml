@@ -1,0 +1,82 @@
+id: STK-K8S-PSA-002
+title: "kubernetes_namespace Pod Security Admission `enforce` level is `privileged` (no enforcement)"
+section: stack
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.2.1"
+pci_dss:
+  - "Req-2.2"
+soc2_cc:
+  - "CC6.6"
+mitre:
+  - "T1611"
+cwe:
+  - "CWE-250"
+  - "CWE-269"
+nist_csf:
+  - "PR.PT-3"
+nist_800_53:
+  - "CM-7"
+csa_ccm:
+  - "AIS-07"
+owasp:
+  - "K01"
+  - "K04"
+# Pod Security Admission has three enforce levels:
+#   - `privileged` (default; no enforcement — every PSP-style violation
+#     is permitted, hostPath / hostNetwork / privileged: true / etc.)
+#   - `baseline`   (blocks the worst foot-guns)
+#   - `restricted` (defense-in-depth — runAsNonRoot, drop all capabilities)
+# Setting enforce explicitly to `privileged` is functionally identical
+# to setting no label at all (which SEC-K8S-PSA-001 already covers),
+# but operators sometimes set it deliberately to silence a different
+# scanner — this rule catches that anti-pattern.
+patterns:
+  - kind: resource_body_contains
+    resource: kubernetes_namespace
+    regex: '"pod-security\.kubernetes\.io/enforce"\s*=\s*"privileged"'
+    description: |
+      `kubernetes_namespace` has `pod-security.kubernetes.io/enforce`
+      set to `privileged` — the weakest of the three PSA levels.
+      Every PodSecurityPolicy-equivalent violation is permitted in
+      this namespace: privileged containers, host-namespace sharing,
+      hostPath mounts, hostNetwork pods. Functionally equivalent to
+      having no PSA label at all.
+recommendation: |
+  Raise the enforce level to `baseline` (blocks the worst-known
+  foot-guns) or `restricted` (defense-in-depth, recommended for new
+  workloads). Use the `warn` and `audit` levels to identify pods
+  that would be rejected before flipping enforce.
+
+      resource "kubernetes_namespace" "app" {
+        metadata {
+          name = "app"
+          labels = {
+            "pod-security.kubernetes.io/enforce"         = "restricted"
+            "pod-security.kubernetes.io/enforce-version" = "latest"
+            "pod-security.kubernetes.io/warn"            = "restricted"
+            "pod-security.kubernetes.io/audit"           = "restricted"
+          }
+        }
+      }
+verification: |
+  `kubectl get ns -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.pod-security\.kubernetes\.io/enforce}{"\n"}{end}'`
+  should not list any workload namespace with `privileged`.
+fix_hcl: |
+  resource "kubernetes_namespace" "example" {
+    metadata {
+      name = "example"
+      labels = {
+        "pod-security.kubernetes.io/enforce"         = "restricted"
+        "pod-security.kubernetes.io/enforce-version" = "latest"
+        "pod-security.kubernetes.io/warn"            = "restricted"
+        "pod-security.kubernetes.io/audit"           = "restricted"
+      }
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Tightening from `privileged` to `restricted` will reject pending pods that don't meet the restricted profile (runAsNonRoot, drop all caps). Roll out via the `warn` level first to identify which workloads need remediation."
+fixtures:
+  - k8s_psa_privileged

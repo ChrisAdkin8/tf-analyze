@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**343 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**353 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -113,7 +113,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-UNUSED-002`](./ROB-UNUSED-002.md) | LOW | Declared output is never consumed by any caller |
 | [`ROB-VERSION-002`](./ROB-VERSION-002.md) | LOW | Submodule directory has no required_version |
 
-## security (186)
+## security (193)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -137,6 +137,8 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-GCP-WIF-001`](./SEC-GCP-WIF-001.md) | CRITICAL | GCP Workload Identity Federation pool provider missing attribute_condition |
 | [`SEC-K8S-HELM-002`](./SEC-K8S-HELM-002.md) | CRITICAL | helm_release sets `securityContext.privileged=true` |
 | [`SEC-K8S-RBAC-001`](./SEC-K8S-RBAC-001.md) | CRITICAL | ClusterRoleBinding grants cluster-admin OR uses wildcard verbs / system:authenticated |
+| [`SEC-K8S-RBAC-002`](./SEC-K8S-RBAC-002.md) | CRITICAL | RoleBinding / ClusterRoleBinding subject targets a broad system Group |
+| [`SEC-K8S-SECRET-002`](./SEC-K8S-SECRET-002.md) | CRITICAL | kubernetes_secret of type `kubernetes.io/dockerconfigjson` carries literal data (image-pull credentials in state) |
 | [`SEC-PROVISIONER-002`](./SEC-PROVISIONER-002.md) | CRITICAL | local-exec or remote-exec uses `curl \| bash` or unverified-pipe pattern |
 | [`SEC-SECRETS-001`](./SEC-SECRETS-001.md) | CRITICAL | Hardcoded credential or API key in Terraform source |
 | [`SEC-STATE-001`](./SEC-STATE-001.md) | CRITICAL | .tfstate file committed to the repository |
@@ -229,8 +231,12 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-GCP-SCC-001`](./SEC-GCP-SCC-001.md) | HIGH | GCP Security Command Center notification not configured |
 | [`SEC-GCP-SQL-PUBLIC-001`](./SEC-GCP-SQL-PUBLIC-001.md) | HIGH | Cloud SQL instance permits public IPv4 |
 | [`SEC-K8S-HELM-001`](./SEC-K8S-HELM-001.md) | HIGH | helm_release sets `service.type=LoadBalancer` (publicly exposed) |
+| [`SEC-K8S-HELM-003`](./SEC-K8S-HELM-003.md) | HIGH | helm_release weak supply-chain controls (`verify = false` OR `version` unpinned) |
+| [`SEC-K8S-HELM-004`](./SEC-K8S-HELM-004.md) | HIGH | helm_release bypasses chart safety (`disable_webhooks = true` OR `skip_crds = true`) |
 | [`SEC-K8S-NETPOL-001`](./SEC-K8S-NETPOL-001.md) | HIGH | kubernetes_network_policy absent for the corpus |
+| [`SEC-K8S-NETPOL-002`](./SEC-K8S-NETPOL-002.md) | HIGH | kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule) |
 | [`SEC-K8S-PSA-001`](./SEC-K8S-PSA-001.md) | HIGH | kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop |
+| [`SEC-K8S-SECRET-001`](./SEC-K8S-SECRET-001.md) | HIGH | kubernetes_secret carries literal `data` (vs ExternalSecret / Vault Secrets Operator) |
 | [`SEC-PROVISIONER-001`](./SEC-PROVISIONER-001.md) | HIGH | Provisioner block used for shell execution |
 | [`SEC-SECRETS-002`](./SEC-SECRETS-002.md) | HIGH | aws_ssm_parameter stores a sensitive value as plain `String` (not `SecureString`) |
 | [`SEC-SENSITIVE-001`](./SEC-SENSITIVE-001.md) | HIGH | Sensitive output not marked sensitive=true |
@@ -296,6 +302,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-GCP-SPANNER-001`](./SEC-GCP-SPANNER-001.md) | MEDIUM | GCP Spanner instance not encrypted with customer-managed key |
 | [`SEC-GCP-SQL-CMEK-001`](./SEC-GCP-SQL-CMEK-001.md) | MEDIUM | Cloud SQL instance not encrypted with customer-managed key (CMEK) |
 | [`SEC-GCP-VPC-PEER-001`](./SEC-GCP-VPC-PEER-001.md) | MEDIUM | GCP VPC peering exports all custom routes (broad blast radius) |
+| [`SEC-K8S-SA-001`](./SEC-K8S-SA-001.md) | MEDIUM | kubernetes_service_account allows automount of API token |
 | [`SEC-LOG-CROSS-ACCOUNT-001`](./SEC-LOG-CROSS-ACCOUNT-001.md) | MEDIUM | Audit log destination is in the same AWS account (no cross-account isolation) |
 | [`SEC-PROVIDER-001`](./SEC-PROVIDER-001.md) | MEDIUM | Provider version constraint missing upper bound |
 | [`SEC-USERDATA-002`](./SEC-USERDATA-002.md) | MEDIUM | user_data passes a sensitive var unencoded (base64encode missing) |
@@ -304,7 +311,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AZURE-VNET-ENC-001`](./SEC-AZURE-VNET-ENC-001.md) | LOW | Azure Virtual Network missing VNet encryption |
 | [`SEC-GCP-COMPUTE-CONFCOMP-001`](./SEC-GCP-COMPUTE-CONFCOMP-001.md) | LOW | GCP Compute instance not using Confidential Computing (TDX/SEV) |
 
-## stack (83)
+## stack (86)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -348,6 +355,9 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-GCP-KMS-LOCATION-001`](./STK-GCP-KMS-LOCATION-001.md) | HIGH | CMEK consumer location mismatches KMS key ring location |
 | [`STK-GCP-LB-002`](./STK-GCP-LB-002.md) | HIGH | GCP HTTPS load balancer missing SSL policy (default permits TLS 1.0) |
 | [`STK-K8S-IMAGE-SIGNED-001`](./STK-K8S-IMAGE-SIGNED-001.md) | HIGH | Kubernetes pod or container references an image without a signature/digest pin |
+| [`STK-K8S-INGRESS-001`](./STK-K8S-INGRESS-001.md) | HIGH | kubernetes_ingress_v1 has no `tls` block (HTTP traffic exposed in clear) |
+| [`STK-K8S-PSA-002`](./STK-K8S-PSA-002.md) | HIGH | kubernetes_namespace Pod Security Admission `enforce` level is `privileged` (no enforcement) |
+| [`STK-K8S-PSP-001`](./STK-K8S-PSP-001.md) | HIGH | kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25) |
 | [`STK-K8S-VERSION-001`](./STK-K8S-VERSION-001.md) | HIGH | EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2 |
 | [`STK-AWS-ECS-001`](./STK-AWS-ECS-001.md) | MEDIUM | ECS cluster Container Insights not configured |
 | [`STK-AWS-EKS-004`](./STK-AWS-EKS-004.md) | MEDIUM | EKS cluster missing OIDC provider for IRSA |

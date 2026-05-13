@@ -1,0 +1,85 @@
+id: SEC-K8S-HELM-003
+title: "helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.3.1"
+pci_dss:
+  - "Req-6.4.5"
+soc2_cc:
+  - "CC8.1"
+mitre:
+  - "T1195.002"
+  - "T1078"
+cwe:
+  - "CWE-494"
+  - "CWE-345"
+nist_csf:
+  - "PR.DS-6"
+  - "ID.SC-3"
+nist_800_53:
+  - "SI-7"
+  - "SR-4"
+csa_ccm:
+  - "AIS-04"
+  - "TVM-09"
+owasp:
+  - "K05"
+owasp_iac:
+  - "Develop and Distribute / Image Signing"
+patterns:
+  - kind: resource_body_contains
+    resource: helm_release
+    regex: '(?m)^\s*verify\s*=\s*false\b'
+    description: |
+      `helm_release` sets `verify = false` (or relies on the provider
+      default, which is off). Without chart signature verification a
+      compromised or typosquatted chart repository serves an attacker
+      arbitrary Kubernetes manifests on `terraform apply`. The 2021
+      Codecov compromise and the 2023 3CX supply-chain incident both
+      pivoted through unsigned build-time artefacts; helm charts are
+      the equivalent surface for cluster workloads.
+  - kind: resource_missing_arg
+    resource: helm_release
+    arg: version
+    description: |
+      `helm_release` omits `version` entirely. The chart resolves to
+      the repository's *current* latest tag on every `terraform apply`,
+      so the deployed manifests can change without any diff in the
+      Terraform configuration. An attacker who compromises the chart
+      repository (or a maintainer's credentials) pushes a new "latest"
+      and the next apply pulls it silently.
+recommendation: |
+  Pin `version` to an exact semver and enable signature verification
+  against a known-good keyring. For OCI registries that don't ship
+  PGP keyrings, pair `version` pinning with a private mirror so the
+  apply path doesn't reach the upstream registry at all.
+
+      resource "helm_release" "app" {
+        name       = "app"
+        repository = "https://charts.example.io"
+        chart      = "app"
+        version    = "1.4.2"
+        verify     = true
+        keyring    = "/etc/helm/keyring.gpg"
+      }
+verification: |
+  `helm verify <chart>` against every chart referenced from
+  `helm_release` blocks must succeed against the chosen keyring;
+  `terraform state list | xargs -n1 terraform state show | grep helm_release`
+  must not show any release without a pinned `version`.
+fix_hcl: |
+  resource "helm_release" "example" {
+    name       = "example"
+    repository = "https://charts.example.io"
+    chart      = "example"
+    version    = "1.4.2"
+    verify     = true
+    keyring    = "/etc/helm/keyring.gpg"
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Enabling `verify` and pinning `version` may fail the next apply if the keyring is missing or the chart was floating. Stage the keyring first, then bump version."
+fixtures:
+  - helm_unverified_chart

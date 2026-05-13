@@ -1,0 +1,124 @@
+id: SEC-K8S-NETPOL-002
+title: "kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.3.2"
+pci_dss:
+  - "Req-1.2"
+  - "Req-1.3"
+soc2_cc:
+  - "CC6.6"
+mitre:
+  - "T1190"
+  - "T1041"
+cwe:
+  - "CWE-284"
+  - "CWE-1188"
+nist_csf:
+  - "PR.AC-5"
+nist_800_53:
+  - "SC-7"
+  - "AC-4"
+csa_ccm:
+  - "IVS-06"
+  - "IVS-09"
+owasp:
+  - "K06"
+# SEC-K8S-NETPOL-001 covers *missing* network policies. This rule
+# covers the harder failure mode: a network policy that exists (so
+# the cluster reports "policies in place") but is functionally
+# allow-all because of a wildcard cidr or empty rule. The lulling
+# effect makes this worse than no policy at all — observability
+# dashboards report "secured" while traffic flows unrestricted.
+patterns:
+  - kind: resource_body_contains
+    resource: kubernetes_network_policy
+    regex: 'cidr\s*=\s*"0\.0\.0\.0/0"'
+    description: |
+      `kubernetes_network_policy` whitelists `0.0.0.0/0` in an `ip_block`.
+      Every IPv4 address — including the public internet — matches the
+      rule. The 2018 Tesla / Kubernetes-dashboard cryptomining incident
+      pivoted through exactly this shape: a "network policy is
+      configured" cluster whose policy whitelisted the world.
+  - kind: resource_body_contains
+    resource: kubernetes_network_policy
+    regex: '(?ms)^\s*egress\s*\{\s*\}'
+    description: |
+      `kubernetes_network_policy` has an empty `egress { }` block. An
+      empty rule in NetworkPolicy semantics is "allow all" — every
+      egress destination is permitted from pods this policy selects.
+      The cluster operator probably intended `egress { }` to mean
+      "deny all egress", which is a common mistranslation from iptables
+      mental models.
+  - kind: resource_body_contains
+    resource: kubernetes_network_policy
+    regex: '(?ms)^\s*ingress\s*\{\s*\}'
+    description: |
+      Same as above on the ingress side — `ingress { }` resolves to
+      "allow all" inbound, defeating the purpose of a NetworkPolicy.
+  - kind: resource_body_contains
+    resource: kubernetes_network_policy_v1
+    regex: 'cidr\s*=\s*"0\.0\.0\.0/0"'
+    description: API-versioned alias — same anti-pattern.
+recommendation: |
+  Replace the wildcard cidr with the specific CIDR(s) the workload
+  needs to reach. If the workload genuinely needs egress to the
+  public internet, route it through an egress proxy / NAT gateway
+  and whitelist that proxy's IP — never the full `0.0.0.0/0`. Empty
+  rule blocks should be deleted (the policy itself + `policy_types`
+  decides direction, an empty rule is never the right shape).
+
+      resource "kubernetes_network_policy" "app" {
+        metadata {
+          name      = "app"
+          namespace = "app"
+        }
+        spec {
+          pod_selector { match_labels = { app = "app" } }
+          policy_types = ["Egress"]
+          egress {
+            to {
+              ip_block {
+                cidr   = "10.0.0.0/16"
+                except = ["10.0.100.0/24"]
+              }
+            }
+            ports {
+              protocol = "TCP"
+              port     = "5432"
+            }
+          }
+        }
+      }
+verification: |
+  `kubectl get networkpolicy -A -o json | jq '.items[] | select(.spec.egress[]?.to[]?.ipBlock?.cidr == "0.0.0.0/0" or .spec.egress[]? == {} or .spec.ingress[]? == {})'`
+  should return empty across non-bootstrap namespaces.
+fix_hcl: |
+  resource "kubernetes_network_policy" "scoped" {
+    metadata {
+      name      = "scoped"
+      namespace = "app"
+    }
+    spec {
+      pod_selector { match_labels = { app = "app" } }
+      policy_types = ["Egress"]
+      egress {
+        to {
+          ip_block {
+            cidr = "10.0.0.0/16"
+          }
+        }
+        ports {
+          protocol = "TCP"
+          port     = "5432"
+        }
+      }
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Tightening from allow-all to a specific cidr will break any workload that depended on reaching destinations outside the whitelist. Roll out alongside an egress-traffic dashboard so unexpected drops surface immediately."
+fixtures:
+  - k8s_netpol_permissive

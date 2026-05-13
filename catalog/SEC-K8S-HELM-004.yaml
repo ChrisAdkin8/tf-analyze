@@ -1,0 +1,100 @@
+id: SEC-K8S-HELM-004
+title: "helm_release bypasses chart safety (`disable_webhooks = true` OR `skip_crds = true`)"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.2.4"
+pci_dss:
+  - "Req-6.4.2"
+soc2_cc:
+  - "CC8.1"
+mitre:
+  - "T1562.001"
+  - "T1078"
+cwe:
+  - "CWE-693"
+  - "CWE-1188"
+nist_csf:
+  - "PR.IP-1"
+  - "PR.PT-3"
+nist_800_53:
+  - "CM-7"
+  - "SI-7"
+csa_ccm:
+  - "CCC-04"
+  - "TVM-09"
+owasp:
+  - "K07"
+# `helm_release` exposes two opt-outs that disable safety:
+#   - `disable_webhooks`: skips pre/post-install admission webhooks
+#     (validating + mutating). Charts use these for policy enforcement,
+#     defaulting, ordering, and rendering-time sanity checks.
+#   - `skip_crds`: skips installation of the chart's CustomResourceDefinitions.
+#     Resources later in the apply that reference those CRDs will be
+#     scheduled before the CRD exists, racing the K8s controller.
+# Both are classic "I'll just disable that to make the apply succeed"
+# footguns — the chart's safety net silently rolls off and the cluster
+# operates outside the chart author's tested envelope.
+patterns:
+  - kind: resource_body_contains
+    resource: helm_release
+    regex: '(?m)^\s*disable_webhooks\s*=\s*true\b'
+    description: |
+      `helm_release` sets `disable_webhooks = true`, bypassing pre-install
+      and post-install admission webhooks. Charts often use webhooks
+      to enforce field defaults, validate resource combinations, and
+      stage TLS-cert generation — skipping them leaves the release
+      in an unsafe interim state that the chart author never tested.
+  - kind: resource_body_contains
+    resource: helm_release
+    regex: '(?m)^\s*skip_crds\s*=\s*true\b'
+    description: |
+      `helm_release` sets `skip_crds = true`, bypassing the chart's
+      CRD installation. Any subsequent resource that references those
+      CRDs (e.g. a CertManager `Certificate` or an Istio `VirtualService`)
+      will be scheduled before the CRD exists, producing apply-time
+      races. The cert-manager and OPA Gatekeeper communities both
+      explicitly document `skip_crds` as a footgun.
+recommendation: |
+  Remove the bypass flag. If a webhook or CRD is genuinely the
+  blocking factor, fix the upstream issue rather than disabling the
+  safety net:
+
+  - Webhook 503/timeout: increase `wait_for_jobs` and `timeout`;
+    investigate why the cluster's webhook serving pod is unhealthy.
+  - CRD already exists from a previous install: the correct shape is
+    to let Helm manage the CRD lifecycle from a single release, not
+    to skip it.
+
+      resource "helm_release" "app" {
+        name             = "app"
+        repository       = "https://charts.example.io"
+        chart            = "app"
+        version          = "1.4.2"
+        disable_webhooks = false   # default; included for explicitness
+        skip_crds        = false
+        wait             = true
+        wait_for_jobs    = true
+        timeout          = 600
+      }
+verification: |
+  `terraform state list | grep helm_release | xargs -I{} terraform state show {} | grep -E '(disable_webhooks|skip_crds) *= *true'`
+  should return empty for every workload release.
+fix_hcl: |
+  resource "helm_release" "example" {
+    name             = "example"
+    repository       = "https://charts.example.io"
+    chart            = "example"
+    version          = "1.4.2"
+    disable_webhooks = false
+    skip_crds        = false
+    wait             = true
+    wait_for_jobs    = true
+    timeout          = 600
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Removing `disable_webhooks` or `skip_crds` may cause the next apply to fail if the underlying issue (unhealthy webhook, pre-existing CRDs) hasn't been fixed first. Investigate the original reason the flag was set before removing it."
+fixtures:
+  - helm_disable_webhooks

@@ -1,0 +1,88 @@
+id: SEC-K8S-SA-001
+title: "kubernetes_service_account allows automount of API token"
+section: security
+default_urgency: MEDIUM
+blast_radius: environment
+status: active
+cis:
+  - "5.1.5"
+  - "5.1.6"
+pci_dss:
+  - "Req-7.2.2"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1528"
+  - "T1078.001"
+cwe:
+  - "CWE-269"
+  - "CWE-732"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+  - "IA-5"
+csa_ccm:
+  - "IAM-09"
+owasp:
+  - "K03"
+# A Kubernetes ServiceAccount with `automount_service_account_token`
+# set to true (or omitted — the default IS true) projects the SA's
+# bearer token into every pod scheduled with that SA. Any RCE in a
+# pod yields the token; the token unlocks whatever RBAC the SA has.
+# Best practice is to mount the token only on pods that actually
+# call the API, by setting `automount = false` on the SA and
+# opt-in at the Pod spec via `automountServiceAccountToken: true`.
+patterns:
+  - kind: resource_body_contains
+    resource: kubernetes_service_account
+    regex: '(?m)^\s*automount_service_account_token\s*=\s*true\b'
+    description: |
+      `kubernetes_service_account` explicitly sets
+      `automount_service_account_token = true`, projecting the SA's
+      bearer token into every pod that mounts it. Compromise of any
+      such pod (RCE, container breakout, log access) yields the
+      token; the token is reusable cluster-wide until rotated.
+  - kind: resource_missing_arg
+    resource: kubernetes_service_account
+    arg: automount_service_account_token
+    description: |
+      `kubernetes_service_account` omits `automount_service_account_token`
+      entirely. The Kubernetes default is `true`, so the omission is
+      functionally equivalent to opting into automount — the SA
+      token is projected into every pod that runs under this SA.
+  - kind: resource_body_contains
+    resource: kubernetes_service_account_v1
+    regex: '(?m)^\s*automount_service_account_token\s*=\s*true\b'
+    description: |
+      `kubernetes_service_account_v1` — same anti-pattern in the
+      API-versioned alias.
+recommendation: |
+  Set `automount_service_account_token = false` at the SA level
+  (deny-by-default), then opt in selectively at the Pod spec with
+  `automountServiceAccountToken: true` only on the workloads that
+  actually call the API.
+
+      resource "kubernetes_service_account" "app" {
+        metadata {
+          name      = "app"
+          namespace = "app"
+        }
+        automount_service_account_token = false
+      }
+verification: |
+  `kubectl get sa -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"/"}{.metadata.name}{"\t"}{.automountServiceAccountToken}{"\n"}{end}'`
+  should show `false` for every SA except those whose pods genuinely
+  need API access.
+fix_hcl: |
+  resource "kubernetes_service_account" "app" {
+    metadata {
+      name      = "app"
+      namespace = "app"
+    }
+    automount_service_account_token = false
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Setting automount to false drops the projected token on every pod that runs under this SA. Workloads that genuinely call the API will start failing auth until they opt back in at the Pod spec."
+fixtures:
+  - k8s_sa_automount_token

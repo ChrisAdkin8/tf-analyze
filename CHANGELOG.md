@@ -5,6 +5,111 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 32.1 — K8s/Helm rule coverage 8 → 18 + version-drift sweep — 2026-05-13
+
+Brings the catalogue from 343 → **353 active rules** by closing the
+K8s/Helm coverage gap. The family sat at 8 rules vs 91 per hyperscaler
+since Round 30; this round brings it to 18 with a deliberate filter:
+**only declarative HCL misconfigurations that runtime scanners
+(kubescape / polaris / kube-bench) cannot catch as cleanly.** Live-
+cluster scanners stay authoritative for runtime drift; tf-analyze owns
+the plan-time HCL surface.
+
+### New rules (7 SEC + 3 STK)
+
+- **SEC-K8S-HELM-003** — `helm_release` weak supply-chain controls
+  (`verify = false` OR `version` unpinned). Catches typosquatted /
+  compromised chart-repository attacks at plan time.
+- **SEC-K8S-HELM-004** — `helm_release` bypasses chart safety
+  (`disable_webhooks = true` OR `skip_crds = true`). Classic "make
+  the apply succeed" footgun.
+- **SEC-K8S-NETPOL-002** — `kubernetes_network_policy` is overly
+  permissive (`0.0.0.0/0` cidr OR empty `egress`/`ingress` rule).
+  Complements NETPOL-001 (missing policy) — this rule catches the
+  worse failure mode where a policy exists but lulls operators
+  into a false sense of "secured" while traffic flows unrestricted.
+- **SEC-K8S-RBAC-002** — RoleBinding / ClusterRoleBinding subject
+  targets `system:masters` or `system:unauthenticated`. CRITICAL —
+  `system:masters` bypasses RBAC entirely at the apiserver level.
+- **SEC-K8S-SA-001** — `kubernetes_service_account` allows automount
+  of API token (explicit `= true` OR omitted, since the K8s default
+  is true). MEDIUM, because the right shape is deny-by-default at
+  the SA + opt-in at the Pod spec.
+- **SEC-K8S-SECRET-001** — `kubernetes_secret` carries literal `data`
+  block. base64 is encoding, not encryption; the value lands in
+  .tf source AND state.
+- **SEC-K8S-SECRET-002** — `kubernetes_secret` of type
+  `kubernetes.io/dockerconfigjson` with literal data. CRITICAL —
+  blast radius is supply-chain (anyone with state read can pull
+  every image from the private registry).
+- **STK-K8S-INGRESS-001** — `kubernetes_ingress_v1` has no `tls`
+  block. Plaintext HTTP exposure of every routed host.
+- **STK-K8S-PSA-002** — Pod Security Admission `enforce` level set to
+  `privileged` (the weakest level — functionally identical to no
+  PSA at all, but more insidious because it looks intentional in a
+  code review).
+- **STK-K8S-PSP-001** — `kubernetes_pod_security_policy` resource
+  declared. PSP was deprecated in 1.21 and **removed** in 1.25;
+  catching it at plan time tells operators the next K8s minor
+  upgrade will reject the apply.
+
+### K8s/Helm breakdown
+
+| Section | Before | After |
+|---|---:|---:|
+| SEC | 5 | 12 |
+| STK | 3 | 6 |
+| **Total** | **8** | **18** |
+
+### False-positive guards
+
+10 `_clean` fixtures auto-pair with the 10 new positive fixtures.
+**251 → 261 clean fixtures**, all green on first run.
+
+### Engine + docs
+
+- **`scripts/_mitre.py`** — adds three ATT&CK techniques cited by
+  the new rules: `T1041` (Exfiltration Over C2 Channel), `T1078.001`
+  (Valid Accounts: Default Accounts), `T1528` (Steal Application
+  Access Token). Drift gate clean against v17.
+- **`docs/rules/*.md`** — 343 → 353 per-rule pages regenerated.
+- **README** — Rules badge 343 → 353, rule-docs badge 343 → 353
+  pages, "Rules at a glance" table K8s/Helm row 8 → 18, detailed
+  per-family table K8s/Helm row updated.
+
+### Documentation version-drift sweep (landed in the same commit)
+
+A scan across user-facing docs found stale version references — all
+fixed in the same commit so the surface is internally consistent:
+
+- **`vscode-extension/README.md`** + **`docs/vscode-extension.md`** +
+  README integrations table: `tf-analyze-0.1.54.vsix` → `0.1.56`
+  (matches `vscode-extension/package.json`).
+- **`README.md`** Quickstart YAML + **`docs/github-action.md`**
+  pinning example + worked example: `ref: v0.2.3` / `v0.2.1` →
+  `v0.2.6` (latest engine release).
+- **`docs/pre-commit.md`**: `https://github.com/example/tf-analyze`
+  placeholder URL replaced with the real repo; `rev: v0.1.0` →
+  `rev: v0.2.6`.
+- **`README.md`** badges + prose: `Tests: 872` → `1153`;
+  comparison-table `fix_hcl 89%` reconciled to the live 93% the
+  badge already showed.
+
+Historical version references (audit-shipped behaviour in
+`docs/blast-radius.md` and `docs/vscode-extension.md`, "Fixed in
+v0.1.X" troubleshooting rows, R30 P0.2 clone-URL note) were
+deliberately left untouched — they are historical record per
+`CONTRIBUTING.md`'s blog-post pinning rule.
+
+### Test surface
+
+`tests/test_fixtures.py` 342 → 352 positive fixtures (+10).
+`tests/test_clean_fixtures.py` 251 → 261 (+10). Full suite:
+**1133 → 1153 passing**, 2 skipped. All drift gates green
+(`test_readme_drift`, `test_rule_docs`, `test_sarif_taxonomies`).
+
+---
+
 ## Round 32 — cross-cloud rule parity: AWS 91 / GCP 91 / Azure 91 — 2026-05-13
 
 Brings the catalogue from 238 → **343 active rules** with strict numerical parity across the three hyperscalers. Two sequential passes:
