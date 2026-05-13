@@ -1,0 +1,60 @@
+id: STK-GCP-COMPOSER-001
+title: "GCP Composer (Airflow) environment not private"
+section: stack
+default_urgency: HIGH
+blast_radius: module
+status: active
+cis:
+  - "3.5"
+pci_dss:
+  - "Req-1.3"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "PR.AC-5"
+nist_800_53:
+  - "SC-7"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_composer_environment
+    nested_path: config.private_environment_config
+    description: |
+      `google_composer_environment` has no `private_environment_config`.
+      The GKE cluster underneath has public IPs and the Airflow web UI
+      is reachable from the public internet (subject to IAM, but the
+      attack surface is still public).
+recommendation: |
+  Enable private environment so the underlying GKE and Cloud SQL
+  components have private IPs only:
+
+      resource "google_composer_environment" "main" {
+        # ...
+        config {
+          private_environment_config {
+            enable_private_endpoint = true
+          }
+        }
+      }
+verification: |
+  `gcloud composer environments describe <name> --location <l> \
+    --format='value(config.privateEnvironmentConfig.enablePrivateEndpoint)'`
+  must return `True`.
+fix_hcl: |
+  resource "google_composer_environment" "example" {
+    name   = "example"
+    region = "us-central1"
+    config {
+      private_environment_config {
+        enable_private_endpoint = true
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - gcp_composer_not_private

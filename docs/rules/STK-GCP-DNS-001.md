@@ -101,6 +101,12 @@ must return `on`.
 **Source**
   - [`catalog/STK-GCP-DNS-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-DNS-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `STK-GCP-DNS-*` family:
+
+- [`STK-GCP-DNS-002`](./STK-GCP-DNS-002.md) — Cloud DNS DNSSEC uses deprecated RSASHA1 algorithm
+
 ---
 
 ## Run this check

@@ -1,0 +1,88 @@
+id: SEC-AZURE-APPGW-001
+title: "Azure Application Gateway has no WAF policy attached"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "6.5"
+pci_dss:
+  - "Req-6.6"
+soc2_cc:
+  - "CC6.6"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-693"
+d3fend:
+  - "D3-WAF"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-7"
+  - "SI-4"
+csa_ccm:
+  - "AIS-04"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_application_gateway
+    arg: firewall_policy_id
+    description: |
+      `azurerm_application_gateway` has no `firewall_policy_id` and no
+      `waf_configuration` block. The gateway forwards every HTTP request
+      directly to the backend without inspection. Common attacks
+      (SQLi, XSS, path traversal, OWASP-Top-10 patterns) reach the
+      origin unfiltered.
+  - kind: resource_missing_arg
+    resource: azurerm_web_application_firewall_policy
+    arg: managed_rules
+    description: |
+      `azurerm_web_application_firewall_policy` has no `managed_rules`
+      block — the policy exists but has no signature set attached, so
+      no requests are inspected.
+recommendation: |
+  Attach an `azurerm_web_application_firewall_policy` to the gateway
+  and enable the OWASP managed ruleset in Prevention mode:
+
+      resource "azurerm_web_application_firewall_policy" "waf" {
+        name                = "appgw-waf"
+        resource_group_name = azurerm_resource_group.main.name
+        location            = azurerm_resource_group.main.location
+        policy_settings { mode = "Prevention" }
+        managed_rules {
+          managed_rule_set {
+            type    = "OWASP"
+            version = "3.2"
+          }
+        }
+      }
+
+      resource "azurerm_application_gateway" "main" {
+        # ...
+        firewall_policy_id = azurerm_web_application_firewall_policy.waf.id
+        sku {
+          name = "WAF_v2"
+          tier = "WAF_v2"
+          capacity = 2
+        }
+      }
+verification: |
+  `az network application-gateway show --name <name> --resource-group <rg> \
+    --query 'firewallPolicy.id'` must return a non-null policy ID, and
+  the gateway SKU must be `WAF_v2`.
+fix_hcl: |
+  resource "azurerm_application_gateway" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    sku {
+      name     = "WAF_v2"
+      tier     = "WAF_v2"
+      capacity = 2
+    }
+    firewall_policy_id = azurerm_web_application_firewall_policy.example.id
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Switching SKU from Standard_v2 to WAF_v2 is in-place; attaching a Prevention-mode policy may block legitimate traffic if rules are not first tuned in Detection mode."
+fixtures:
+  - azure_appgw_no_waf

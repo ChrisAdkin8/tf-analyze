@@ -1,0 +1,66 @@
+id: SEC-AZURE-ACR-002
+title: "Azure Container Registry missing image retention policy"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-6.3"
+soc2_cc:
+  - "CC8.1"
+mitre:
+  - "T1525"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "PR.IP-1"
+  - "ID.SC-2"
+nist_800_53:
+  - "CM-7"
+  - "SR-4"
+csa_ccm:
+  - "AIS-07"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_container_registry
+    arg: retention_policy
+    description: |
+      `azurerm_container_registry` has no `retention_policy` block.
+      Without retention, untagged image manifests accumulate
+      indefinitely, growing storage cost and the supply-chain blast
+      radius (every old image — including the vulnerable ones — remains
+      pullable forever).
+recommendation: |
+  Enable retention so untagged manifests are garbage-collected after a
+  short window. Requires the `Premium` SKU:
+
+      resource "azurerm_container_registry" "main" {
+        # ...
+        sku = "Premium"
+        retention_policy {
+          days    = 30
+          enabled = true
+        }
+      }
+verification: |
+  `az acr config retention show --registry <name>` must show
+  `"status": "enabled"` and a finite `days` value.
+fix_hcl: |
+  resource "azurerm_container_registry" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    sku                 = "Premium"
+    retention_policy {
+      days    = 30
+      enabled = true
+    }
+  }
+fix_disruption: none
+fix_disruption_note: "Enabling retention starts garbage-collecting untagged manifests on the next eviction cycle; tagged images are unaffected."
+fixtures:
+  - azure_acr_no_retention

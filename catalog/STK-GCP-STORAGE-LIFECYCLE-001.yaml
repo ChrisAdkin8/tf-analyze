@@ -1,0 +1,54 @@
+id: STK-GCP-STORAGE-LIFECYCLE-001
+title: "GCS bucket missing lifecycle_rule (object accumulation)"
+section: stack
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1496"
+nist_csf:
+  - "PR.IP-1"
+nist_800_53:
+  - "CP-9"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_storage_bucket
+    arg: lifecycle_rule
+    description: |
+      `google_storage_bucket` has no `lifecycle_rule`. Old object
+      versions accumulate indefinitely — storage cost grows
+      unbounded, and old PII/secrets can persist long after they
+      should have been purged.
+recommendation: |
+  Define a lifecycle rule that ages out non-current versions or
+  transitions cold data to a cheaper storage class:
+
+      resource "google_storage_bucket" "main" {
+        # ...
+        lifecycle_rule {
+          condition { age = 90 }
+          action    { type = "Delete" }
+        }
+        lifecycle_rule {
+          condition { age = 30 }
+          action    { type = "SetStorageClass" storage_class = "NEARLINE" }
+        }
+      }
+verification: |
+  `gsutil lifecycle get gs://<bucket>` must return at least one rule.
+fix_hcl: |
+  resource "google_storage_bucket" "example" {
+    name                        = "app-cache"
+    location                    = "US"
+    uniform_bucket_level_access = true
+    public_access_prevention    = "enforced"
+    lifecycle_rule {
+      condition { age = 90 }
+      action {
+        type = "Delete"
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_storage_no_lifecycle

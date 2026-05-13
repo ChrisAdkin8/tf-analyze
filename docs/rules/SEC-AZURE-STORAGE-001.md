@@ -119,6 +119,8 @@ The command should return `true`.
 See also rules in the `SEC-AZURE-STORAGE-*` family:
 
 - [`SEC-AZURE-STORAGE-002`](./SEC-AZURE-STORAGE-002.md) — Azure storage account allows public blob access
+- [`SEC-AZURE-STORAGE-003`](./SEC-AZURE-STORAGE-003.md) — Azure storage account not using customer-managed key encryption
+- [`SEC-AZURE-STORAGE-004`](./SEC-AZURE-STORAGE-004.md) — Azure storage account missing diagnostic logging
 
 ---
 

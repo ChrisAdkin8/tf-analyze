@@ -1,0 +1,55 @@
+id: SEC-AZURE-APIM-002
+title: "Azure API Management product without rate-limit policy"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1498"
+cwe:
+  - "CWE-770"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-5"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_api_management_product_policy
+    when_present: azurerm_api_management_product
+    description: |
+      `azurerm_api_management_product` exists but no
+      `azurerm_api_management_product_policy` is bound. Subscribers
+      can call APIs without rate limits — abuse traffic, scraping,
+      and DDoS reach the backend at full bore.
+recommendation: |
+  Attach a rate-limit / quota policy to the product:
+
+      resource "azurerm_api_management_product_policy" "main" {
+        product_id          = azurerm_api_management_product.main.product_id
+        api_management_name = azurerm_api_management.main.name
+        resource_group_name = azurerm_resource_group.main.name
+        xml_content = <<XML
+          <policies>
+            <inbound>
+              <rate-limit-by-key calls="100" renewal-period="60"
+                                 counter-key="@(context.Subscription.Key)" />
+              <quota-by-key calls="100000" renewal-period="2592000"
+                            counter-key="@(context.Subscription.Key)" />
+              <base />
+            </inbound>
+          </policies>
+        XML
+      }
+verification: |
+  `az apim product policy show --service-name <s> --product-id <p> -g <rg>`
+  must contain a `<rate-limit>` or `<quota>` element.
+fix_hcl: |
+  resource "azurerm_api_management_product_policy" "example" {
+    product_id          = azurerm_api_management_product.example.product_id
+    api_management_name = azurerm_api_management.example.name
+    resource_group_name = azurerm_resource_group.example.name
+    xml_content         = "<policies><inbound><rate-limit-by-key calls=\"100\" renewal-period=\"60\" counter-key=\"@(context.Subscription.Key)\" /><base /></inbound></policies>"
+  }
+fix_disruption: none
+fixtures:
+  - azure_apim_no_ratelimit

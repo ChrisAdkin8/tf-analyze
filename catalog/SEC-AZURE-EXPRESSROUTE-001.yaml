@@ -1,0 +1,55 @@
+id: SEC-AZURE-EXPRESSROUTE-001
+title: "Azure ExpressRoute port missing MACsec encryption"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1040"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-ET"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_express_route_port
+    arg: macsec_cipher
+    description: |
+      `azurerm_express_route_port` has no `macsec_cipher` (and the
+      paired key references). MACsec is a layer-2 encryption protocol
+      for ExpressRoute Direct ports — without it, traffic between the
+      Microsoft Enterprise Edge and customer router is unencrypted.
+recommendation: |
+  Configure MACsec on ExpressRoute Direct ports for compliance-driven
+  workloads (PCI-DSS, FedRAMP-High):
+
+      resource "azurerm_express_route_port" "main" {
+        # ...
+        macsec_cipher                 = "GcmAes128"
+        macsec_ckn_keyvault_secret_id = azurerm_key_vault_secret.ckn.id
+        macsec_cak_keyvault_secret_id = azurerm_key_vault_secret.cak.id
+      }
+verification: |
+  `az network express-route port show -g <rg> -n <name> --query 'links[0].macSecConfig'`
+  must return a non-null config.
+fix_hcl: |
+  resource "azurerm_express_route_port" "example" {
+    name                = "er-port"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    peering_location    = "Equinix-Washington-DC-DC2"
+    bandwidth_in_gbps   = 10
+    encapsulation       = "Dot1Q"
+    macsec_cipher       = "GcmAes128"
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_er_no_macsec

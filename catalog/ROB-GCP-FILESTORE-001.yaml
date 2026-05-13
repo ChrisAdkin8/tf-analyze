@@ -1,0 +1,49 @@
+id: ROB-GCP-FILESTORE-001
+title: "GCP Filestore instance missing backup configuration"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.1"
+soc2_cc:
+  - "A1.2"
+mitre:
+  - "T1485"
+  - "T1490"
+cwe:
+  - "CWE-779"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
+patterns:
+  - kind: resource_absent
+    resource: google_filestore_backup
+    when_present: google_filestore_instance
+    description: |
+      `google_filestore_instance` is declared but no
+      `google_filestore_backup` resource exists. Filestore has no
+      automated snapshot/backup policy resource yet — operators must
+      explicitly model backups in Terraform or accept that the share is
+      a single point of data loss.
+recommendation: |
+  Either model `google_filestore_backup` resources on a schedule, or
+  attach a `google_filestore_snapshot` via a regularly-run job. For
+  Enterprise-tier instances, prefer in-region Cloud Scheduler →
+  Cloud Run job that calls the Filestore API.
+verification: |
+  `gcloud filestore backups list --location <l> --filter='source.instance="<inst>"'`
+  must return at least one recent backup.
+fix_hcl: |
+  resource "google_filestore_backup" "example" {
+    name        = "weekly"
+    location    = "us-central1"
+    source_instance = google_filestore_instance.example.id
+    source_file_share = "share1"
+  }
+fix_disruption: none
+fixtures:
+  - gcp_filestore_no_backup

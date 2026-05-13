@@ -1,0 +1,91 @@
+id: STK-GCP-FUNCTIONS-002
+title: "GCP Cloud Function uses default service account"
+section: stack
+default_urgency: HIGH
+blast_radius: module
+status: active
+cis:
+  - "1.4"
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1078.004"
+cwe:
+  - "CWE-250"
+  - "CWE-272"
+d3fend:
+  - "D3-LAM"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_cloudfunctions_function
+    arg: service_account_email
+    description: |
+      `google_cloudfunctions_function` has no `service_account_email`.
+      The function runs as the project's default App Engine service
+      account, which is granted broad `roles/editor` at project
+      creation. A code-execution flaw in the function inherits
+      project-wide write access. Equivalent to the SEC-GCP-COMPUTE-SA-001
+      finding for GCE.
+  - kind: resource_missing_arg
+    resource: google_cloudfunctions2_function
+    nested_path: service_config.service_account_email
+    description: |
+      `google_cloudfunctions2_function` has no
+      `service_config.service_account_email`. v2 function falls back to
+      the over-privileged Compute Engine default SA.
+recommendation: |
+  Provision a dedicated service account with the minimum roles the
+  function needs, and bind it to the function:
+
+      resource "google_service_account" "fn" {
+        account_id   = "fn-process-events"
+        display_name = "process-events function"
+      }
+
+      resource "google_cloudfunctions2_function" "main" {
+        # ...
+        service_config {
+          service_account_email = google_service_account.fn.email
+        }
+      }
+verification: |
+  `gcloud functions describe <name> --format='value(serviceConfig.serviceAccountEmail)'`
+  must NOT return `<project>@appspot.gserviceaccount.com` or
+  `<project-number>-compute@developer.gserviceaccount.com`.
+fix_hcl: |
+  resource "google_service_account" "fn" {
+    account_id   = "fn-process-events"
+    display_name = "process-events function"
+  }
+
+  resource "google_cloudfunctions2_function" "example" {
+    name     = "process-events"
+    location = "us-central1"
+
+    build_config {
+      runtime     = "python312"
+      entry_point = "main"
+      source {
+        storage_source {
+          bucket = google_storage_bucket.source.name
+          object = "source.zip"
+        }
+      }
+    }
+
+    service_config {
+      service_account_email = google_service_account.fn.email
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Switching service accounts requires the new SA to have the same roles as the old default-SA permissions the function actually used; audit Cloud Audit Logs first to enumerate."
+fixtures:
+  - gcp_function_default_sa

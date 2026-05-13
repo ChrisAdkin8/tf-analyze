@@ -1,0 +1,64 @@
+id: SEC-GCP-SQL-CMEK-001
+title: "Cloud SQL instance not encrypted with customer-managed key (CMEK)"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "6.7"
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-12"
+  - "SC-13"
+csa_ccm:
+  - "CEK-03"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_sql_database_instance
+    arg: encryption_key_name
+    description: |
+      `google_sql_database_instance` has no `encryption_key_name`. Without
+      a CMEK, Cloud SQL data is encrypted with a Google-managed key that
+      cannot be revoked or rotated independently. CIS 6.7 and PCI-DSS
+      Req-3.4 require customer-controlled key material for regulated
+      workloads.
+recommendation: |
+  Bind the instance to a Cloud KMS key in the same region. Grant the
+  Cloud SQL service identity `roles/cloudkms.cryptoKeyEncrypterDecrypter`
+  on the key first (via `google_kms_crypto_key_iam_member`):
+
+      resource "google_sql_database_instance" "main" {
+        # ...
+        encryption_key_name = google_kms_crypto_key.sql.id
+      }
+
+  Note: CMEK on Cloud SQL can only be configured at create-time;
+  existing instances must be cloned to a new CMEK-protected instance.
+verification: |
+  `gcloud sql instances describe <name> --format='value(diskEncryptionConfiguration.kmsKeyName)'`
+  must return a non-empty Cloud KMS key resource name.
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    name                = "example"
+    region              = "us-central1"
+    database_version    = "POSTGRES_16"
+    encryption_key_name = google_kms_crypto_key.sql.id
+    settings {
+      tier = "db-custom-2-7680"
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "CMEK cannot be added in place; the instance must be recreated and data migrated."
+fixtures:
+  - gcp_sql_no_cmek

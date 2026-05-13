@@ -1,0 +1,104 @@
+id: STK-GCP-CLOUDARMOR-001
+title: "GCP Cloud Armor security policy missing rate-based rule"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-6.6"
+soc2_cc:
+  - "CC6.6"
+mitre:
+  - "T1498"
+  - "T1190"
+cwe:
+  - "CWE-770"
+  - "CWE-799"
+d3fend:
+  - "D3-WAF"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-5"
+  - "SI-4"
+csa_ccm:
+  - "AIS-04"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_compute_security_policy
+    arg: rule
+    description: |
+      `google_compute_security_policy` has no rules — equivalent to
+      having no WAF attached. Defaults to allow-all.
+  - kind: resource_body_contains
+    resource: google_compute_security_policy
+    regex: 'action\s*=\s*"allow"\s*\n?\s*priority\s*=\s*2147483647'
+    description: |
+      Policy only has the default `allow` rule at priority 2147483647 —
+      every layer-7 attack (credential stuffing, scraping, basic DDoS)
+      reaches the origin. Equivalent to SEC-AWS-WAF-002 (ALB+WAF without
+      rate-based rule).
+recommendation: |
+  Add a rate-based ban rule near the top of the policy:
+
+      resource "google_compute_security_policy" "main" {
+        name = "edge-policy"
+
+        rule {
+          action   = "throttle"
+          priority = 1000
+          match {
+            versioned_expr = "SRC_IPS_V1"
+            config { src_ip_ranges = ["*"] }
+          }
+          rate_limit_options {
+            conform_action = "allow"
+            exceed_action  = "deny(429)"
+            enforce_on_key = "IP"
+            rate_limit_threshold {
+              count        = 100
+              interval_sec = 60
+            }
+          }
+        }
+
+        rule {
+          action   = "allow"
+          priority = 2147483647
+          match {
+            versioned_expr = "SRC_IPS_V1"
+            config { src_ip_ranges = ["*"] }
+          }
+          description = "Default rule, higher priority overrides it"
+        }
+      }
+verification: |
+  `gcloud compute security-policies describe <name> --format=json | \
+    jq '.rules[] | select(.rateLimitOptions != null)'` must return at
+  least one rate-based rule.
+fix_hcl: |
+  resource "google_compute_security_policy" "example" {
+    name = "example"
+
+    rule {
+      action   = "throttle"
+      priority = 1000
+      match {
+        versioned_expr = "SRC_IPS_V1"
+        config { src_ip_ranges = ["*"] }
+      }
+      rate_limit_options {
+        conform_action = "allow"
+        exceed_action  = "deny(429)"
+        enforce_on_key = "IP"
+        rate_limit_threshold {
+          count        = 100
+          interval_sec = 60
+        }
+      }
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Rate-based rules may throttle legitimate burst traffic; tune the threshold against historical p99 RPS before promoting to production."
+fixtures:
+  - gcp_cloudarmor_no_rate

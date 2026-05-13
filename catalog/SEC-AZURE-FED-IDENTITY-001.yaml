@@ -1,0 +1,70 @@
+id: SEC-AZURE-FED-IDENTITY-001
+title: "Azure federated identity credential accepts wildcard subject claim"
+section: security
+default_urgency: CRITICAL
+blast_radius: environment
+status: active
+cis:
+  - "1.21"
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1078.004"
+  - "T1199"
+cwe:
+  - "CWE-284"
+  - "CWE-287"
+d3fend:
+  - "D3-UAC"
+nist_csf:
+  - "PR.AC-1"
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-2"
+  - "AC-3"
+  - "IA-5"
+csa_ccm:
+  - "IAM-04"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_federated_identity_credential
+    arg: subject
+    regex: '^.*\*'
+    description: |
+      Federated identity credential `subject` matches a wildcard. A
+      wildcard subject means ANY GitHub repo, ANY GitLab project, or ANY
+      workload that authenticates against the configured issuer can
+      assume this managed identity. This is functionally equivalent to a
+      public-principal IAM role.
+recommendation: |
+  Replace the wildcard with the exact OIDC subject claim of the workload
+  that should assume this UAMI. For GitHub Actions:
+
+      subject = "repo:my-org/my-repo:ref:refs/heads/main"
+
+  For GitLab CI:
+
+      subject = "project_path:my-group/my-project:ref_type:branch:ref:main"
+
+  For Kubernetes service accounts (AKS workload identity):
+
+      subject = "system:serviceaccount:my-namespace:my-sa"
+verification: |
+  `az identity federated-credential list --identity-name <name> \
+    --resource-group <rg> --query "[].subject"` must return no entries
+  containing `*` (other than escaped literal asterisks).
+fix_hcl: |
+  resource "azurerm_federated_identity_credential" "github" {
+    name                = "github-main"
+    resource_group_name = azurerm_resource_group.main.name
+    parent_id           = azurerm_user_assigned_identity.gh.id
+    audience            = ["api://AzureADTokenExchange"]
+    issuer              = "https://token.actions.githubusercontent.com"
+    subject             = "repo:my-org/my-repo:ref:refs/heads/main"
+  }
+fix_disruption: none
+fix_disruption_note: "Tightening the subject does not affect callers that already match the exact claim."
+fixtures:
+  - azure_fed_identity_wildcard

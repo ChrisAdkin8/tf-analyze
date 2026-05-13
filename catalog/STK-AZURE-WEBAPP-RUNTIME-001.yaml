@@ -1,0 +1,53 @@
+id: STK-AZURE-WEBAPP-RUNTIME-001
+title: "Azure App Service Web App uses end-of-life runtime"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-4"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_body_contains
+    resource: azurerm_linux_web_app
+    regex: '(python_version|node_version|dotnet_version|java_version|php_version|ruby_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|2\.5|2\.6|2\.7|7\.[234]|8\.0|11)"'
+    description: Linux Web App uses an EOL runtime (Python 3.6-3.8, Node 10-16, Ruby 2.5-2.7, PHP 7.x/8.0, .NET 3.1-6.0, Java 8/11)
+  - kind: resource_body_contains
+    resource: azurerm_windows_web_app
+    regex: '(node_version|dotnet_version|java_version|php_version)\s*=\s*"(10|12|14|16|v3\.1|v5\.0|v6\.0|7\.[234]|8\.0|11)"'
+    description: Windows Web App uses an EOL runtime
+recommendation: |
+  Upgrade to a supported runtime. Azure App Service supported
+  versions (May 2026):
+  - Python: 3.10, 3.11, 3.12, 3.13
+  - Node.js: 20, 22
+  - .NET: 8, 9
+  - Java: 17, 21
+  - PHP: 8.2, 8.3, 8.4
+verification: |
+  `az webapp config show -g <rg> -n <name> --query 'linuxFxVersion'`
+  must reference a currently-supported runtime.
+fix_hcl: |
+  resource "azurerm_linux_web_app" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    service_plan_id     = azurerm_service_plan.example.id
+    site_config {
+      application_stack {
+        python_version = "3.12"
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_webapp_eol_runtime

@@ -1,0 +1,67 @@
+id: SEC-AZURE-STORAGE-004
+title: "Azure storage account missing diagnostic logging"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "3.11"
+pci_dss:
+  - "Req-10.2"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1530"
+  - "T1213"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-IAA"
+nist_csf:
+  - "DE.CM-1"
+  - "PR.PT-1"
+nist_800_53:
+  - "AU-2"
+  - "AU-12"
+csa_ccm:
+  - "LOG-08"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_storage_account
+    arg: queue_properties
+    description: |
+      `azurerm_storage_account` has no `queue_properties.logging` block
+      and no companion `azurerm_monitor_diagnostic_setting` declared.
+      Without diagnostic logging, blob/queue/table read/write/delete
+      operations and authentication failures are not captured for
+      forensic analysis or compliance attestation.
+recommendation: |
+  Either configure `queue_properties.logging` on the account, or attach
+  an `azurerm_monitor_diagnostic_setting` resource that ships
+  `StorageRead` / `StorageWrite` / `StorageDelete` to a Log Analytics
+  workspace, Event Hub, or storage destination:
+
+      resource "azurerm_monitor_diagnostic_setting" "sa" {
+        name                       = "sa-diag"
+        target_resource_id         = azurerm_storage_account.main.id
+        log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+        enabled_log { category = "StorageRead" }
+        enabled_log { category = "StorageWrite" }
+        enabled_log { category = "StorageDelete" }
+      }
+verification: |
+  `az monitor diagnostic-settings list --resource <storage-account-id>` must
+  return at least one configuration with `StorageRead`, `StorageWrite`, and
+  `StorageDelete` log categories enabled.
+fix_hcl: |
+  resource "azurerm_monitor_diagnostic_setting" "sa" {
+    name                       = "${azurerm_storage_account.example.name}-diag"
+    target_resource_id         = "${azurerm_storage_account.example.id}/blobServices/default"
+    log_analytics_workspace_id = azurerm_log_analytics_workspace.example.id
+    enabled_log { category = "StorageRead" }
+    enabled_log { category = "StorageWrite" }
+    enabled_log { category = "StorageDelete" }
+  }
+fix_disruption: none
+fixtures:
+  - azure_storage_no_logging

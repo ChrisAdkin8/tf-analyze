@@ -1,0 +1,53 @@
+id: STK-GCP-PUBSUB-DLQ-001
+title: "GCP Pub/Sub subscription missing dead_letter_policy"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1499.002"
+cwe:
+  - "CWE-770"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-5"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_pubsub_subscription
+    arg: dead_letter_policy
+    description: |
+      `google_pubsub_subscription` has no `dead_letter_policy`. Messages
+      that fail to process repeatedly cycle through the subscription
+      forever, exhausting subscriber throughput and burying every other
+      message behind the poisoned one. Equivalent to AWS Lambda DLQ
+      gap (STK-AWS-LAMBDA-002).
+recommendation: |
+  Configure a dead-letter topic and bounded delivery attempts:
+
+      resource "google_pubsub_topic" "dlq" {
+        name = "${google_pubsub_subscription.main.name}-dlq"
+      }
+
+      resource "google_pubsub_subscription" "main" {
+        # ...
+        dead_letter_policy {
+          dead_letter_topic     = google_pubsub_topic.dlq.id
+          max_delivery_attempts = 5
+        }
+      }
+verification: |
+  `gcloud pubsub subscriptions describe <name> --format='value(deadLetterPolicy.deadLetterTopic)'`
+  must return a non-empty topic resource name.
+fix_hcl: |
+  resource "google_pubsub_subscription" "example" {
+    name  = "events-sub"
+    topic = google_pubsub_topic.events.name
+    dead_letter_policy {
+      dead_letter_topic     = google_pubsub_topic.dlq.id
+      max_delivery_attempts = 5
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_pubsub_no_dlq

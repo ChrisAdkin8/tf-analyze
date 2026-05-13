@@ -1,0 +1,58 @@
+id: SEC-AZURE-DATABRICKS-002
+title: "Azure Databricks workspace missing customer-managed key (DBFS)"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-12"
+  - "SC-13"
+csa_ccm:
+  - "CEK-03"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_databricks_workspace
+    arg: customer_managed_key_enabled
+    description: |
+      `azurerm_databricks_workspace.customer_managed_key_enabled` not
+      set to true. DBFS (and notebook source code) is encrypted only
+      with Microsoft-managed keys — customer-controlled revocation is
+      impossible.
+recommendation: |
+  Enable CMK and attach a `azurerm_databricks_workspace_customer_managed_key`:
+
+      resource "azurerm_databricks_workspace" "main" {
+        # ...
+        customer_managed_key_enabled = true
+      }
+
+      resource "azurerm_databricks_workspace_customer_managed_key" "main" {
+        workspace_id     = azurerm_databricks_workspace.main.id
+        key_vault_key_id = azurerm_key_vault_key.dbfs.id
+      }
+verification: |
+  `az databricks workspace show -g <rg> -n <name> --query 'parameters.encryption.value.keySource'`
+  must return `Microsoft.Keyvault`.
+fix_hcl: |
+  resource "azurerm_databricks_workspace" "example" {
+    name                         = "example"
+    resource_group_name          = azurerm_resource_group.example.name
+    location                     = azurerm_resource_group.example.location
+    sku                          = "premium"
+    customer_managed_key_enabled = true
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_databricks_no_cmk

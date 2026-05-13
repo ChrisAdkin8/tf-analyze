@@ -1,0 +1,46 @@
+id: STK-GCP-CLOUDRUN-001
+title: "GCP Cloud Run service has unbounded container concurrency"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1498"
+cwe:
+  - "CWE-770"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-5"
+patterns:
+  - kind: resource_body_contains
+    resource: google_cloud_run_v2_service
+    regex: 'max_instance_request_concurrency\s*=\s*(0|10[0-9]{2,}|[2-9][0-9]{3,})\b'
+    description: |
+      Cloud Run v2 service has `max_instance_request_concurrency` at 0
+      (unbounded) or above the safe default of 1000. A single bad
+      revision can exhaust upstream capacity (DB, downstream APIs).
+recommendation: |
+  Pin a sensible per-instance concurrency cap matched to backend
+  capacity (typical: 80–250 for I/O-bound, 1–10 for CPU-bound):
+
+      resource "google_cloud_run_v2_service" "main" {
+        template {
+          max_instance_request_concurrency = 80
+        }
+      }
+verification: |
+  `gcloud run services describe <name> --format='value(spec.template.spec.containerConcurrency)'`
+  must return a non-zero, finite value.
+fix_hcl: |
+  resource "google_cloud_run_v2_service" "example" {
+    name     = "frontend"
+    location = "us-central1"
+    template {
+      max_instance_request_concurrency = 80
+      containers { image = "gcr.io/example/app:1.0" }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_cloudrun_unbounded_concurrency

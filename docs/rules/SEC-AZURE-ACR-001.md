@@ -129,6 +129,13 @@ must return `false`.
 **Source**
   - [`catalog/SEC-AZURE-ACR-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-AZURE-ACR-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-AZURE-ACR-*` family:
+
+- [`SEC-AZURE-ACR-002`](./SEC-AZURE-ACR-002.md) — Azure Container Registry missing image retention policy
+- [`SEC-AZURE-ACR-003`](./SEC-AZURE-ACR-003.md) — Azure Container Registry missing image quarantine policy
+
 ---
 
 ## Run this check

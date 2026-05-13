@@ -17,12 +17,12 @@
 
 <!-- Content row — what does it cover? -->
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 238](https://img.shields.io/badge/rules-238-brightgreen)
-![fix_hcl: 89%](https://img.shields.io/badge/fix__hcl-89%25-brightgreen)
+![Rules: 343](https://img.shields.io/badge/rules-343-brightgreen)
+![fix_hcl: 93%](https://img.shields.io/badge/fix__hcl-93%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
 ![Tests: 872](https://img.shields.io/badge/tests-872%20passing-brightgreen)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-238%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-343%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Integrations](#integrations) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Demo corpora](#demo-corpora--examples) · [Repo layout](#repository-layout) · [Contributing](#contributing--maintenance) · [Provenance](#provenance) · [License](#license)**
 
@@ -164,7 +164,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-238 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+343 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -175,7 +175,25 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Cross-resource | `INT-*`, `graph_check` | Intent–implementation gaps, KMS location parity, IAM breadth |
 | Module reuse (advisory) | `MOD-REUSE-*` | Hand-rolled scaffolding that mirrors a popular Terraform Registry module — INFO tier, never gates CI. Pass `--show-info` to render |
 
-**Per-cloud breakdown:** AWS 91 · GCP 43 · Azure 34 · Kubernetes/Helm 8 · cross-cloud 62.
+**Per-cloud breakdown** (numerical parity across AWS, GCP, Azure as of 2026-05-13):
+
+| Cloud  | SEC | ROB | STK | OPS | COST | MOD-REUSE | **Total** |
+|--------|----:|----:|----:|----:|-----:|----------:|----------:|
+| AWS    | 62  | 13  | 12  | 2   | 1    | 1         | **91**    |
+| GCP    | 41  | 5   | 42  | 1   | 1    | 1         | **91**    |
+| Azure  | 56  | 7   | 25  | 1   | 1    | 1         | **91**    |
+| K8s/Helm | 5 | —   | 3   | —   | —    | —         | **8**     |
+| Cross-cloud / engine | — | — | — | — | — | — | **62** |
+
+**Why the per-section shapes differ at the same headline count.** Each cloud puts services in different boxes, and the catalogue follows the provider taxonomy rather than forcing a synthetic split:
+
+- **AWS skews `SEC` (62)** because more discrete services have their own dedicated security rule — KMS, ECR, CloudTrail, GuardDuty, Security Hub, MSK, Neptune, DocDB, Athena, Cognito, Kinesis, SNS, SQS, Secrets Manager, SSM. Each surfaces a distinct misconfiguration class that maps 1:1 to a rule.
+- **GCP skews `STK` (42)** because GCP rolls multi-feature platforms (GKE, Cloud Run, Cloud SQL, BigQuery, Composer, Dataproc) where hardening is expressed as *stack-level configuration* (release channels, workload identity, binary authorization, IAM auth flags, CMEK on the platform) rather than per-service `SEC-*` rules.
+- **Azure skews `SEC` (56)** because Azure's policy / Defender / Synapse / Databricks story exposes many fine-grained controls (`auth_settings_v2`, `microsoft_defender`, `data_exfiltration_protection_enabled`, `oms_agent`, vault per-resource diagnostic settings, federated-identity-credential subjects) that each get their own rule. App-Service / Functions / Event Grid / Search platform hardening goes under `STK` (25).
+- **`ROB` is small everywhere** (13 / 5 / 7) because lifecycle and backup gaps map onto a small set of stateful resource shapes per cloud (RDS / Cloud SQL / Azure SQL + Cosmos + VMSS).
+- **`OPS` / `COST` / `MOD-REUSE` are deliberately 1-2 each per cloud** — these tier-INFO/MEDIUM rules are about workflow ergonomics, not service depth, so one well-curated rule per cloud beats many redundant ones.
+
+The headline number is parity. The shape is a property of each provider's product surface.
 
 ### Execution modes
 
@@ -356,7 +374,7 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (239 positive + 146 clea
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration
 ├── .github/workflows/          # CI (ci.yml, docker.yml)
-├── catalog/                    # 238 rule definitions (one YAML per rule)
+├── catalog/                    # 343 rule definitions (one YAML per rule)
 │   └── README.md               # Schema reference
 ├── fixtures/                   # 239 positive + 146 clean (negative) fixtures
 ├── examples/                   # Showcase corpora

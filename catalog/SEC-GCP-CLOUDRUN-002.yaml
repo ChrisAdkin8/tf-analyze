@@ -1,0 +1,60 @@
+id: SEC-GCP-CLOUDRUN-002
+title: "GCP Cloud Run service publicly accessible (allUsers IAM binding)"
+section: security
+default_urgency: CRITICAL
+blast_radius: single-resource
+status: active
+cis:
+  - "7.2"
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-UAC"
+nist_csf:
+  - "PR.AC-3"
+nist_800_53:
+  - "AC-3"
+csa_ccm:
+  - "IAM-09"
+patterns:
+  - kind: resource_body_contains
+    resource: google_cloud_run_service_iam_member
+    regex: 'member\s*=\s*"all(Users|AuthenticatedUsers)"'
+    description: |
+      `google_cloud_run_service_iam_member` binds the Cloud Run service
+      to `allUsers` or `allAuthenticatedUsers`. The service is reachable
+      by anyone on the internet.
+  - kind: resource_body_contains
+    resource: google_cloud_run_v2_service_iam_member
+    regex: 'member\s*=\s*"all(Users|AuthenticatedUsers)"'
+    description: Cloud Run v2 IAM binding exposes service to allUsers/allAuthenticatedUsers
+recommendation: |
+  Replace the public binding with a specific identity (group, service
+  account, or Identity-Aware Proxy):
+
+      resource "google_cloud_run_service_iam_member" "invoker" {
+        service  = google_cloud_run_service.main.name
+        location = google_cloud_run_service.main.location
+        role     = "roles/run.invoker"
+        member   = "group:authenticated-callers@example.com"
+      }
+verification: |
+  `gcloud run services get-iam-policy <name> --format=json | \
+    jq '.bindings[] | select(.role=="roles/run.invoker") | .members'` must
+  not contain `allUsers` or `allAuthenticatedUsers`.
+fix_hcl: |
+  resource "google_cloud_run_service_iam_member" "invoker" {
+    service  = google_cloud_run_service.example.name
+    location = google_cloud_run_service.example.location
+    role     = "roles/run.invoker"
+    member   = "group:authenticated-callers@example.com"
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_cloudrun_public

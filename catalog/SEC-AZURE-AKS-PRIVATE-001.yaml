@@ -1,0 +1,68 @@
+id: SEC-AZURE-AKS-PRIVATE-001
+title: "Azure AKS cluster API server publicly accessible (not a private cluster)"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+cis:
+  - "5.4.2"
+pci_dss:
+  - "Req-1.3"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "PR.AC-5"
+nist_800_53:
+  - "SC-7"
+csa_ccm:
+  - "IVS-06"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: private_cluster_enabled
+    description: |
+      `azurerm_kubernetes_cluster` has no `private_cluster_enabled = true`.
+      The API server is reachable from the public internet (subject to
+      authorized_ip_ranges, but the attack surface is still public).
+      Equivalent to SEC-AWS-EKS-001 (EKS public endpoint).
+  - kind: resource_arg
+    resource: azurerm_kubernetes_cluster
+    arg: private_cluster_enabled
+    regex: '^false$'
+    description: AKS cluster explicitly sets private_cluster_enabled = false
+recommendation: |
+  Enable private cluster mode and reach the API server through the
+  private endpoint:
+
+      resource "azurerm_kubernetes_cluster" "main" {
+        # ...
+        private_cluster_enabled             = true
+        private_dns_zone_id                 = "System"
+        private_cluster_public_fqdn_enabled = false
+      }
+verification: |
+  `az aks show -g <rg> -n <name> --query 'apiServerAccessProfile.enablePrivateCluster'`
+  must return `true`.
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                    = "example"
+    location                = azurerm_resource_group.example.location
+    resource_group_name     = azurerm_resource_group.example.name
+    dns_prefix              = "example"
+    private_cluster_enabled = true
+    default_node_pool {
+      name       = "default"
+      node_count = 1
+      vm_size    = "Standard_D2s_v3"
+    }
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_aks_public_api

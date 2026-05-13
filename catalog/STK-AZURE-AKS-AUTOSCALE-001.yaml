@@ -1,0 +1,55 @@
+id: STK-AZURE-AKS-AUTOSCALE-001
+title: "Azure AKS default node pool missing auto-scaling"
+section: stack
+default_urgency: LOW
+blast_radius: module
+status: active
+mitre:
+  - "T1496"
+nist_csf:
+  - "PR.PT-1"
+patterns:
+  - kind: resource_body_contains
+    resource: azurerm_kubernetes_cluster
+    regex: 'enable_auto_scaling\s*=\s*false'
+    description: |
+      `azurerm_kubernetes_cluster.default_node_pool.enable_auto_scaling = false`
+      explicitly disables the cluster autoscaler. Fixed node count
+      wastes capacity at low load and hits ceiling at high load.
+  - kind: resource_body_contains
+    resource: azurerm_kubernetes_cluster_node_pool
+    regex: 'enable_auto_scaling\s*=\s*false'
+    description: Standalone AKS node pool with auto-scaling disabled
+recommendation: |
+  Enable cluster autoscaler on the default node pool:
+
+      resource "azurerm_kubernetes_cluster" "main" {
+        default_node_pool {
+          name                = "default"
+          enable_auto_scaling = true
+          min_count           = 1
+          max_count           = 10
+          vm_size             = "Standard_D2s_v3"
+        }
+      }
+verification: |
+  `az aks show -g <rg> -n <name> --query 'agentPoolProfiles[0].enableAutoScaling'`
+  must return `true`.
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    dns_prefix          = "example"
+    default_node_pool {
+      name                = "default"
+      enable_auto_scaling = true
+      min_count           = 1
+      max_count           = 10
+      vm_size             = "Standard_D2s_v3"
+    }
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_aks_no_autoscale

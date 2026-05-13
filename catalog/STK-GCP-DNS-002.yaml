@@ -1,0 +1,64 @@
+id: STK-GCP-DNS-002
+title: "Cloud DNS DNSSEC uses deprecated RSASHA1 algorithm"
+section: stack
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+cis:
+  - "3.4"
+pci_dss:
+  - "Req-4.1"
+mitre:
+  - "T1583.002"
+cwe:
+  - "CWE-327"
+d3fend:
+  - "D3-ET"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-13"
+patterns:
+  - kind: resource_body_contains
+    resource: google_dns_managed_zone
+    regex: 'algorithm\s*=\s*"rsasha1"'
+    description: |
+      `google_dns_managed_zone.dnssec_config.default_key_specs.algorithm = "rsasha1"`.
+      RSASHA1 is deprecated by RFC 8624 and NIST SP 800-57; modern DNS
+      resolvers may downgrade or refuse to validate signatures.
+recommendation: |
+  Use a NIST-approved algorithm (`rsasha256`, `ecdsap256sha256`, or
+  `ecdsap384sha384`):
+
+      resource "google_dns_managed_zone" "main" {
+        # ...
+        dnssec_config {
+          state = "on"
+          default_key_specs {
+            algorithm  = "ecdsap256sha256"
+            key_type   = "zoneSigning"
+            key_length = 256
+          }
+        }
+      }
+verification: |
+  `gcloud dns managed-zones describe <name> --format=json | \
+    jq '.dnssecConfig.defaultKeySpecs[].algorithm'` must not contain
+  `rsasha1`.
+fix_hcl: |
+  resource "google_dns_managed_zone" "example" {
+    name        = "example"
+    dns_name    = "example.com."
+    description = "primary"
+    dnssec_config {
+      state = "on"
+      default_key_specs {
+        algorithm  = "ecdsap256sha256"
+        key_type   = "zoneSigning"
+        key_length = 256
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - gcp_dns_rsasha1

@@ -1,0 +1,56 @@
+id: SEC-AZURE-SQL-ATP-001
+title: "Azure SQL Server missing advanced threat protection"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-10.6"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1078"
+cwe:
+  - "CWE-693"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "SI-4"
+csa_ccm:
+  - "TVM-04"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_mssql_server_security_alert_policy
+    when_present: azurerm_mssql_server
+    description: |
+      `azurerm_mssql_server` is declared but no
+      `azurerm_mssql_server_security_alert_policy` is bound. SQL
+      injection, anomalous logins, and brute-force attacks are not
+      surfaced to Defender for SQL.
+recommendation: |
+  Bind a security_alert_policy with notification emails:
+
+      resource "azurerm_mssql_server_security_alert_policy" "main" {
+        resource_group_name = azurerm_resource_group.main.name
+        server_name         = azurerm_mssql_server.main.name
+        state               = "Enabled"
+        email_account_admins = true
+        email_addresses     = ["secops@example.com"]
+        retention_days      = 90
+      }
+verification: |
+  `az sql server threat-policy show -g <rg> --server <name>` must
+  return `state: Enabled`.
+fix_hcl: |
+  resource "azurerm_mssql_server_security_alert_policy" "example" {
+    resource_group_name  = azurerm_resource_group.example.name
+    server_name          = azurerm_mssql_server.example.name
+    state                = "Enabled"
+    email_account_admins = true
+    retention_days       = 90
+  }
+fix_disruption: none
+fixtures:
+  - azure_sql_no_atp

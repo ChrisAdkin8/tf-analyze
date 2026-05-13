@@ -1,0 +1,54 @@
+id: SEC-GCP-VPC-PEER-001
+title: "GCP VPC peering exports all custom routes (broad blast radius)"
+section: security
+default_urgency: MEDIUM
+blast_radius: environment
+status: active
+cis:
+  - "3.5"
+mitre:
+  - "T1078"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "PR.AC-5"
+nist_800_53:
+  - "SC-7"
+patterns:
+  - kind: resource_arg
+    resource: google_compute_network_peering
+    arg: export_custom_routes
+    regex: '^true$'
+    description: |
+      `google_compute_network_peering.export_custom_routes = true`
+      ships every custom route to the peer VPC, including subnet
+      routes that should stay internal. Attackers reaching the peer
+      VPC can pivot into the source VPC's segments via the inherited
+      routes.
+recommendation: |
+  Disable custom-route export unless absolutely needed; if the peer
+  needs select routes, advertise them via explicit
+  `google_compute_route` blocks instead:
+
+      resource "google_compute_network_peering" "main" {
+        # ...
+        export_custom_routes = false
+        import_custom_routes = false
+      }
+verification: |
+  `gcloud compute networks peerings list --network <name> \
+    --format='value(exportCustomRoutes)'` must return `False` for
+  cross-org / cross-trust-boundary peerings.
+fix_hcl: |
+  resource "google_compute_network_peering" "example" {
+    name                 = "to-other"
+    network              = google_compute_network.main.id
+    peer_network         = "projects/other/global/networks/main"
+    export_custom_routes = false
+    import_custom_routes = false
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_vpc_peer_export

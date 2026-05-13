@@ -1,0 +1,59 @@
+id: SEC-AZURE-SQL-VULN-001
+title: "Azure SQL Server missing vulnerability assessment"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-11.3"
+soc2_cc:
+  - "CC7.1"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-693"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "ID.RA-1"
+nist_800_53:
+  - "RA-5"
+csa_ccm:
+  - "TVM-02"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_mssql_server_vulnerability_assessment
+    when_present: azurerm_mssql_server
+    description: |
+      `azurerm_mssql_server` is declared but no
+      `azurerm_mssql_server_vulnerability_assessment` resource is
+      bound. Misconfigurations and known-bad SQL patterns
+      (excessive permissions, weak passwords, deprecated features) are
+      never surfaced.
+recommendation: |
+  Bind a vulnerability assessment to the server:
+
+      resource "azurerm_mssql_server_vulnerability_assessment" "main" {
+        server_security_alert_policy_id = azurerm_mssql_server_security_alert_policy.main.id
+        storage_container_path          = "${azurerm_storage_account.va.primary_blob_endpoint}vulnerability-assessment/"
+        storage_account_access_key      = azurerm_storage_account.va.primary_access_key
+        recurring_scans {
+          enabled                   = true
+          email_subscription_admins = true
+        }
+      }
+verification: |
+  `az sql server vulnerability-assessment show -g <rg> --server <name>` must
+  return a non-null `storageContainerPath`.
+fix_hcl: |
+  resource "azurerm_mssql_server_vulnerability_assessment" "example" {
+    server_security_alert_policy_id = azurerm_mssql_server_security_alert_policy.example.id
+    storage_container_path          = "${azurerm_storage_account.va.primary_blob_endpoint}vulnerability-assessment/"
+    storage_account_access_key      = azurerm_storage_account.va.primary_access_key
+    recurring_scans {
+      enabled = true
+    }
+  }
+fix_disruption: none
+fixtures:
+  - azure_sql_no_vuln

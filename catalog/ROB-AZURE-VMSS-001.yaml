@@ -1,0 +1,73 @@
+id: ROB-AZURE-VMSS-001
+title: "Azure VM Scale Set missing automatic instance repair"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+mitre:
+  - "T1485"
+nist_csf:
+  - "PR.IP-1"
+nist_800_53:
+  - "CP-10"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_linux_virtual_machine_scale_set
+    arg: automatic_instance_repair
+    description: |
+      `azurerm_linux_virtual_machine_scale_set` has no
+      `automatic_instance_repair` block. Unhealthy instances stay in
+      the scale set until manual intervention — capacity drops below
+      the requested target after a host failure.
+  - kind: resource_missing_arg
+    resource: azurerm_windows_virtual_machine_scale_set
+    arg: automatic_instance_repair
+    description: Windows VMSS missing automatic_instance_repair
+recommendation: |
+  Pair the scale set with a load-balancer or application-gateway
+  health probe and enable automatic_instance_repair:
+
+      resource "azurerm_linux_virtual_machine_scale_set" "main" {
+        # ...
+        health_probe_id = azurerm_lb_probe.main.id
+        automatic_instance_repair {
+          enabled      = true
+          grace_period = "PT10M"
+        }
+      }
+verification: |
+  `az vmss show -g <rg> -n <name> --query 'automaticRepairsPolicy.enabled'`
+  must return `true`.
+fix_hcl: |
+  resource "azurerm_linux_virtual_machine_scale_set" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    sku                 = "Standard_D2s_v3"
+    instances           = 3
+    admin_username      = "azureuser"
+    health_probe_id     = azurerm_lb_probe.example.id
+    automatic_instance_repair {
+      enabled      = true
+      grace_period = "PT10M"
+    }
+    os_disk { caching = "ReadWrite" storage_account_type = "Standard_LRS" }
+    source_image_reference {
+      publisher = "Canonical"
+      offer     = "0001-com-ubuntu-server-jammy"
+      sku       = "22_04-lts-gen2"
+      version   = "latest"
+    }
+    network_interface {
+      name    = "ni"
+      primary = true
+      ip_configuration {
+        name      = "ic"
+        primary   = true
+        subnet_id = azurerm_subnet.example.id
+      }
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_vmss_no_repair

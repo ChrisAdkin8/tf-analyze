@@ -1,0 +1,71 @@
+id: STK-AZURE-FUNCTION-AUTH-001
+title: "Azure Function App missing platform-level authentication"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-287"
+d3fend:
+  - "D3-UAC"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "AC-3"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_linux_function_app
+    arg: auth_settings_v2
+    description: |
+      `azurerm_linux_function_app` has no `auth_settings_v2`. HTTP-
+      triggered functions accept anonymous requests; only host-key
+      based auth (a query-string secret) gates access. Equivalent to
+      AWS Lambda Function URL with `AuthType: NONE`.
+  - kind: resource_missing_arg
+    resource: azurerm_windows_function_app
+    arg: auth_settings_v2
+    description: Windows Function App missing platform-level auth
+recommendation: |
+  Enable `auth_settings_v2` and require Microsoft Entra ID:
+
+      resource "azurerm_linux_function_app" "main" {
+        # ...
+        auth_settings_v2 {
+          auth_enabled           = true
+          require_authentication = true
+          default_provider       = "AzureActiveDirectory"
+          active_directory_v2 {
+            client_id            = var.aad_client_id
+            tenant_auth_endpoint = "https://login.microsoftonline.com/${var.tenant_id}/v2.0"
+          }
+          login {}
+        }
+      }
+verification: |
+  `az functionapp auth show -g <rg> -n <name> --query 'platform.enabled'`
+  must return `true`.
+fix_hcl: |
+  resource "azurerm_linux_function_app" "example" {
+    name                       = "example"
+    resource_group_name        = azurerm_resource_group.example.name
+    location                   = azurerm_resource_group.example.location
+    service_plan_id            = azurerm_service_plan.example.id
+    storage_account_name       = azurerm_storage_account.example.name
+    storage_account_access_key = azurerm_storage_account.example.primary_access_key
+    site_config {}
+    auth_settings_v2 {
+      auth_enabled           = true
+      require_authentication = true
+      default_provider       = "AzureActiveDirectory"
+      login {}
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_function_no_auth

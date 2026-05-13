@@ -1,0 +1,63 @@
+id: STK-AZURE-RECOVERY-001
+title: "Azure Recovery Services Vault missing soft-delete protection"
+section: stack
+default_urgency: HIGH
+blast_radius: module
+status: active
+cis:
+  - "8.5"
+pci_dss:
+  - "Req-3.1"
+soc2_cc:
+  - "A1.2"
+mitre:
+  - "T1485"
+  - "T1490"
+cwe:
+  - "CWE-779"
+d3fend:
+  - "D3-DENCR"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_recovery_services_vault
+    arg: soft_delete_enabled
+    regex: '^false$'
+    description: |
+      `azurerm_recovery_services_vault.soft_delete_enabled = false`.
+      An attacker with backup-contributor rights can delete recovery
+      points immediately — no 14-day grace window for accidental or
+      malicious deletes. Equivalent to AWS Backup vault lock gap
+      (SEC-AWS-BACKUP-001).
+recommendation: |
+  Enable soft-delete and (for high-RPO workloads) enable
+  immutability_settings:
+
+      resource "azurerm_recovery_services_vault" "main" {
+        # ...
+        soft_delete_enabled = true
+        immutability        = "Unlocked"
+      }
+
+  Lock immutability to "Locked" once you're confident — after that
+  retention can only be extended, never shortened.
+verification: |
+  `az backup vault show -g <rg> -n <name> --query 'properties.securitySettings.softDeleteSettings.softDeleteState'`
+  must return `Enabled`.
+fix_hcl: |
+  resource "azurerm_recovery_services_vault" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    sku                 = "Standard"
+    soft_delete_enabled = true
+    immutability        = "Unlocked"
+  }
+fix_disruption: none
+fixtures:
+  - azure_recovery_no_soft_delete

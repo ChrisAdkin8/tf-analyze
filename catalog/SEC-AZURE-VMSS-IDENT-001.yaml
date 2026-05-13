@@ -1,0 +1,75 @@
+id: SEC-AZURE-VMSS-IDENT-001
+title: "Azure VM Scale Set has no managed identity"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+cis:
+  - "1.4"
+pci_dss:
+  - "Req-3.6"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1552.001"
+cwe:
+  - "CWE-798"
+d3fend:
+  - "D3-CR"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "IA-5"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_linux_virtual_machine_scale_set
+    arg: identity
+    description: |
+      `azurerm_linux_virtual_machine_scale_set` has no `identity` block.
+      Workloads on the scale set authenticate to Azure services with
+      static credentials baked into custom_data / app config — the
+      classic credential-leak class.
+  - kind: resource_missing_arg
+    resource: azurerm_windows_virtual_machine_scale_set
+    arg: identity
+    description: Windows VMSS missing managed identity
+recommendation: |
+  Bind a system-assigned managed identity so workloads can use the
+  Azure Instance Metadata Service to obtain short-lived tokens:
+
+      resource "azurerm_linux_virtual_machine_scale_set" "main" {
+        # ...
+        identity { type = "SystemAssigned" }
+      }
+verification: |
+  `az vmss show -g <rg> -n <name> --query 'identity.type'` must return
+  `SystemAssigned` (or `UserAssigned`).
+fix_hcl: |
+  resource "azurerm_linux_virtual_machine_scale_set" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    sku                 = "Standard_D2s_v3"
+    instances           = 3
+    admin_username      = "azureuser"
+    identity { type = "SystemAssigned" }
+    os_disk { caching = "ReadWrite" storage_account_type = "Standard_LRS" }
+    source_image_reference {
+      publisher = "Canonical"
+      offer     = "0001-com-ubuntu-server-jammy"
+      sku       = "22_04-lts-gen2"
+      version   = "latest"
+    }
+    network_interface {
+      name    = "ni"
+      primary = true
+      ip_configuration {
+        name      = "ic"
+        primary   = true
+        subnet_id = azurerm_subnet.example.id
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - azure_vmss_no_identity

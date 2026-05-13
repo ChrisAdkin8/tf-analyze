@@ -1,0 +1,46 @@
+id: STK-GCP-GKE-INTRANODE-001
+title: "GKE cluster missing intra-node visibility"
+section: stack
+default_urgency: LOW
+blast_radius: module
+status: active
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1071"
+cwe:
+  - "CWE-778"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    arg: enable_intranode_visibility
+    description: |
+      `google_container_cluster.enable_intranode_visibility` is not set
+      (defaults to `false`). Pod-to-pod traffic on the same node is
+      invisible to VPC Flow Logs — lateral-movement signals can't be
+      reconstructed from network logs.
+recommendation: |
+  Enable intra-node visibility so all pod traffic flows through the
+  VPC layer:
+
+      resource "google_container_cluster" "main" {
+        # ...
+        enable_intranode_visibility = true
+      }
+verification: |
+  `gcloud container clusters describe <name> --format='value(networkConfig.enableIntraNodeVisibility)'`
+  must return `True`.
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name                        = "example"
+    location                    = "us-central1"
+    initial_node_count          = 1
+    enable_intranode_visibility = true
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_gke_no_intranode

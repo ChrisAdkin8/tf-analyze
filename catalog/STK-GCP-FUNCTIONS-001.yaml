@@ -1,0 +1,71 @@
+id: STK-GCP-FUNCTIONS-001
+title: "GCP Cloud Function uses end-of-life runtime"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1190"
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-4"
+csa_ccm:
+  - "AIS-07"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_arg
+    resource: google_cloudfunctions_function
+    arg: runtime
+    regex: '^(python37|python38|nodejs10|nodejs12|nodejs14|nodejs16|go111|go113|go116|java11|dotnet3|ruby25|ruby27)$'
+    description: Cloud Functions v1 runtime out of support
+  - kind: resource_arg
+    resource: google_cloudfunctions2_function
+    arg: build_config.runtime
+    regex: '^(python37|python38|nodejs14|nodejs16|go116|go118|java11|dotnet3|ruby27)$'
+    description: Cloud Functions v2 runtime out of support
+  - kind: resource_body_contains
+    resource: google_cloudfunctions2_function
+    regex: 'runtime\s*=\s*"(python37|python38|nodejs14|nodejs16|go116|go118|java11|dotnet3|ruby27)"'
+    description: Cloud Functions v2 runtime out of support (body match)
+recommendation: |
+  Upgrade to a currently supported runtime. Google Cloud Functions
+  supported runtimes (May 2026):
+  - Python: 3.10, 3.11, 3.12, 3.13
+  - Node.js: 18, 20, 22
+  - Go: 1.21, 1.22, 1.23
+  - Java: 17, 21
+  - .NET: 6, 8
+  - Ruby: 3.2, 3.3
+
+  Deprecated runtimes can no longer be deployed; existing deployments
+  continue to run but receive no security patches.
+verification: |
+  `gcloud functions describe <name> --gen2 --format='value(buildConfig.runtime)'`
+  must return a supported runtime identifier (see GCP docs).
+fix_hcl: |
+  resource "google_cloudfunctions2_function" "example" {
+    name     = "example"
+    location = "us-central1"
+
+    build_config {
+      runtime     = "python312"
+      entry_point = "main"
+      source {
+        storage_source {
+          bucket = google_storage_bucket.source.name
+          object = "source.zip"
+        }
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Runtime upgrades may break source compatibility (removed stdlib APIs, dependency conflicts); test in a staging project first."
+fixtures:
+  - gcp_function_eol_runtime

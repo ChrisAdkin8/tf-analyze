@@ -1,0 +1,64 @@
+id: STK-GCP-STORAGE-RETENTION-001
+title: "GCS bucket missing retention_policy (ransomware/regulatory risk)"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.1"
+soc2_cc:
+  - "A1.2"
+mitre:
+  - "T1485"
+  - "T1490"
+cwe:
+  - "CWE-779"
+d3fend:
+  - "D3-DENCR"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_storage_bucket
+    arg: retention_policy
+    description: |
+      `google_storage_bucket` has no `retention_policy`. Objects can be
+      deleted at any time — by an attacker who compromises credentials,
+      by a misconfigured pipeline, or by an automated cleanup script.
+      Equivalent to the AWS S3 object-lock gap (SEC-AWS-LOG-RETENTION-001).
+recommendation: |
+  Lock a minimum retention period for buckets holding logs, backups,
+  or compliance-relevant data:
+
+      resource "google_storage_bucket" "audit" {
+        name     = "audit-logs"
+        location = "US"
+        retention_policy {
+          retention_period = 7776000   # 90 days
+          is_locked        = true
+        }
+      }
+
+  Setting `is_locked = true` is irreversible — the retention period can
+  only be increased thereafter. Test in a non-production bucket first.
+verification: |
+  `gsutil retention get gs://<bucket>` must report a non-zero retention
+  period.
+fix_hcl: |
+  resource "google_storage_bucket" "example" {
+    name                        = "audit-logs"
+    location                    = "US"
+    uniform_bucket_level_access = true
+    public_access_prevention    = "enforced"
+    retention_policy {
+      retention_period = 7776000
+      is_locked        = false
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_storage_no_retention

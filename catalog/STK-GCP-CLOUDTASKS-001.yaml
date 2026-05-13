@@ -1,0 +1,61 @@
+id: STK-GCP-CLOUDTASKS-001
+title: "GCP Cloud Tasks queue missing rate or retry configuration"
+section: stack
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1498"
+cwe:
+  - "CWE-770"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-5"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_cloud_tasks_queue
+    arg: retry_config
+    description: |
+      `google_cloud_tasks_queue` has no `retry_config`. Failing tasks
+      retry with defaults that may overload the downstream worker, or
+      give up too early to recover from transient errors.
+  - kind: resource_missing_arg
+    resource: google_cloud_tasks_queue
+    arg: rate_limits
+    description: Cloud Tasks queue has no rate_limits (unbounded dispatch)
+recommendation: |
+  Pin both rate_limits and retry_config to match downstream capacity:
+
+      resource "google_cloud_tasks_queue" "main" {
+        # ...
+        rate_limits {
+          max_dispatches_per_second = 50
+          max_concurrent_dispatches = 100
+        }
+        retry_config {
+          max_attempts       = 5
+          min_backoff        = "1s"
+          max_backoff        = "60s"
+        }
+      }
+verification: |
+  `gcloud tasks queues describe <name> --location <l>` must show both
+  `rateLimits` and `retryConfig` populated.
+fix_hcl: |
+  resource "google_cloud_tasks_queue" "example" {
+    name     = "example"
+    location = "us-central1"
+    rate_limits {
+      max_dispatches_per_second = 50
+      max_concurrent_dispatches = 100
+    }
+    retry_config {
+      max_attempts = 5
+      min_backoff  = "1s"
+      max_backoff  = "60s"
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_tasks_no_retry

@@ -1,0 +1,65 @@
+id: SEC-GCP-CLOUDRUN-003
+title: "GCP Cloud Run service uses default compute service account"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+cis:
+  - "1.4"
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1078.004"
+cwe:
+  - "CWE-250"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_cloud_run_service
+    nested_path: template.spec.service_account_name
+    description: |
+      `google_cloud_run_service` has no
+      `template.spec.service_account_name`. The revision runs as the
+      project's default Compute Engine SA, which holds broad
+      `roles/editor`. A code-execution flaw inherits project-wide write
+      access.
+  - kind: resource_missing_arg
+    resource: google_cloud_run_v2_service
+    nested_path: template.service_account
+    description: Cloud Run v2 service falls back to default compute SA
+recommendation: |
+  Bind a dedicated service account with the minimum roles the service
+  needs:
+
+      resource "google_service_account" "run" {
+        account_id = "run-frontend"
+      }
+
+      resource "google_cloud_run_v2_service" "main" {
+        # ...
+        template {
+          service_account = google_service_account.run.email
+        }
+      }
+verification: |
+  `gcloud run services describe <name> --format='value(spec.template.spec.serviceAccountName)'`
+  must NOT return `<project-number>-compute@developer.gserviceaccount.com`.
+fix_hcl: |
+  resource "google_cloud_run_v2_service" "example" {
+    name     = "frontend"
+    location = "us-central1"
+    template {
+      service_account = google_service_account.run.email
+      containers { image = "gcr.io/example/app:1.0" }
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_cloudrun_default_sa

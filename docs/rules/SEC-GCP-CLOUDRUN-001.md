@@ -123,6 +123,13 @@ must not return `all`.
 **Source**
   - [`catalog/SEC-GCP-CLOUDRUN-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/SEC-GCP-CLOUDRUN-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `SEC-GCP-CLOUDRUN-*` family:
+
+- [`SEC-GCP-CLOUDRUN-002`](./SEC-GCP-CLOUDRUN-002.md) — GCP Cloud Run service publicly accessible (allUsers IAM binding)
+- [`SEC-GCP-CLOUDRUN-003`](./SEC-GCP-CLOUDRUN-003.md) — GCP Cloud Run service uses default compute service account
+
 ---
 
 ## Run this check

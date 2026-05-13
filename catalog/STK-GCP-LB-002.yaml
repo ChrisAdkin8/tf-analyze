@@ -1,0 +1,88 @@
+id: STK-GCP-LB-002
+title: "GCP HTTPS load balancer missing SSL policy (default permits TLS 1.0)"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "3.9"
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1040"
+  - "T1557"
+cwe:
+  - "CWE-326"
+  - "CWE-327"
+d3fend:
+  - "D3-ET"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+  - "SC-13"
+csa_ccm:
+  - "DSI-03"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_compute_target_https_proxy
+    arg: ssl_policy
+    description: |
+      `google_compute_target_https_proxy` has no `ssl_policy`. The
+      default GCP SSL policy (`COMPATIBLE`) permits TLS 1.0 and TLS 1.1,
+      which are deprecated by the IETF and forbidden by PCI-DSS v4.0
+      and FedRAMP-High. Equivalent to the AWS ALB TLS-1.0 finding
+      (SEC-AWS-LB-LISTENER-002).
+  - kind: resource_arg
+    resource: google_compute_ssl_policy
+    arg: min_tls_version
+    regex: '^TLS_1_(0|1)$'
+    description: |
+      `google_compute_ssl_policy.min_tls_version` permits TLS 1.0 or
+      TLS 1.1 — same risk class even when an explicit policy is
+      attached.
+  - kind: resource_arg
+    resource: google_compute_ssl_policy
+    arg: profile
+    regex: '^COMPATIBLE$'
+    description: |
+      `google_compute_ssl_policy.profile = "COMPATIBLE"` is GCP's
+      loosest profile, allowing legacy cipher suites and TLS 1.0.
+recommendation: |
+  Attach a hardened SSL policy:
+
+      resource "google_compute_ssl_policy" "modern" {
+        name            = "modern-tls"
+        profile         = "MODERN"
+        min_tls_version = "TLS_1_2"
+      }
+
+      resource "google_compute_target_https_proxy" "main" {
+        # ...
+        ssl_policy = google_compute_ssl_policy.modern.id
+      }
+
+  Use `profile = "RESTRICTED"` for FedRAMP-High / PCI-DSS workloads.
+verification: |
+  `gcloud compute target-https-proxies describe <name> \
+    --format='value(sslPolicy)'` must return a non-empty resource URL,
+  and the policy's `minTlsVersion` must be `TLS_1_2` or `TLS_1_3`.
+fix_hcl: |
+  resource "google_compute_ssl_policy" "modern" {
+    name            = "modern-tls"
+    profile         = "MODERN"
+    min_tls_version = "TLS_1_2"
+  }
+
+  resource "google_compute_target_https_proxy" "example" {
+    name             = "example"
+    url_map          = google_compute_url_map.example.id
+    ssl_certificates = [google_compute_ssl_certificate.example.id]
+    ssl_policy       = google_compute_ssl_policy.modern.id
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Tightening to TLS 1.2 breaks legacy clients (Win XP IE, embedded devices) that cannot negotiate TLS 1.2."
+fixtures:
+  - gcp_lb_no_ssl_policy

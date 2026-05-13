@@ -1,0 +1,45 @@
+id: SEC-AZURE-PRIVATE-DNS-001
+title: "Azure Private DNS zone missing virtual network link"
+section: security
+default_urgency: LOW
+blast_radius: module
+status: active
+mitre:
+  - "T1583.002"
+nist_csf:
+  - "PR.AC-5"
+nist_800_53:
+  - "SC-7"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_private_dns_zone_virtual_network_link
+    when_present: azurerm_private_dns_zone
+    description: |
+      `azurerm_private_dns_zone` exists but no
+      `azurerm_private_dns_zone_virtual_network_link` is bound. The
+      zone is orphaned — no VNet resolves names from it, so the zone
+      is a deploy-time error or stale leftover that pays for itself
+      while providing zero value.
+recommendation: |
+  Either remove the orphan zone or link it to the consumer VNet:
+
+      resource "azurerm_private_dns_zone_virtual_network_link" "link" {
+        name                  = "main-link"
+        resource_group_name   = azurerm_resource_group.main.name
+        private_dns_zone_name = azurerm_private_dns_zone.main.name
+        virtual_network_id    = azurerm_virtual_network.main.id
+        registration_enabled  = false
+      }
+verification: |
+  `az network private-dns link vnet list -g <rg> --zone-name <z>` must
+  return at least one link, or the zone should be deleted.
+fix_hcl: |
+  resource "azurerm_private_dns_zone_virtual_network_link" "example" {
+    name                  = "example-link"
+    resource_group_name   = azurerm_resource_group.example.name
+    private_dns_zone_name = azurerm_private_dns_zone.example.name
+    virtual_network_id    = azurerm_virtual_network.example.id
+  }
+fix_disruption: none
+fixtures:
+  - azure_pdns_no_link

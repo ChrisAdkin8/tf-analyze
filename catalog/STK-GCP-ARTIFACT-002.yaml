@@ -1,0 +1,83 @@
+id: STK-GCP-ARTIFACT-002
+title: "GCP Artifact Registry missing cleanup policy"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-6.3"
+soc2_cc:
+  - "CC8.1"
+mitre:
+  - "T1525"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "PR.IP-1"
+  - "ID.SC-2"
+nist_800_53:
+  - "CM-7"
+  - "SR-4"
+csa_ccm:
+  - "AIS-07"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_artifact_registry_repository
+    arg: cleanup_policies
+    description: |
+      `google_artifact_registry_repository` has no `cleanup_policies`
+      block. Without retention, old image versions accumulate
+      indefinitely, growing storage cost AND supply-chain blast radius
+      (every old image — including vulnerable ones — remains pullable).
+      Equivalent to the AWS ECR lifecycle policy gap (SEC-AWS-ECR-002)
+      and the Azure ACR retention gap (SEC-AZURE-ACR-002).
+recommendation: |
+  Add at least one cleanup policy that deletes untagged versions after
+  a short window and keeps only N most-recent tagged versions:
+
+      resource "google_artifact_registry_repository" "main" {
+        # ...
+        cleanup_policies {
+          id     = "keep-untagged-7d"
+          action = "DELETE"
+          condition {
+            tag_state  = "UNTAGGED"
+            older_than = "604800s" # 7 days
+          }
+        }
+
+        cleanup_policies {
+          id     = "keep-last-30-tagged"
+          action = "KEEP"
+          most_recent_versions {
+            keep_count = 30
+          }
+        }
+      }
+verification: |
+  `gcloud artifacts repositories describe <name> --location=<loc> \
+    --format='value(cleanupPolicies)'` must list at least one DELETE
+  policy.
+fix_hcl: |
+  resource "google_artifact_registry_repository" "example" {
+    location      = "us-central1"
+    repository_id = "example"
+    format        = "DOCKER"
+
+    cleanup_policies {
+      id     = "keep-untagged-7d"
+      action = "DELETE"
+      condition {
+        tag_state  = "UNTAGGED"
+        older_than = "604800s"
+      }
+    }
+  }
+fix_disruption: none
+fix_disruption_note: "Cleanup policies operate on next scheduled sweep; image versions matching the DELETE condition are removed. Test in dry-run mode first if available."
+fixtures:
+  - gcp_artifact_no_cleanup

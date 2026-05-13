@@ -1,0 +1,63 @@
+id: SEC-GCP-GKE-BINAUTHZ-001
+title: "GKE cluster missing Binary Authorization"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+pci_dss:
+  - "Req-6.3"
+soc2_cc:
+  - "CC7.1"
+mitre:
+  - "T1525"
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "PR.IP-1"
+nist_800_53:
+  - "CM-7"
+  - "SR-4"
+csa_ccm:
+  - "AIS-07"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    arg: binary_authorization
+    description: |
+      `google_container_cluster` has no `binary_authorization`. Without
+      it, unsigned or unvetted images can run as workloads — including
+      pulled-from-public-registry images that bypass internal supply-
+      chain controls.
+recommendation: |
+  Require attestation-signed images via Binary Authorization in
+  ENFORCE mode:
+
+      resource "google_container_cluster" "main" {
+        # ...
+        binary_authorization {
+          evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
+        }
+      }
+
+  Configure a `google_binary_authorization_policy` with attestors that
+  match your CI/CD signing flow.
+verification: |
+  `gcloud container clusters describe <name> --format='value(binaryAuthorization.evaluationMode)'`
+  must return `PROJECT_SINGLETON_POLICY_ENFORCE`.
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name     = "example"
+    location = "us-central1"
+    initial_node_count = 1
+    binary_authorization {
+      evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_gke_no_binauthz

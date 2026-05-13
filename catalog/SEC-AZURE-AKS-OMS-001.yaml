@@ -1,0 +1,56 @@
+id: SEC-AZURE-AKS-OMS-001
+title: "Azure AKS cluster missing Container Insights (OMS agent)"
+section: security
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-IAA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+csa_ccm:
+  - "LOG-08"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: oms_agent
+    description: |
+      `azurerm_kubernetes_cluster` has no `oms_agent` block. Container
+      Insights metrics, container logs, and Prometheus scraping are
+      not exported to Log Analytics — incident response is blind to
+      pod-level signals.
+recommendation: |
+  Enable Container Insights via the OMS agent:
+
+      resource "azurerm_kubernetes_cluster" "main" {
+        # ...
+        oms_agent {
+          log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+        }
+      }
+verification: |
+  `az aks show -g <rg> -n <name> --query 'addonProfiles.omsagent.enabled'`
+  must return `true`.
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    dns_prefix          = "example"
+    default_node_pool { name = "default" node_count = 1 vm_size = "Standard_D2s_v3" }
+    identity { type = "SystemAssigned" }
+    oms_agent {
+      log_analytics_workspace_id = azurerm_log_analytics_workspace.example.id
+    }
+  }
+fix_disruption: none
+fixtures:
+  - azure_aks_no_oms
