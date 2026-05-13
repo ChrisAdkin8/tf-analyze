@@ -5,6 +5,53 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.56] — 2026-05-13
+
+**Bundled engine refreshed for R32 — numerical parity across AWS / GCP / Azure (343 active rules).**
+
+The bundled rule catalogue grows from 264 → 343 rules. AWS, GCP, and
+Azure each now ship 91 rules — exact numerical parity on the three
+hyperscalers. The expansion fills functional-parity gaps (KMS rotation,
+CMK on stateful resources, container-registry retention + scan-on-push,
+audit / observability shipping, WAF rate-based rules + TLS-1.2,
+federated-identity wildcard subjects, EOL runtimes, cost controls,
+long-term DB retention) plus depth (GKE BinAuthz / database_encryption /
+GKE_METADATA, Cloud Run depth, Secret Manager, AKS Defender / OMS,
+Front Door + CDN, Databricks + Synapse + Data Lake, APIM, SQL audit /
+vuln / ATP, Cosmos backup, Recovery Vault soft-delete, Event Grid
+identity + DLQ, etc.).
+
+The shape differs per cloud because each provider's product surface
+differs — AWS skews `SEC` (more discrete dedicated-rule services), GCP
+skews `STK` (platform configuration centric), Azure mixes both. See
+the repo README "Per-cloud breakdown" table for the rationale.
+
+### Fixed
+
+- **`npm test` script** — `out/test/**/*.test.js` globstar pattern is
+  unsupported by Node 20's `--test` runner (which only recognizes
+  `*`). CI failures dating back several runs cleared by switching to
+  the flat `out/test/*.test.js` glob; all 62 test cases continue to
+  pass on Node 20, 22, and 24+.
+
+### What you see
+
+After installing v0.1.56 the status-bar chip will report 343 rules on
+a workspace where the previous build reported 264. Existing rule IDs
+keep their docs, suppressions, and `vscode://` deep-links. New rule
+IDs are listed in the engine's `--list-rules` output and on the
+canonical docs site at [chrisadkin8.github.io/tf-analyze/rules](https://chrisadkin8.github.io/tf-analyze/rules/).
+
+### Build notes
+
+Bundled engine smoke test confirms `python3 detect.py --list-rules`
+returns 343 active rules from the packaged catalogue. No engine-side
+behaviour change beyond the catalogue refresh; the extension's
+TypeScript surface, panels, URI handler, and Quick Fix code paths are
+unchanged from v0.1.55.
+
+---
+
 ## [0.1.55] — 2026-05-13
 
 **Severity filter for the Findings tree.**

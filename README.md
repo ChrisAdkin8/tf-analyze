@@ -72,7 +72,7 @@ Live diagnostics, Quick Fix, attack graph, Module Reuse Advisor, and a `vscode:/
 code --install-extension tfanalyze.tf-analyze
 
 # Or from a downloaded .vsix (current path until the Marketplace listing publishes)
-code --install-extension tf-analyze-0.1.54.vsix
+code --install-extension tf-analyze-0.1.56.vsix
 ```
 
 Open any Terraform workspace and the six status-bar shortcuts appear bottom-left:
