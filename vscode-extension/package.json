@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.54",
+  "version": "0.1.55",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -104,6 +104,26 @@
         "command": "tf-analyze.showBlastRadius",
         "title": "tf-analyze: Show Blast Radius",
         "icon": "$(flame)"
+      },
+      {
+        "command": "tf-analyze.toggleCritical",
+        "title": "tf-analyze: Toggle Critical severity in Findings view",
+        "icon": "$(error)"
+      },
+      {
+        "command": "tf-analyze.toggleHigh",
+        "title": "tf-analyze: Toggle High severity in Findings view",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "tf-analyze.toggleMedium",
+        "title": "tf-analyze: Toggle Medium severity in Findings view",
+        "icon": "$(info)"
+      },
+      {
+        "command": "tf-analyze.toggleLow",
+        "title": "tf-analyze: Toggle Low severity in Findings view",
+        "icon": "$(circle-large-outline)"
       }
     ],
     "configuration": {

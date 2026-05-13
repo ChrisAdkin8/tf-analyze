@@ -107,12 +107,46 @@ function urgencyIcon(urgency) {
         default: return new vscode.ThemeIcon("circle-outline");
     }
 }
+const FILTERABLE_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+class FilterGroupItem extends vscode.TreeItem {
+    constructor(counts, hidden) {
+        const totalSev = FILTERABLE_SEVERITIES.filter((s) => (counts.get(s) ?? 0) > 0).length;
+        const visibleSev = FILTERABLE_SEVERITIES.filter((s) => !hidden.has(s) && (counts.get(s) ?? 0) > 0).length;
+        const suffix = hidden.size === 0 ? "showing all" : `${visibleSev} of ${totalSev}`;
+        super(`Severity filter (${suffix})`, vscode.TreeItemCollapsibleState.Collapsed);
+        this.counts = counts;
+        this.hidden = hidden;
+        // Stable id so VS Code remembers the user's expand/collapse state
+        // across re-renders. Without it every refresh resets to Collapsed.
+        this.id = "tfAnalyzeFilterGroup";
+        this.iconPath = new vscode.ThemeIcon("filter");
+        this.contextValue = "severityFilterGroup";
+    }
+}
+class SeverityFilterItem extends vscode.TreeItem {
+    constructor(severity, count, visible) {
+        const titled = severity.charAt(0) + severity.slice(1).toLowerCase();
+        super(`${titled}  (${count})`, vscode.TreeItemCollapsibleState.None);
+        this.severity = severity;
+        this.id = `tfAnalyzeFilterSeverity-${severity}`;
+        this.checkboxState = visible
+            ? vscode.TreeItemCheckboxState.Checked
+            : vscode.TreeItemCheckboxState.Unchecked;
+        this.contextValue = "severityFilter";
+    }
+}
 class FindingsProvider {
     constructor() {
         this._onDidChangeTreeData = new vscode.EventEmitter();
         this.onDidChangeTreeData = this._onDidChangeTreeData.event;
         this.findings = [];
         this.scanRunning = false;
+        // Severities (uppercased) the user has chosen to hide from the tree
+        // view. Empty set = show all. Filtering applies only to the tree;
+        // diagnostics, status bar, and other panels continue to reflect the
+        // full set so the filter never silently drops a real finding from
+        // anywhere except the surface the user explicitly filtered.
+        this.hiddenSeverities = new Set();
     }
     setFindings(findings) {
         this.findings = findings;
@@ -126,8 +160,39 @@ class FindingsProvider {
         this.findings = [];
         this._onDidChangeTreeData.fire();
     }
+    setHiddenSeverities(severities) {
+        this.hiddenSeverities = new Set([...severities].map((s) => s.toUpperCase()));
+        this._onDidChangeTreeData.fire();
+    }
+    getHiddenSeverities() {
+        return [...this.hiddenSeverities];
+    }
+    toggleSeverity(sev) {
+        const key = sev.toUpperCase();
+        if (this.hiddenSeverities.has(key)) {
+            this.hiddenSeverities.delete(key);
+        }
+        else {
+            this.hiddenSeverities.add(key);
+        }
+        this._onDidChangeTreeData.fire();
+        return !this.hiddenSeverities.has(key);
+    }
+    visibleFindings() {
+        if (this.hiddenSeverities.size === 0)
+            return this.findings;
+        return this.findings.filter((f) => !this.hiddenSeverities.has(f.urgency.toUpperCase()));
+    }
     getTreeItem(element) {
         return element;
+    }
+    severityCounts() {
+        const counts = new Map();
+        for (const f of this.findings) {
+            const k = f.urgency.toUpperCase();
+            counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+        return counts;
     }
     getChildren(element) {
         if (this.scanRunning && !element) {
@@ -141,8 +206,23 @@ class FindingsProvider {
                 item.iconPath = new vscode.ThemeIcon("check");
                 return [item];
             }
-            const sections = [...new Set(this.findings.map((f) => f.section))].sort();
-            return sections.map((s) => new SectionItem(s, this.findings.filter((f) => f.section === s)));
+            const counts = this.severityCounts();
+            const filterGroup = new FilterGroupItem(counts, this.hiddenSeverities);
+            const visible = this.visibleFindings();
+            if (visible.length === 0) {
+                const empty = new vscode.TreeItem("No findings match the active severity filter");
+                empty.iconPath = new vscode.ThemeIcon("filter");
+                return [filterGroup, empty];
+            }
+            const sections = [...new Set(visible.map((f) => f.section))].sort();
+            return [
+                filterGroup,
+                ...sections.map((s) => new SectionItem(s, visible.filter((f) => f.section === s))),
+            ];
+        }
+        if (element instanceof FilterGroupItem) {
+            const counts = this.severityCounts();
+            return FILTERABLE_SEVERITIES.map((sev) => new SeverityFilterItem(sev, counts.get(sev) ?? 0, !this.hiddenSeverities.has(sev)));
         }
         if (element instanceof SectionItem) {
             return element.findings.map((f) => new FindingItem(f, vscode.TreeItemCollapsibleState.None));
@@ -609,6 +689,41 @@ function activate(context) {
         treeDataProvider: provider,
         showCollapseAll: true,
     });
+    // Severity filter — surfaced as a collapsible "Severity filter" row
+    // at the top of the Findings tree with native VS Code checkboxes for
+    // Critical / High / Medium / Low. State persists in workspaceState
+    // across reloads. The palette commands `tf-analyze.toggle<Sev>`
+    // remain wired up as keyboard-shortcut targets for power users.
+    const SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+    const FILTER_STATE_KEY = "tf-analyze.hiddenSeverities";
+    const persistFilter = () => {
+        void context.workspaceState.update(FILTER_STATE_KEY, provider.getHiddenSeverities());
+    };
+    const persistedHidden = context.workspaceState.get(FILTER_STATE_KEY, []);
+    provider.setHiddenSeverities(persistedHidden);
+    // VS Code fires this when the user clicks one of the severity
+    // checkboxes inside the filter group. We translate the new checkbox
+    // state into provider state and persist; the tree re-render is
+    // triggered by `toggleSeverity` -> `_onDidChangeTreeData`.
+    treeView.onDidChangeCheckboxState((e) => {
+        let changed = false;
+        for (const [item, state] of e.items) {
+            if (!(item instanceof SeverityFilterItem))
+                continue;
+            const wantVisible = state === vscode.TreeItemCheckboxState.Checked;
+            const isHidden = provider.getHiddenSeverities().includes(item.severity);
+            if (wantVisible && isHidden) {
+                provider.toggleSeverity(item.severity);
+                changed = true;
+            }
+            else if (!wantVisible && !isHidden) {
+                provider.toggleSeverity(item.severity);
+                changed = true;
+            }
+        }
+        if (changed)
+            persistFilter();
+    });
     // R30.18 — Blast-radius tree (top-N high-blast resources, expandable
     // to downstream dependents) and CodeLens (per-resource inline
     // annotation). Both providers receive their data via setters from
@@ -634,7 +749,10 @@ function activate(context) {
         blastLensProvider,
         outputChannel,
     };
-    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, deltaStatusBar, complianceStatusBar, remediateStatusBar, moduleReuseStatusBar, blastStatusBar, treeView, blastTreeView, blastLensRegistration, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(scanCtx)), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
+    context.subscriptions.push(diagnosticCollection, outputChannel, statusBar, graphStatusBar, deltaStatusBar, complianceStatusBar, remediateStatusBar, moduleReuseStatusBar, blastStatusBar, treeView, blastTreeView, blastLensRegistration, vscode.languages.registerCodeActionsProvider({ language: "terraform", scheme: "file" }, codeActionProvider, { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Empty] }), vscode.commands.registerCommand("tf-analyze.runScan", () => runScan(scanCtx)), ...SEVERITIES.map((sev) => vscode.commands.registerCommand(`tf-analyze.toggle${sev.charAt(0)}${sev.slice(1).toLowerCase()}`, () => {
+        provider.toggleSeverity(sev);
+        persistFilter();
+    })), vscode.commands.registerCommand("tf-analyze.clearFindings", () => {
         diagnosticCollection.clear();
         findingsMap.clear();
         provider.clear();

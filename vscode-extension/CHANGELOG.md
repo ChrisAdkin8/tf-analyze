@@ -5,6 +5,59 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [0.1.55] — 2026-05-13
+
+**Severity filter for the Findings tree.**
+The Findings view gains a collapsible "Severity filter" group at the
+top with native checkboxes for Critical / High / Medium / Low and a
+per-severity count. Tick or untick to show/hide findings at that
+level. State persists per-workspace.
+
+### What you see
+
+```
+▸ Severity filter (showing all)
+─────────────────────────────
+▾ security  (24)
+  …
+
+— when expanded —
+
+▾ Severity filter (3 of 4)
+    ☑ Critical  (3)
+    ☑ High      (12)
+    ☐ Medium    (47)
+    ☑ Low       (8)
+```
+
+The group label updates as you change the filter (e.g. `Severity
+filter (showing all)` vs. `Severity filter (3 of 4)`). When every
+remaining finding is filtered out, the tree shows `No findings match
+the active severity filter`.
+
+### Scope
+
+Filtering applies **only to the Findings tree**. Diagnostics (squiggles,
+Problems pane), the status bar count, the attack-graph view, the
+compliance panel and every other surface continue to reflect the full
+finding set so a hidden severity is never silently dropped from any
+other view.
+
+### Palette commands
+
+Four palette / keyboard-shortcut targets are also registered for power
+users:
+
+- `tf-analyze: Toggle Critical severity in Findings view`
+- `tf-analyze: Toggle High severity in Findings view`
+- `tf-analyze: Toggle Medium severity in Findings view`
+- `tf-analyze: Toggle Low severity in Findings view`
+
+They share state with the checkbox UI — toggling via the palette
+re-ticks/un-ticks the corresponding checkbox.
+
+---
+
 ## [0.1.54] — 2026-05-12
 
 **Engine refresh — `ignore_paths` config + `--apply-fixes-max-disruption` flag.**
