@@ -14,7 +14,15 @@ RUN apt-get update \
 # without it (regex fallback) — this is a quality upgrade, not a hard dep.
 RUN pip install --no-cache-dir python-hcl2==4.3.5
 
-COPY scripts/detect.py .
+# R31.7 — copy every Python module in scripts/, not just detect.py.
+# The R30.13 → R30.15 refactor split detect.py into 24 sibling modules
+# (`_apply_fixes.py`, `_attack_graph.py`, `_handlers_*.py`, …); the
+# Dockerfile kept the pre-refactor single-file COPY and silently broke.
+# Result: 20+ consecutive docker build failures with `ModuleNotFoundError:
+# No module named '_versions'` at the smoke-test step, and no published
+# image since 2026-05-11. Globbing fixes this both retroactively and for
+# any future siblings.
+COPY scripts/*.py ./
 COPY catalog/ ./catalog/
 
 RUN python3 detect.py --list-rules --catalog ./catalog/ > /dev/null
