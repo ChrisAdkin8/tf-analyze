@@ -102,6 +102,39 @@ runs:
         fi
         echo "mode=$MODE" >> "$GITHUB_OUTPUT"
 
+    # Issue #19 hardening — when --mode diff runs on a PR event, the
+    # engine's `_diff.get_diff_files` needs `origin/<base_ref>` reachable
+    # from `git rev-parse`. The default `actions/checkout@v4` does a
+    # shallow fetch (depth 1) of just the PR head SHA, so the base ref
+    # isn't local and the engine silently scans 0 files → 0 findings → 0
+    # inline suggestions posted. Pre-fetch the base ref (cheap: ~1 MB
+    # shallow) so diff mode actually has a baseline to diff against, and
+    # pass an explicit `--diff-base` so the engine doesn't fall through
+    # to its `main`/`master` autodetection.
+    - name: Ensure diff base is available
+      id: diff_base
+      if: steps.mode.outputs.mode == 'diff' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        TFA_BASE_REF: ${{ github.base_ref }}
+      run: |
+        # If the base ref is already local (caller used `fetch-depth: 0`
+        # or explicitly fetched it), skip the fetch — it'd be a no-op
+        # anyway and saves a network round-trip on the happy path.
+        if git -C "${{ github.workspace }}" rev-parse --verify "origin/${TFA_BASE_REF}" >/dev/null 2>&1; then
+          echo "::notice::tf-analyze: --mode diff baseline 'origin/${TFA_BASE_REF}' already local; skipping fetch"
+        else
+          echo "::notice::tf-analyze: fetching base ref 'origin/${TFA_BASE_REF}' for --mode diff (use 'fetch-depth: 0' on actions/checkout to skip this)"
+          if ! git -C "${{ github.workspace }}" fetch --depth=1 origin "${TFA_BASE_REF}" 2>&1; then
+            echo "::warning::tf-analyze: could not fetch 'origin/${TFA_BASE_REF}'; --mode diff will likely scan 0 files and post 0 inline suggestions. See https://github.com/ChrisAdkin8/tf-analyze/issues/19"
+          fi
+        fi
+        # Pass the explicit fully-qualified ref to detect.py so the
+        # engine doesn't fall back to its (limited) `main`/`master`
+        # autodetection on workflows whose target branch is `develop`,
+        # `release/*`, etc.
+        echo "diff-base=origin/${TFA_BASE_REF}" >> "$GITHUB_OUTPUT"
+
     - name: Build detect.py args
       id: args
       shell: bash
@@ -115,6 +148,7 @@ runs:
       env:
         TFA_TARGET: ${{ inputs.target }}
         TFA_MODE_OUT: ${{ steps.mode.outputs.mode }}
+        TFA_DIFF_BASE: ${{ steps.diff_base.outputs.diff-base }}
         TFA_SECTION: ${{ inputs.section }}
         TFA_ATTACK_GRAPH: ${{ inputs.attack-graph }}
         TFA_BASELINE: ${{ inputs.baseline }}
@@ -123,6 +157,13 @@ runs:
         TFA_COMPLIANCE_FW: ${{ inputs.compliance-framework }}
       run: |
         ARGS=(--target "/workspace/${TFA_TARGET}" --mode "${TFA_MODE_OUT}")
+        # Issue #19 hardening — when the "Ensure diff base is available"
+        # step ran (PR event + mode=diff), it set `diff-base` to the
+        # explicit `origin/<base_ref>` ref. Pass it through so the engine
+        # doesn't fall back to its `main`/`master` autodetection.
+        if [ -n "${TFA_DIFF_BASE}" ]; then
+          ARGS+=(--diff-base "${TFA_DIFF_BASE}")
+        fi
         if [ -n "${TFA_SECTION}" ]; then
           ARGS+=(--section "${TFA_SECTION}")
         fi

@@ -267,3 +267,99 @@ class TestInlineSuggestionLogging:
             assert key in action_text, (
                 f"diagnostic line must include {key!r} for greppability"
             )
+
+
+# ---------------------------------------------------------------------------
+# Issue #19 root-cause hardening — diff-mode base-ref pre-fetch.
+# ---------------------------------------------------------------------------
+
+
+class TestDiffBaseHardening:
+    """Issue #19 — the demo PR posted 0 inline `suggestion` comments
+    because `mode: auto` resolved to `--mode diff` on the PR event, but
+    the default ``actions/checkout@v4`` (depth 1) didn't have ``origin/main``
+    locally, so the engine's ``_diff.get_diff_files`` returned an empty set
+    and the engine scanned 0 files. Restoring ``mode: static`` in the demo
+    healed production, but the action itself was the broken contract —
+    a caller writing the "obvious" workflow (no ``fetch-depth``, default
+    ``mode``) silently got 0 findings on every PR. These tests pin the
+    fix: the action now pre-fetches the base ref so diff mode works out
+    of the box, and passes an explicit ``--diff-base`` so the engine
+    doesn't fall back to its (limited) ``main``/``master`` autodetection."""
+
+    def test_diff_base_step_present(self, action: dict) -> None:
+        # The composite must declare a step that ensures the base ref
+        # is locally available before running the engine in diff mode.
+        # Identified by a stable id; the friendly name is allowed to
+        # change but the id is the contract.
+        steps = action["runs"]["steps"]
+        assert any(s.get("id") == "diff_base" for s in steps), (
+            "action.yml must declare a step with id=diff_base that "
+            "pre-fetches origin/<base_ref> on PR events when --mode diff "
+            "is requested. Without it, default checkout @v4 (depth 1) "
+            "users silently get 0 findings on every PR (issue #19)."
+        )
+
+    def test_diff_base_step_gated_correctly(self, action: dict) -> None:
+        # The pre-fetch must only run when we ACTUALLY need a base ref —
+        # i.e., mode resolved to diff AND we're on a pull_request event.
+        # Running it unconditionally would (a) waste a fetch on push
+        # builds and (b) reference github.base_ref which is empty on
+        # non-PR events.
+        steps = action["runs"]["steps"]
+        step = next(s for s in steps if s.get("id") == "diff_base")
+        gate = step.get("if", "")
+        assert "diff" in gate and "pull_request" in gate, (
+            f"diff_base step `if:` gate must reference both 'diff' mode "
+            f"and 'pull_request' event; got {gate!r}"
+        )
+
+    def test_diff_base_uses_github_base_ref(self, action_text: str) -> None:
+        # The whole point of the step is to fetch the PR's TARGET branch
+        # so the engine has something to diff against. github.base_ref
+        # is the canonical source — github.ref / GITHUB_REF point at the
+        # PR head's merge ref, not the base.
+        assert "github.base_ref" in action_text, (
+            "action must read github.base_ref to know which branch to "
+            "pre-fetch for --mode diff"
+        )
+
+    def test_diff_base_emits_warning_on_fetch_failure(self, action_text: str) -> None:
+        # If the fetch fails (private fork, network glitch, etc.), the
+        # action must SAY SO loudly via ::warning:: rather than continuing
+        # silently to a zero-findings scan. The previous failure mode
+        # (issue #19) was silent precisely because no warning fired.
+        # We also require the issue URL so future operators can pivot
+        # quickly to the documented cause.
+        assert "::warning::" in action_text and "issues/19" in action_text, (
+            "diff_base step must emit a ::warning:: that references "
+            "issue #19 when the base-ref fetch fails, so a regressed "
+            "fetch surfaces clearly in the workflow log"
+        )
+
+    def test_diff_base_passed_to_engine(self, action_text: str) -> None:
+        # Pre-fetching is necessary but not sufficient — the engine must
+        # be told WHICH ref to diff against. The action's own resolution
+        # is `origin/<base_ref>`; the engine's autodetection only checks
+        # `main`/`master`, so a workflow targeting `develop` would still
+        # miss without this explicit pass-through.
+        assert "--diff-base" in action_text, (
+            "action must pass --diff-base to detect.py so the engine "
+            "doesn't fall back to main/master autodetection"
+        )
+        assert "TFA_DIFF_BASE" in action_text, (
+            "the diff base must flow through an env var (audit fix #1 "
+            "pattern) rather than direct ${{ }} interpolation into the "
+            "bash array literal"
+        )
+
+    def test_diff_base_arg_appended_conditionally(self, action_text: str) -> None:
+        # The --diff-base arg must only be appended when the env var is
+        # non-empty — otherwise a `mode: static` invocation would get
+        # `--diff-base` (empty) and the engine would error on the
+        # missing positional. Bash idiom: `if [ -n "${TFA_DIFF_BASE}" ]`.
+        assert 'if [ -n "${TFA_DIFF_BASE}" ]' in action_text, (
+            "--diff-base must only be added to ARGS when TFA_DIFF_BASE "
+            "is non-empty, otherwise static-mode runs would pass an "
+            "empty --diff-base and crash"
+        )

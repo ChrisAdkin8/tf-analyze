@@ -44,6 +44,33 @@ The per-section shapes differ because each cloud's product surface differs: AWS 
 
 ---
 
+## Round 31.9 — diff-mode base-ref auto-fetch (closes #19) — 2026-05-13
+
+Closes upstream issue [#19](https://github.com/ChrisAdkin8/tf-analyze/issues/19). The demo PR (`tf-analyze-action-demo` #1) silently dropped from 4 inline `suggestion` comments to 0 between the v0.2.4 and v0.2.5 demo bumps. The dropoff looked like an engine regression; it was actually a hidden contract gap in the composite action.
+
+**Root cause**: the demo workflow's v0.2.4 commit had `mode: static` explicit. A subsequent demo-side commit reverted that to `mode: auto` so the workflow would "match what users would typically write." That reset to `auto` was the silent kill — on PR events, `auto` resolves to `--mode diff`, which needs `origin/<base_ref>` reachable from `git rev-parse`. The default `actions/checkout@v4` (depth 1) doesn't fetch the base, so `_diff.get_diff_files` returned an empty set, the engine scanned 0 files, and the action posted 0 inline comments. The same regression would have hit ANY user writing the "obvious" workflow without `fetch-depth: 0`.
+
+**Fix** — composite action now pre-fetches the base ref before invoking diff mode:
+
+- New step `id: diff_base` (gated on `mode == 'diff' && pull_request`) runs `git fetch --depth=1 origin "${{ github.base_ref }}"` if the ref isn't already local. Cheap (~1 MB shallow), only fires on the PR happy path.
+- `--diff-base origin/<base_ref>` is passed explicitly to `detect.py` so the engine doesn't fall back to its (limited) `main`/`master` autodetection — workflows targeting `develop`, `release/*`, etc. now work too.
+- A `::warning::` referencing issue #19 fires if the fetch fails, so a regressed fetch surfaces in the workflow log instead of silently scanning 0 files. (The prior failure mode — issue #19 itself — was silent precisely because no warning fired.)
+- The `--diff-base` flag is conditionally appended only when `TFA_DIFF_BASE` is non-empty (which it only is on PR events), so `mode: static` and push-event runs are unaffected.
+
+### Drift gate
+
+`tests/test_action_yml.py::TestDiffBaseHardening` — 6 new tests: the `diff_base` step exists with the right `id`, is gated on both `'diff'` and `'pull_request'`, reads `github.base_ref`, emits a `::warning::` linking to issue #19 on fetch failure, passes `--diff-base` to detect.py through the `TFA_DIFF_BASE` env-var pattern (audit fix #1), and only appends the flag when the env var is non-empty.
+
+### Migration
+
+`mode: auto` workflows (the action's default) now Just Work on any `actions/checkout@v4` configuration — `fetch-depth: 0` is no longer required for diff mode to function. Workflows that explicitly set `mode: static` are unaffected. No new input.
+
+### Demo repo
+
+`tf-analyze-action-demo` PR #1 was healed in parallel with two complementary fixes — `fetch-depth: 0` on the checkout (so the demo would also have worked under `mode: auto`) and `mode: static` explicit (so the demo shows the FULL fixture's findings, not just changed lines — more visible value for a walkthrough). Either alone would have closed the user-visible regression.
+
+---
+
 ## Round 31.8 — pr-summary compliance section + safety-net wrapper — 2026-05-13
 
 Closes upstream issues [#12](https://github.com/ChrisAdkin8/tf-analyze/issues/12) and [#13](https://github.com/ChrisAdkin8/tf-analyze/issues/13). Both surfaced while documenting `tf-analyze-action-demo` PR #1 — the engine emitted an empty `tf-analyze-pr-summary.md` under one input combination (mode static + attack-graph + compliance + many findings) and never embedded the compliance gap section in pr-summary even when `--compliance-framework` was set. The action's github-script fallback masked the first bug; the second one was an outright feature gap.
