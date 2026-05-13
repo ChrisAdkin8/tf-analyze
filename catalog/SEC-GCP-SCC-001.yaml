@@ -1,0 +1,75 @@
+id: SEC-GCP-SCC-001
+title: "GCP Security Command Center notification not configured"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "2.1"
+pci_dss:
+  - "Req-10.6"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1078"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "DE.CM-1"
+  - "DE.CM-7"
+nist_800_53:
+  - "SI-4"
+  - "RA-5"
+csa_ccm:
+  - "TVM-04"
+patterns:
+  - kind: resource_absent
+    resource: google_scc_notification_config
+    when_present: google_compute_network
+    description: |
+      No `google_scc_notification_config` declared. Security Command
+      Center detects misconfigurations (Security Health Analytics),
+      vulnerabilities (Web Security Scanner), and threats (Event Threat
+      Detection / Container Threat Detection). Without a notification
+      config piping findings to Pub/Sub, alerts stay buried in the SCC
+      console and no automated response is possible. This is the GCP
+      equivalent of `aws_guardduty_detector` (SEC-AWS-GUARDDUTY-001).
+recommendation: |
+  Wire SCC findings to a Pub/Sub topic so alerting platforms can react:
+
+      resource "google_pubsub_topic" "scc" {
+        name = "scc-findings"
+      }
+
+      resource "google_scc_notification_config" "high_severity" {
+        config_id    = "high-severity"
+        organization = var.org_id
+        pubsub_topic = google_pubsub_topic.scc.id
+
+        streaming_config {
+          filter = "severity = \"HIGH\" OR severity = \"CRITICAL\""
+        }
+      }
+
+  Pair with `google_project_service` enabling
+  `securitycenter.googleapis.com` and `containerthreatdetection.googleapis.com`.
+verification: |
+  `gcloud scc notifications list --organization=<org-id>` must return at
+  least one configuration, and the Pub/Sub topic must have a downstream
+  subscriber.
+fix_hcl: |
+  resource "google_scc_notification_config" "all_findings" {
+    config_id    = "all-findings"
+    organization = var.org_id
+    pubsub_topic = google_pubsub_topic.scc.id
+
+    streaming_config {
+      filter = "state = \"ACTIVE\""
+    }
+  }
+fix_disruption: none
+fix_disruption_note: "Activating SCC Premium incurs per-asset cost; review pricing before deploying organisation-wide."
+fixtures:
+  - gcp_scc_missing

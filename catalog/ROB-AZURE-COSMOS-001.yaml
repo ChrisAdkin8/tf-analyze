@@ -1,0 +1,64 @@
+id: ROB-AZURE-COSMOS-001
+title: "Azure Cosmos DB backup policy not Continuous"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.1"
+soc2_cc:
+  - "A1.2"
+mitre:
+  - "T1485"
+  - "T1490"
+cwe:
+  - "CWE-779"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
+patterns:
+  - kind: resource_body_contains
+    resource: azurerm_cosmosdb_account
+    regex: 'backup\s*\{[^}]*type\s*=\s*"Periodic"'
+    description: |
+      `azurerm_cosmosdb_account.backup.type = "Periodic"` provides only
+      24-48h granularity. Continuous backup with PITR gives 7- or 30-day
+      restore window at any point in time — required for high-RPO
+      workloads.
+recommendation: |
+  Switch backup type to Continuous (note: Continuous backup forces
+  recreation if Periodic was set at creation):
+
+      resource "azurerm_cosmosdb_account" "main" {
+        # ...
+        backup {
+          type = "Continuous"
+          tier = "Continuous30Days"
+        }
+      }
+verification: |
+  `az cosmosdb show -g <rg> -n <name> --query 'backupPolicy.type'` must
+  return `Continuous`.
+fix_hcl: |
+  resource "azurerm_cosmosdb_account" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    offer_type          = "Standard"
+    kind                = "GlobalDocumentDB"
+    backup {
+      type = "Continuous"
+      tier = "Continuous30Days"
+    }
+    consistency_policy { consistency_level = "Session" }
+    geo_location {
+      location          = azurerm_resource_group.example.location
+      failover_priority = 0
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_cosmos_periodic_backup

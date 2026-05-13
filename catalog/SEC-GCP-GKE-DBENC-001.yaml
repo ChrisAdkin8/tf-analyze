@@ -1,0 +1,66 @@
+id: SEC-GCP-GKE-DBENC-001
+title: "GKE cluster missing application-layer secrets encryption (etcd CMEK)"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "5.5.5"
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1552.007"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-12"
+  - "SC-28"
+csa_ccm:
+  - "CEK-03"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_cluster
+    arg: database_encryption
+    description: |
+      `google_container_cluster` has no `database_encryption`. Kubernetes
+      Secrets in etcd are encrypted only with a Google-managed key,
+      preventing customer-controlled key revocation. Application-layer
+      encryption with a Cloud KMS CMEK is required for SOC2 / PCI-DSS
+      regulated workloads.
+recommendation: |
+  Enable application-layer secrets encryption:
+
+      resource "google_kms_crypto_key" "etcd" {
+        name     = "gke-etcd"
+        key_ring = google_kms_key_ring.gke.id
+      }
+
+      resource "google_container_cluster" "main" {
+        # ...
+        database_encryption {
+          state    = "ENCRYPTED"
+          key_name = google_kms_crypto_key.etcd.id
+        }
+      }
+verification: |
+  `gcloud container clusters describe <name> --format='value(databaseEncryption.state)'`
+  must return `ENCRYPTED`.
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name               = "example"
+    location           = "us-central1"
+    initial_node_count = 1
+    database_encryption {
+      state    = "ENCRYPTED"
+      key_name = "projects/example/locations/us-central1/keyRings/gke/cryptoKeys/etcd"
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - gcp_gke_no_dbenc

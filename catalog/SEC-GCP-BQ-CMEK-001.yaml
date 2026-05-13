@@ -1,0 +1,59 @@
+id: SEC-GCP-BQ-CMEK-001
+title: "BigQuery table not encrypted with customer-managed key"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-12"
+  - "SC-13"
+csa_ccm:
+  - "CEK-03"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_bigquery_table
+    arg: encryption_configuration
+    description: |
+      `google_bigquery_table` has no `encryption_configuration`. The
+      table inherits the dataset's encryption — which defaults to a
+      Google-managed key unless the dataset has
+      `default_encryption_configuration.kms_key_name` set.
+recommendation: |
+  Set encryption_configuration on tables holding sensitive data:
+
+      resource "google_bigquery_table" "main" {
+        # ...
+        encryption_configuration {
+          kms_key_name = google_kms_crypto_key.bq.id
+        }
+      }
+
+  Or set `default_encryption_configuration` at the dataset level so
+  every new table inherits CMEK.
+verification: |
+  `bq show --format=prettyjson <project>:<dataset>.<table> | \
+    jq '.encryptionConfiguration.kmsKeyName'` must return a non-null
+  Cloud KMS key URI.
+fix_hcl: |
+  resource "google_bigquery_table" "example" {
+    dataset_id = google_bigquery_dataset.example.dataset_id
+    table_id   = "example"
+    encryption_configuration {
+      kms_key_name = "projects/example/locations/us/keyRings/bq/cryptoKeys/data"
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - gcp_bq_table_no_cmek

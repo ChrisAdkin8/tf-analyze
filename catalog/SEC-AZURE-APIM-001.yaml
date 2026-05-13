@@ -1,0 +1,58 @@
+id: SEC-AZURE-APIM-001
+title: "Azure API Management missing diagnostic settings"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-10.2"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-IAA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+csa_ccm:
+  - "LOG-08"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_api_management_diagnostic
+    when_present: azurerm_api_management
+    description: |
+      `azurerm_api_management` is declared but no
+      `azurerm_api_management_diagnostic` resource is bound. Request /
+      response logs (including auth failures, 4xx/5xx rates) are not
+      shipped to Log Analytics or Event Hub.
+recommendation: |
+  Wire APIM logs to Application Insights or Log Analytics via a
+  diagnostic setting:
+
+      resource "azurerm_api_management_diagnostic" "main" {
+        identifier               = "applicationinsights"
+        resource_group_name      = azurerm_resource_group.main.name
+        api_management_name      = azurerm_api_management.main.name
+        api_management_logger_id = azurerm_api_management_logger.main.id
+        sampling_percentage      = 100
+        always_log_errors        = true
+      }
+verification: |
+  `az apim diagnostic list --service-name <name> -g <rg>` must return
+  at least one diagnostic.
+fix_hcl: |
+  resource "azurerm_api_management_diagnostic" "example" {
+    identifier               = "applicationinsights"
+    resource_group_name      = azurerm_resource_group.example.name
+    api_management_name      = azurerm_api_management.example.name
+    api_management_logger_id = azurerm_api_management_logger.example.id
+    sampling_percentage      = 100
+    always_log_errors        = true
+  }
+fix_disruption: none
+fixtures:
+  - azure_apim_no_diag

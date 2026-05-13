@@ -1,0 +1,79 @@
+id: SEC-AZURE-APPGW-002
+title: "Azure Application Gateway uses weak TLS policy"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "5.1"
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1040"
+  - "T1557"
+cwe:
+  - "CWE-326"
+  - "CWE-327"
+d3fend:
+  - "D3-ET"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+  - "SC-13"
+csa_ccm:
+  - "DSI-03"
+patterns:
+  - kind: resource_body_contains
+    resource: azurerm_application_gateway
+    regex: 'min_protocol_version\s*=\s*"(TLSv1_0|TLSv1_1)"'
+    description: |
+      Application Gateway `ssl_policy.min_protocol_version` permits
+      TLS 1.0 or TLS 1.1. Both are deprecated by the IETF and forbidden
+      by PCI-DSS v4.0 and FedRAMP. Modern HTTPS endpoints must require
+      TLS 1.2 or higher.
+  - kind: resource_body_contains
+    resource: azurerm_application_gateway
+    regex: 'policy_name\s*=\s*"AppGwSslPolicy20150501"'
+    description: |
+      Application Gateway uses the legacy predefined SSL policy
+      `AppGwSslPolicy20150501`, which permits TLS 1.0 and weak ciphers.
+recommendation: |
+  Set `min_protocol_version = "TLSv1_2"` (or `"TLSv1_3"` if supported by
+  the App Gateway tier) and pin a modern predefined policy or a
+  hand-curated `policy_type = "Custom"`:
+
+      resource "azurerm_application_gateway" "main" {
+        # ...
+        ssl_policy {
+          policy_type          = "Predefined"
+          policy_name          = "AppGwSslPolicy20220101S"
+          min_protocol_version = "TLSv1_2"
+        }
+      }
+verification: |
+  `az network application-gateway ssl-policy show --gateway-name <name> \
+    --resource-group <rg> --query minProtocolVersion` must return
+  `TLSv1_2` or `TLSv1_3`.
+fix_hcl: |
+  resource "azurerm_application_gateway" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    sku {
+      name     = "Standard_v2"
+      tier     = "Standard_v2"
+      capacity = 2
+    }
+    ssl_policy {
+      policy_type          = "Predefined"
+      policy_name          = "AppGwSslPolicy20220101S"
+      min_protocol_version = "TLSv1_2"
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Tightening the TLS policy may break ancient clients (Win XP IE, legacy embedded devices) that cannot negotiate TLS 1.2."
+fixtures:
+  - azure_appgw_weak_tls

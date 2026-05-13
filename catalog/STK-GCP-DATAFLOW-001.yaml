@@ -1,0 +1,51 @@
+id: STK-GCP-DATAFLOW-001
+title: "GCP Dataflow job exposes workers to public IPs"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "3.5"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-284"
+nist_csf:
+  - "PR.AC-5"
+nist_800_53:
+  - "SC-7"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_dataflow_job
+    arg: ip_configuration
+    description: |
+      `google_dataflow_job` has no `ip_configuration` set to
+      `WORKER_IP_PRIVATE`. Workers receive public IPs by default,
+      widening the attack surface and increasing egress cost.
+  - kind: resource_arg
+    resource: google_dataflow_job
+    arg: ip_configuration
+    regex: '^WORKER_IP_PUBLIC$'
+    description: Dataflow job explicitly uses WORKER_IP_PUBLIC
+recommendation: |
+  Force workers to private IP only:
+
+      resource "google_dataflow_job" "main" {
+        # ...
+        ip_configuration = "WORKER_IP_PRIVATE"
+        subnetwork       = google_compute_subnetwork.df.id
+      }
+verification: |
+  `gcloud dataflow jobs describe <id> --format='value(environment.ipConfiguration)'`
+  must return `WORKER_IP_PRIVATE`.
+fix_hcl: |
+  resource "google_dataflow_job" "example" {
+    name              = "etl"
+    template_gcs_path = "gs://dataflow-templates/latest/Word_Count"
+    temp_gcs_location = "gs://example/temp"
+    ip_configuration  = "WORKER_IP_PRIVATE"
+    subnetwork        = google_compute_subnetwork.df.id
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - gcp_dataflow_public_ip

@@ -1,0 +1,69 @@
+id: SEC-GCP-GKE-METADATA-001
+title: "GKE node pool missing GKE_METADATA workload metadata config (SSRF risk)"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+cis:
+  - "5.4.1"
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1552.005"
+  - "T1078.004"
+cwe:
+  - "CWE-918"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_container_node_pool
+    nested_path: node_config.workload_metadata_config.mode
+    description: |
+      `google_container_node_pool` has no
+      `node_config.workload_metadata_config.mode = "GKE_METADATA"`.
+      Without GKE Metadata Server (Workload Identity), every pod on the
+      node can read the node's compute metadata, including service
+      account tokens — equivalent to the AWS IMDSv1 SSRF risk
+      (SEC-AWS-SSRF-001).
+recommendation: |
+  Enable GKE Metadata Server so pods reach metadata through the
+  Workload Identity broker:
+
+      resource "google_container_node_pool" "main" {
+        # ...
+        node_config {
+          workload_metadata_config {
+            mode = "GKE_METADATA"
+          }
+        }
+      }
+
+  Requires the cluster to have `workload_identity_config.workload_pool`
+  set (see STK-GCP-GKE-002).
+verification: |
+  `gcloud container node-pools describe <pool> --cluster <c> \
+    --format='value(config.workloadMetadataConfig.mode)'` must return
+  `GKE_METADATA`.
+fix_hcl: |
+  resource "google_container_node_pool" "example" {
+    name       = "main"
+    cluster    = google_container_cluster.example.name
+    node_count = 1
+    node_config {
+      workload_metadata_config {
+        mode = "GKE_METADATA"
+      }
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_gke_no_metadata_config

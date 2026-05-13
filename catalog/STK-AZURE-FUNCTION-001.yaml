@@ -1,0 +1,79 @@
+id: STK-AZURE-FUNCTION-001
+title: "Azure Function App uses end-of-life runtime"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1190"
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-4"
+csa_ccm:
+  - "AIS-07"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_linux_function_app
+    arg: site_config.application_stack.python_version
+    regex: '^(3\.6|3\.7|3\.8)$'
+    description: Function App Python runtime out of support
+  - kind: resource_body_contains
+    resource: azurerm_linux_function_app
+    regex: 'python_version\s*=\s*"(3\.6|3\.7|3\.8)"'
+    description: Function App Python runtime out of support (regex body match)
+  - kind: resource_body_contains
+    resource: azurerm_linux_function_app
+    regex: 'node_version\s*=\s*"(10|12|14|16)"'
+    description: Function App Node.js runtime out of support
+  - kind: resource_body_contains
+    resource: azurerm_linux_function_app
+    regex: 'dotnet_version\s*=\s*"(v3\.1|v5\.0|v6\.0)"'
+    description: Function App .NET runtime out of support
+  - kind: resource_body_contains
+    resource: azurerm_linux_function_app
+    regex: 'java_version\s*=\s*"(8|11)"'
+    description: Function App Java runtime out of support
+  - kind: resource_body_contains
+    resource: azurerm_windows_function_app
+    regex: '(python_version|node_version|dotnet_version|java_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|8|11)"'
+    description: Windows Function App runtime out of support
+recommendation: |
+  Upgrade the runtime to a supported version. Current Azure Functions
+  supported runtimes (May 2026):
+  - Python: 3.10, 3.11, 3.12
+  - Node.js: 18, 20
+  - .NET: 8 (isolated), 9 (preview)
+  - Java: 17, 21
+
+  Test compatibility on a staging slot before swapping production.
+verification: |
+  `az functionapp config show --name <name> --resource-group <rg> \
+    --query 'linuxFxVersion'` must return a supported runtime identifier
+  (e.g. `Python|3.12`, `Node|20`).
+fix_hcl: |
+  resource "azurerm_linux_function_app" "example" {
+    name                       = "example"
+    resource_group_name        = azurerm_resource_group.example.name
+    location                   = azurerm_resource_group.example.location
+    service_plan_id            = azurerm_service_plan.example.id
+    storage_account_name       = azurerm_storage_account.example.name
+    storage_account_access_key = azurerm_storage_account.example.primary_access_key
+
+    site_config {
+      application_stack {
+        python_version = "3.12"
+      }
+    }
+  }
+fix_disruption: forces_replacement
+fix_disruption_note: "Runtime upgrades may break source compatibility (e.g. removed/changed stdlib APIs); test on a deployment slot first."
+fixtures:
+  - azure_function_eol_runtime

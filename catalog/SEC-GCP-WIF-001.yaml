@@ -1,0 +1,81 @@
+id: SEC-GCP-WIF-001
+title: "GCP Workload Identity Federation pool provider missing attribute_condition"
+section: security
+default_urgency: CRITICAL
+blast_radius: environment
+status: active
+cis:
+  - "1.13"
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1078.004"
+  - "T1199"
+cwe:
+  - "CWE-284"
+  - "CWE-287"
+d3fend:
+  - "D3-UAC"
+nist_csf:
+  - "PR.AC-1"
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-2"
+  - "AC-3"
+  - "IA-5"
+csa_ccm:
+  - "IAM-04"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_iam_workload_identity_pool_provider
+    arg: attribute_condition
+    description: |
+      `google_iam_workload_identity_pool_provider` has no
+      `attribute_condition`. Without a CEL expression restricting which
+      external identities can mint Google tokens, ANY workload that
+      authenticates against the upstream OIDC issuer (any GitHub repo,
+      any GitLab project, any AWS account) can impersonate this
+      service account. This is the GCP equivalent of an IAM role with
+      `Principal: "*"` in its trust policy.
+recommendation: |
+  Add a CEL `attribute_condition` that pins the exact external
+  identity. For GitHub Actions:
+
+      resource "google_iam_workload_identity_pool_provider" "github" {
+        # ...
+        attribute_condition = "assertion.repository == 'my-org/my-repo'"
+      }
+
+  For AWS:
+
+      attribute_condition = "google.subject.startsWith('arn:aws:iam::123456789012:role/')"
+
+  Pair with `attribute_mapping` so the assertion claims you constrain
+  are actually surfaced as `google.subject`.
+verification: |
+  `gcloud iam workload-identity-pools providers describe <provider-id> \
+    --workload-identity-pool=<pool-id> --location=global` must return a
+  non-empty `attributeCondition` field.
+fix_hcl: |
+  resource "google_iam_workload_identity_pool_provider" "github" {
+    workload_identity_pool_id          = google_iam_workload_identity_pool.gh.workload_identity_pool_id
+    workload_identity_pool_provider_id = "github-actions"
+    display_name                       = "GitHub Actions"
+
+    attribute_mapping = {
+      "google.subject"        = "assertion.sub"
+      "attribute.repository"  = "assertion.repository"
+    }
+
+    attribute_condition = "assertion.repository == 'my-org/my-repo'"
+
+    oidc {
+      issuer_uri = "https://token.actions.githubusercontent.com"
+    }
+  }
+fix_disruption: none
+fix_disruption_note: "Tightening the condition does not affect workloads that already match the constraint."
+fixtures:
+  - gcp_wif_no_condition

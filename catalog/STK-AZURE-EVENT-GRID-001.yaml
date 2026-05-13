@@ -1,0 +1,56 @@
+id: STK-AZURE-EVENT-GRID-001
+title: "Azure Event Grid topic missing managed identity and CMK"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+csa_ccm:
+  - "CEK-03"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_eventgrid_topic
+    arg: identity
+    description: |
+      `azurerm_eventgrid_topic` has no `identity` block, so it cannot
+      bind a customer-managed key for encryption-at-rest. Event payloads
+      are encrypted only with Microsoft-managed keys.
+  - kind: resource_missing_arg
+    resource: azurerm_eventgrid_domain
+    arg: identity
+    description: Event Grid domain missing managed identity (no CMK possible)
+recommendation: |
+  Bind a system-assigned identity and use it to grant the topic Key
+  Vault Crypto Service Encryption User on the CMK:
+
+      resource "azurerm_eventgrid_topic" "main" {
+        # ...
+        identity { type = "SystemAssigned" }
+        inbound_ip_rule { ip_mask = "10.0.0.0/8" action = "Allow" }
+      }
+verification: |
+  `az eventgrid topic show -g <rg> -n <name> --query 'identity.type'`
+  must return `SystemAssigned` or `UserAssigned`.
+fix_hcl: |
+  resource "azurerm_eventgrid_topic" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_eventgrid_no_identity

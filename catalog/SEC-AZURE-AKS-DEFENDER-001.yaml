@@ -1,0 +1,56 @@
+id: SEC-AZURE-AKS-DEFENDER-001
+title: "Azure AKS cluster missing Microsoft Defender for Containers"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+pci_dss:
+  - "Req-10.6"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1525"
+cwe:
+  - "CWE-693"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "SI-4"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_kubernetes_cluster
+    arg: microsoft_defender
+    description: |
+      `azurerm_kubernetes_cluster` has no `microsoft_defender` block.
+      Container threat detection, runtime workload protection, and
+      kube-audit log analysis are disabled. Equivalent to
+      SEC-AWS-GUARDDUTY-001 + SEC-AWS-EKS-005 (audit logs).
+recommendation: |
+  Enable Defender for Containers on the cluster:
+
+      resource "azurerm_kubernetes_cluster" "main" {
+        # ...
+        microsoft_defender {
+          log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+        }
+      }
+verification: |
+  `az aks show -g <rg> -n <name> --query 'securityProfile.defender'`
+  must return a populated config (not `null`).
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    dns_prefix          = "example"
+    default_node_pool { name = "default" node_count = 1 vm_size = "Standard_D2s_v3" }
+    identity { type = "SystemAssigned" }
+    microsoft_defender {
+      log_analytics_workspace_id = azurerm_log_analytics_workspace.example.id
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_aks_no_defender

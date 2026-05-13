@@ -1,0 +1,54 @@
+id: SEC-AZURE-DATALAKE-001
+title: "Azure Data Lake Gen 2 filesystem missing encryption scope"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-13"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_storage_data_lake_gen2_filesystem
+    arg: default_encryption_scope
+    description: |
+      `azurerm_storage_data_lake_gen2_filesystem.default_encryption_scope`
+      is not set. Files default to the storage account's encryption
+      key — there's no per-filesystem isolation for blast-radius
+      reduction or per-tenant key separation.
+recommendation: |
+  Pin a per-filesystem encryption scope so cryptographic isolation
+  matches the data tenancy boundary:
+
+      resource "azurerm_storage_encryption_scope" "fs" {
+        name               = "fs-scope"
+        storage_account_id = azurerm_storage_account.main.id
+        source             = "Microsoft.KeyVault"
+        key_vault_key_id   = azurerm_key_vault_key.fs.id
+      }
+
+      resource "azurerm_storage_data_lake_gen2_filesystem" "main" {
+        # ...
+        default_encryption_scope = azurerm_storage_encryption_scope.fs.name
+      }
+verification: |
+  `az storage fs show --account-name <a> --name <f> --query 'defaultEncryptionScope'`
+  must return the scope name.
+fix_hcl: |
+  resource "azurerm_storage_data_lake_gen2_filesystem" "example" {
+    name                     = "example"
+    storage_account_id       = azurerm_storage_account.example.id
+    default_encryption_scope = azurerm_storage_encryption_scope.example.name
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_datalake_no_scope

@@ -1,0 +1,69 @@
+id: SEC-AZURE-COSMOS-001
+title: "Azure Cosmos DB account allows public network access"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "5.4"
+pci_dss:
+  - "Req-1.3"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1190"
+  - "T1530"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "PR.AC-3"
+  - "PR.AC-5"
+nist_800_53:
+  - "SC-7"
+  - "AC-3"
+csa_ccm:
+  - "IVS-06"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_cosmosdb_account
+    arg: public_network_access_enabled
+    regex: '^true$'
+    description: |
+      `azurerm_cosmosdb_account` has `public_network_access_enabled = true`,
+      exposing the Cosmos endpoint to the public internet. Even with
+      strong authentication, public exposure widens the attack surface
+      (credential stuffing, key leaks, network-layer scanning).
+recommendation: |
+  Set `public_network_access_enabled = false` and reach the account via a
+  private endpoint. Add `is_virtual_network_filter_enabled = true` and
+  enumerate `virtual_network_rule` blocks for the subnets that need
+  access, plus `ip_range_filter` for any required allow-listed IPs.
+
+      resource "azurerm_cosmosdb_account" "main" {
+        # ...
+        public_network_access_enabled    = false
+        is_virtual_network_filter_enabled = true
+      }
+verification: |
+  `az cosmosdb show --name <name> --resource-group <rg> \
+    --query publicNetworkAccess` must return `"Disabled"`.
+fix_hcl: |
+  resource "azurerm_cosmosdb_account" "example" {
+    name                          = "example"
+    location                      = azurerm_resource_group.example.location
+    resource_group_name           = azurerm_resource_group.example.name
+    offer_type                    = "Standard"
+    kind                          = "GlobalDocumentDB"
+    public_network_access_enabled = false
+    consistency_policy { consistency_level = "Session" }
+    geo_location {
+      location          = azurerm_resource_group.example.location
+      failover_priority = 0
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Disabling public access breaks clients reaching the account over the public endpoint; ensure private endpoints are in place first."
+fixtures:
+  - azure_cosmos_public

@@ -1,0 +1,67 @@
+id: ROB-GCP-CLOUDSQL-PITR-001
+title: "Cloud SQL instance missing point-in-time recovery"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "6.6"
+pci_dss:
+  - "Req-3.1"
+soc2_cc:
+  - "A1.2"
+mitre:
+  - "T1485"
+  - "T1490"
+cwe:
+  - "CWE-779"
+d3fend:
+  - "D3-DENCR"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
+patterns:
+  - kind: resource_body_contains
+    resource: google_sql_database_instance
+    regex: 'point_in_time_recovery_enabled\s*=\s*false'
+    description: |
+      `google_sql_database_instance.settings.backup_configuration.point_in_time_recovery_enabled`
+      is `false`. Without PITR, recovery is limited to nightly snapshot
+      granularity — any incident between snapshots loses up to 24h of
+      writes. Equivalent to AWS RDS PITR gap.
+recommendation: |
+  Enable PITR (Postgres / MySQL only):
+
+      resource "google_sql_database_instance" "main" {
+        # ...
+        settings {
+          backup_configuration {
+            enabled                        = true
+            point_in_time_recovery_enabled = true
+            transaction_log_retention_days = 7
+          }
+        }
+      }
+verification: |
+  `gcloud sql instances describe <name> --format='value(settings.backupConfiguration.pointInTimeRecoveryEnabled)'`
+  must return `True`.
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    name             = "example"
+    region           = "us-central1"
+    database_version = "POSTGRES_16"
+    settings {
+      tier = "db-custom-2-7680"
+      backup_configuration {
+        enabled                        = true
+        point_in_time_recovery_enabled = true
+        transaction_log_retention_days = 7
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_cloudsql_no_pitr

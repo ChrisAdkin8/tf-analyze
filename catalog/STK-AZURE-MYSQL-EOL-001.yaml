@@ -1,0 +1,54 @@
+id: STK-AZURE-MYSQL-EOL-001
+title: "Azure MySQL/PostgreSQL flexible server on end-of-life version"
+section: stack
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-4"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_mysql_flexible_server
+    arg: version
+    regex: '^(5\.6|5\.7)$'
+    description: MySQL flexible server on 5.6/5.7 (EOL upstream)
+  - kind: resource_arg
+    resource: azurerm_postgresql_flexible_server
+    arg: version
+    regex: '^(9\.6|10|11)$'
+    description: PostgreSQL flexible server on 9.6/10/11 (EOL upstream)
+recommendation: |
+  Upgrade to a supported version:
+  - MySQL: 8.0 (LTS) or 8.4
+  - PostgreSQL: 14, 15, 16
+
+  Test the upgrade in a non-production fork first; some breaking
+  changes affect query syntax (e.g. PostgreSQL 12 unified
+  `pg_resetxlog` → `pg_resetwal`).
+verification: |
+  `az mysql flexible-server show -g <rg> -n <name> --query 'version'`
+  must return a non-EOL major version.
+fix_hcl: |
+  resource "azurerm_postgresql_flexible_server" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    version             = "16"
+    sku_name            = "GP_Standard_D2s_v3"
+    storage_mb          = 32768
+    administrator_login    = "pgadmin"
+    administrator_password = "REDACTED"
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_mysql_eol_version

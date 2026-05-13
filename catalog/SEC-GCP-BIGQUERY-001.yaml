@@ -1,0 +1,76 @@
+id: SEC-GCP-BIGQUERY-001
+title: "BigQuery dataset grants access to allUsers or allAuthenticatedUsers"
+section: security
+default_urgency: CRITICAL
+blast_radius: single-resource
+status: active
+cis:
+  - "7.1"
+pci_dss:
+  - "Req-7.1"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-284"
+d3fend:
+  - "D3-UAC"
+nist_csf:
+  - "PR.AC-3"
+nist_800_53:
+  - "AC-3"
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
+patterns:
+  - kind: resource_body_contains
+    resource: google_bigquery_dataset
+    regex: 'special_group\s*=\s*"all(AuthenticatedUsers|Users)"'
+    description: |
+      `google_bigquery_dataset.access` grants `special_group = "allUsers"`
+      or `special_group = "allAuthenticatedUsers"`. The dataset (and any
+      view defined on top of it) is readable by anyone with a Google
+      account — or even unauthenticated — depending on the role.
+  - kind: resource_body_contains
+    resource: google_bigquery_dataset_iam_binding
+    regex: 'members\s*=\s*\[[^\]]*"all(Users|AuthenticatedUsers)"'
+    description: |
+      `google_bigquery_dataset_iam_binding.members` includes `allUsers`
+      or `allAuthenticatedUsers` — same public-data exposure via the
+      newer IAM binding resource.
+  - kind: resource_body_contains
+    resource: google_bigquery_dataset_iam_member
+    regex: 'member\s*=\s*"all(Users|AuthenticatedUsers)"'
+    description: BigQuery dataset IAM member is allUsers / allAuthenticatedUsers
+recommendation: |
+  Replace the public grant with a specific group/user/service account:
+
+      resource "google_bigquery_dataset" "main" {
+        dataset_id = "analytics"
+        access {
+          role          = "READER"
+          group_by_email = "analysts@example.com"
+        }
+      }
+
+  If genuinely public data is intended, prefer a publicly-readable
+  Cloud Storage bucket with a documented attribution policy, not a
+  BigQuery dataset — public BigQuery queries are billed to the caller
+  but the schema/contents are exposed in full.
+verification: |
+  `bq show --format=prettyjson <project>:<dataset> | jq '.access'` must
+  not contain entries with `"specialGroup": "allUsers"` or
+  `"specialGroup": "allAuthenticatedUsers"`.
+fix_hcl: |
+  resource "google_bigquery_dataset" "example" {
+    dataset_id = "example"
+    access {
+      role           = "READER"
+      group_by_email = "analysts@example.com"
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Revoking public access immediately breaks any consumer relying on the open grant; identify and notify downstream users first."
+fixtures:
+  - gcp_bigquery_public

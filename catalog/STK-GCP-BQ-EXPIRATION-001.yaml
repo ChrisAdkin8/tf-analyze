@@ -1,0 +1,38 @@
+id: STK-GCP-BQ-EXPIRATION-001
+title: "BigQuery dataset missing default_table_expiration_ms (cost runaway)"
+section: stack
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1496"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_bigquery_dataset
+    arg: default_table_expiration_ms
+    description: |
+      `google_bigquery_dataset` has no `default_table_expiration_ms`.
+      Ad-hoc tables, materialized views, and ML temp tables persist
+      indefinitely, accumulating storage cost.
+recommendation: |
+  Pin a default table expiration on the dataset so new tables age out:
+
+      resource "google_bigquery_dataset" "main" {
+        # ...
+        default_table_expiration_ms = 2592000000   # 30 days
+      }
+
+  Production tables that should not expire can override
+  `expiration_time` per `google_bigquery_table`.
+verification: |
+  `bq show --format=prettyjson <project>:<dataset> | \
+    jq '.defaultTableExpirationMs'` must return a finite value.
+fix_hcl: |
+  resource "google_bigquery_dataset" "example" {
+    dataset_id                  = "scratch"
+    location                    = "US"
+    default_table_expiration_ms = 2592000000
+  }
+fix_disruption: none
+fixtures:
+  - gcp_bq_no_expiration

@@ -1,0 +1,59 @@
+id: SEC-GCP-COMPUTE-OSLOGIN-001
+title: "GCP Compute instance has OS Login disabled"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "4.1"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1078"
+cwe:
+  - "CWE-287"
+d3fend:
+  - "D3-UAC"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "AC-2"
+csa_ccm:
+  - "IAM-04"
+patterns:
+  - kind: resource_body_contains
+    resource: google_compute_instance
+    regex: 'enable-oslogin\s*=\s*"FALSE"'
+    description: |
+      `google_compute_instance.metadata.enable-oslogin = "FALSE"` falls
+      back to project-wide SSH keys (or local `ssh-keys` metadata),
+      which can't be governed by IAM. Centralised SSH governance via
+      OS Login is bypassed.
+recommendation: |
+  Enable OS Login on every Compute instance (or set it project-wide via
+  `google_compute_project_metadata`):
+
+      resource "google_compute_instance" "main" {
+        # ...
+        metadata = {
+          enable-oslogin = "TRUE"
+        }
+      }
+verification: |
+  `gcloud compute instances describe <name> --zone <zone> \
+    --format='value(metadata.items.filter(key="enable-oslogin"))'` must
+  return `TRUE`.
+fix_hcl: |
+  resource "google_compute_instance" "example" {
+    name         = "example"
+    machine_type = "e2-medium"
+    zone         = "us-central1-a"
+    boot_disk { initialize_params { image = "debian-cloud/debian-12" } }
+    network_interface { network = "default" }
+    metadata = {
+      enable-oslogin = "TRUE"
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_compute_oslogin_off

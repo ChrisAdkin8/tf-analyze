@@ -1,0 +1,58 @@
+id: SEC-AZURE-VNET-ENC-001
+title: "Azure Virtual Network missing VNet encryption"
+section: security
+default_urgency: LOW
+blast_radius: environment
+status: active
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1040"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-ET"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_virtual_network
+    arg: encryption
+    description: |
+      `azurerm_virtual_network` has no `encryption` block. East-west VM
+      traffic between subnets in the VNet is unencrypted at the
+      network fabric layer. For PCI-DSS / FedRAMP-High workloads,
+      Azure VNet encryption adds opportunistic MACsec on supported VM
+      SKUs (all GenV+).
+recommendation: |
+  Opt in to VNet encryption for sensitive workloads:
+
+      resource "azurerm_virtual_network" "main" {
+        # ...
+        encryption {
+          enforcement = "AllowUnencrypted"
+        }
+      }
+
+  Set `enforcement = "DropUnencrypted"` once all in-VNet workloads
+  support MACsec.
+verification: |
+  `az network vnet show -g <rg> -n <name> --query 'encryption.enabled'`
+  must return `true`.
+fix_hcl: |
+  resource "azurerm_virtual_network" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    address_space       = ["10.0.0.0/16"]
+    encryption {
+      enforcement = "AllowUnencrypted"
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_vnet_no_enc

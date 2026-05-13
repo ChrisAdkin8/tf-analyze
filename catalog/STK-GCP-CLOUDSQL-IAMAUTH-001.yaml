@@ -1,0 +1,65 @@
+id: STK-GCP-CLOUDSQL-IAMAUTH-001
+title: "Cloud SQL instance not using IAM authentication"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "6.4"
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1078"
+cwe:
+  - "CWE-287"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "IA-2"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_sql_database_instance
+    arg: database_flags
+    description: |
+      `google_sql_database_instance` has no `database_flags` block, so
+      no `cloudsql.iam_authentication = on` flag is set. The instance
+      authenticates only with built-in passwords — IAM-based identity
+      cannot be enforced.
+recommendation: |
+  Enable IAM authentication and add `database_flags`:
+
+      resource "google_sql_database_instance" "main" {
+        # ...
+        settings {
+          database_flags {
+            name  = "cloudsql.iam_authentication"
+            value = "on"
+          }
+        }
+      }
+
+      resource "google_sql_user" "iam_user" {
+        instance = google_sql_database_instance.main.name
+        type     = "CLOUD_IAM_USER"
+        name     = "data-engineer@example.iam.gserviceaccount.com"
+      }
+verification: |
+  `gcloud sql instances describe <name> --format=json | \
+    jq '.settings.databaseFlags[]|select(.name=="cloudsql.iam_authentication")'`
+  must return `value: "on"`.
+fix_hcl: |
+  resource "google_sql_database_instance" "example" {
+    name             = "example"
+    region           = "us-central1"
+    database_version = "POSTGRES_16"
+    settings {
+      tier = "db-custom-2-7680"
+      database_flags {
+        name  = "cloudsql.iam_authentication"
+        value = "on"
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_cloudsql_no_iamauth

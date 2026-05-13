@@ -1,0 +1,61 @@
+id: SEC-GCP-COMPUTE-PROJSSH-001
+title: "GCP Compute instance permits project-wide SSH keys"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+cis:
+  - "4.3"
+mitre:
+  - "T1078"
+cwe:
+  - "CWE-287"
+d3fend:
+  - "D3-UAC"
+nist_csf:
+  - "PR.AC-1"
+nist_800_53:
+  - "AC-2"
+patterns:
+  - kind: resource_body_contains
+    resource: google_compute_instance
+    regex: 'block-project-ssh-keys\s*=\s*"FALSE"'
+    description: |
+      `metadata.block-project-ssh-keys = "FALSE"` lets the instance be
+      accessed via every project-wide SSH key, bypassing per-instance
+      IAM. Combined with stale project keys, this is a common lateral-
+      movement vector.
+  - kind: resource_missing_arg
+    resource: google_compute_instance
+    arg: metadata
+    description: |
+      `google_compute_instance` has no `metadata` block, so
+      `block-project-ssh-keys` defaults to FALSE — any project-wide SSH
+      key can log in.
+recommendation: |
+  Block project-wide SSH keys per instance:
+
+      resource "google_compute_instance" "main" {
+        # ...
+        metadata = {
+          block-project-ssh-keys = "TRUE"
+        }
+      }
+verification: |
+  `gcloud compute instances describe <name> --zone <zone> \
+    --format='value(metadata.items.filter(key="block-project-ssh-keys"))'`
+  must return `TRUE`.
+fix_hcl: |
+  resource "google_compute_instance" "example" {
+    name         = "example"
+    machine_type = "e2-medium"
+    zone         = "us-central1-a"
+    boot_disk { initialize_params { image = "debian-cloud/debian-12" } }
+    network_interface { network = "default" }
+    metadata = {
+      block-project-ssh-keys = "TRUE"
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_compute_projssh_allowed

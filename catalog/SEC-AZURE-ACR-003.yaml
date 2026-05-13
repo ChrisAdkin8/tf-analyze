@@ -1,0 +1,64 @@
+id: SEC-AZURE-ACR-003
+title: "Azure Container Registry missing image quarantine policy"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-6.3"
+soc2_cc:
+  - "CC7.1"
+mitre:
+  - "T1525"
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "PR.IP-1"
+  - "DE.CM-4"
+nist_800_53:
+  - "RA-5"
+  - "SR-4"
+csa_ccm:
+  - "AIS-07"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_container_registry
+    arg: quarantine_policy_enabled
+    description: |
+      `azurerm_container_registry` has no `quarantine_policy_enabled`.
+      Without quarantine, every pushed image is immediately pullable —
+      even those that fail Defender for Containers vulnerability
+      scanning. Quarantine equivalents `scan-on-push` on AWS ECR
+      (SEC-AWS-ECR-001).
+recommendation: |
+  Enable the quarantine policy so images sit in quarantine until the
+  Defender scanner verifies them:
+
+      resource "azurerm_container_registry" "main" {
+        # ...
+        sku                          = "Premium"
+        quarantine_policy_enabled    = true
+      }
+
+  Pair with Microsoft Defender for Containers (see SEC-AZURE-DEFENDER-001).
+verification: |
+  `az acr config content-trust show --registry <name>` and the ARM API
+  `Microsoft.ContainerRegistry/registries/{name}?api-version=2022-12-01`
+  must show `"quarantinePolicy.status": "enabled"`.
+fix_hcl: |
+  resource "azurerm_container_registry" "example" {
+    name                      = "example"
+    resource_group_name       = azurerm_resource_group.example.name
+    location                  = azurerm_resource_group.example.location
+    sku                       = "Premium"
+    quarantine_policy_enabled = true
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Existing un-scanned images remain pullable; only images pushed after quarantine is enabled are gated."
+fixtures:
+  - azure_acr_no_quarantine

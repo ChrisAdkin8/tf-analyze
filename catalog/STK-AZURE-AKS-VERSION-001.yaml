@@ -1,0 +1,49 @@
+id: STK-AZURE-AKS-VERSION-001
+title: "Azure AKS cluster on end-of-life Kubernetes version"
+section: stack
+default_urgency: HIGH
+blast_radius: module
+status: active
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-4"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_kubernetes_cluster
+    arg: kubernetes_version
+    regex: '^1\.(1[0-9]|2[0-6])(\..*)?$'
+    description: |
+      `azurerm_kubernetes_cluster.kubernetes_version` is on a Kubernetes
+      release no longer supported by AKS (1.19–1.26 inclusive). EOL
+      versions stop receiving security patches; AKS may force-upgrade
+      them on a maintenance window the operator cannot defer.
+recommendation: |
+  Upgrade to a supported AKS Kubernetes version (1.27+ as of May 2026).
+  Check the support matrix at
+  https://learn.microsoft.com/azure/aks/supported-kubernetes-versions
+  and test the upgrade in a non-production cluster first.
+verification: |
+  `az aks show -g <rg> -n <name> --query 'kubernetesVersion'` must
+  return a version Azure currently supports.
+fix_hcl: |
+  resource "azurerm_kubernetes_cluster" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    dns_prefix          = "example"
+    kubernetes_version  = "1.29.4"
+    default_node_pool { name = "default" node_count = 1 vm_size = "Standard_D2s_v3" }
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_aks_eol_version

@@ -1,0 +1,57 @@
+id: STK-GCP-MEMCACHE-001
+title: "GCP Memorystore Memcache missing maintenance policy"
+section: stack
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1485"
+nist_csf:
+  - "PR.IP-1"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_memcache_instance
+    arg: maintenance_policy
+    description: |
+      `google_memcache_instance` has no `maintenance_policy`. Google
+      may apply maintenance at any time, including peak hours.
+recommendation: |
+  Pin a maintenance window:
+
+      resource "google_memcache_instance" "main" {
+        # ...
+        maintenance_policy {
+          weekly_maintenance_window {
+            day      = "SUNDAY"
+            duration = "10800s"
+            start_time {
+              hours = 3
+            }
+          }
+        }
+      }
+verification: |
+  `gcloud memcache instances describe <name> --region <r> \
+    --format='value(maintenancePolicy)'` must be non-empty.
+fix_hcl: |
+  resource "google_memcache_instance" "example" {
+    name           = "example"
+    region         = "us-central1"
+    node_count     = 1
+    node_config {
+      cpu_count      = 1
+      memory_size_mb = 1024
+    }
+    maintenance_policy {
+      weekly_maintenance_window {
+        day      = "SUNDAY"
+        duration = "10800s"
+        start_time {
+          hours = 3
+        }
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_memcache_no_maintenance

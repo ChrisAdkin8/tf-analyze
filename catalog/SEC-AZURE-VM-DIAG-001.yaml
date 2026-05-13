@@ -1,0 +1,61 @@
+id: SEC-AZURE-VM-DIAG-001
+title: "Azure virtual machine missing boot diagnostics"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-IAA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_linux_virtual_machine
+    arg: boot_diagnostics
+    description: |
+      `azurerm_linux_virtual_machine` has no `boot_diagnostics` block.
+      Without serial console output captured to a storage account, a
+      boot failure or kernel panic cannot be diagnosed remotely — the
+      VM has to be torn down and recreated.
+  - kind: resource_missing_arg
+    resource: azurerm_windows_virtual_machine
+    arg: boot_diagnostics
+    description: Windows VM missing boot_diagnostics
+recommendation: |
+  Enable boot diagnostics on every VM:
+
+      resource "azurerm_linux_virtual_machine" "main" {
+        # ...
+        boot_diagnostics {}   # managed storage (no storage_account_uri = use platform-managed)
+      }
+verification: |
+  `az vm boot-diagnostics get-boot-log -g <rg> -n <name>` must return
+  serial output (not "boot diagnostics is not enabled").
+fix_hcl: |
+  resource "azurerm_linux_virtual_machine" "example" {
+    name                = "example"
+    resource_group_name = azurerm_resource_group.example.name
+    location            = azurerm_resource_group.example.location
+    size                = "Standard_D2s_v3"
+    admin_username      = "azureuser"
+    network_interface_ids = [azurerm_network_interface.example.id]
+    boot_diagnostics {}
+    os_disk { caching = "ReadWrite" storage_account_type = "Standard_LRS" }
+    source_image_reference {
+      publisher = "Canonical"
+      offer     = "0001-com-ubuntu-server-jammy"
+      sku       = "22_04-lts-gen2"
+      version   = "latest"
+    }
+  }
+fix_disruption: none
+fixtures:
+  - azure_vm_no_diag

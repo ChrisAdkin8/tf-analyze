@@ -1,0 +1,55 @@
+id: STK-GCP-MIG-002
+title: "GCP managed instance group missing autoscaler"
+section: stack
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1496"
+nist_csf:
+  - "PR.PT-1"
+patterns:
+  - kind: resource_absent
+    resource: google_compute_autoscaler
+    when_present: google_compute_instance_group_manager
+    description: |
+      `google_compute_instance_group_manager` exists but no
+      `google_compute_autoscaler` is bound to it. Capacity is fixed —
+      idle hours waste compute, busy hours fail under load.
+recommendation: |
+  Bind an autoscaler with sensible CPU / load-balancing utilization
+  targets:
+
+      resource "google_compute_autoscaler" "main" {
+        name   = "main-asg"
+        zone   = "us-central1-a"
+        target = google_compute_instance_group_manager.main.id
+        autoscaling_policy {
+          min_replicas    = 2
+          max_replicas    = 20
+          cooldown_period = 60
+          cpu_utilization {
+            target = 0.6
+          }
+        }
+      }
+verification: |
+  `gcloud compute instance-groups managed describe <name> --zone <z> \
+    --format='value(status.autoscaler)'` must return a non-empty value.
+fix_hcl: |
+  resource "google_compute_autoscaler" "example" {
+    name   = "example"
+    zone   = "us-central1-a"
+    target = google_compute_instance_group_manager.example.id
+    autoscaling_policy {
+      min_replicas    = 2
+      max_replicas    = 20
+      cooldown_period = 60
+      cpu_utilization {
+        target = 0.6
+      }
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_mig_no_autoscaler

@@ -1,0 +1,77 @@
+id: SEC-AZURE-FRONTDOOR-001
+title: "Azure Front Door profile missing WAF policy attachment"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-6.6"
+soc2_cc:
+  - "CC6.6"
+mitre:
+  - "T1190"
+cwe:
+  - "CWE-693"
+d3fend:
+  - "D3-WAF"
+nist_csf:
+  - "PR.PT-4"
+nist_800_53:
+  - "SC-7"
+csa_ccm:
+  - "AIS-04"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_cdn_frontdoor_firewall_policy
+    when_present: azurerm_cdn_frontdoor_profile
+    description: |
+      `azurerm_cdn_frontdoor_profile` exists but no
+      `azurerm_cdn_frontdoor_firewall_policy` is declared. Every HTTP
+      request flows directly to the origin without WAF inspection —
+      OWASP-Top-10 attacks (SQLi, XSS, path traversal) reach the
+      origin unfiltered.
+recommendation: |
+  Provision a Front Door WAF policy in Prevention mode and attach it
+  to the security_policy block:
+
+      resource "azurerm_cdn_frontdoor_firewall_policy" "waf" {
+        name                = "fd-waf"
+        resource_group_name = azurerm_resource_group.main.name
+        sku_name            = "Premium_AzureFrontDoor"
+        enabled             = true
+        mode                = "Prevention"
+        managed_rule { type = "Microsoft_DefaultRuleSet" version = "2.1" action = "Block" }
+      }
+
+      resource "azurerm_cdn_frontdoor_security_policy" "main" {
+        name                     = "fd-security"
+        cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.main.id
+        security_policies {
+          firewall {
+            cdn_frontdoor_firewall_policy_id = azurerm_cdn_frontdoor_firewall_policy.waf.id
+            association {
+              domain { cdn_frontdoor_domain_id = azurerm_cdn_frontdoor_custom_domain.main.id }
+              patterns_to_match = ["/*"]
+            }
+          }
+        }
+      }
+verification: |
+  `az afd security-policy list --profile-name <name> -g <rg>` must
+  return at least one security policy with a non-null `wafPolicy`.
+fix_hcl: |
+  resource "azurerm_cdn_frontdoor_firewall_policy" "example" {
+    name                = "example-waf"
+    resource_group_name = azurerm_resource_group.example.name
+    sku_name            = "Premium_AzureFrontDoor"
+    enabled             = true
+    mode                = "Prevention"
+    managed_rule {
+      type    = "Microsoft_DefaultRuleSet"
+      version = "2.1"
+      action  = "Block"
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_frontdoor_no_waf

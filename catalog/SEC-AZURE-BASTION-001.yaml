@@ -1,0 +1,55 @@
+id: SEC-AZURE-BASTION-001
+title: "Azure Bastion host using Basic SKU (no shareable links, no RBAC)"
+section: security
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+soc2_cc:
+  - "CC6.3"
+mitre:
+  - "T1133"
+cwe:
+  - "CWE-272"
+nist_csf:
+  - "PR.AC-3"
+nist_800_53:
+  - "AC-17"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_bastion_host
+    arg: sku
+    regex: '^Basic$'
+    description: |
+      `azurerm_bastion_host.sku = "Basic"` lacks Standard-tier features:
+      shareable links, native client tunneling, custom port, host scaling,
+      and Microsoft-Entra-ID-based access controls (Standard only).
+recommendation: |
+  Upgrade to Standard SKU and enable scale units + the relevant
+  Standard-tier features:
+
+      resource "azurerm_bastion_host" "main" {
+        # ...
+        sku                = "Standard"
+        scale_units        = 2
+        tunneling_enabled  = true
+        ip_connect_enabled = true
+      }
+verification: |
+  `az network bastion show -g <rg> -n <name> --query 'sku.name'` must
+  return `Standard`.
+fix_hcl: |
+  resource "azurerm_bastion_host" "example" {
+    name                = "example"
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    sku                 = "Standard"
+    scale_units         = 2
+    ip_configuration {
+      name                 = "config"
+      subnet_id            = azurerm_subnet.bastion.id
+      public_ip_address_id = azurerm_public_ip.bastion.id
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_bastion_basic_sku

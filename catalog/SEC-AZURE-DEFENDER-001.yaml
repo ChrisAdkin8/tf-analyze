@@ -1,0 +1,71 @@
+id: SEC-AZURE-DEFENDER-001
+title: "Microsoft Defender for Cloud not enabled on subscription"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "2.1"
+pci_dss:
+  - "Req-10.6"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1078"
+cwe:
+  - "CWE-693"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "DE.CM-1"
+  - "DE.CM-7"
+nist_800_53:
+  - "SI-4"
+  - "RA-5"
+csa_ccm:
+  - "TVM-04"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_security_center_subscription_pricing
+    arg: tier
+    regex: '^Free$'
+    description: |
+      `azurerm_security_center_subscription_pricing` has `tier = "Free"`,
+      which disables Microsoft Defender for Cloud's advanced threat
+      protection (vuln scanning, anomaly detection, threat intel).
+  - kind: resource_absent
+    resource: azurerm_security_center_subscription_pricing
+    when_present: azurerm_resource_group
+    description: |
+      No `azurerm_security_center_subscription_pricing` declared. Defender
+      for Cloud's enhanced security features (Standard tier) provide
+      runtime threat detection across VMs, App Service, SQL, Storage,
+      Containers, Key Vault, Resource Manager, DNS, and ARM. Without an
+      explicit Standard-tier subscription, the subscription falls back to
+      the Free tier (CSPM only, no threat detection).
+recommendation: |
+  Enable Defender for Cloud Standard tier on the resource_types that are
+  in use (VMs, AppServices, SqlServers, StorageAccounts, KeyVaults,
+  Arm, Dns, Containers, etc.):
+
+      resource "azurerm_security_center_subscription_pricing" "vm" {
+        tier          = "Standard"
+        resource_type = "VirtualMachines"
+      }
+verification: |
+  `az security pricing list --query "value[].{name:name,tier:pricingTier}"`
+  must show `Standard` for each in-use resource_type.
+fix_hcl: |
+  resource "azurerm_security_center_subscription_pricing" "vm" {
+    tier          = "Standard"
+    resource_type = "VirtualMachines"
+  }
+
+  resource "azurerm_security_center_subscription_pricing" "storage" {
+    tier          = "Standard"
+    resource_type = "StorageAccounts"
+  }
+fix_disruption: none
+fix_disruption_note: "Defender activation has no plane-of-control impact; it adds per-resource cost (see Azure pricing)."
+fixtures:
+  - azure_defender_free_tier

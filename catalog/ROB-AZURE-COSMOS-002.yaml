@@ -1,0 +1,59 @@
+id: ROB-AZURE-COSMOS-002
+title: "Azure Cosmos DB automatic failover disabled"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1485"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CP-10"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_cosmosdb_account
+    arg: automatic_failover_enabled
+    regex: '^false$'
+    description: |
+      `azurerm_cosmosdb_account.automatic_failover_enabled = false`.
+      A regional outage requires manual operator intervention to
+      failover — RTO is bounded by oncall response time, not Cosmos
+      capability.
+  - kind: resource_missing_arg
+    resource: azurerm_cosmosdb_account
+    arg: automatic_failover_enabled
+    description: |
+      Multi-region Cosmos account without `automatic_failover_enabled`
+      (defaults to false in some provider versions).
+recommendation: |
+  Enable automatic failover on multi-region Cosmos accounts:
+
+      resource "azurerm_cosmosdb_account" "main" {
+        # ...
+        automatic_failover_enabled = true
+      }
+verification: |
+  `az cosmosdb show -g <rg> -n <name> --query 'enableAutomaticFailover'`
+  must return `true`.
+fix_hcl: |
+  resource "azurerm_cosmosdb_account" "example" {
+    name                       = "example"
+    location                   = azurerm_resource_group.example.location
+    resource_group_name        = azurerm_resource_group.example.name
+    offer_type                 = "Standard"
+    kind                       = "GlobalDocumentDB"
+    automatic_failover_enabled = true
+    consistency_policy { consistency_level = "Session" }
+    geo_location {
+      location          = azurerm_resource_group.example.location
+      failover_priority = 0
+    }
+    geo_location {
+      location          = "westus2"
+      failover_priority = 1
+    }
+  }
+fix_disruption: none
+fixtures:
+  - azure_cosmos_no_failover

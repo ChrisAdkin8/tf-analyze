@@ -1,0 +1,78 @@
+id: SEC-AZURE-KV-CERT-001
+title: "Azure Key Vault certificate missing auto-renewal policy"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1552.004"
+cwe:
+  - "CWE-321"
+d3fend:
+  - "D3-CR"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-12"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_key_vault_certificate
+    arg: certificate_policy
+    description: |
+      `azurerm_key_vault_certificate` has no `certificate_policy` block.
+      The certificate cannot be auto-renewed by Key Vault — an operator
+      must manually upload a new version before expiry, risking outage.
+recommendation: |
+  Embed a renewal policy that issues a new version some days before
+  expiry:
+
+      resource "azurerm_key_vault_certificate" "main" {
+        # ...
+        certificate_policy {
+          issuer_parameters { name = "Self" }
+          key_properties {
+            exportable = false
+            key_type   = "RSA"
+            key_size   = 2048
+            reuse_key  = false
+          }
+          lifetime_action {
+            action { action_type = "AutoRenew" }
+            trigger { days_before_expiry = 30 }
+          }
+          secret_properties { content_type = "application/x-pkcs12" }
+        }
+      }
+verification: |
+  `az keyvault certificate get-default-policy --vault-name <v> --name <c> \
+    --query 'lifetimeActions[].action.actionType'` must include `AutoRenew`.
+fix_hcl: |
+  resource "azurerm_key_vault_certificate" "example" {
+    name         = "example"
+    key_vault_id = azurerm_key_vault.example.id
+    certificate_policy {
+      issuer_parameters { name = "Self" }
+      key_properties {
+        exportable = false
+        key_type   = "RSA"
+        key_size   = 2048
+        reuse_key  = false
+      }
+      lifetime_action {
+        action {
+          action_type = "AutoRenew"
+        }
+        trigger {
+          days_before_expiry = 30
+        }
+      }
+      secret_properties { content_type = "application/x-pkcs12" }
+    }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_kv_cert_no_policy

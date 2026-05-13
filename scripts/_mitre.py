@@ -82,6 +82,14 @@ MITRE_TECHNIQUE_INFO: dict[str, tuple[str, list[str]]] = {
     "T1565":      ("Data Manipulation",                                             ["Impact"]),
     "T1565.001":  ("Data Manipulation: Stored Data Manipulation",                   ["Impact"]),
     "T1574.002":  ("Hijack Execution Flow: DLL Side-Loading",                       ["Persistence", "Privilege Escalation", "Defense Evasion"]),
+    # ---- R31.X additions (2026-05-13) — cross-cloud parity rules ----
+    "T1071":      ("Application Layer Protocol",                                    ["Command and Control"]),
+    "T1213":      ("Data from Information Repositories",                            ["Collection"]),
+    "T1498":      ("Network Denial of Service",                                     ["Impact"]),
+    "T1542":      ("Pre-OS Boot",                                                   ["Defense Evasion", "Persistence"]),
+    "T1552.007":  ("Unsecured Credentials: Container API",                          ["Credential Access"]),
+    "T1557":      ("Adversary-in-the-Middle",                                       ["Credential Access", "Collection"]),
+    "T1567":      ("Exfiltration Over Web Service",                                 ["Exfiltration"]),
 }
 
 

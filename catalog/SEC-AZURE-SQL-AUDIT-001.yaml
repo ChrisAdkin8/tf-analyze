@@ -1,0 +1,55 @@
+id: SEC-AZURE-SQL-AUDIT-001
+title: "Azure SQL Server missing extended auditing policy"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "4.1.1"
+pci_dss:
+  - "Req-10.2"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-IAA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+csa_ccm:
+  - "LOG-08"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_mssql_server_extended_auditing_policy
+    when_present: azurerm_mssql_server
+    description: |
+      `azurerm_mssql_server` exists but no
+      `azurerm_mssql_server_extended_auditing_policy` resource is bound.
+      Login attempts, query execution, and DDL changes are not logged
+      to a storage account, Event Hub, or Log Analytics workspace.
+recommendation: |
+  Bind an extended auditing policy:
+
+      resource "azurerm_mssql_server_extended_auditing_policy" "main" {
+        server_id              = azurerm_mssql_server.main.id
+        log_monitoring_enabled = true
+        storage_endpoint       = azurerm_storage_account.audit.primary_blob_endpoint
+        storage_account_access_key_is_secondary = false
+        retention_in_days      = 90
+      }
+verification: |
+  `az sql server audit-policy show -g <rg> --server <name> --query 'state'`
+  must return `Enabled`.
+fix_hcl: |
+  resource "azurerm_mssql_server_extended_auditing_policy" "example" {
+    server_id              = azurerm_mssql_server.example.id
+    log_monitoring_enabled = true
+    retention_in_days      = 90
+  }
+fix_disruption: none
+fixtures:
+  - azure_sql_no_audit

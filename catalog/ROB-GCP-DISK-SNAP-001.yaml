@@ -1,0 +1,60 @@
+id: ROB-GCP-DISK-SNAP-001
+title: "GCP Compute disk missing snapshot schedule"
+section: robustness
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.1"
+soc2_cc:
+  - "A1.2"
+mitre:
+  - "T1485"
+  - "T1490"
+cwe:
+  - "CWE-779"
+nist_csf:
+  - "PR.IP-4"
+nist_800_53:
+  - "CP-9"
+csa_ccm:
+  - "BCR-08"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_compute_disk
+    arg: resource_policies
+    description: |
+      `google_compute_disk` has no `resource_policies` attached. Without
+      a `google_compute_resource_policy` snapshot schedule bound, the
+      disk has no automated backups — recovery from accidental deletion
+      or ransomware requires a manual snapshot at the right time.
+recommendation: |
+  Create a snapshot schedule and attach it:
+
+      resource "google_compute_resource_policy" "daily" {
+        name   = "daily-snapshots"
+        region = "us-central1"
+        snapshot_schedule_policy {
+          schedule { daily_schedule { days_in_cycle = 1 start_time = "04:00" } }
+          retention_policy { max_retention_days = 14 on_source_disk_delete = "KEEP_AUTO_SNAPSHOTS" }
+        }
+      }
+
+      resource "google_compute_disk" "main" {
+        # ...
+        resource_policies = [google_compute_resource_policy.daily.id]
+      }
+verification: |
+  `gcloud compute disks describe <name> --zone <z> --format='value(resourcePolicies)'`
+  must return at least one policy URL.
+fix_hcl: |
+  resource "google_compute_disk" "example" {
+    name              = "data"
+    type              = "pd-ssd"
+    size              = 100
+    zone              = "us-central1-a"
+    resource_policies = [google_compute_resource_policy.daily.id]
+  }
+fix_disruption: none
+fixtures:
+  - gcp_disk_no_snapshot

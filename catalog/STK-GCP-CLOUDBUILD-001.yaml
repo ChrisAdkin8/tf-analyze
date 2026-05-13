@@ -1,0 +1,61 @@
+id: STK-GCP-CLOUDBUILD-001
+title: "GCP Cloud Build trigger missing manual approval"
+section: stack
+default_urgency: MEDIUM
+blast_radius: environment
+status: active
+pci_dss:
+  - "Req-6.4"
+soc2_cc:
+  - "CC8.1"
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1357"
+nist_csf:
+  - "PR.IP-3"
+nist_800_53:
+  - "CM-3"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_cloudbuild_trigger
+    arg: approval_config
+    description: |
+      `google_cloudbuild_trigger` has no `approval_config`. Every push to
+      the source branch produces an image and may deploy automatically.
+      For production-bound triggers, a human approver should gate the
+      run. Equivalent to SLSA Build Track Level 3's "two-party review"
+      control.
+recommendation: |
+  Gate production trigger runs on manual approval:
+
+      resource "google_cloudbuild_trigger" "prod" {
+        # ...
+        approval_config {
+          approval_required = true
+        }
+      }
+verification: |
+  `gcloud builds triggers describe <name> --format='value(approvalConfig.approvalRequired)'`
+  must return `True` for production-bound triggers.
+fix_hcl: |
+  resource "google_cloudbuild_trigger" "example" {
+    name        = "prod-deploy"
+    filename    = "cloudbuild.yaml"
+    description = "Production deployment"
+    github {
+      owner = "example"
+      name  = "infra"
+      push {
+        branch = "^main$"
+      }
+    }
+    approval_config {
+      approval_required = true
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_cloudbuild_no_approval

@@ -1,0 +1,55 @@
+id: SEC-GCP-LOG-EXCLUSION-001
+title: "GCP logging sink with broad exclusion drops audit-relevant entries"
+section: security
+default_urgency: HIGH
+blast_radius: environment
+status: active
+cis:
+  - "2.8"
+pci_dss:
+  - "Req-10.5"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-IAA"
+nist_csf:
+  - "DE.CM-1"
+  - "PR.PT-1"
+nist_800_53:
+  - "AU-9"
+  - "AU-12"
+csa_ccm:
+  - "LOG-08"
+patterns:
+  - kind: resource_body_contains
+    resource: google_logging_project_exclusion
+    regex: 'logs/cloudaudit\.googleapis\.com'
+    description: |
+      `google_logging_project_exclusion.filter` drops Cloud Audit Logs
+      (admin activity, data access, system event). This blinds
+      incident response and breaks SOC2 / PCI-DSS audit attestation.
+  - kind: resource_body_contains
+    resource: google_logging_project_sink
+    regex: 'exclusions\s*\{[^}]*"cloudaudit\.googleapis\.com'
+    description: Project sink exclusion targets cloudaudit.googleapis.com
+recommendation: |
+  Cloud Audit Logs must always reach the long-term sink. Move broad
+  exclusions to specific noisy log names (e.g.
+  `logName=~"projects/.*/logs/compute\\.googleapis\\.com%2Fhealthcheck"`).
+verification: |
+  `gcloud logging exclusions list --format='value(name,filter)'` must
+  not include any filter referencing `cloudaudit.googleapis.com` log
+  names without an explicit allow-list scope.
+fix_hcl: |
+  resource "google_logging_project_exclusion" "example" {
+    name        = "noisy-healthcheck"
+    description = "Drop only healthcheck noise"
+    filter      = "logName=~\"projects/.*/logs/compute.googleapis.com%2Fhealthcheck\""
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_log_drops_audit

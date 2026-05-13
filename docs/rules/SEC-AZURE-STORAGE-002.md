@@ -116,6 +116,8 @@ The command should return `false`.
 See also rules in the `SEC-AZURE-STORAGE-*` family:
 
 - [`SEC-AZURE-STORAGE-001`](./SEC-AZURE-STORAGE-001.md) — Azure storage account allows non-HTTPS traffic
+- [`SEC-AZURE-STORAGE-003`](./SEC-AZURE-STORAGE-003.md) — Azure storage account not using customer-managed key encryption
+- [`SEC-AZURE-STORAGE-004`](./SEC-AZURE-STORAGE-004.md) — Azure storage account missing diagnostic logging
 
 ---
 

@@ -112,6 +112,12 @@ The value should be >= 14 for non-prod and >= 35 for production.
 **Source**
   - [`catalog/ROB-AZURE-SQL-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/ROB-AZURE-SQL-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `ROB-AZURE-SQL-*` family:
+
+- [`ROB-AZURE-SQL-002`](./ROB-AZURE-SQL-002.md) — Azure SQL database missing long-term retention policy
+
 ---
 
 ## Run this check

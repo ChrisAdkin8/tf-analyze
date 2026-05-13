@@ -1,0 +1,53 @@
+id: SEC-AZURE-SQL-TDE-002
+title: "Azure SQL transparent data encryption uses service-managed key (no CMK)"
+section: security
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-3.4"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-311"
+d3fend:
+  - "D3-EAR"
+nist_csf:
+  - "PR.DS-1"
+nist_800_53:
+  - "SC-12"
+  - "SC-13"
+csa_ccm:
+  - "CEK-03"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_mssql_server_transparent_data_encryption
+    arg: key_vault_key_id
+    description: |
+      `azurerm_mssql_server_transparent_data_encryption` has no
+      `key_vault_key_id`, so TDE defaults to the Microsoft-managed service
+      key. CMK (BYOK) is required for PCI-DSS, FedRAMP-High, and many
+      regulated workloads, since the service-managed key cannot be revoked
+      or rotated independently of Azure.
+recommendation: |
+  Bind TDE to a Key Vault key. The MSSQL server must have a managed
+  identity with `Key Vault Crypto Service Encryption User` on the vault:
+
+      resource "azurerm_mssql_server_transparent_data_encryption" "tde" {
+        server_id        = azurerm_mssql_server.main.id
+        key_vault_key_id = azurerm_key_vault_key.tde.id
+      }
+verification: |
+  `az sql server tde-key show --server <name> --resource-group <rg>` must
+  return a `kid` referencing a Key Vault key URI (not `ServiceManaged`).
+fix_hcl: |
+  resource "azurerm_mssql_server_transparent_data_encryption" "tde" {
+    server_id        = azurerm_mssql_server.example.id
+    key_vault_key_id = azurerm_key_vault_key.tde.id
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Switching TDE to CMK rotates the protector; database remains online during the swap."
+fixtures:
+  - azure_sql_tde_no_cmk

@@ -5,6 +5,45 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 32 — cross-cloud rule parity: AWS 91 / GCP 91 / Azure 91 — 2026-05-13
+
+Brings the catalogue from 238 → **343 active rules** with strict numerical parity across the three hyperscalers. Two sequential passes:
+
+1. **Functional parity (+24)** — fills the genuine risk-class gaps across all three clouds: KMS-rotation / CMK-on-stateful-resource, container-registry retention + scan-on-push, audit/observability shipping (Defender for Cloud, Security Command Center notification, App-Gateway/LB diagnostic settings), WAF rate-based rules + TLS-1.2 hardening, federated-identity wildcard subjects, EOL runtimes, Azure cost control, long-term DB retention.
+2. **Numerical parity (+79)** — closes the AWS↔GCP/Azure rule-count gap end-to-end:
+   - **+38 GCP**: Cloud Run depth (public IAM, default-SA, container concurrency), Secret Manager rotation + CMEK, GKE Binary Authorization / database_encryption / GKE_METADATA / release channel / intra-node visibility, Compute OS Login / project-SSH-keys / confidential VM, IAP, firewall logging, VPC peering filters, GCS public-IAM / retention / lifecycle, BigQuery CMEK + table expiration, Pub/Sub DLQ, Dataproc autoscaling, Composer private env, Dataflow private IP, Cloud Tasks retry, Cloud SQL PITR / IAM auth, Disk snapshot schedules, MIG auto-heal + autoscaler, Spanner CMEK, Memcache maintenance, DNS RSASHA1, Log-sink audit-drop, Cloud Build approval, Cloud NAT logging, Filestore backup.
+   - **+41 Azure**: AKS private / Defender / OMS / autoscale / EOL Kubernetes, Front Door WAF + TLS, CDN HTTP, Bastion Basic-SKU, VM boot diagnostics + EOL image, VMSS identity + auto-repair, Databricks no-public-IP + CMK, Synapse public + data-exfil-prot, Data Lake Gen 2 encryption scope, APIM diagnostics + rate-limit, Logic App + Data Factory, SQL audit + vuln + ATP + MySQL/PostgreSQL EOL, Cosmos backup-tier + auto-failover, Recovery Vault soft-delete, VNet DDoS + encryption, Private DNS zone link, ExpressRoute MACsec, Function App auth_settings_v2, Web App EOL runtime, Event Grid identity + DLQ, Cognitive Search identity, LB + NAT diagnostics, Key Vault certificate auto-renewal.
+
+### Per-cloud breakdown
+
+| Cloud | SEC | ROB | STK | OPS | COST | MOD-REUSE | **Total** |
+|---|---|---|---|---|---|---|---|
+| AWS | 62 | 13 | 12 | 2 | 1 | 1 | **91** |
+| GCP | 41 | 5 | 42 | 1 | 1 | 1 | **91** |
+| Azure | 56 | 7 | 25 | 1 | 1 | 1 | **91** |
+
+The per-section shapes differ because each cloud's product surface differs: AWS exposes more discrete `SEC-*` services (KMS, ECR, CloudTrail, GuardDuty, MSK, Neptune, DocDB, …), GCP rolls hardening into platform configuration (`STK-*` — GKE release channel, Workload Identity, BinAuthz, IAM-auth flags), Azure mixes both. README documents the shape rationale.
+
+### False-positive guards
+
+`scripts/gen_clean_fixtures.py --write` auto-scaffolded a `_clean` companion for every new rule whose `fix_hcl` is a stand-alone resource block. **172 → 251 clean fixtures** (+79). Two rules surfaced production bugs the clean-fixture run caught:
+
+- **STK-GCP-FUNCTIONS-002** — `resource_body_contains` doesn't honour `suppress_if_body_contains`; rewrote with `nested_path: service_config.service_account_email`.
+- **STK-AZURE-EVENT-GRID-002** — original `resource_missing_arg dead_letter_identity` missed the equally-valid `storage_blob_dead_letter_destination` variant; added `suppress_if_body_contains` to accept it.
+
+### Engine + docs
+
+- **`scripts/_mitre.py`** — adds 7 new ATT&CK techniques cited by the new catalogue rules: `T1071` (Application Layer Protocol), `T1213` (Data from Information Repositories), `T1498` (Network Denial of Service), `T1542` (Pre-OS Boot), `T1552.007` (Unsecured Credentials: Container API), `T1557` (Adversary-in-the-Middle), `T1567` (Exfiltration Over Web Service). Drift gate (`scripts/check_attack_drift.py`) now clean against v17.
+- **`docs/rules/*.md`** — 238 → 343 per-rule pages regenerated.
+- **README** — Rules badge 238 → 343, fix_hcl badge 89% → 93%, rule-docs badge 238 → 343 pages, plus a new "Per-cloud breakdown" table under `### Detection` with a note on why the per-section shapes differ at the same headline count.
+- **`docs/index.md`** + **`docs/github-action-bot.md`** + **`integrations/github-action-bot/README.md`** — counts refreshed (e.g. bot-fixable rules 150/238 → 220/343).
+
+### Test surface
+
+`tests/test_clean_fixtures.py` 172 → 251 cases (+79 auto-parametrized). `tests/test_fixtures.py` parametrized over 263 → 342 positive fixtures (+79). Full suite: **872 → 1101 passing**, 2 skipped, baseline behaviour preserved (`test_clean_repo_scores_100` continues to score 100 on an empty workspace after gating SEC-AZURE-DEFENDER-001 on `when_present: azurerm_resource_group`).
+
+---
+
 ## Round 31.8 — pr-summary compliance section + safety-net wrapper — 2026-05-13
 
 Closes upstream issues [#12](https://github.com/ChrisAdkin8/tf-analyze/issues/12) and [#13](https://github.com/ChrisAdkin8/tf-analyze/issues/13). Both surfaced while documenting `tf-analyze-action-demo` PR #1 — the engine emitted an empty `tf-analyze-pr-summary.md` under one input combination (mode static + attack-graph + compliance + many findings) and never embedded the compliance gap section in pr-summary even when `--compliance-framework` was set. The action's github-script fallback masked the first bug; the second one was an outright feature gap.

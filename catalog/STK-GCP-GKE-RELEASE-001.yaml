@@ -1,0 +1,53 @@
+id: STK-GCP-GKE-RELEASE-001
+title: "GKE cluster on STATIC release channel (no auto-upgrade)"
+section: stack
+default_urgency: MEDIUM
+blast_radius: module
+status: active
+mitre:
+  - "T1195.002"
+cwe:
+  - "CWE-1104"
+d3fend:
+  - "D3-SCA"
+nist_csf:
+  - "ID.SC-2"
+nist_800_53:
+  - "SR-4"
+slsa:
+  - "deps"
+patterns:
+  - kind: resource_body_contains
+    resource: google_container_cluster
+    regex: 'release_channel\s*\{[^}]*channel\s*=\s*"UNSPECIFIED"'
+    description: |
+      `google_container_cluster.release_channel.channel = "UNSPECIFIED"`
+      pins the cluster to the static (no-channel) release stream, which
+      disables auto-upgrade. The control plane drifts onto unsupported
+      versions and accumulates CVEs.
+recommendation: |
+  Enroll the cluster on a managed release channel (RAPID, REGULAR, or
+  STABLE) so the control plane and node pools receive automatic
+  upgrades within the channel's cadence:
+
+      resource "google_container_cluster" "main" {
+        # ...
+        release_channel {
+          channel = "REGULAR"
+        }
+      }
+verification: |
+  `gcloud container clusters describe <name> --format='value(releaseChannel.channel)'`
+  must return `RAPID`, `REGULAR`, or `STABLE` (not `UNSPECIFIED`).
+fix_hcl: |
+  resource "google_container_cluster" "example" {
+    name               = "example"
+    location           = "us-central1"
+    initial_node_count = 1
+    release_channel {
+      channel = "REGULAR"
+    }
+  }
+fix_disruption: none
+fixtures:
+  - gcp_gke_static_channel

@@ -1,0 +1,54 @@
+id: STK-AZURE-NAT-001
+title: "Azure NAT Gateway missing diagnostic settings"
+section: stack
+default_urgency: MEDIUM
+blast_radius: single-resource
+status: active
+pci_dss:
+  - "Req-10.2"
+soc2_cc:
+  - "CC7.2"
+mitre:
+  - "T1562.008"
+cwe:
+  - "CWE-778"
+d3fend:
+  - "D3-IAA"
+nist_csf:
+  - "DE.CM-1"
+nist_800_53:
+  - "AU-2"
+patterns:
+  - kind: resource_absent
+    resource: azurerm_monitor_diagnostic_setting
+    when_present: azurerm_nat_gateway
+    description: |
+      `azurerm_nat_gateway` is declared but no
+      `azurerm_monitor_diagnostic_setting` is bound. SNAT port usage,
+      drop rates, and idle-timeout failures are not logged.
+recommendation: |
+  Ship NAT Gateway metrics to Log Analytics for SNAT exhaustion
+  alerting:
+
+      resource "azurerm_monitor_diagnostic_setting" "nat" {
+        name                       = "nat-diag"
+        target_resource_id         = azurerm_nat_gateway.main.id
+        log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+        metric { category = "AllMetrics" enabled = true }
+      }
+verification: |
+  `az monitor diagnostic-settings list --resource <nat-gw-id>` must
+  return at least one configuration.
+fix_hcl: |
+  resource "azurerm_monitor_diagnostic_setting" "nat" {
+    name                       = "nat-diag"
+    target_resource_id         = azurerm_nat_gateway.example.id
+    log_analytics_workspace_id = azurerm_log_analytics_workspace.example.id
+    metric {
+      category = "AllMetrics"
+      enabled  = true
+    }
+  }
+fix_disruption: none
+fixtures:
+  - azure_nat_no_diag

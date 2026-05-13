@@ -1,0 +1,59 @@
+id: SEC-AZURE-SYNAPSE-002
+title: "Azure Synapse workspace missing data exfiltration protection"
+section: security
+default_urgency: HIGH
+blast_radius: module
+status: active
+pci_dss:
+  - "Req-1.3"
+soc2_cc:
+  - "CC6.1"
+mitre:
+  - "T1567"
+cwe:
+  - "CWE-200"
+d3fend:
+  - "D3-NTA"
+nist_csf:
+  - "PR.DS-5"
+nist_800_53:
+  - "SC-7"
+patterns:
+  - kind: resource_missing_arg
+    resource: azurerm_synapse_workspace
+    arg: data_exfiltration_protection_enabled
+    description: |
+      `azurerm_synapse_workspace.data_exfiltration_protection_enabled`
+      is not set to `true`. Notebook authors and pipeline operators
+      can `COPY INTO` external storage accounts — data egresses
+      Synapse without VNet controls.
+recommendation: |
+  Enable exfiltration protection (requires Managed VNet):
+
+      resource "azurerm_synapse_workspace" "main" {
+        # ...
+        managed_virtual_network_enabled      = true
+        data_exfiltration_protection_enabled = true
+      }
+
+  This blocks outbound traffic to non-approved storage accounts and
+  to any data source not behind an approved managed private endpoint.
+verification: |
+  `az synapse workspace show -g <rg> -n <name> --query 'workspaceProperties.dataExfiltrationProtection'`
+  must return enabled.
+fix_hcl: |
+  resource "azurerm_synapse_workspace" "example" {
+    name                                 = "example"
+    resource_group_name                  = azurerm_resource_group.example.name
+    location                             = azurerm_resource_group.example.location
+    storage_data_lake_gen2_filesystem_id = azurerm_storage_data_lake_gen2_filesystem.example.id
+    sql_administrator_login              = "synapseadmin"
+    sql_administrator_login_password     = "REDACTED"
+    public_network_access_enabled        = false
+    managed_virtual_network_enabled      = true
+    data_exfiltration_protection_enabled = true
+    identity { type = "SystemAssigned" }
+  }
+fix_disruption: forces_replacement
+fixtures:
+  - azure_synapse_no_exfil_prot

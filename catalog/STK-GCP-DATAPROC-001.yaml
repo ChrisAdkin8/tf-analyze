@@ -1,0 +1,51 @@
+id: STK-GCP-DATAPROC-001
+title: "GCP Dataproc cluster missing autoscaling policy"
+section: stack
+default_urgency: LOW
+blast_radius: single-resource
+status: active
+mitre:
+  - "T1496"
+nist_csf:
+  - "PR.PT-1"
+patterns:
+  - kind: resource_missing_arg
+    resource: google_dataproc_cluster
+    nested_path: cluster_config.autoscaling_config.policy_uri
+    description: |
+      `google_dataproc_cluster` has no `cluster_config.autoscaling_config`.
+      Worker count is fixed; idle clusters pay for unused capacity, busy
+      ones miss elastic burst.
+recommendation: |
+  Attach an autoscaling policy:
+
+      resource "google_dataproc_autoscaling_policy" "main" {
+        policy_id = "main"
+        worker_config { max_instances = 10 }
+        secondary_worker_config { max_instances = 50 }
+      }
+
+      resource "google_dataproc_cluster" "main" {
+        # ...
+        cluster_config {
+          autoscaling_config {
+            policy_uri = google_dataproc_autoscaling_policy.main.id
+          }
+        }
+      }
+verification: |
+  `gcloud dataproc clusters describe <name> --region <r> --format='value(config.autoscalingConfig.policyUri)'`
+  must be non-empty.
+fix_hcl: |
+  resource "google_dataproc_cluster" "example" {
+    name   = "example"
+    region = "us-central1"
+    cluster_config {
+      autoscaling_config {
+        policy_uri = google_dataproc_autoscaling_policy.example.id
+      }
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - gcp_dataproc_no_autoscale

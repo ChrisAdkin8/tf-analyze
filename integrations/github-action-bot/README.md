@@ -50,7 +50,7 @@ A rule is bot-eligible when:
 2. Its `fix_disruption` field is `none` (or `≤ max-disruption` input).
 3. The detection produced enough context (file + line) to anchor the patch.
 
-Today that's roughly **150 of 238 active rules**. Every fix the bot applies is also documented at the per-rule docs site (`chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>/`) so reviewers can read the rationale before approving.
+Today that's roughly **220 of 343 active rules**. Every fix the bot applies is also documented at the per-rule docs site (`chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>/`) so reviewers can read the rationale before approving.
 
 ## What the bot deliberately won't do
 

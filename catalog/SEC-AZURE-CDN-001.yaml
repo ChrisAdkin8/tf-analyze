@@ -1,0 +1,58 @@
+id: SEC-AZURE-CDN-001
+title: "Azure CDN endpoint allows plain HTTP"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+status: active
+cis:
+  - "5.1"
+pci_dss:
+  - "Req-4.1"
+soc2_cc:
+  - "CC6.7"
+mitre:
+  - "T1040"
+cwe:
+  - "CWE-319"
+d3fend:
+  - "D3-ET"
+nist_csf:
+  - "PR.DS-2"
+nist_800_53:
+  - "SC-8"
+patterns:
+  - kind: resource_arg
+    resource: azurerm_cdn_endpoint
+    arg: is_http_allowed
+    regex: '^true$'
+    description: |
+      `azurerm_cdn_endpoint.is_http_allowed = true` exposes the endpoint
+      over plain HTTP. Cookies, session tokens, and credentials cross
+      the wire in cleartext.
+recommendation: |
+  Disable HTTP and require HTTPS:
+
+      resource "azurerm_cdn_endpoint" "main" {
+        # ...
+        is_http_allowed  = false
+        is_https_allowed = true
+      }
+verification: |
+  `az cdn endpoint show -g <rg> --profile-name <p> -n <name> \
+    --query 'isHttpAllowed'` must return `false`.
+fix_hcl: |
+  resource "azurerm_cdn_endpoint" "example" {
+    name                = "example"
+    profile_name        = azurerm_cdn_profile.example.name
+    location            = azurerm_resource_group.example.location
+    resource_group_name = azurerm_resource_group.example.name
+    is_http_allowed     = false
+    is_https_allowed    = true
+    origin {
+      name      = "origin"
+      host_name = "origin.example.com"
+    }
+  }
+fix_disruption: plan_required
+fixtures:
+  - azure_cdn_http_allowed

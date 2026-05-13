@@ -126,6 +126,12 @@ must return a non-empty KMS CryptoKey resource name.
 **Source**
   - [`catalog/STK-GCP-ARTIFACT-001.yaml`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/catalog/STK-GCP-ARTIFACT-001.yaml) — canonical YAML
 
+## Family
+
+See also rules in the `STK-GCP-ARTIFACT-*` family:
+
+- [`STK-GCP-ARTIFACT-002`](./STK-GCP-ARTIFACT-002.md) — GCP Artifact Registry missing cleanup policy
+
 ---
 
 ## Run this check
