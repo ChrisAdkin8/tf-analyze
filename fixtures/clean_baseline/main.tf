@@ -52,6 +52,27 @@ resource "google_storage_bucket" "data" {
     enabled = true
   }
 
+  # Production data bucket — age out non-current versions (cost) and lock
+  # a 7-day retention floor against ransomware-style mass-delete attacks
+  # (STK-GCP-STORAGE-LIFECYCLE-001 + STK-GCP-STORAGE-RETENTION-001). The
+  # `prevent_destroy` lifecycle below covers Terraform-driven deletes;
+  # `retention_policy` covers tampering by anyone with bucket.objects.delete
+  # (via leaked SA key, compromised CI, etc.).
+  lifecycle_rule {
+    condition {
+      age                = 90
+      with_state         = "ARCHIVED"
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  retention_policy {
+    retention_period = 604800 # 7 days
+    is_locked        = false  # set to true once tested in non-prod
+  }
+
   labels = {
     environment = "production"
     managed_by  = "terraform"
