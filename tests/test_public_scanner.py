@@ -176,6 +176,224 @@ class TestCacheBehaviour:
         )
 
 
+class TestIgnorePathsAwareCap:
+    """The .tf-file cap must respect `.tf-analyze.yaml:ignore_paths`.
+
+    Otherwise scanning tf-analyze itself trips the cap (501 .tf files
+    including `fixtures/` and `examples/`), even though the engine
+    would skip ~300 of them at scan time. The cap should reflect what
+    is actually scanned, not the raw `rglob("*.tf")` count.
+    """
+
+    def test_helpers_handle_missing_or_empty_config(self, tmp_path: Path) -> None:
+        import app as demo_app  # type: ignore
+        # No file → empty list, no exceptions.
+        assert demo_app._load_ignore_paths(tmp_path) == []
+        # Empty file → empty list.
+        (tmp_path / ".tf-analyze.yaml").write_text("")
+        assert demo_app._load_ignore_paths(tmp_path) == []
+
+    def test_load_ignore_paths_parses_repo_shape(self, tmp_path: Path) -> None:
+        """The minimal YAML parser must handle the shape this repo's
+        `.tf-analyze.yaml` uses (comments, blank lines, quoted/
+        unquoted list entries, trailing slashes)."""
+        import app as demo_app  # type: ignore
+        (tmp_path / ".tf-analyze.yaml").write_text(
+            "# a comment\n"
+            "ignore_paths:\n"
+            "  - examples/   # inline comment\n"
+            "  - 'fixtures/'\n"
+            '  - "tasks/"\n'
+            "\n"
+            "# another comment\n"
+            "other_key: value\n"
+        )
+        assert demo_app._load_ignore_paths(tmp_path) == [
+            "examples", "fixtures", "tasks",
+        ]
+
+    def test_path_is_ignored_component_match(self) -> None:
+        import app as demo_app  # type: ignore
+        ignored = ["fixtures", "examples", "docs/rules"]
+        # Direct hit at first component.
+        assert demo_app._path_is_ignored(Path("fixtures/a.tf"), ignored)
+        assert demo_app._path_is_ignored(Path("fixtures/aws/foo/main.tf"), ignored)
+        # Multi-component pattern.
+        assert demo_app._path_is_ignored(Path("docs/rules/SEC-AWS-IAM-001.md"), ignored)
+        # Sibling that string-prefix-matches but is NOT a component match.
+        assert not demo_app._path_is_ignored(Path("not-fixtures/a.tf"), ignored)
+        assert not demo_app._path_is_ignored(Path("docs/index.md"), ignored)
+        # Empty / absent list never matches.
+        assert not demo_app._path_is_ignored(Path("anything.tf"), [])
+
+    def test_cap_check_skips_ignored_paths(
+        self, client, monkeypatch,
+    ) -> None:
+        """Cloned repo with 501 .tf files — 480 under fixtures/ — must
+        scan cleanly. Without the fix it would 413."""
+        import app as demo_app  # type: ignore
+
+        def _resolver(*a, **k):
+            return "c" * 40
+
+        def _stub_subprocess_run(args, **kwargs):
+            if args and args[0] == "git" and args[1] == "clone":
+                dest = Path(args[-1])
+                dest.mkdir(exist_ok=True)
+                # Production code: 21 files under modules/
+                modules = dest / "modules"
+                modules.mkdir()
+                for i in range(21):
+                    (modules / f"m{i}.tf").write_text(
+                        f'resource "null_resource" "x{i}" {{}}\n'
+                    )
+                # Fixture corpus: 480 files under fixtures/ — would
+                # normally trip the cap with room to spare.
+                fixtures = dest / "fixtures"
+                fixtures.mkdir()
+                for i in range(480):
+                    (fixtures / f"f{i}.tf").write_text(
+                        f'resource "null_resource" "f{i}" {{}}\n'
+                    )
+                # The repo's own ignore-list — same shape as tf-analyze's.
+                (dest / ".tf-analyze.yaml").write_text(
+                    "ignore_paths:\n  - fixtures/\n  - examples/\n"
+                )
+                return subprocess.CompletedProcess(args, 0, "", "")
+            # detect.py invocation: return a minimal valid scan result.
+            return subprocess.CompletedProcess(
+                args, 0, json.dumps({
+                    "summary": {
+                        "score": 100, "grade": "A",
+                        "counts": {k: 0 for k in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")},
+                        "suppressed_count": 0, "formula": "",
+                    },
+                    "findings": [],
+                }), "",
+            )
+
+        with patch("app._resolve_head_sha", _resolver), \
+             patch("app.subprocess.run", _stub_subprocess_run):
+            r = client.get("/scan/me/big-repo.json")
+
+        # Cap is 500; raw rglob count is 501; ignore-aware count is 21.
+        assert r.status_code == 200, (
+            f"expected 200 (ignore_paths skips fixtures/), got {r.status_code}: "
+            f"{r.text[:200]}"
+        )
+        # _meta should reflect the count AFTER ignore_paths is applied.
+        meta = r.json().get("_meta", {})
+        assert meta.get("tf_file_count") == 21, (
+            f"expected tf_file_count=21 (only modules/ counted), got {meta}"
+        )
+
+    def test_cap_still_fires_without_ignore_paths(
+        self, client, monkeypatch,
+    ) -> None:
+        """Repos with no `.tf-analyze.yaml` and >500 .tf files must
+        still trip the cap — the fix can't weaken the guard for
+        repos that have no opt-in config."""
+        import app as demo_app  # type: ignore
+
+        def _resolver(*a, **k):
+            return "d" * 40
+
+        def _stub_subprocess_run(args, **kwargs):
+            if args and args[0] == "git" and args[1] == "clone":
+                dest = Path(args[-1])
+                dest.mkdir(exist_ok=True)
+                for i in range(demo_app.MAX_TF_FILES + 1):
+                    (dest / f"r{i}.tf").write_text(
+                        f'resource "null_resource" "r{i}" {{}}\n'
+                    )
+                return subprocess.CompletedProcess(args, 0, "", "")
+            return subprocess.CompletedProcess(args, 0, "{}", "")
+
+        with patch("app._resolve_head_sha", _resolver), \
+             patch("app.subprocess.run", _stub_subprocess_run):
+            r = client.get("/scan/me/huge-repo.json")
+        assert r.status_code == 413
+
+
+class TestCatalogVersionedCache:
+    """The cache key includes a short hash of the catalogue.
+
+    Without this, a rule-pack ship leaves stale per-SHA entries that
+    return pre-deploy findings until manually purged. The hash flips
+    on every catalogue change, so the lookup misses and a fresh scan
+    runs against the new rules.
+    """
+
+    def test_catalog_hash_is_eight_hex_chars(self) -> None:
+        import app as demo_app  # type: ignore
+        h = demo_app.CATALOG_HASH
+        assert len(h) == 8, f"expected 8 hex chars, got {h!r}"
+        assert all(c in "0123456789abcdef" for c in h), (
+            f"expected hex-only, got {h!r}"
+        )
+
+    def test_catalog_hash_changes_when_catalogue_changes(
+        self, tmp_path: Path, monkeypatch,
+    ) -> None:
+        """Smoke: pointing CATALOG at two different directories must
+        produce two different hashes."""
+        import app as demo_app  # type: ignore
+        # Build two tiny catalogues that differ by exactly one byte.
+        cat_a = tmp_path / "cat_a"; cat_a.mkdir()
+        (cat_a / "rule.yaml").write_text("id: A\n")
+        cat_b = tmp_path / "cat_b"; cat_b.mkdir()
+        (cat_b / "rule.yaml").write_text("id: B\n")
+        monkeypatch.setattr(demo_app, "CATALOG", cat_a)
+        h_a = demo_app._catalog_hash()
+        monkeypatch.setattr(demo_app, "CATALOG", cat_b)
+        h_b = demo_app._catalog_hash()
+        assert h_a != h_b, "single-byte change to catalogue should flip the hash"
+
+    def test_cache_key_includes_catalog_hash(
+        self, client, tmp_path: Path,
+    ) -> None:
+        """After a cache-miss scan, the on-disk filename must carry
+        the `__<hash>.json` suffix so future deploys with a different
+        catalogue miss the cache."""
+        import app as demo_app  # type: ignore
+
+        def _resolver(*a, **k):
+            return "e" * 40
+
+        def _stub_subprocess_run(args, **kwargs):
+            if args and args[0] == "git" and args[1] == "clone":
+                dest = Path(args[-1])
+                dest.mkdir(exist_ok=True)
+                (dest / "main.tf").write_text(
+                    'resource "null_resource" "x" {}\n'
+                )
+                return subprocess.CompletedProcess(args, 0, "", "")
+            return subprocess.CompletedProcess(
+                args, 0, json.dumps({
+                    "summary": {"score": 100, "grade": "A",
+                                "counts": {k: 0 for k in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")},
+                                "suppressed_count": 0, "formula": ""},
+                    "findings": [],
+                }), "",
+            )
+
+        with patch("app._resolve_head_sha", _resolver), \
+             patch("app.subprocess.run", _stub_subprocess_run):
+            r = client.get("/scan/who/what.json")
+        assert r.status_code == 200
+
+        # The cache dir was redirected to tmp_path/cache by the client
+        # fixture. The new key shape: `<owner>_<repo>_<sha>__<hash>.json`.
+        cache_files = list(demo_app.CACHE_DIR.glob("*.json"))
+        assert cache_files, "expected at least one cache file"
+        names = [p.name for p in cache_files]
+        # Exactly one expected, named with the new shape.
+        assert any(f"__{demo_app.CATALOG_HASH}.json" in n for n in names), (
+            f"expected cache key to include __{demo_app.CATALOG_HASH}.json suffix; "
+            f"got {names}"
+        )
+
+
 class TestHealth:
     def test_healthz(self, client) -> None:
         r = client.get("/healthz")

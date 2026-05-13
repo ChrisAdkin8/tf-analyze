@@ -23,6 +23,7 @@ Hardening shared across all three:
 """
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -71,6 +72,100 @@ MAX_TF_FILES = 500
 MAX_CLONE_BYTES = 50 * 1024 * 1024  # 50 MB
 RATE_LIMIT_REQUESTS = 10
 RATE_LIMIT_WINDOW_SECONDS = 60
+
+
+def _catalog_hash() -> str:
+    """Compact hash (first 8 hex of SHA-256) of every YAML under CATALOG.
+
+    Used as a suffix on the per-SHA cache key so that a rule-pack ship
+    invalidates the cache automatically — old entries with the previous
+    hash stop being looked up after redeploy, no manual cache purge.
+
+    Computed once at import time. Cost is negligible (~1 ms for ~343
+    YAMLs). Returns the empty string if the catalogue can't be read at
+    all (so the key shape stays well-formed even in dev environments
+    without a populated CATALOG dir).
+    """
+    h = hashlib.sha256()
+    try:
+        for p in sorted(CATALOG.glob("*.yaml")):
+            try:
+                h.update(p.read_bytes())
+            except OSError:
+                # A YAML disappeared mid-iteration is fine — skip it; the
+                # remaining files still produce a deterministic hash for
+                # this process' view of the catalogue.
+                continue
+    except OSError:
+        return ""
+    return h.hexdigest()[:8]
+
+
+CATALOG_HASH = _catalog_hash()
+
+
+def _load_ignore_paths(target: Path) -> list[str]:
+    """Read `ignore_paths:` from `<target>/.tf-analyze.yaml`.
+
+    Returns a list of normalised path prefixes (no leading/trailing
+    slashes). Empty list on missing file or any parse error — the cap
+    check then falls back to counting every `.tf` file, matching pre-
+    R32-rebuild behaviour.
+
+    We inline a tiny YAML parser instead of importing the engine's
+    `_catalog._load_project_config` because (a) the demo app deliberately
+    shells out to `detect.py` rather than importing engine internals and
+    (b) the shape we need is a single string-list under one top-level
+    key — trivial to parse without a YAML library.
+    """
+    cfg_path = target / ".tf-analyze.yaml"
+    if not cfg_path.exists():
+        return []
+    try:
+        text = cfg_path.read_text()
+    except OSError:
+        return []
+    out: list[str] = []
+    in_ignore = False
+    for line in text.splitlines():
+        # Strip inline comments before further parsing.
+        if "#" in line:
+            line = line[: line.index("#")]
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped == "ignore_paths:":
+            in_ignore = True
+            continue
+        if in_ignore:
+            # A list item under ignore_paths.
+            if stripped.startswith("- "):
+                val = stripped[2:].strip().strip('"').strip("'").strip("/")
+                if val:
+                    out.append(val)
+                continue
+            # A new top-level key means we're done with ignore_paths.
+            if not line.startswith((" ", "\t")):
+                in_ignore = False
+    return out
+
+
+def _path_is_ignored(rel: Path, ignore_paths: list[str]) -> bool:
+    """Component-wise prefix match against `ignore_paths`.
+
+    Mirrors `scripts/detect.py:_path_is_ignored` so the engine's view
+    of which files are in scope agrees with the cap check here. Each
+    pattern matches if all its `/`-separated components match the
+    corresponding leading components of `rel`.
+    """
+    if not ignore_paths:
+        return False
+    parts = rel.parts
+    for pat in ignore_paths:
+        pat_parts = tuple(pat.split("/"))
+        if len(pat_parts) <= len(parts) and parts[: len(pat_parts)] == pat_parts:
+            return True
+    return False
 
 
 def _rate_check(ip: str) -> bool:
@@ -184,7 +279,12 @@ def _clone_and_scan(owner: str, repo: str, sha: str) -> dict:
     deleted as soon as the scan completes — no on-disk state beyond
     the JSON cache entry.
     """
-    cache_file = CACHE_DIR / f"{owner}_{repo}_{sha}.json"
+    # Cache key includes the catalogue hash so a rule-pack ship
+    # invalidates entries naturally — without the suffix, every release
+    # required a manual `rm -rf /var/cache/tf-analyze/*` on Fly because
+    # cached results would still be served against the new image.
+    cache_key = f"{owner}_{repo}_{sha}__{CATALOG_HASH}.json" if CATALOG_HASH else f"{owner}_{repo}_{sha}.json"
+    cache_file = CACHE_DIR / cache_key
     if cache_file.exists():
         try:
             return json.loads(cache_file.read_text())
@@ -200,6 +300,13 @@ def _clone_and_scan(owner: str, repo: str, sha: str) -> dict:
         )
         if clone.returncode != 0:
             raise HTTPException(status_code=404, detail="Could not clone repository")
+        # Respect the cloned repo's `.tf-analyze.yaml:ignore_paths`. The
+        # engine already skips these at scan time, so counting them
+        # toward the cap blocks repos (like tf-analyze itself) that have
+        # large `fixtures/` or `examples/` corpora but small production
+        # surface. The cap now reflects what's actually scanned.
+        clone_root = Path(d)
+        ignore_paths = _load_ignore_paths(clone_root)
         # Quick size guard. Refuse to scan anything ridiculous.
         # Round-5 audit fix #18 — accumulate the file size DURING the
         # rglob iteration so the race window between "discover" and
@@ -212,8 +319,14 @@ def _clone_and_scan(owner: str, repo: str, sha: str) -> dict:
         # we skip it — already correct, documented here for clarity.
         total = 0
         tf_count = 0
-        for p in Path(d).rglob("*.tf"):
+        for p in clone_root.rglob("*.tf"):
             if ".terraform" in p.parts:
+                continue
+            try:
+                rel = p.relative_to(clone_root)
+            except ValueError:
+                continue
+            if _path_is_ignored(rel, ignore_paths):
                 continue
             tf_count += 1
             if tf_count > MAX_TF_FILES:
