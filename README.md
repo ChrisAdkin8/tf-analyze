@@ -92,10 +92,10 @@ To see the deeper panels render against rich input, open one of the showcase cor
     post-pr-comment: true                # inline `suggestion` blocks on every PR
     compliance-framework: owasp_iac      # optional — adds a collapsible compliance gap report
     attack-graph: true                   # optional — embeds Mermaid attack graph in PR summary
-    ref: v0.2.1                          # optional — shorthand for image tag (default: :latest)
+    ref: v0.2.3                          # optional — shorthand for image tag (default: :latest)
 ```
 
-`ref:` is a convenience alias — `ref: v0.2.2` is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:v0.2.2`; set one or the other, not both. See [`action.yml`](action.yml) for the full input reference, and [`integrations/github-action.yml`](integrations/github-action.yml) for an alternative install-from-source workflow that adds SARIF upload + HTML artefact.
+`ref:` is a convenience alias — `ref: v0.2.3` is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:0.2.3` (the leading `v` is stripped before building the docker tag, since `docker/metadata-action` publishes semver tags without it). Both `v0.2.3` and `0.2.3` work; non-semver values like `main` or `latest` pass through untouched. Set `ref:` or `image:`, not both. See [`action.yml`](action.yml) for the full input reference, and [`integrations/github-action.yml`](integrations/github-action.yml) for an alternative install-from-source workflow that adds SARIF upload + HTML artefact.
 
 ---
 

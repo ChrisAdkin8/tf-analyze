@@ -44,7 +44,7 @@ inputs:
     description: 'Optional compliance framework for the gap report (cis, pci_dss, soc2, owasp_iac, all). Empty = disabled. When set, the engine runs the compliance gap report and the PR comment gains a collapsible compliance section.'
     default: ''
   ref:
-    description: 'Shorthand for pinning the engine image tag — equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:<ref>`. Mutually exclusive with an explicit `image:`.'
+    description: 'Shorthand for pinning the engine image tag. Accepts both `v0.2.3` (matches GitHub release URLs / CHANGELOG / marketplace listing) and `0.2.3` (matches the docker tag emitted by `docker/metadata-action`); the leading `v` is stripped when followed by a digit. Non-semver refs like `main` or `latest` pass through untouched. Mutually exclusive with an explicit `image:`.'
     default: ''
 
 outputs:
@@ -150,11 +150,19 @@ runs:
     - name: Resolve image
       id: resolve_image
       shell: bash
-      # `ref` is a convenience alias for the image tag — `ref: v0.2.2`
-      # is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:v0.2.2`.
+      # `ref` is a convenience alias for the image tag — `ref: v0.2.3`
+      # is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:0.2.3`.
       # We fail loudly when both are set explicitly because they're two
       # signals fighting over the same field; better to surface the
       # ambiguity than pick one silently.
+      #
+      # R31.6: strip a leading `v` when it's followed by a digit so that
+      # `ref: v0.2.3` (the form users see in release URLs, the CHANGELOG,
+      # the tag list, and the marketplace listing) works the same as
+      # `ref: 0.2.3` (the form `docker/metadata-action` emits by default
+      # for semver tags). Non-semver refs like `main` or `latest` pass
+      # through untouched. The `^v[0-9]` guard means a hypothetical
+      # `ref: vault` would not get truncated to `ault`.
       env:
         TFA_REF: ${{ inputs.ref }}
         TFA_IMAGE: ${{ inputs.image }}
@@ -165,7 +173,12 @@ runs:
           exit 1
         fi
         if [ -n "${TFA_REF}" ]; then
-          RESOLVED="ghcr.io/chrisadkin8/tf-analyze:${TFA_REF}"
+          if [[ "${TFA_REF}" =~ ^v[0-9] ]]; then
+            TAG="${TFA_REF#v}"
+          else
+            TAG="${TFA_REF}"
+          fi
+          RESOLVED="ghcr.io/chrisadkin8/tf-analyze:${TAG}"
         else
           RESOLVED="${TFA_IMAGE}"
         fi

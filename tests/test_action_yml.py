@@ -121,6 +121,44 @@ class TestRefInput:
 
 
 # ---------------------------------------------------------------------------
+# R31.6 — `ref` accepts both `v0.2.3` and `0.2.3` forms.
+# ---------------------------------------------------------------------------
+
+
+class TestRefVPrefixHandling:
+    """`docker/metadata-action` emits semver image tags WITHOUT a leading
+    `v` (`0.2.3`, `0.2`, `latest`). Git tags and every surface a user sees
+    (release page, CHANGELOG, marketplace listing) use the `vX.Y.Z` form.
+    The action must accept both so a user pasting `ref: v0.2.3` from a
+    release URL doesn't 404 when the action tries to pull
+    `:v0.2.3` instead of the real `:0.2.3` image."""
+
+    def test_strip_v_guard_pattern_present(self, action_text: str) -> None:
+        # The guard prevents non-semver refs like `main` or `vault` from
+        # being mangled. The pattern `^v[0-9]` is the stable anchor.
+        assert "^v[0-9]" in action_text, (
+            "Resolve image step must guard the strip-v rewrite behind "
+            "^v[0-9] so non-semver refs (main, vault) aren't truncated"
+        )
+
+    def test_strip_v_uses_parameter_expansion(self, action_text: str) -> None:
+        # `${TFA_REF#v}` is the idiom for "remove leading v" without
+        # spawning a subshell. If this regresses to `sed s/^v//` we
+        # lose injection hardening — TFA_REF would be expanded by the
+        # external command instead of staying inside bash.
+        assert "${TFA_REF#v}" in action_text
+
+    def test_description_advertises_both_forms(self, action: dict) -> None:
+        desc = action["inputs"]["ref"]["description"]
+        # Description must name both shapes so users don't need to read
+        # the action source.
+        assert "v0." in desc, "ref description must show the `v`-prefixed form"
+        assert "0.2.3" in desc or "0.2.2" in desc, (
+            "ref description must show the bare semver form"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Hardening — every user-supplied input must flow through `env:` (R5).
 # ---------------------------------------------------------------------------
 
