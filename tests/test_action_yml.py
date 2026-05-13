@@ -175,3 +175,95 @@ class TestInjectionHardening:
     def test_ref_flows_through_env(self, action_text: str) -> None:
         assert "TFA_REF:" in action_text
         assert "${{ inputs.ref }}" in action_text
+
+
+# ---------------------------------------------------------------------------
+# debug-upload-findings input + inline-suggestion logging — R31.9 hardening
+# motivated by https://github.com/ChrisAdkin8/tf-analyze/issues/19.
+# ---------------------------------------------------------------------------
+
+
+class TestDebugUploadFindingsInput:
+    """Issue #19 surfaced a v0.2.4 → v0.2.5 regression that couldn't be
+    diagnosed from the action's existing surfaces: the HTML artifact
+    doesn't carry per-finding `line` / `fix_hcl`, and the inline-
+    suggestion step had no log output. This input adds an opt-in
+    pathway to upload the raw `tf-analyze-findings.json` for debugging.
+    """
+
+    def test_input_present(self, action: dict) -> None:
+        assert "debug-upload-findings" in action["inputs"]
+
+    def test_default_is_false_string(self, action: dict) -> None:
+        # Must be 'false' (string), not False (bool) — GitHub Actions
+        # treats inputs as strings and the `== 'true'` guard expects
+        # string comparison.
+        d = action["inputs"]["debug-upload-findings"].get("default")
+        assert d == "false", (
+            f"default must be the string 'false' so opt-in semantics hold; "
+            f"got {d!r}"
+        )
+
+    def test_description_references_issue_19(self, action: dict) -> None:
+        # Cross-link to the issue so a future operator hitting a similar
+        # zero-comments regression can find the precedent without digging.
+        desc = action["inputs"]["debug-upload-findings"]["description"]
+        assert "issues/19" in desc, (
+            "description must link to issue #19 (the motivating regression) "
+            "so future operators find the precedent"
+        )
+
+    def test_upload_step_gated_on_input(self, action_text: str) -> None:
+        # The step must be conditioned on `inputs.debug-upload-findings == 'true'`
+        # so off-by-default semantics actually hold. A missing guard would
+        # ship findings.json on every PR run — fine for the demo, bad for
+        # private repos using the action.
+        assert "inputs.debug-upload-findings == 'true'" in action_text, (
+            "upload step must explicitly gate on the input being 'true'"
+        )
+
+    def test_upload_step_artifact_named(self, action_text: str) -> None:
+        # Distinct artifact name from `tf-analyze-report` (HTML) so the two
+        # don't collide and so users can download just the JSON if that's
+        # what they need.
+        assert "name: tf-analyze-findings-json" in action_text
+
+
+class TestInlineSuggestionLogging:
+    """Issue #19 — the inline-suggestion step posted 0 comments where the
+    previous engine version posted 4, and the only signal was the
+    summary footer's `_No inline suggestions available_` text. A single
+    `core.info()` line with per-skip-reason counters localises the bug
+    on next regression without rerunning."""
+
+    def test_skip_reasons_object_emitted(self, action_text: str) -> None:
+        # The skipReasons object must enumerate every gate the loop
+        # passes through, so a future zero-posted run tells us WHICH
+        # gate ate the findings. Bumping a counter without the
+        # core.info() at the end would still leave the data unobserved.
+        for reason in ("no_fix_hcl", "no_line", "not_in_pr_files",
+                       "not_in_diff_hunk", "post_failed"):
+            assert reason in action_text, (
+                f"skipReasons must track {reason!r} so issue #19-class "
+                f"regressions are diagnosable from the log alone"
+            )
+
+    def test_summary_line_uses_core_info(self, action_text: str) -> None:
+        # core.info() (not console.log) so the line appears in the
+        # GitHub Actions log group at INFO level — searchable + grouped
+        # consistently with other action steps. core.warning() would be
+        # alarming for a steady-state summary line.
+        assert "core.info(" in action_text and "inline-suggestion summary" in action_text, (
+            "the summary diagnostic must use core.info() and carry the "
+            "'inline-suggestion summary' marker so future operators can "
+            "grep for it"
+        )
+
+    def test_summary_line_grep_friendly(self, action_text: str) -> None:
+        # Format must be machine-readable enough for grep + awk on a
+        # workflow log dump. Smoke-check key=value pairs are present.
+        for key in ("findings=", "posted=", "with_fix_hcl_and_line=",
+                    "skipped["):
+            assert key in action_text, (
+                f"diagnostic line must include {key!r} for greppability"
+            )

@@ -34,6 +34,18 @@ inputs:
   upload-html-artifact:
     description: 'Upload the HTML report as a workflow artifact (retention 30 days).'
     default: 'true'
+  debug-upload-findings:
+    description: |
+      OPT-IN DEBUG: upload `tf-analyze-findings.json` as a workflow artifact
+      (retention 7 days). Off by default because the JSON can be large on
+      big repos and most users don't need it. Flip to `true` when
+      diagnosing a difference between what the engine reports and what the
+      action posts (e.g. zero inline `suggestion` comments when findings
+      do exist). Pair with the `core.info(...)` lines the action emits in
+      the "Post PR review comments + summary" step for a complete picture
+      of which findings reached the inline-suggestion loop. See
+      https://github.com/ChrisAdkin8/tf-analyze/issues/19.
+    default: 'false'
   image:
     description: 'Docker image to run. Override to pin a specific engine version (e.g. ghcr.io/chrisadkin8/tf-analyze:v0.1.0).'
     default: 'ghcr.io/chrisadkin8/tf-analyze:latest'
@@ -288,6 +300,22 @@ runs:
         path: ${{ github.workspace }}/tf-analyze-report.html
         retention-days: 30
 
+    # Off-by-default companion to the HTML artifact. Uploads the raw
+    # `tf-analyze-findings.json` the engine produced so an out-of-band
+    # debugger (or future-you) can see exactly what the inline-suggestion
+    # step *read*, not just what it *posted*. Filed against issue #19 where
+    # a v0.2.4 → v0.2.5 inline-comment-count regression couldn't be
+    # diagnosed without re-running the engine locally — the HTML artifact
+    # alone doesn't carry the finding objects' `line` / `file` / `fix_hcl`
+    # fields the action consumes.
+    - name: Upload findings.json artifact (debug)
+      if: always() && inputs.debug-upload-findings == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: tf-analyze-findings-json
+        path: ${{ github.workspace }}/tf-analyze-findings.json
+        retention-days: 7
+
     - name: Post PR review comments + summary
       if: >
         always() &&
@@ -330,10 +358,22 @@ runs:
           // Dedup by (file, line, rule_id) so multiple rules on the same line each
           // post a suggestion, but identical rule re-fires (e.g. from -recursive scans)
           // collapse. Higher-urgency wins ties.
+          //
+          // Debug counters — `core.info()` emits these to the workflow log
+          // at the end of this step. When a future regression like #19
+          // surfaces (inline-suggestion count silently drops to 0), the
+          // counter line tells the operator exactly which gate ate the
+          // findings: catalogue-side (no fix_hcl), shape-side (no line),
+          // not-in-PR-files, not-in-diff-hunk, or post-failure. Without
+          // these lines, the only signal is the summary footer's
+          // "_No inline suggestions available_" — which is too coarse to
+          // localise the bug.
+          const skipReasons = { no_fix_hcl: 0, no_line: 0, not_in_pr_files: 0, not_in_diff_hunk: 0, post_failed: 0 };
+
           const byLoc = new Map();
           for (const f of findings) {
-            if (!f.fix_hcl) continue;
-            if (f.line == null) continue;
+            if (!f.fix_hcl) { skipReasons.no_fix_hcl++; continue; }
+            if (f.line == null) { skipReasons.no_line++; continue; }
             const key = `${f.file}:${f.line}:${f.id}`;
             const existing = byLoc.get(key);
             if (!existing || rank(f.urgency) > rank(existing.urgency)) byLoc.set(key, f);
@@ -364,9 +404,9 @@ runs:
             // Strip the in-container mount prefix; the runner-side GITHUB_WORKSPACE
             // is a different path entirely, so don't use it here.
             const rel = f.file.replace(/^\/workspace\//, '');
-            if (!changedPaths.has(rel)) continue;
+            if (!changedPaths.has(rel)) { skipReasons.not_in_pr_files++; continue; }
             const inDiff = rightSideLines.get(rel);
-            if (!inDiff || !inDiff.has(f.line)) continue;
+            if (!inDiff || !inDiff.has(f.line)) { skipReasons.not_in_diff_hunk++; continue; }
             const emoji = URGENCY_EMOJI[f.urgency] ?? '•';
             const body = [
               `${emoji} **[${f.id}]** — ${f.title}`,
@@ -386,9 +426,29 @@ runs:
               });
               posted++;
             } catch (e) {
+              skipReasons.post_failed++;
               core.warning(`Could not post suggestion for ${f.id} at ${rel}:${f.line}: ${e.message}`);
             }
           }
+
+          // R31.9 — emit a single-line diagnostic so the log carries enough
+          // detail to diagnose a "0 inline comments posted on a PR with
+          // findings" regression without rerunning. Cheap (one log line),
+          // off-the-hot-path, and the format is grep-friendly. Issue #19
+          // documents the regression that motivated this hardening.
+          core.info(
+            `[tf-analyze inline-suggestion summary] ` +
+            `findings=${findings.length} ` +
+            `with_fix_hcl_and_line=${byLoc.size} ` +
+            `posted=${posted} ` +
+            `skipped[no_fix_hcl=${skipReasons.no_fix_hcl},` +
+            `no_line=${skipReasons.no_line},` +
+            `not_in_pr_files=${skipReasons.not_in_pr_files},` +
+            `not_in_diff_hunk=${skipReasons.not_in_diff_hunk},` +
+            `post_failed=${skipReasons.post_failed}] ` +
+            `changed_paths=${changedPaths.size} ` +
+            `right_side_lines_files=${rightSideLines.size}`
+          );
 
           // Summary comment, upserted.
           //
