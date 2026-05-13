@@ -5,6 +5,28 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 31.7 — Dockerfile copies every sibling module — 2026-05-13
+
+Fixes a critical regression that pre-dated R31.5 by two days: the R30.13–R30.15 refactor split `detect.py` into 24 `_*.py` sibling modules (`_versions.py`, `_attack_graph.py`, `_handlers_*.py`, …) but the Dockerfile kept the pre-refactor single-file `COPY scripts/detect.py .` line. Every docker build since 2026-05-11 failed at the in-build smoke test step with `ModuleNotFoundError: No module named '_versions'`. **20+ consecutive failures** because nothing gates the docker workflow's status.
+
+Net effect for users since 2026-05-11: `ghcr.io/chrisadkin8/tf-analyze:latest` has been frozen at a pre-R30.13 image. Anyone installing `@v1` got the stale engine. R31.5 wired new inputs into action.yml; R31.6 fixed `ref:` parsing; without this fix neither change reaches users because the image they pull doesn't know about the new flags.
+
+One-line fix: `COPY scripts/detect.py .` → `COPY scripts/*.py ./`. Globbing fixes this both retroactively and for any future siblings.
+
+### Drift gate
+
+New `tests/test_dockerfile.py` (3 assertions):
+
+- `COPY scripts/*.py` (or an enumeration listing every current sibling) must be present.
+- `COPY scripts/detect.py` must NOT be the sole COPY line in the body (catches a regression to the pre-R31.7 form).
+- The in-build smoke test (`RUN python3 detect.py --list-rules`) must remain — it's the only gate that catches missing-module bugs before publish.
+
+### Why nothing caught this earlier
+
+The docker workflow runs on tag pushes and main pushes but isn't required for merging. Per the R28 audit memory: *"repo has no required-checks; auto-merge fires before CI finishes."* The 20 consecutive failures were invisible because nobody had reason to look at the docker workflow's tab. Adding `docker.yml` to the branch-protection required-checks list (a repo-settings change, not a code change) would prevent this regression class — recommended follow-up.
+
+---
+
 ## Round 31.6 — `ref` accepts both `v0.2.3` and `0.2.3` forms — 2026-05-13
 
 Fix-forward to R31.5. The newly-wired `ref:` input forwarded its value verbatim to the image tag — `ref: v0.2.3` resolved to `ghcr.io/chrisadkin8/tf-analyze:v0.2.3`. But `docker/metadata-action` (configured in `.github/workflows/docker.yml`) strips the `v` from semver tags by default, so the published images are `:0.2.3`, `:0.2`, and `:latest` — *not* `:v0.2.3`. Users pasting `ref: v0.2.3` from a release URL hit `manifest unknown` at `docker pull` time.
