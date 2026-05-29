@@ -210,8 +210,9 @@ def _sarif_fingerprint(finding: dict) -> dict:
       name is preserved.
     """
     import hashlib
-    full_key = f"{finding['id']}|{finding.get('file','')}|{finding.get('resource','')}"
-    resource_key = f"{finding['id']}|{finding.get('resource','')}"
+    fid = finding.get("id", "UNKNOWN")
+    full_key = f"{fid}|{finding.get('file','')}|{finding.get('resource','')}"
+    resource_key = f"{fid}|{finding.get('resource','')}"
     return {
         "tfAnalyze/v1": hashlib.sha256(full_key.encode()).hexdigest()[:16],
         "tfAnalyze/v1-resource": hashlib.sha256(resource_key.encode()).hexdigest()[:16],
@@ -462,30 +463,38 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
 
     results = []
     for f in findings:
+        # Defensive `.get` throughout — a synthetic or externally-supplied
+        # finding missing `resource`/`file`/`line` must not KeyError and
+        # abort the ENTIRE SARIF emit (SARIF has no per-result safety net).
+        # `ruleIndex` is set ONLY when the rule is known: defaulting it to 0
+        # mis-attributed an unknown-rule finding to rules[0] in GitHub Code
+        # Scanning.
+        fid = f.get("id", "UNKNOWN")
         result = {
-            "ruleId": f["id"],
-            "ruleIndex": rule_index.get(f["id"], 0),
+            "ruleId": fid,
             "level": "warning",
             # SARIF message goes through `json.dumps` so quote escaping
             # is handled automatically — but a literal newline in the
             # resource name would break some lax consumers. Strip
             # control characters defensively.
-            "message": {"text": _sarif_safe_text(f"Finding {f['id']} on {f['resource'] or 'file'}")},
+            "message": {"text": _sarif_safe_text(f"Finding {fid} on {f.get('resource') or 'file'}")},
             "locations": [
                 {
                     "physicalLocation": {
                         # Audit fix #19 — URI normalization. Windows
                         # paths emit backslashes; SARIF expects URI
                         # form. Use forward slashes uniformly.
-                        "artifactLocation": {"uri": f["file"].replace("\\", "/")},
-                        "region": {"startLine": max(f["line"], 1)},
+                        "artifactLocation": {"uri": (f.get("file") or "").replace("\\", "/")},
+                        "region": {"startLine": max(f.get("line") or 1, 1)},
                     }
                 }
             ],
             "partialFingerprints": _sarif_fingerprint(f),
         }
-        if f["id"] in rule_index:
-            result["level"] = rules[rule_index[f["id"]]]["defaultConfiguration"]["level"]
+        if fid in rule_index:
+            idx = rule_index[fid]
+            result["ruleIndex"] = idx
+            result["level"] = rules[idx]["defaultConfiguration"]["level"]
         # KEV exploitability tag (R30.2). Surfaced at the per-result
         # level rather than per-rule so consumers can distinguish "this
         # specific finding hit a KEV-listed CWE" from "the rule could
@@ -1613,12 +1622,12 @@ def _render_compliance_html(by_fw: dict) -> str:
                     + " fired)</span>"
                 )
             rows.append(
-                f"<tr><td style='font-family:monospace'>{ctrl['control']}</td>"
+                f"<tr><td style='font-family:monospace'>{_h(str(ctrl['control']))}</td>"
                 f"<td>{sbadge}</td>"
                 f"<td>{rules_html}{fail_html}</td></tr>"
             )
         sections.append(
-            f"<h3>{fw}</h3>"
+            f"<h3>{_h(str(fw))}</h3>"
             f"<p style='color:#555;font-size:13px'>"
             f"{passed}/{total} controls PASS ({pct}%) — {failed} FAIL</p>"
             f"<div style='background:#eee;border-radius:4px;height:8px;margin-bottom:.8em'>"

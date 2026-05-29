@@ -24,15 +24,18 @@ Then send a fake payload (HMAC headers checked when key is set):
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import tempfile
 from hashlib import sha512
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 try:
     from fastapi import FastAPI, Request, HTTPException
@@ -53,6 +56,24 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DETECT_PY = REPO_ROOT / "scripts" / "detect.py"
 HMAC_KEY = os.environ.get("TFA_RUN_TASK_HMAC_KEY", "").encode()
 FAIL_ON = os.environ.get("TFA_RUN_TASK_FAIL_ON", "HIGH")
+
+# Opt-in escape hatch for local dev only — when set, an unset HMAC key
+# accepts all requests instead of failing closed. Never set in production.
+ALLOW_INSECURE = os.environ.get("TFA_RUN_TASK_ALLOW_INSECURE") == "1"
+
+# SSRF guard. `plan_json_api_url` / `task_result_callback_url` come from the
+# request body, and we fetch them while forwarding the caller's HCP bearer
+# token — so a forged request could otherwise reach cloud metadata
+# (169.254.169.254) or internal services and exfiltrate the token. Restrict
+# outbound requests to HCP Terraform plus any operator-declared Terraform
+# Enterprise host (comma-separated TFA_RUN_TASK_ALLOWED_HOSTS).
+_DEFAULT_ALLOWED_HOSTS = {"app.terraform.io"}
+ALLOWED_HOSTS = _DEFAULT_ALLOWED_HOSTS | {
+    h.strip().lower()
+    for h in os.environ.get("TFA_RUN_TASK_ALLOWED_HOSTS", "").split(",")
+    if h.strip()
+}
+MAX_PLAN_BYTES = int(os.environ.get("TFA_RUN_TASK_MAX_PLAN_BYTES", str(50 * 1024 * 1024)))
 
 # Optional compliance-framework gating. When set the engine renders a
 # compliance gap report against the named framework alongside its
@@ -76,15 +97,62 @@ URGENCY_RANK = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
 def _verify_hmac(body: bytes, header: str | None) -> bool:
     """HCP Terraform sends X-Tfc-Task-Signature: sha512=hex(hmac).
 
-    When TFA_RUN_TASK_HMAC_KEY is unset we accept all requests (dev-only).
+    Fails CLOSED: with TFA_RUN_TASK_HMAC_KEY unset we reject every request,
+    because an unauthenticated endpoint here is a remotely-driven SSRF +
+    bearer-token relay (see `_validate_outbound_url`). Set
+    TFA_RUN_TASK_ALLOW_INSECURE=1 to restore accept-all for LOCAL DEV only.
     """
     if not HMAC_KEY:
-        LOG.warning("HMAC verification disabled — set TFA_RUN_TASK_HMAC_KEY in prod")
-        return True
+        if ALLOW_INSECURE:
+            LOG.warning("HMAC disabled (TFA_RUN_TASK_ALLOW_INSECURE=1) — dev only")
+            return True
+        LOG.error(
+            "TFA_RUN_TASK_HMAC_KEY is unset; rejecting request. Set the key, "
+            "or TFA_RUN_TASK_ALLOW_INSECURE=1 for local dev."
+        )
+        return False
     if not header or not header.startswith("sha512="):
         return False
     expected = hmac.new(HMAC_KEY, body, sha512).hexdigest()
     return hmac.compare_digest(expected, header[7:])
+
+
+def _addr_is_public(ip: str) -> bool:
+    """True only for a globally-routable IP — rejects loopback, RFC-1918,
+    link-local (169.254.169.254), reserved, multicast and unspecified."""
+    try:
+        return ipaddress.ip_address(ip).is_global
+    except ValueError:
+        return False
+
+
+def _validate_outbound_url(url: str, what: str) -> None:
+    """Reject a request-supplied URL that isn't an allow-listed HCP/TFE HTTPS
+    endpoint resolving to a public address. Raises ``HTTPException(400)``.
+
+    The allow-list is the primary control (a forged payload cannot name an
+    arbitrary host); the public-IP check is defence-in-depth against an
+    allow-listed name that resolves into private space. A determined
+    DNS-rebind against an operator-controlled allow-listed host is out of
+    scope — pin the IP at the proxy if that matters.
+    """
+    parts = urlsplit(url)
+    if parts.scheme != "https":
+        raise HTTPException(status_code=400, detail=f"{what} must be https")
+    host = (parts.hostname or "").lower()
+    if host not in ALLOWED_HOSTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{what} host {host!r} not in allow-list {sorted(ALLOWED_HOSTS)}",
+        )
+    try:
+        infos = socket.getaddrinfo(host, parts.port or 443)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail=f"{what} host does not resolve")
+    if not all(_addr_is_public(info[4][0]) for info in infos):
+        raise HTTPException(
+            status_code=400, detail=f"{what} resolves to a non-public address",
+        )
 
 
 def _run_detect(plan_json_path: Path) -> tuple[dict, int]:
@@ -280,15 +348,35 @@ async def run_task(request: Request) -> JSONResponse:
     if not plan_url or not callback_url:
         raise HTTPException(status_code=400, detail="missing plan_json_api_url or callback_url")
 
+    # SSRF guard — validate BOTH URLs before any outbound request so the
+    # caller's bearer token is only ever sent to an allow-listed HCP/TFE host.
+    _validate_outbound_url(plan_url, "plan_json_api_url")
+    _validate_outbound_url(callback_url, "task_result_callback_url")
+
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
-    plan_resp = requests.get(plan_url, headers=headers, timeout=30)
+    # allow_redirects=False — a 30x from an allow-listed host could otherwise
+    # bounce us to an internal address with the token attached.
+    plan_resp = requests.get(
+        plan_url, headers=headers, timeout=30, allow_redirects=False, stream=True,
+    )
     if plan_resp.status_code != 200:
         LOG.error("plan download failed: %s", plan_resp.status_code)
         raise HTTPException(status_code=502, detail="cannot fetch plan-json")
 
+    # Cap the body — bound memory against an oversized response or a gzip
+    # bomb (requests auto-decompresses Content-Encoding: gzip).
+    plan_chunks: list[bytes] = []
+    total = 0
+    for chunk in plan_resp.iter_content(64 * 1024):
+        total += len(chunk)
+        if total > MAX_PLAN_BYTES:
+            plan_resp.close()
+            raise HTTPException(status_code=413, detail="plan-json exceeds size cap")
+        plan_chunks.append(chunk)
+
     with tempfile.TemporaryDirectory() as td:
         plan_path = Path(td) / "plan.json"
-        plan_path.write_bytes(plan_resp.content)
+        plan_path.write_bytes(b"".join(plan_chunks))
         data, _ = _run_detect(plan_path)
 
     findings = data.get("findings") or []
@@ -298,6 +386,7 @@ async def run_task(request: Request) -> JSONResponse:
         headers={**headers, "Content-Type": "application/vnd.api+json"},
         data=json.dumps(callback_body),
         timeout=10,
+        allow_redirects=False,
     )
     if cb.status_code >= 300:
         LOG.warning("callback returned %s: %s", cb.status_code, cb.text[:200])

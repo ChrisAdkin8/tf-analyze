@@ -184,3 +184,71 @@ def test_apply_fixes_does_not_corrupt(fixture_dir: str, tmp_path: Path) -> None:
             f"--apply-fixes corrupted braces in {fixture_dir}/{tf.name}: "
             f"\n{text[-300:]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Corruption-mode regression tests (P0 #2). These call handle_apply_fixes
+# directly with crafted findings/entries — `args` is unused by the function.
+# ---------------------------------------------------------------------------
+
+import _apply_fixes  # noqa: E402
+
+_ARG_ENTRY = {
+    "id": "T-ARG-001",
+    "fix_hcl_minimal": "  storage_encrypted = true\n",
+    "patterns": [{"resource": "aws_db_instance", "kind": "resource_arg", "arg": "storage_encrypted"}],
+}
+_MISS_ENTRY = {
+    "id": "T-MISS-001",
+    "fix_hcl_minimal": '  acl = "private"\n',
+    "patterns": [{"resource": "aws_s3_bucket", "kind": "resource_missing_arg", "arg": "acl"}],
+}
+
+
+def test_apply_fixes_idempotent_missing_arg(tmp_path: Path) -> None:
+    # Applying the same report twice must NOT insert a duplicate attribute
+    # (which would fail `terraform validate` with "Attribute redefined").
+    tf = tmp_path / "main.tf"
+    tf.write_text('resource "aws_s3_bucket" "b" {\n  bucket = "x"\n}\n')
+    findings = [{"id": "T-MISS-001", "file": str(tf), "line": 1, "resource": "aws_s3_bucket.b"}]
+    _apply_fixes.handle_apply_fixes(None, findings, [_MISS_ENTRY], dry_run=False)
+    _apply_fixes.handle_apply_fixes(None, findings, [_MISS_ENTRY], dry_run=False)
+    assert tf.read_text().count("acl") == 1
+
+
+def test_apply_fixes_depth_aware_does_not_clobber_nested(tmp_path: Path) -> None:
+    # A same-named attribute inside a nested block must not be rewritten;
+    # only the resource's own top-level attribute is the target.
+    tf = tmp_path / "main.tf"
+    tf.write_text(
+        'resource "aws_db_instance" "d" {\n'
+        '  restore_to_point_in_time {\n'
+        '    storage_encrypted = false\n'
+        '  }\n'
+        '  storage_encrypted = false\n'
+        '}\n'
+    )
+    findings = [{"id": "T-ARG-001", "file": str(tf), "line": 1, "resource": "aws_db_instance.d"}]
+    _apply_fixes.handle_apply_fixes(None, findings, [_ARG_ENTRY], dry_run=False)
+    lines = tf.read_text().splitlines()
+    assert "    storage_encrypted = false" in lines  # nested (4-sp) untouched
+    assert "  storage_encrypted = true" in lines      # top-level (2-sp) fixed
+
+
+def test_apply_fixes_skips_overshoot_into_wrong_resource(tmp_path: Path) -> None:
+    # finding.line points one line too high (a blank line) just before the
+    # NEXT resource; the patcher must not flip the wrong resource.
+    tf = tmp_path / "main.tf"
+    tf.write_text(
+        'resource "aws_db_instance" "a" {\n'
+        '  storage_encrypted = true\n'
+        '}\n'
+        '\n'
+        'resource "aws_db_instance" "b" {\n'
+        '  storage_encrypted = false\n'
+        '}\n'
+    )
+    # Finding names resource "a" but its line points at the blank line (4).
+    findings = [{"id": "T-ARG-001", "file": str(tf), "line": 4, "resource": "aws_db_instance.a"}]
+    _apply_fixes.handle_apply_fixes(None, findings, [_ARG_ENTRY], dry_run=False)
+    assert "  storage_encrypted = false" in tf.read_text().splitlines()  # "b" untouched

@@ -27,6 +27,7 @@ straightforward to unit-test in isolation (``tests/test_blast_radius.py``).
 """
 from __future__ import annotations
 
+import html
 from typing import Iterable
 
 
@@ -199,7 +200,7 @@ def render_blast_radius_html(top: Iterable[dict]) -> str:
         bg_b = int(199 - (199 - 38) * intensity)
         body_rows.append(
             f'<tr>'
-            f'<td><code>{r["resource"]}</code></td>'
+            f'<td><code>{html.escape(str(r["resource"]))}</code></td>'
             f'<td style="background:rgb({bg_r},{bg_g},{bg_b});color:#222;text-align:right;font-weight:600">{radius}</td>'
             f'<td>{flags}</td>'
             f'</tr>'

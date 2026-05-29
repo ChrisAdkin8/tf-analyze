@@ -1,6 +1,6 @@
 [project]
 name = "tf-analyze"
-version = "0.1.0"
+version = "0.2.6"
 description = "Terraform static analysis and security scanner"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,4 +19,43 @@ addopts = "-v --tb=short"
 
 [build-system]
 requires = ["setuptools>=69"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
+
+# The engine is a set of flat top-level modules in `scripts/` (they import
+# each other as `from _hcl import ...`, so they must install top-level, not
+# under a package). The rule catalogue ships as the `tf_analyze_catalog` data
+# package so the installed console script can locate the YAML rules; see
+# `detect._default_catalog_dir()`.
+[tool.setuptools]
+package-dir = { "" = "scripts", "tf_analyze_catalog" = "catalog" }
+packages = ["tf_analyze_catalog"]
+py-modules = [
+    "detect",
+    "_apply_fixes",
+    "_attack_graph",
+    "_baseline",
+    "_blast_radius",
+    "_cache",
+    "_catalog",
+    "_cross_resource",
+    "_diff",
+    "_handlers_generic",
+    "_handlers_infra",
+    "_handlers_modules",
+    "_handlers_robustness",
+    "_handlers_security",
+    "_hcl",
+    "_lsp",
+    "_mitre",
+    "_modes",
+    "_output",
+    "_plan_state",
+    "_registry",
+    "_scoring",
+    "_threat_intel",
+    "_verify",
+    "_versions",
+]
+
+[tool.setuptools.package-data]
+tf_analyze_catalog = ["*.yaml", "*.md"]

@@ -217,6 +217,21 @@ class TestOwaspIacCli:
                    "--no-hcl2")
         assert "OWASP IaC Cheat Sheet" in out
 
+    def test_compliance_html_escapes_control_and_framework(self) -> None:
+        # V2 — control labels (free-text in some frameworks) and framework
+        # names (user-supplied via --catalog) must be HTML-escaped, not
+        # injected raw into the report.
+        out = detect._render_compliance_html({
+            "<b>FW</b>": [
+                {"control": "<img src=x onerror=alert(1)>",
+                 "status": "FAIL", "rules": [], "failed_rules": []},
+            ],
+        })
+        assert "<img src=x onerror=alert(1)>" not in out
+        assert "&lt;img src=x onerror=alert(1)&gt;" in out
+        assert "<b>FW</b>" not in out
+        assert "&lt;b&gt;FW&lt;/b&gt;" in out
+
     def test_unknown_framework_is_rejected_by_argparse(
         self, tmp_path: Path,
     ) -> None:
