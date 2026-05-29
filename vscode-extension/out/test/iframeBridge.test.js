@@ -75,4 +75,32 @@ const iframeBridge_1 = require("../iframeBridge");
     assert.match(iframeBridge_1.LINK_BRIDGE_PARENT_JS, /'openLink'/);
     assert.match(iframeBridge_1.LINK_BRIDGE_PARENT_JS, /vscode\.postMessage/);
 });
+/**
+ * V3 — the report/compliance iframes get `sandbox="allow-scripts"` plus a
+ * CSP injected into the report document. These lock the CSP helper's
+ * contract: a policy that blocks network exfiltration lands in the report's
+ * <head> before any inline script, and stays idempotent across re-renders.
+ */
+(0, node_test_1.test)('injectReportCsp inserts a CSP meta after <head>', () => {
+    const input = '<!DOCTYPE html><html><head><style>x{}</style></head><body><script>1</script></body></html>';
+    const out = (0, iframeBridge_1.injectReportCsp)(input);
+    assert.match(out, /Content-Security-Policy/);
+    assert.match(out, /connect-src 'none'/); // blocks exfiltration
+    assert.match(out, /default-src 'none'/);
+    // Policy must precede the document's inline script so it governs it.
+    assert.ok(out.indexOf('Content-Security-Policy') < out.indexOf('<script>'), 'CSP meta must be parsed before any inline script');
+    assert.ok(out.indexOf('Content-Security-Policy') > out.indexOf('<head>'), 'CSP meta belongs inside <head>');
+});
+(0, node_test_1.test)('injectReportCsp is idempotent', () => {
+    const input = '<html><head></head><body></body></html>';
+    const once = (0, iframeBridge_1.injectReportCsp)(input);
+    assert.equal((0, iframeBridge_1.injectReportCsp)(once), once, 'a panel re-render must not stack a second CSP meta');
+});
+(0, node_test_1.test)('injectReportCsp falls back to prepend when <head> is missing', () => {
+    const out = (0, iframeBridge_1.injectReportCsp)('<div>no head</div>');
+    assert.ok(out.startsWith('<meta http-equiv="Content-Security-Policy"'), 'with no <head>, prepend the policy (the iframe sandbox still isolates it)');
+});
+(0, node_test_1.test)('injectReportCsp returns empty input unchanged', () => {
+    assert.equal((0, iframeBridge_1.injectReportCsp)(''), '');
+});
 //# sourceMappingURL=iframeBridge.test.js.map

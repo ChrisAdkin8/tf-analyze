@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
 .DS_Store
+# Python build artifacts (pip install / python -m build now work — see pyproject.toml)
+build/
+dist/
+*.egg-info/
 docs/sentinel/
 /tmp/
 *.sarif

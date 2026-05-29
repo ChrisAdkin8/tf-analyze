@@ -146,6 +146,52 @@ def block_indent(lines: list[str], start: int, end: int) -> str:
     return "  "  # fallback: 2 spaces
 
 
+def _block_has_top_level_arg(lines: list[str], start: int, end: int, arg: str) -> bool:
+    """True if ``arg`` is already set as a top-level (depth-1) attribute or
+    nested-block opener of the resource that opens at line ``start``.
+
+    Used by the ``resource_missing_arg`` path so re-running ``--apply-fixes``
+    (or applying a report whose fix didn't clear the finding) doesn't insert
+    a *second* ``arg = …`` line and produce HCL that fails ``terraform
+    validate`` with "Attribute redefined". Depth tracking matches
+    ``find_block_end_in_lines`` (brace count over lines) so a same-named
+    attribute inside a *nested* block isn't mistaken for a top-level one.
+    """
+    arg_re = re.compile(rf'^\s*{re.escape(arg)}\s*[={{]')
+    depth = 0
+    for i in range(start, end + 1):
+        line = lines[i]
+        if depth == 1 and arg_re.match(line):
+            return True
+        for ch in line:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+    return False
+
+
+def _line_opens_finding_resource(line: str, resource_addr: str) -> bool:
+    """Guard against patching the wrong block.
+
+    The forward scan for the opening ``{`` can overshoot into the *next*
+    resource when ``finding.line`` points at a blank line just before it.
+    Returns ``False`` only when ``line`` clearly opens a ``resource``/``data``
+    block whose type/name mismatch ``resource_addr`` — that's the
+    overshoot signature. Conservative: returns ``True`` when it can't tell
+    (no address, non-``resource``/``data`` header) so correct fixes are
+    never blocked; it only vetoes a clear mismatch.
+    """
+    parts = resource_addr.split(".")
+    if len(parts) < 2:
+        return True
+    rtype, rname = parts[-2], parts[-1]
+    m = re.match(r'\s*(?:resource|data)\s+"([^"]+)"\s+"([^"]+)"', line)
+    if not m:
+        return True
+    return m.group(1) == rtype and m.group(2) == rname
+
+
 def handle_apply_fixes(
     args: object,
     findings: list[dict],
@@ -226,9 +272,21 @@ def handle_apply_fixes(
             while start_idx < len(modified) - 1 and '{' not in modified[start_idx]:
                 start_idx += 1
 
+            # Don't patch a block the forward scan overshot into (e.g. the
+            # next resource, when finding.line pointed at a preceding blank
+            # line). Only vetoes a clear resource-address mismatch.
+            if not _line_opens_finding_resource(modified[start_idx], resource_addr):
+                continue
+
             if kind == "resource_missing_arg" and arg:
                 block_end = find_block_end_in_lines(modified, start_idx)
                 if block_end is None:
+                    continue
+                # Idempotency — skip if the argument is already present at
+                # the block's top level. Without this, re-running
+                # --apply-fixes (or a fix that doesn't clear the finding)
+                # inserts a duplicate attribute and breaks `terraform validate`.
+                if _block_has_top_level_arg(modified, start_idx, block_end, arg):
                     continue
                 indent = block_indent(modified, start_idx, block_end)
                 raw = fix_line_for_arg(fix_hcl, arg) or fix_block_for_nested_arg(fix_hcl, arg)
@@ -244,13 +302,30 @@ def handle_apply_fixes(
                 fix_line = fix_line_for_arg(fix_hcl, arg)
                 if not fix_line:
                     continue
-                attr_re = re.compile(rf'(?m)^\s*{re.escape(arg)}\s*=')
+                # Prefer the resource's own (depth-1) attribute so a
+                # same-named key inside a nested block isn't clobbered.
+                # Fall back to the first match at any depth for rules whose
+                # target legitimately sits in a nested block (no regression).
+                attr_re = re.compile(rf'^\s*{re.escape(arg)}\s*=')
+                target_li = None
+                depth = 0
                 for li in range(start_idx, block_end + 1):
                     if attr_re.match(modified[li]):
-                        indent = modified[li][:len(modified[li]) - len(modified[li].lstrip())]
-                        modified[li] = f"{indent}{fix_line}\n"
-                        total_applied += 1
-                        break
+                        if depth == 1:
+                            target_li = li
+                            break
+                        if target_li is None:
+                            target_li = li
+                    for ch in modified[li]:
+                        if ch == '{':
+                            depth += 1
+                        elif ch == '}':
+                            depth -= 1
+                if target_li is not None:
+                    line = modified[target_li]
+                    indent = line[:len(line) - len(line.lstrip())]
+                    modified[target_li] = f"{indent}{fix_line}\n"
+                    total_applied += 1
 
         if modified == original_lines:
             continue

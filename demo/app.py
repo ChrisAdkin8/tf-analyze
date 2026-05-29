@@ -168,12 +168,24 @@ def _path_is_ignored(rel: Path, ignore_paths: list[str]) -> bool:
     return False
 
 
+_RATE_TABLE_MAX = 4096  # evict stale buckets once the table grows past this
+
+
 def _rate_check(ip: str) -> bool:
     now = time.time()
-    _rate[ip] = [t for t in _rate[ip] if now - t < RATE_LIMIT_WINDOW_SECONDS]
-    if len(_rate[ip]) >= RATE_LIMIT_REQUESTS:
+    # Opportunistic eviction — without it, every distinct client IP leaves a
+    # permanent dict entry (slow memory-growth DoS). When the table is large,
+    # drop buckets whose most-recent hit is outside the window.
+    if len(_rate) > _RATE_TABLE_MAX:
+        for k in [k for k, ts in list(_rate.items())
+                  if not ts or now - ts[-1] >= RATE_LIMIT_WINDOW_SECONDS]:
+            del _rate[k]
+    recent = [t for t in _rate.get(ip, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
+    if len(recent) >= RATE_LIMIT_REQUESTS:
+        _rate[ip] = recent
         return False
-    _rate[ip].append(now)
+    recent.append(now)
+    _rate[ip] = recent
     return True
 
 
@@ -186,7 +198,7 @@ class ScanRepo(BaseModel):
 
 
 def _run_scan(target_dir: str) -> dict:
-    result = subprocess.run(
+    result = _run_capture(
         [
             "python3", str(DETECT),
             "--target", target_dir,
@@ -200,8 +212,6 @@ def _run_scan(target_dir: str) -> dict:
             # keep the noise floor low.
             "--show-info",
         ],
-        capture_output=True,
-        text=True,
         timeout=30,
     )
     # Round-3 audit fix #19 — a non-JSON stdout could mean either (a)
@@ -272,6 +282,74 @@ def _resolve_head_sha(owner: str, repo: str) -> str | None:
     return None
 
 
+def _run_capture(cmd: list[str], timeout: int) -> subprocess.CompletedProcess:
+    """Like ``subprocess.run(timeout=…)`` but reliably KILLS the child on
+    timeout. Plain ``subprocess.run`` leaves the process running on
+    Python <= 3.13, so repeated timeouts leak engine/git processes that
+    hold the clone's file handles. Mirrors the run-task server's pattern.
+    """
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+        rc = proc.returncode
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            out, err = proc.communicate()
+        except Exception:
+            out, err = "", "killed by timeout"
+        rc = proc.returncode if proc.returncode is not None else 124
+    return subprocess.CompletedProcess(cmd, rc, out, err)
+
+
+def _enforce_clone_caps(clone_root: Path) -> int:
+    """Reject a cloned tree too large to scan safely; return the scanned
+    ``.tf`` count. Shared by every clone path (``/scan``, ``/scan/repo``,
+    ``/trend``) so they all get the same DoS guards (file-count + byte
+    caps). Respects the repo's ``.tf-analyze.yaml:ignore_paths`` — the
+    engine skips those at scan time, so counting them would block repos
+    with large `fixtures/`/`examples/` corpora but a small real surface.
+
+    Size is accumulated DURING the lazy rglob so the discover→stat race
+    window is per-file; a file deleted mid-iteration raises OSError and is
+    skipped. Both caps short-circuit to avoid stat()ing past the limit.
+    """
+    ignore_paths = _load_ignore_paths(clone_root)
+    total = 0
+    tf_count = 0
+    for p in clone_root.rglob("*.tf"):
+        if ".terraform" in p.parts:
+            continue
+        try:
+            rel = p.relative_to(clone_root)
+        except ValueError:
+            continue
+        if _path_is_ignored(rel, ignore_paths):
+            continue
+        tf_count += 1
+        if tf_count > MAX_TF_FILES:
+            break
+        try:
+            total += p.stat().st_size
+        except OSError:
+            continue
+        if total > MAX_CLONE_BYTES:
+            break
+    if tf_count == 0:
+        raise HTTPException(status_code=400, detail="No .tf files found in repository")
+    if tf_count > MAX_TF_FILES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Repository has {tf_count} .tf files; scanner caps at {MAX_TF_FILES}",
+        )
+    if total > MAX_CLONE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Repository content exceeds {MAX_CLONE_BYTES // (1024*1024)} MB cap",
+        )
+    return tf_count
+
+
 def _clone_and_scan(owner: str, repo: str, sha: str) -> dict:
     """Shallow-clone the repo at `sha` and run the engine.
 
@@ -300,59 +378,9 @@ def _clone_and_scan(owner: str, repo: str, sha: str) -> dict:
         )
         if clone.returncode != 0:
             raise HTTPException(status_code=404, detail="Could not clone repository")
-        # Respect the cloned repo's `.tf-analyze.yaml:ignore_paths`. The
-        # engine already skips these at scan time, so counting them
-        # toward the cap blocks repos (like tf-analyze itself) that have
-        # large `fixtures/` or `examples/` corpora but small production
-        # surface. The cap now reflects what's actually scanned.
-        clone_root = Path(d)
-        ignore_paths = _load_ignore_paths(clone_root)
-        # Quick size guard. Refuse to scan anything ridiculous.
-        # Round-5 audit fix #18 — accumulate the file size DURING the
-        # rglob iteration so the race window between "discover" and
-        # "stat" is per-file, not per-glob. The previous shape was
-        # already correct (the loop computes size as it iterates); the
-        # only TOCTOU concern is files added mid-iteration that the
-        # lazy rglob doesn't see. That isn't fixable without a snapshot
-        # and is bounded by `MAX_TF_FILES` anyway, so the cap is safe.
-        # A file deleted between iteration and stat raises OSError and
-        # we skip it — already correct, documented here for clarity.
-        total = 0
-        tf_count = 0
-        for p in clone_root.rglob("*.tf"):
-            if ".terraform" in p.parts:
-                continue
-            try:
-                rel = p.relative_to(clone_root)
-            except ValueError:
-                continue
-            if _path_is_ignored(rel, ignore_paths):
-                continue
-            tf_count += 1
-            if tf_count > MAX_TF_FILES:
-                # Short-circuit: don't even bother stat()ing the rest.
-                # The HTTPException below will fire on the count alone.
-                break
-            try:
-                total += p.stat().st_size
-            except OSError:
-                continue
-            if total > MAX_CLONE_BYTES:
-                # Same short-circuit on byte cap — avoid additional
-                # stat() calls once we're over.
-                break
-        if tf_count == 0:
-            raise HTTPException(status_code=400, detail="No .tf files found in repository")
-        if tf_count > MAX_TF_FILES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Repository has {tf_count} .tf files; scanner caps at {MAX_TF_FILES}",
-            )
-        if total > MAX_CLONE_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Repository content exceeds {MAX_CLONE_BYTES // (1024*1024)} MB cap",
-            )
+        # File-count + byte caps (DoS guard) — shared with /scan/repo and
+        # /trend so every clone path is bounded identically.
+        tf_count = _enforce_clone_caps(Path(d))
         result = _run_scan(d)
 
     # Tag the cached result with the metadata permalink visitors care about.
@@ -687,13 +715,14 @@ async def scan_repo(body: ScanRepo, request: Request) -> dict:
     if not re.match(r"https://(github|gitlab)\.com/[\w.\-]+/[\w.\-]+(\.git)?$", url):
         raise HTTPException(status_code=400, detail="Only github.com and gitlab.com repos are supported")
     with tempfile.TemporaryDirectory() as d:
-        clone = subprocess.run(
-            ["git", "clone", "--depth", "1", "--single-branch", url, d],
-            capture_output=True,
+        clone = _run_capture(
+            ["git", "clone", "--depth", "1", "--single-branch",
+             "--filter=blob:limit=1m", url, d],
             timeout=30,
         )
         if clone.returncode != 0:
             raise HTTPException(status_code=400, detail="Could not clone repository")
+        _enforce_clone_caps(Path(d))  # same DoS caps as the primary /scan route
         return _run_scan(d)
 
 
@@ -756,15 +785,16 @@ def _clone_and_trend(owner: str, repo: str, sha: str, lookback_days: int) -> dic
     # very-quiet repos still see history.
     commit_cap = max(200, lookback_days * 5)
     with tempfile.TemporaryDirectory() as d:
-        clone = subprocess.run(
+        clone = _run_capture(
             ["git", "clone", f"--depth={commit_cap}", "--no-single-branch",
              "--filter=blob:limit=1m", url, d],
-            capture_output=True, text=True, timeout=120,
+            timeout=120,
         )
         if clone.returncode != 0:
             raise HTTPException(status_code=404, detail="Could not clone repository")
+        _enforce_clone_caps(Path(d))  # bound file-count/bytes before the trend walk
 
-        proc = subprocess.run(
+        proc = _run_capture(
             [
                 "python3", str(DETECT),
                 "--target", d,
@@ -773,7 +803,6 @@ def _clone_and_trend(owner: str, repo: str, sha: str, lookback_days: int) -> dic
                 "--lookback", str(lookback_days),
                 "--format", "json",
             ],
-            capture_output=True, text=True,
             timeout=300,  # trend can be slow on long histories
         )
         if proc.returncode != 0:

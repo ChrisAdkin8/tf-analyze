@@ -582,3 +582,50 @@ class TestTrendDashboard:
         # appear in the dedicated annotation line.
         assert "Biggest single-commit jump" in body
         assert "c9d0e1f2" in body
+
+
+class TestCloneCapsAndRateLimit:
+    """V1 — DoS guards now shared across /scan, /scan/repo and /trend."""
+
+    def test_caps_reject_too_many_files(self, tmp_path: Path, monkeypatch) -> None:
+        import app as demo_app  # type: ignore
+        from fastapi import HTTPException
+        monkeypatch.setattr(demo_app, "MAX_TF_FILES", 3)
+        for i in range(5):
+            (tmp_path / f"f{i}.tf").write_text('resource "x" "y" {}\n')
+        with pytest.raises(HTTPException) as ei:
+            demo_app._enforce_clone_caps(tmp_path)
+        assert ei.value.status_code == 413
+
+    def test_caps_reject_oversized(self, tmp_path: Path, monkeypatch) -> None:
+        import app as demo_app  # type: ignore
+        from fastapi import HTTPException
+        monkeypatch.setattr(demo_app, "MAX_CLONE_BYTES", 100)
+        (tmp_path / "big.tf").write_text("x" * 500)
+        with pytest.raises(HTTPException) as ei:
+            demo_app._enforce_clone_caps(tmp_path)
+        assert ei.value.status_code == 413
+
+    def test_caps_reject_empty_repo(self, tmp_path: Path) -> None:
+        import app as demo_app  # type: ignore
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as ei:
+            demo_app._enforce_clone_caps(tmp_path)
+        assert ei.value.status_code == 400
+
+    def test_caps_ok_returns_count(self, tmp_path: Path) -> None:
+        import app as demo_app  # type: ignore
+        (tmp_path / "a.tf").write_text('resource "x" "y" {}\n')
+        (tmp_path / "b.tf").write_text('resource "x" "z" {}\n')
+        assert demo_app._enforce_clone_caps(tmp_path) == 2
+
+    def test_rate_check_evicts_stale_buckets(self, monkeypatch) -> None:
+        import app as demo_app  # type: ignore
+        demo_app._rate.clear()
+        monkeypatch.setattr(demo_app, "_RATE_TABLE_MAX", 10)
+        for i in range(50):
+            demo_app._rate[f"10.0.0.{i}"] = [0.0]  # stale (epoch 0)
+        demo_app._rate_check("1.2.3.4")  # table > cap → sweep stale buckets
+        assert len(demo_app._rate) < 50
+        assert "1.2.3.4" in demo_app._rate
+        demo_app._rate.clear()

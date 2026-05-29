@@ -189,3 +189,15 @@ def test_render_html_has_table_and_chips() -> None:
     assert "aws_vpc.main" in out
     assert "crown jewel" in out
     assert "internet-reachable" in out
+
+
+def test_render_html_escapes_resource_name() -> None:
+    # V2 — a crafted resource name (attacker-influenced via a scanned repo
+    # in the public scanner / fleet reports) must not inject markup.
+    out = render_blast_radius_html([
+        {"resource": "<img src=x onerror=alert(1)>", "type": "n",
+         "file": "f.tf", "line": 1, "blast_radius": 3,
+         "is_crown_jewel": False, "internet_reachable": False},
+    ])
+    assert "<img src=x onerror=alert(1)>" not in out
+    assert "&lt;img src=x onerror=alert(1)&gt;" in out

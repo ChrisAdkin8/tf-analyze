@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
-import { injectLinkInterceptor, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
+import { injectLinkInterceptor, injectReportCsp, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
 import { runEngine } from './engineRunner';
 
 const FRAMEWORKS = ['cis', 'pci_dss', 'soc2', 'owasp_iac', 'all'] as const;
@@ -113,7 +113,7 @@ export class CompliancePanel {
     // set as the inline `_escape` helper below; previously this path
     // only escaped `&` and `"`, so a `</script>` sequence inside an
     // engine-rendered attribute could break the wrapping HTML.
-    const srcdoc = reportHtml
+    const srcdoc = injectReportCsp(reportHtml)
       .replace(/&/g, '&amp;')
       .replace(/"/g, '&quot;')
       .replace(/</g, '&lt;')
@@ -146,7 +146,7 @@ export class CompliancePanel {
   <button onclick="reload()">Refresh</button>
   <button onclick="openExternal()">Open in browser</button>
 </div>
-<iframe id="report" srcdoc="${srcdoc}"></iframe>
+<iframe id="report" sandbox="allow-scripts" srcdoc="${srcdoc}"></iframe>
 <script>
   const vscode = acquireVsCodeApi();
   document.getElementById('fw').addEventListener('change', e => {

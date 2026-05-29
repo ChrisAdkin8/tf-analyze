@@ -1649,6 +1649,35 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
     )
 
 
+def _default_catalog_dir() -> str:
+    """Resolve the default catalogue directory across every layout.
+
+    Order matters:
+      1. ``TF_ANALYZE_CATALOG`` env override — explicit wins.
+      2. ``<module>/../catalog`` sibling — the source checkout, the bundled
+         VS Code engine (``engine/scripts`` + ``engine/catalog``), and the
+         Docker image all have this, so their behaviour is unchanged.
+      3. The ``tf_analyze_catalog`` data package — only reached on a flat
+         ``pip install`` where the sibling doesn't exist; resolves to the
+         catalogue YAML shipped as package-data (see ``catalog/__init__.py``).
+    """
+    env = os.environ.get("TF_ANALYZE_CATALOG")
+    if env:
+        return env
+    sibling = Path(__file__).resolve().parent.parent / "catalog"
+    if sibling.is_dir():
+        return str(sibling)
+    try:
+        import tf_analyze_catalog  # type: ignore
+
+        pkg_dir = Path(tf_analyze_catalog.__file__).resolve().parent
+        if pkg_dir.is_dir():
+            return str(pkg_dir)
+    except Exception:
+        pass
+    return str(sibling)
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -1669,7 +1698,7 @@ def main():
     )
     ap.add_argument(
         "--catalog",
-        default=str(Path(__file__).parent.parent / "catalog"),
+        default=_default_catalog_dir(),
         help="Catalog directory",
     )
     ap.add_argument(
@@ -2495,7 +2524,12 @@ def main():
     _cache_hit = False
     findings: list[dict] = []
     if getattr(args, "cache", False) and diff_files is None:
-        _corpus_hash_val = _corpus_hash(all_text, entries)
+        # Hash the FULL scanned-file set (.tf + the extra workflow-YAML /
+        # tfvars files scanned below), not just .tf. The extra_text scan
+        # only runs on a cache MISS, so keying the cache on .tf alone let a
+        # warm cache silently skip a secret (or any finding) added to e.g.
+        # a `.github/workflows/*.yml` while the .tf files were unchanged.
+        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries)
         _cache_path = (
             Path(args.cache_file).resolve()
             if getattr(args, "cache_file", None)

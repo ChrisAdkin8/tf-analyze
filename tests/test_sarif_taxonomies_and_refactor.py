@@ -188,3 +188,30 @@ class TestSarifTaxonomies:
         assert any(t.startswith("cwe:CWE-") for t in tags)
         assert any(t.startswith("mitre:T") for t in tags)
         assert any(t.startswith("d3fend:D3-") for t in tags)
+
+
+class TestSarifRobustness:
+    """P1 — to_sarif must not crash on a malformed/synthetic finding, and
+    must not mis-attribute an unknown rule to rules[0] via ruleIndex=0."""
+
+    def test_malformed_finding_does_not_abort_emit(self) -> None:
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import detect
+        # Finding missing resource/file/line (synthetic / externally-supplied)
+        # used to KeyError and abort the ENTIRE SARIF document.
+        sarif = detect.to_sarif([{"id": "SEC-X-001"}], [])
+        results = sarif["runs"][0]["results"]
+        assert len(results) == 1
+        r = results[0]
+        assert r["ruleId"] == "SEC-X-001"
+        # Unknown rule (no entry) → no ruleIndex, so it can't mis-map to rules[0].
+        assert "ruleIndex" not in r
+        loc = r["locations"][0]["physicalLocation"]
+        assert loc["artifactLocation"]["uri"] == ""        # defaulted, not crashed
+        assert loc["region"]["startLine"] == 1             # defaulted, not crashed
+
+    def test_finding_with_no_id_is_handled(self) -> None:
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        import detect
+        sarif = detect.to_sarif([{}], [])  # truly empty finding
+        assert sarif["runs"][0]["results"][0]["ruleId"] == "UNKNOWN"

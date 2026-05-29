@@ -41,12 +41,31 @@ class TestBlockArgValue:
         body = "  port = 3306\n"
         assert detect.block_arg_value(body, "port") == "3306"
 
-    def test_bav_list_first_token(self):
-        # Multi-line list: returns only the first line token
+    def test_bav_multiline_list_captured_fully(self):
+        # Regression: the single-line regex used to return just "[" for a
+        # multi-line list, so the IAM wildcard analyser (`'"*"' in actions`)
+        # silently missed the idiomatic policy. brace_walk now extends the
+        # capture to the matching `]`.
         body = '  types = [\n    "a",\n    "b",\n  ]\n'
         val = detect.block_arg_value(body, "types")
         assert val is not None
-        assert "[" in val or val == "["
+        assert '"a"' in val and '"b"' in val
+
+    def test_bav_multiline_list_sees_wildcard(self):
+        body = '  actions = [\n    "s3:GetObject",\n    "*",\n  ]\n'
+        assert '"*"' in (detect.block_arg_value(body, "actions") or "")
+
+    def test_bav_multiline_map_captured_fully(self):
+        body = '  tags = {\n    Env  = "prod"\n    Team = "x"\n  }\n'
+        val = detect.block_arg_value(body, "tags")
+        assert val is not None
+        assert "Env" in val and "Team" in val
+
+    def test_bav_unbalanced_bracket_falls_back(self):
+        # No matching close → fall back to the single-line value rather
+        # than returning None or raising.
+        body = '  broken = [\n    "a",\n'
+        assert detect.block_arg_value(body, "broken") == "["
 
     def test_bav_single_line_list(self):
         body = '  types = ["a", "b"]\n'
@@ -228,6 +247,54 @@ class TestFindBlocks:
         blocks = detect.find_blocks(tf, pat)
         assert len(blocks) == 1
         assert "vpc_config" in blocks[0]["body"]
+
+    def test_fb_close_brace_inside_string_literal(self):
+        # Regression: the naive brace counter truncated the block body at
+        # a `}` inside a string literal, dropping every attribute after it
+        # (and mis-attributing the rest of the file). brace_walk is
+        # quote-aware, so `name` survives and both blocks are found.
+        tf = (
+            'resource "aws_x" "a" {\n'
+            '  pattern = "value-with-close-brace}"\n'
+            '  name    = "a"\n'
+            '}\n'
+            'resource "aws_x" "b" {\n'
+            '  name = "b"\n'
+            '}\n'
+        )
+        pat = re.compile(r'resource\s+"aws_x"\s+"([^"]+)"\s*\{')
+        blocks = detect.find_blocks(tf, pat)
+        assert len(blocks) == 2
+        assert 'name    = "a"' in blocks[0]["body"]
+        assert blocks[1]["groups"] == ("b",)
+
+
+# ---------------------------------------------------------------------------
+# _extract_terraform_version
+# ---------------------------------------------------------------------------
+
+class TestExtractTerraformVersion:
+    def test_backend_block_before_required_version(self):
+        # Regression: the `[^}]*?` regex stopped at the backend block's
+        # closing `}`, so a required_version declared after it was never
+        # seen and every applies_when.min_terraform gate silently
+        # disabled. brace_walk reads the whole terraform{} body.
+        hcl = (
+            'terraform {\n'
+            '  backend "s3" {\n'
+            '    bucket = "x"\n'
+            '  }\n'
+            '  required_version = ">= 1.5.0"\n'
+            '}\n'
+        )
+        assert detect._extract_terraform_version({"main.tf": hcl}) == ">= 1.5.0"
+
+    def test_simple_required_version(self):
+        hcl = 'terraform {\n  required_version = ">= 1.6"\n}\n'
+        assert detect._extract_terraform_version({"main.tf": hcl}) == ">= 1.6"
+
+    def test_no_terraform_block_returns_empty(self):
+        assert detect._extract_terraform_version({"m.tf": 'resource "x" "y" {}\n'}) == ""
 
 
 # ---------------------------------------------------------------------------
