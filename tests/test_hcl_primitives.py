@@ -324,12 +324,30 @@ class TestBraceWalk:
         text = '{ key = "foo \\"bar}baz\\" qux" }'
         assert self._bw(text, 0) == len(text)
 
-    def test_single_quoted_string_handled(self) -> None:
-        # HCL accepts single quotes only inside heredocs / interpolation,
-        # but the walker tracks them defensively so a passing test
-        # input that uses `'…'` doesn't false-balance.
+    def test_apostrophe_is_not_a_string_delimiter(self) -> None:
+        # HCL has NO single-quoted strings, so `'` is an ordinary
+        # character. The walker used to track `'` "defensively", which
+        # swallowed the closing `}` whenever a comment contained an
+        # apostrophe (`# the child's bucket`) and broke block extraction.
+        # Corrected contract: the first real `}` closes the block; the
+        # `}` between the lone `'`s is counted because they aren't quotes.
         text = "{ k = 'v with } inside' }"
+        assert self._bw(text, 0) == text.index("}") + 1
+
+    def test_apostrophe_in_comment_does_not_false_balance(self) -> None:
+        # Regression guard (find_blocks/_extract_terraform_version build
+        # on this): an apostrophe in a comment must not be read as a
+        # string start and swallow the block's closing brace.
+        text = "{\n  # the child's value\n  k = 1\n}"
         assert self._bw(text, 0) == len(text)
+
+    def test_comment_contents_do_not_affect_depth(self) -> None:
+        # `#`, `//` and `/* */` comments are skipped, so a stray brace or
+        # quote inside one does not prematurely open/close the block.
+        assert self._bw("{ # stray } in a comment\n k = 1 }", 0) is not None
+        assert self._bw("{ // stray } again\n k = 1 }", 0) is not None
+        full = "{ /* } */ k = 1 }"
+        assert self._bw(full, 0) == len(full)
 
     def test_paren_walker_via_opens_closes_kwargs(self) -> None:
         # The same logic must work for parentheses — `jsonencode(...)`

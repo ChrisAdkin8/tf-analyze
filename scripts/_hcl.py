@@ -240,14 +240,21 @@ def brace_walk(
     where the cumulative depth returns to 0. Returns ``None`` on
     unbalanced input.
 
-    Quote state is tracked with backslash awareness:
+    String and comment state is tracked so brackets that aren't real
+    structure don't affect depth:
 
-    * Double quotes (``"``) and single quotes (``'``) each toggle their
-      own state flag.
+    * Double quotes (``"``) toggle string state. HCL has **no**
+      single-quoted strings, so ``'`` is an ordinary character — this
+      matters because apostrophes are common in comments
+      (``# the child's bucket``) and must not be read as a string start.
+    * ``#`` and ``//`` begin a line comment (to the next newline);
+      ``/* … */`` is a block comment. Brackets, quotes and apostrophes
+      inside a comment do **not** affect depth.
     * A backslash immediately before a quote (``\\"``) prevents the
-      toggle, so a value like ``key = "with \\"quoted\\" inside"`` is
-      treated as a single string literal.
-    * Brackets inside any active string literal do **not** affect depth.
+      toggle, so a value like ``key = "with \\"quoted\\" inside"`` is one
+      string literal.
+    * Brackets inside any active string literal or comment do **not**
+      affect depth.
 
     Customise ``opens`` / ``closes`` to walk other balanced delimiters:
 
@@ -280,31 +287,47 @@ def brace_walk(
         the input ran out before depth returned to 0.
     """
     depth = 0
-    in_dq = False
-    in_sq = False
+    in_dq = False             # inside a "double-quoted" string
+    in_line_comment = False   # after # or // until newline
+    in_block_comment = False  # after /* until */
     seen_open = False
     prev = ""
-    for i in range(start_pos, len(text)):
+    i = start_pos
+    n = len(text)
+    while i < n:
         ch = text[i]
-        # `\\<char>` neutralises the next character's quote-toggling
-        # effect. Tracking only the immediate prior byte is sufficient
-        # for HCL: there's no `\\\\\\\"` ambiguity because a literal
-        # backslash is `\\\\` and the backslash run is consumed
-        # left-to-right by this same flag.
-        escaped = prev == "\\"
-        if ch == '"' and not in_sq and not escaped:
-            in_dq = not in_dq
-        elif ch == "'" and not in_dq and not escaped:
-            in_sq = not in_sq
-        elif not in_dq and not in_sq:
-            if ch == opens:
-                depth += 1
-                seen_open = True
-            elif ch == closes:
-                depth -= 1
-                if seen_open and depth == 0:
-                    return i + 1
+        nxt = text[i + 1] if i + 1 < n else ""
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+        elif in_block_comment:
+            if prev == "*" and ch == "/":
+                in_block_comment = False
+                ch = ""  # consume so this `/` can't re-open a token
+        elif in_dq:
+            # `\\<char>` neutralises a quote's toggle. Tracking only the
+            # immediate prior byte is sufficient for HCL scalar strings:
+            # a literal backslash is `\\\\` and the run is consumed
+            # left-to-right by this same flag.
+            if ch == '"' and prev != "\\":
+                in_dq = False
+        elif ch == '"':
+            in_dq = True
+        elif ch == "#":
+            in_line_comment = True
+        elif ch == "/" and nxt == "/":
+            in_line_comment = True
+        elif ch == "/" and nxt == "*":
+            in_block_comment = True
+        elif ch == opens:
+            depth += 1
+            seen_open = True
+        elif ch == closes:
+            depth -= 1
+            if seen_open and depth == 0:
+                return i + 1
         prev = ch
+        i += 1
     return None
 
 
@@ -315,19 +338,12 @@ def find_blocks(text: str, regex: re.Pattern) -> list[dict]:
     blocks = []
     for m in regex.finditer(text):
         start_pos = m.start()
-        depth = 0
-        i = m.end() - 1  # position of the opening `{`
-        end_pos = None
-        while i < len(text):
-            c = text[i]
-            if c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-                if depth == 0:
-                    end_pos = i + 1
-                    break
-            i += 1
+        # `m.end() - 1` is the opening `{` (every header regex ends in
+        # `\{`). Walk to its match with the quote-aware `brace_walk` so a
+        # `}` inside a string literal — e.g. an IAM ARN
+        # `pattern = "arn:aws:s3:::bucket-{*}"` or a heredoc — no longer
+        # truncates the block and silently drops the attributes after it.
+        end_pos = brace_walk(text, m.end() - 1)
         if end_pos is None:
             continue
         block_text = text[start_pos:end_pos]
@@ -352,19 +368,9 @@ def find_simple_blocks(text: str, regex: re.Pattern) -> list[dict]:
     blocks = []
     for m in regex.finditer(text):
         start_pos = m.start()
-        depth = 0
-        i = m.end() - 1
-        end_pos = None
-        while i < len(text):
-            c = text[i]
-            if c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-                if depth == 0:
-                    end_pos = i + 1
-                    break
-            i += 1
+        # Quote-aware walk — see find_blocks. Keeps `moved`/`import`
+        # block boundaries correct when a string value contains `}`.
+        end_pos = brace_walk(text, m.end() - 1)
         if end_pos is None:
             continue
         body = text[m.end() : end_pos - 1]
@@ -428,6 +434,21 @@ def block_arg_value(body: str, arg: str) -> str | None:
     m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*=\s*(.+?)\s*$', body)
     if not m:
         return None
+    # Multi-line collection / object / parenthesised value: the
+    # single-line regex above only captures the first physical line, so
+    # `actions = [\n  "s3:*",\n  "*",\n]` would return just `"["`. When
+    # the value opens a bracketed construct, extend the capture to its
+    # matching close via the quote-aware brace_walk so callers (e.g. the
+    # IAM wildcard analyser's `'"*"' in actions` test) see the whole
+    # literal. Single-line bracketed values are unchanged (brace_walk
+    # finds the closer on the same line); unbalanced input falls back to
+    # the single-line value below.
+    _closer = {"[": "]", "{": "}", "(": ")"}
+    open_ch = body[m.start(1)]
+    if open_ch in _closer:
+        coll_end = brace_walk(body, m.start(1), opens=open_ch, closes=_closer[open_ch])
+        if coll_end is not None:
+            return body[m.start(1):coll_end].strip()
     val = m.group(1).strip()
     if '"' in val or "'" in val:
         # Audit follow-up #6 — the quote-state walker must skip an
@@ -469,22 +490,12 @@ def block_has_nested_path(body: str, path: str) -> bool:
     head, tail = parts[0], parts[1:]
     nested_re = re.compile(rf'(?m)^\s*{re.escape(head)}\s*\{{')
     for m in nested_re.finditer(body):
-        depth = 0
-        i = m.end() - 1
-        end = None
-        while i < len(body):
-            c = body[i]
-            if c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i
-                    break
-            i += 1
-        if end is None:
+        # Quote-aware walk — see find_blocks. brace_walk returns the
+        # index one past the matching `}`; the inner body excludes it.
+        end_after = brace_walk(body, m.end() - 1)
+        if end_after is None:
             continue
-        inner = body[m.end():end]
+        inner = body[m.end():end_after - 1]
         if block_has_nested_path(inner, ".".join(tail)):
             return True
     return False

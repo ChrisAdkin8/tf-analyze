@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import re
 
+from _hcl import brace_walk  # type: ignore
+
 
 def _version_tuple(s: str) -> tuple[int, ...]:
     """Extract the first dotted-numeric sequence from a string."""
@@ -165,15 +167,31 @@ def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
 
 def _extract_terraform_version(all_files_text: dict) -> str:
     """Pull the user's `terraform { required_version = "..." }` constraint
-    string. Last-write-wins across files; ROB-VERSION-002 already flags
-    inconsistent declarations separately."""
-    rv_re = re.compile(
-        r'(?ms)^\s*terraform\s*\{[^}]*?required_version\s*=\s*"([^"]+)"'
-    )
+    string. First match across files wins; ROB-VERSION-002 already flags
+    inconsistent declarations separately.
+
+    The `terraform {}` body is extracted by quote-aware brace matching
+    rather than a `[^}]*?` regex: the latter stops at the first nested
+    `}`, so the extremely common layout
+
+        terraform {
+          backend "s3" { ... }
+          required_version = ">= 1.5.0"
+        }
+
+    used to return "" and silently disable every `applies_when.min_terraform`
+    gate. Walking the full block body fixes that.
+    """
+    tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
+    rv_re = re.compile(r'(?m)^\s*required_version\s*=\s*"([^"]+)"')
     for text in all_files_text.values():
-        m = rv_re.search(text)
-        if m:
-            return m.group(1)
+        for m in tf_block_re.finditer(text):
+            end_after = brace_walk(text, m.end() - 1)
+            if end_after is None:
+                continue
+            rm = rv_re.search(text[m.end():end_after - 1])
+            if rm:
+                return rm.group(1)
     return ""
 
 
