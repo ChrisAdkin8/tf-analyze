@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
-import { injectLinkInterceptor, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
+import { injectLinkInterceptor, injectReportCsp, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
 import { runEngine } from './engineRunner';
 
 /** Webview panel that renders `detect.py --format html` output inline.
@@ -149,7 +149,7 @@ export class HtmlReportPanel {
     // Audit follow-up #14 — escape the full <,>,&," set so a stray
     // `</script>` in an engine-rendered attribute can't break out of
     // the srcdoc wrapper.
-    const srcdoc = reportHtml
+    const srcdoc = injectReportCsp(reportHtml)
       .replace(/&/g, '&amp;')
       .replace(/"/g, '&quot;')
       .replace(/</g, '&lt;')
@@ -174,7 +174,7 @@ export class HtmlReportPanel {
   <button onclick="reload()">Refresh</button>
   <button onclick="openExternal()">Open in browser</button>
 </div>
-<iframe id="report" srcdoc="${srcdoc}"></iframe>
+<iframe id="report" sandbox="allow-scripts" srcdoc="${srcdoc}"></iframe>
 <script>
   const vscode = acquireVsCodeApi();
   function reload() { location.reload(); }

@@ -64,7 +64,7 @@ class AttackGraphPanel {
         if (!absScript) {
             this._panel.webview.html = this._getErrorHtml("detect.py not found", "Set <code>tf-analyze.scriptPath</code> in settings to the absolute path of " +
                 "<code>scripts/detect.py</code>, or open the tf-analyze project as part of your " +
-                "workspace.\n\nLooked in: " + (0, scriptResolver_1.defaultSearchPaths)(wsFolder).map(p => `<li><code>${p}</code></li>`).join(""));
+                "workspace.\n\nLooked in: " + (0, scriptResolver_1.defaultSearchPaths)(wsFolder).map(p => `<li><code>${this._escape(p)}</code></li>`).join(""));
             return;
         }
         // Audit item 30 — `cp.exec` with a template-literal command lets a

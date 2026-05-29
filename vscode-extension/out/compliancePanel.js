@@ -128,7 +128,7 @@ class CompliancePanel {
         // set as the inline `_escape` helper below; previously this path
         // only escaped `&` and `"`, so a `</script>` sequence inside an
         // engine-rendered attribute could break the wrapping HTML.
-        const srcdoc = reportHtml
+        const srcdoc = (0, iframeBridge_1.injectReportCsp)(reportHtml)
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;')
@@ -159,7 +159,7 @@ class CompliancePanel {
   <button onclick="reload()">Refresh</button>
   <button onclick="openExternal()">Open in browser</button>
 </div>
-<iframe id="report" srcdoc="${srcdoc}"></iframe>
+<iframe id="report" sandbox="allow-scripts" srcdoc="${srcdoc}"></iframe>
 <script>
   const vscode = acquireVsCodeApi();
   document.getElementById('fw').addEventListener('change', e => {

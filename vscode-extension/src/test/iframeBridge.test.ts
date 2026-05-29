@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { injectLinkInterceptor, LINK_BRIDGE_PARENT_JS } from '../iframeBridge';
+import { injectLinkInterceptor, injectReportCsp, LINK_BRIDGE_PARENT_JS } from '../iframeBridge';
 
 /**
  * Without the bridge, every external link inside the compliance and
@@ -48,4 +48,40 @@ test('LINK_BRIDGE_PARENT_JS forwards iframe messages to the extension host', () 
   assert.match(LINK_BRIDGE_PARENT_JS, /addEventListener\(\s*'message'/);
   assert.match(LINK_BRIDGE_PARENT_JS, /'openLink'/);
   assert.match(LINK_BRIDGE_PARENT_JS, /vscode\.postMessage/);
+});
+
+/**
+ * V3 — the report/compliance iframes get `sandbox="allow-scripts"` plus a
+ * CSP injected into the report document. These lock the CSP helper's
+ * contract: a policy that blocks network exfiltration lands in the report's
+ * <head> before any inline script, and stays idempotent across re-renders.
+ */
+test('injectReportCsp inserts a CSP meta after <head>', () => {
+  const input = '<!DOCTYPE html><html><head><style>x{}</style></head><body><script>1</script></body></html>';
+  const out = injectReportCsp(input);
+  assert.match(out, /Content-Security-Policy/);
+  assert.match(out, /connect-src 'none'/);      // blocks exfiltration
+  assert.match(out, /default-src 'none'/);
+  // Policy must precede the document's inline script so it governs it.
+  assert.ok(out.indexOf('Content-Security-Policy') < out.indexOf('<script>'),
+    'CSP meta must be parsed before any inline script');
+  assert.ok(out.indexOf('Content-Security-Policy') > out.indexOf('<head>'),
+    'CSP meta belongs inside <head>');
+});
+
+test('injectReportCsp is idempotent', () => {
+  const input = '<html><head></head><body></body></html>';
+  const once = injectReportCsp(input);
+  assert.equal(injectReportCsp(once), once,
+    'a panel re-render must not stack a second CSP meta');
+});
+
+test('injectReportCsp falls back to prepend when <head> is missing', () => {
+  const out = injectReportCsp('<div>no head</div>');
+  assert.ok(out.startsWith('<meta http-equiv="Content-Security-Policy"'),
+    'with no <head>, prepend the policy (the iframe sandbox still isolates it)');
+});
+
+test('injectReportCsp returns empty input unchanged', () => {
+  assert.equal(injectReportCsp(''), '');
 });

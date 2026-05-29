@@ -18,6 +18,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LINK_BRIDGE_PARENT_JS = void 0;
 exports.injectLinkInterceptor = injectLinkInterceptor;
+exports.injectReportCsp = injectReportCsp;
 // Audit follow-up #22 — a sentinel HTML comment identifies the bridge
 // uniquely so the idempotency check can't false-positive on a
 // legitimate `'openLink'` occurrence in unmodified engine HTML.
@@ -87,4 +88,33 @@ exports.LINK_BRIDGE_PARENT_JS = `
     }
   });
 `;
+/**
+ * Content-Security-Policy `<meta>` injected into the engine's report HTML
+ * before it goes into an `<iframe srcdoc>`. Defence-in-depth alongside the
+ * iframe's `sandbox="allow-scripts"` (opaque origin): the report is
+ * self-contained (inline CSS + inline SVG/JS, no external CDN), so
+ * `default-src 'none'` with inline script/style allowed costs nothing but
+ * blocks network exfiltration (`connect-src 'none'`) and external loads if
+ * an injected finding field ever slips past the engine's HTML escaping.
+ * Mirrors the attack-graph panel's CSP posture.
+ */
+const REPORT_CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ` +
+    `script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; ` +
+    `connect-src 'none'; font-src 'none';">`;
+/**
+ * Insert {@link REPORT_CSP_META} right after the report's opening `<head>`
+ * so the policy is parsed before the document's inline scripts/styles.
+ * Idempotent; falls back to prepending when there's no `<head>` (the
+ * iframe's `sandbox` attribute still isolates it either way).
+ */
+function injectReportCsp(html) {
+    if (!html || html.indexOf('Content-Security-Policy') !== -1)
+        return html;
+    const m = html.match(/<head[^>]*>/i);
+    if (m && m.index !== undefined) {
+        const at = m.index + m[0].length;
+        return html.slice(0, at) + REPORT_CSP_META + html.slice(at);
+    }
+    return REPORT_CSP_META + html;
+}
 //# sourceMappingURL=iframeBridge.js.map

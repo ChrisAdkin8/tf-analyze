@@ -67,7 +67,7 @@ export class AttackGraphPanel {
         "detect.py not found",
         "Set <code>tf-analyze.scriptPath</code> in settings to the absolute path of " +
         "<code>scripts/detect.py</code>, or open the tf-analyze project as part of your " +
-        "workspace.\n\nLooked in: " + defaultSearchPaths(wsFolder).map(p => `<li><code>${p}</code></li>`).join("")
+        "workspace.\n\nLooked in: " + defaultSearchPaths(wsFolder).map(p => `<li><code>${this._escape(p)}</code></li>`).join("")
       );
       return;
     }

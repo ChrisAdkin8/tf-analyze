@@ -158,7 +158,7 @@ class HtmlReportPanel {
         // Audit follow-up #14 — escape the full <,>,&," set so a stray
         // `</script>` in an engine-rendered attribute can't break out of
         // the srcdoc wrapper.
-        const srcdoc = reportHtml
+        const srcdoc = (0, iframeBridge_1.injectReportCsp)(reportHtml)
             .replace(/&/g, '&amp;')
             .replace(/"/g, '&quot;')
             .replace(/</g, '&lt;')
@@ -183,7 +183,7 @@ class HtmlReportPanel {
   <button onclick="reload()">Refresh</button>
   <button onclick="openExternal()">Open in browser</button>
 </div>
-<iframe id="report" srcdoc="${srcdoc}"></iframe>
+<iframe id="report" sandbox="allow-scripts" srcdoc="${srcdoc}"></iframe>
 <script>
   const vscode = acquireVsCodeApi();
   function reload() { location.reload(); }

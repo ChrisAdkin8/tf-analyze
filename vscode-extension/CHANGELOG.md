@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [Unreleased]
+
+### Security
+
+- **Webview XSS hardening.** The report and compliance panels embed the
+  engine's HTML in an `<iframe srcdoc>`; that iframe now runs with
+  `sandbox="allow-scripts"` (an opaque origin, so injected markup can't
+  reach the parent webview or the VS Code API) plus a Content-Security-Policy
+  (`default-src 'none'; connect-src 'none'`) injected into the report
+  document to block network exfiltration — defence-in-depth so the report's
+  HTML escaping is no longer the only barrier. The attack-graph panel's
+  "detect.py not found" view now HTML-escapes the workspace path it echoes.
+- **Bundled engine** carries this round's engine fixes: HCL parser
+  false-negative fixes (multi-line IAM policies, `}`-in-string blocks,
+  `terraform{}` version extraction), HTML-report output escaping, and the
+  `--cache` correctness fix (a warm cache no longer skips findings in
+  workflow-YAML / tfvars files).
+
 ## [0.1.57] — 2026-05-13
 
 **Bundled engine refreshed for R32.1 — K8s/Helm rule coverage 8 → 18 (343 → 353 active rules).**
