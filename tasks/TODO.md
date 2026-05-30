@@ -72,7 +72,11 @@ Parser`** — the ~510-line argparse block moved out via two boundary edits (pur
 move; flags/choices/defaults/help unchanged, `ap` unused after parse_args).
 Guarded by the CLI-docs drift gate + a `--help` smoke + full suite (1227 passed).
 `main()` body **1041 → 529 lines** (≈1500 at the start of the Option-A work →
-529 now, a ~65% cut).
+529 now, a ~65% cut). Then **split that monolith into 12 domain-grouped
+`_add_*_args(ap)` helpers** (target/catalog/output/mode/analysis/compliance/
+threat-intel/comparison/cache/fix/engine/lsp); `_build_parser` is now a 12-line
+table of contents. Proven behaviour-preserving by a per-argument parser-spec
+snapshot (all 57 actions identical); docs/cli.md regenerated (pure reorder).
 
 **Remaining:**
 - The post-detect enrichment pipeline (`_enrich_findings_for_output` → baseline
