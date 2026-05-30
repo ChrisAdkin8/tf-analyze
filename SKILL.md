@@ -183,6 +183,8 @@ See `catalog/SEC-AWS-IAM-POLICY-001..006.yaml` (data-source) and `catalog/SEC-AW
 
 **`applies_when:` rule gating** (engine support since Round 1; documented here): catalogue rules can declare `applies_when: { min_provider: { aws: "5.0" }, min_terraform: "1.6" }`. Rules whose constraints can't be satisfied by the repo's `required_providers` / `required_version` are silently skipped, with a stderr count. Use this when a rule depends on attributes added in a specific provider version (e.g. `ssl_mode` was added in google provider 5.x).
 
+**`policy` pattern kind** *(new in Round 33)*: the only kind that sees **more than one resource at a time** — for cross-resource, conditional, and aggregate rules the single-resource kinds above can't express. The pattern carries `match:` (which resources bind, as `resource`), exactly one of `require:`/`forbid:` (the assertion — `require` fires when false, `forbid` when true), and an interpolated `description:`. The predicate language is `and/or/not`, comparisons (`== != < <= > >= in "not in" matches`), `has(path)`, and `exists/all/none/count(TYPE where PRED)` quantifiers over `resource.type/.name/.attr.<path>/.tags.<key>` (`that` is the candidate inside a quantifier). It's a hand-rolled parser/evaluator — **no `eval`**, so a `--catalog` user file can't execute code. Expressions are compile-checked at catalogue load (`--strict-catalog`). v1 runs on the regex parser with best-effort scalar/list/bool coercion (repeated blocks bind to the first; computed values stay unresolved — use `--plan-json` for those; graph predicates are phase 2). Full authoring guide: **`docs/policy-dsl.md`**.
+
 ---
 
 ## Urgency Levels

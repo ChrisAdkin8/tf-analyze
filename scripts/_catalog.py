@@ -234,6 +234,24 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
                 continue
             if not p.get("kind"):
                 errs.append(f"{source}: patterns[{i}] missing 'kind'")
+            elif p.get("kind") == "policy":
+                # Compile-check the DSL expressions at load so a typo surfaces
+                # under --strict-catalog / the strict-load test instead of a
+                # rule that silently never fires. Lazy import avoids any
+                # import-order coupling with the engine.
+                from _policy import compile_expr  # noqa: PLC0415
+                if not p.get("match"):
+                    errs.append(f"{source}: patterns[{i}] (kind=policy) needs a 'match' expression")
+                if (p.get("require") is None) == (p.get("forbid") is None):
+                    errs.append(f"{source}: patterns[{i}] (kind=policy) needs exactly one of 'require'/'forbid'")
+                for field in ("match", "require", "forbid"):
+                    src = p.get(field)
+                    if src is None:
+                        continue
+                    try:
+                        compile_expr(src)
+                    except SyntaxError as exc:
+                        errs.append(f"{source}: patterns[{i}].{field} — invalid policy expression: {exc}")
     elif pats is not None:
         errs.append(f"{source}: 'patterns' must be a list")
     narrative = data.get("narrative")

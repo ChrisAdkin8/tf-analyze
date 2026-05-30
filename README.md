@@ -154,7 +154,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | HCP Terraform Run Task integration | ✅ | ❌ | ❌ | ❌ |
 | Native Terraform provider (`data "tfanalyze_scan"`) | ✅ | ❌ | ❌ | ❌ |
 | MCP server for AI agents (Cursor / Claude Desktop / …) | ✅ | ❌ | ❌ | ❌ |
-| YAML custom rules | ✅ | ✅ (Rego) | ✅ (Python+YAML) | ✅ (Python) |
+| YAML custom rules | ✅ pattern **+ policy DSL** (cross-resource / conditional / aggregate) | ✅ (Rego) | ✅ (Python+YAML) | ✅ (Python) |
 | Stdlib-only core (optional fast-path) | ✅ | n/a | ❌ (pip) | ❌ (pip) |
 
 > Comparison reflects features documented as of 2026-05; corrections welcome via issue.
@@ -170,6 +170,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 5. **Baseline ratcheting** — adopt on a noisy legacy repo by snapshotting today's findings; only regressions block CI thereafter.
 6. **Kubernetes + Helm coverage** — `kubernetes_namespace` Pod Security Admission, missing `kubernetes_network_policy`, `cluster-admin` `RoleBinding`s, plus `helm_release` overrides like `service.type=LoadBalancer` and `securityContext.privileged=true`.
 7. **Provider-version-aware** — rules can declare `applies_when: { min_provider: { aws: "5.0" } }` so they self-skip on older provider versions instead of false-positiving.
+8. **Policy-as-code DSL (`kind: policy`)** — author **cross-resource, conditional, and aggregate** rules as catalogue data (e.g. "every S3 bucket must have an `aws_s3_bucket_logging`"), without writing Python or vendoring Rego. A small, safe predicate language over the parsed resource model; findings flow through the same ID/urgency/SARIF/score/suppression pipeline. See [`docs/policy-dsl.md`](docs/policy-dsl.md).
 
 ---
 

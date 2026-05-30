@@ -3213,6 +3213,7 @@ import _handlers_security  # noqa: E402,F401  (R30.15 — 9 security handlers)
 import _handlers_robustness  # noqa: E402,F401  (R30.15 — 14 robustness handlers)
 import _handlers_modules  # noqa: E402,F401  (R30.15 — 7 module-lifecycle handlers)
 import _handlers_infra  # noqa: E402,F401  (R30.15 — 9 infra/backend/provider handlers)
+import _handlers_policy  # noqa: E402,F401  (policy-as-code DSL — kind: policy)
 
 
 if __name__ == "__main__":
