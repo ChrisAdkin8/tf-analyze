@@ -143,7 +143,6 @@ Files that legitimately hold *historical* `.vsix` references (do **not** update 
 
 - `vscode-extension/CHANGELOG.md` — by design, each entry refers to the artefact that shipped at that version.
 - `CHANGELOG.md` (project root) — same.
-- `TODO.md`, `PLAN.md`, archived planning docs — historical, leave as-is.
 
 A version bump is not finished until:
 

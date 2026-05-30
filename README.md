@@ -327,7 +327,7 @@ Additional screenshots: [compliance report](docs/images/compliance-report.png) �
 | Catalogue rule schema | [`catalog/README.md`](catalog/README.md) |
 | Sample reports against terragoat | [`reports/README.md`](reports/README.md) |
 | Skill prose (LLM-facing instructions) | [`SKILL.md`](SKILL.md) |
-| Roadmap and TODO | [`TODO.md`](TODO.md) |
+| Roadmap and backlog | [`tasks/TODO.md`](tasks/TODO.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Blog (design notes, debugging tours, retros) | [`docs/blog/`](docs/blog/) |
 
@@ -380,7 +380,6 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (239 positive + 146 clea
 ├── SKILL.md                    # Skill prose loaded as /tf-analyze in Claude Code
 ├── README.md                   # This file
 ├── CHANGELOG.md                # Per-round release notes
-├── TODO.md                     # Roadmap and backlog
 ├── CONTRIBUTING.md
 ├── LICENSE                     # MPL-2.0
 ├── Dockerfile                  # ghcr.io/chrisadkin8/tf-analyze
