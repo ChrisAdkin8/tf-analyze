@@ -139,9 +139,37 @@ show this help message and exit
 
 File containing one target directory path per line (for --mode fleet).
 
-### `--attack-graph`
+### `--config`
 
-Build a directed attack-path graph from internet-reachable resources to crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). With --format html adds an interactive Attack Graph tab (force-directed SVG, drag, click-to-inspect, critical path highlighted in red). With --format text (default) appends a Mermaid flowchart block after findings. Also enables adversarial scenario narratives for HIGH/CRITICAL findings.
+Path to .tf-analyze.yaml project config file. Default: auto-discover in target directory.
+
+### `--init`
+
+Create .tf-analyze.yaml and .tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml in the target directory, then exit.
+
+### `--output`
+
+Write report output to PATH instead of stdout. The file is created or overwritten. stderr (progress, counts, errors) is unaffected.
+
+### `--show-fixes`
+
+When a catalogue entry carries a `fix_hcl` snippet, render it alongside each finding. HTML: syntax-highlighted block inside the finding detail. Text: indented snippet below the finding line.
+
+### `--show-info`
+
+Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
+
+### `--mitre-tactic`
+
+Restrict --format mitre output to one ATT&CK tactic (e.g. 'Initial Access', 'Defense Evasion'). Case-insensitive; hyphens and underscores accepted as separators ('initial-access' is equivalent).
+
+### `--state-json`
+
+Path to `terraform show -json state.tfstate` output. Required by --mode drift. The catalogue's resource_arg / resource_missing_arg / resource_present / hcl_attr / data_source_present kinds are re-evaluated against the deployed values; findings are tagged mode='state' so downstream consumers can distinguish drift from plan-time / static-time triggers of the same rule.
+
+### `--lookback`
+
+Days of git history to analyse in --mode trend (default: 30).
 
 ### `--repo`
 
@@ -150,6 +178,26 @@ GitHub repository (owner/repo) for --mode pr-review.
 ### `--pr-number`
 
 GitHub pull request number for --mode pr-review.
+
+### `--attack-graph`
+
+Build a directed attack-path graph from internet-reachable resources to crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). With --format html adds an interactive Attack Graph tab (force-directed SVG, drag, click-to-inspect, critical path highlighted in red). With --format text (default) appends a Mermaid flowchart block after findings. Also enables adversarial scenario narratives for HIGH/CRITICAL findings.
+
+### `--blast-radius`
+
+Surface the top-N resources sorted by downstream blast radius — 'what would a single terraform apply destroy?'. Implied by --attack-graph; this flag adds a dedicated text table when --format text. JSON output always carries the `blast_radius` block when the attack graph is built. Findings on high-blast-radius resources also carry a per-finding `blast_radius` integer.
+
+### `--explain-score`
+
+Surface the top-5 findings ranked by score contribution, showing the projected score and grade if each is fixed. Tells the user which fix is worth most. Renders as a header block in text / pr-summary output; surfaces as a structured `score_explanation` object in JSON output.
+
+### `--check-registry`
+
+Query the Terraform Registry for the latest version of each registry-style module source and emit MOD-STALE-001 findings for modules that are significantly behind (>=1 major or >=3 minor versions). Requires outbound HTTPS to registry.terraform.io. Off by default so scans remain offline-capable.
+
+### `--gen-tests`
+
+Generate .tftest.hcl assertion files for each finding whose catalogue entry defines a `test_template` field. Files are written to OUTDIR (created if absent). Native Terraform test format (requires Terraform >= 1.6).
 
 ### `--compliance`
 
@@ -167,42 +215,6 @@ Write an OSCAL Assessment Results JSON file to PATH. Requires --compliance. Comp
 
 Write a CISO-targetable PDF rendering of the compliance gap report to PATH. R30.13 — built on top of the HTML compliance report via weasyprint (optional dep). Pair with --compliance / --compliance-framework FOO. weasyprint is not a hard dependency; if not installed, the engine errors with a one-line install hint and exit 2.
 
-### `--gen-tests`
-
-Generate .tftest.hcl assertion files for each finding whose catalogue entry defines a `test_template` field. Files are written to OUTDIR (created if absent). Native Terraform test format (requires Terraform >= 1.6).
-
-### `--check-registry`
-
-Query the Terraform Registry for the latest version of each registry-style module source and emit MOD-STALE-001 findings for modules that are significantly behind (>=1 major or >=3 minor versions). Requires outbound HTTPS to registry.terraform.io. Off by default so scans remain offline-capable.
-
-### `--show-fixes`
-
-When a catalogue entry carries a `fix_hcl` snippet, render it alongside each finding. HTML: syntax-highlighted block inside the finding detail. Text: indented snippet below the finding line.
-
-### `--output`
-
-Write report output to PATH instead of stdout. The file is created or overwritten. stderr (progress, counts, errors) is unaffected.
-
-### `--state-json`
-
-Path to `terraform show -json state.tfstate` output. Required by --mode drift. The catalogue's resource_arg / resource_missing_arg / resource_present / hcl_attr / data_source_present kinds are re-evaluated against the deployed values; findings are tagged mode='state' so downstream consumers can distinguish drift from plan-time / static-time triggers of the same rule.
-
-### `--lookback`
-
-Days of git history to analyse in --mode trend (default: 30).
-
-### `--show-info`
-
-Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
-
-### `--explain-score`
-
-Surface the top-5 findings ranked by score contribution, showing the projected score and grade if each is fixed. Tells the user which fix is worth most. Renders as a header block in text / pr-summary output; surfaces as a structured `score_explanation` object in JSON output.
-
-### `--blast-radius`
-
-Surface the top-N resources sorted by downstream blast radius — 'what would a single terraform apply destroy?'. Implied by --attack-graph; this flag adds a dedicated text table when --format text. JSON output always carries the `blast_radius` block when the attack graph is built. Findings on high-blast-radius resources also carry a per-finding `blast_radius` integer.
-
 ### `--rank-by`
 
 Ordering mode for findings (R30.2 — exploitability prioritisation). `urgency` (default) keeps the legacy CRITICAL-first ordering. `exploitability` promotes findings whose rule touches a CWE currently in CISA KEV one urgency tier and sorts KEV hits first. `hybrid` keeps urgency-first ordering with the KEV promotion applied. CISA KEV + FIRST.org EPSS feeds are cached daily at ~/.cache/tf-analyze/. No comparable OSS IaC scanner integrates KEV today.
@@ -211,25 +223,9 @@ Ordering mode for findings (R30.2 — exploitability prioritisation). `urgency` 
 
 Disable network fetches for CISA KEV / FIRST.org EPSS. Falls back to cache if present, otherwise skips KEV / EPSS enrichment (no badges, no urgency promotion). Useful for air-gapped CI.
 
-### `--mitre-tactic`
-
-Restrict --format mitre output to one ATT&CK tactic (e.g. 'Initial Access', 'Defense Evasion'). Case-insensitive; hyphens and underscores accepted as separators ('initial-access' is equivalent).
-
 ### `--baseline`
 
 Path to a baseline JSON report. Findings present in the baseline are suppressed (counted under `suppressed_by_baseline` in JSON output) so only NEW findings affect the exit code. Match key: (id, file, line, resource). Use to ratchet a legacy repo: snapshot today's findings, then enforce no regressions going forward.
-
-### `--no-hcl2`
-
-Disable the python-hcl2 fast-path and use the regex parser exclusively. Useful for benchmarking or when running in a constrained environment without the optional dependency.
-
-### `--apply-fixes`
-
-Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying.
-
-### `--apply-fixes-max-disruption`
-
-Cap which findings --apply-fixes will touch by their fix_disruption tier. Default is 'forces_replacement' (no cap — every fixable finding is applied). 'none' applies only non-disruptive fixes (the auto-remediation-bot default). 'plan_required' applies non-disruptive plus changes visible in `terraform plan` but not forcing replacement. Tier ordering: none < plan_required < forces_replacement.
 
 ### `--cache`
 
@@ -239,13 +235,17 @@ Enable incremental scan caching. Stores findings keyed on a hash of all .tf file
 
 Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).
 
-### `--config`
+### `--apply-fixes`
 
-Path to .tf-analyze.yaml project config file. Default: auto-discover in target directory.
+Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying.
 
-### `--init`
+### `--apply-fixes-max-disruption`
 
-Create .tf-analyze.yaml and .tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml in the target directory, then exit.
+Cap which findings --apply-fixes will touch by their fix_disruption tier. Default is 'forces_replacement' (no cap — every fixable finding is applied). 'none' applies only non-disruptive fixes (the auto-remediation-bot default). 'plan_required' applies non-disruptive plus changes visible in `terraform plan` but not forcing replacement. Tier ordering: none < plan_required < forces_replacement.
+
+### `--no-hcl2`
+
+Disable the python-hcl2 fast-path and use the regex parser exclusively. Useful for benchmarking or when running in a constrained environment without the optional dependency.
 
 ### `--lsp`
 
