@@ -183,8 +183,10 @@ require: 'resource.attr.deletion_protection == true
 ```
 ```yaml
 # (c) Aggregate — no SSH open to the world
+#     (`in` is membership: VALUE in LIST — operand order matters; the spike
+#      caught the reverse before it became a footgun in real rules)
 match:   'resource.type == "aws_security_group"'
-forbid:  'resource.attr.ingress.cidr_blocks in ["0.0.0.0/0"]
+forbid:  '"0.0.0.0/0" in resource.attr.ingress.cidr_blocks
           and resource.attr.ingress.from_port <= 22 and resource.attr.ingress.to_port >= 22'
 ```
 ```yaml
