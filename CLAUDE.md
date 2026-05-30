@@ -38,4 +38,5 @@ See CONTRIBUTING.md → "VS Code extension version sync".
 ## Pointers (don't duplicate these here)
 - Adding rules / pattern kinds / graph checks → CONTRIBUTING.md
 - Skill spec / output contract → SKILL.md
+- User guides / docs index (CLI, policy DSL, integrations…) → docs/index.md
 - Active backlog → tasks/TODO.md ; recorded gotchas → tasks/lessons.md
