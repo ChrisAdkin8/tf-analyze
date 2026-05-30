@@ -175,6 +175,7 @@ This is complementary to Quick Fix: the editor's `⌘.` action targets one findi
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `tf-analyze.scriptPath` | `` | Path to detect.py. Auto-detected if empty. |
+| `tf-analyze.pythonPath` | `` | Python interpreter for the engine. Auto-detects `python` on Windows, `python3` elsewhere; set to an absolute path / `py` / a venv python to override. |
 | `tf-analyze.failOn` | `HIGH` | Minimum urgency level to render as Error. |
 | `tf-analyze.runOnSave` | `true` | Re-scan on every .tf save. |
 | `tf-analyze.section` | `` | Restrict to a section (empty = all). |

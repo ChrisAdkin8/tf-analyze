@@ -23,6 +23,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `--cache` correctness fix (a warm cache no longer skips findings in
   workflow-YAML / tfvars files).
 
+### Added
+
+- **`tf-analyze.pythonPath` setting** — choose the Python interpreter the
+  extension spawns the engine with. Auto-detects `python` on Windows and
+  `python3` elsewhere; the previous hardcoded `python3` failed on Windows
+  installs that only ship `python`/`py`.
+
+### Fixed
+
+- **Stale Quick Fix** no longer throws when the buffer shrank below the
+  finding's line — it warns and asks for a re-scan instead.
+- **Attack-graph and rule-explainer panels** now enforce the same 120s
+  engine timeout as the other panels, so a hung `detect.py` can't spin the
+  webview forever.
+- **Bundled engine** P2/P3 correctness: SARIF no longer crashes on a
+  malformed finding (and stops mis-mapping unknown rules to `rules[0]`);
+  delta/baseline counts duplicate-key findings correctly; `strip_hcl_context`
+  is string-aware; PR-review diff positions ignore the `\ No newline` marker;
+  Markdown summary cells escape `|`/newlines; exact-duplicate findings are
+  de-duplicated.
+
+### Changed
+
+- The bundled engine's risk score now rounds **down** (floor) rather than
+  half-to-even, so a single suppressed finding can't nudge the grade upward.
+
 ## [0.1.57] — 2026-05-13
 
 **Bundled engine refreshed for R32.1 — K8s/Helm rule coverage 8 → 18 (343 → 353 active rules).**
