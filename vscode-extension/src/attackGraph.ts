@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
-import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
+import { resolveScriptPath, defaultSearchPaths, resolvePython } from './scriptResolver';
 
 interface GraphNode {
   id: string;
@@ -77,9 +77,9 @@ export class AttackGraphPanel {
     // arbitrary shell. `execFile` passes argv directly to the kernel:
     // no shell, no interpolation, no escape gymnastics.
     cp.execFile(
-      'python3',
+      resolvePython(cfg),
       [absScript, '--target', wsFolder, '--format', 'json', '--attack-graph'],
-      { maxBuffer: 20 * 1024 * 1024 },
+      { maxBuffer: 20 * 1024 * 1024, timeout: 120_000 },
       (err, stdout, stderr) => {
         // exit 1 = findings exist (expected); exit > 1 = real error.
         // BUT: Python emits exit 1 for any unhandled exception, with a
@@ -89,7 +89,7 @@ export class AttackGraphPanel {
         const errCode = (err as cp.ExecException & { code?: number } | null)?.code;
         const exitGtOne = typeof errCode === "number" && errCode > 1;
         const stdoutEmpty = !stdout || !stdout.trim();
-        const cmdLine = `python3 ${absScript} --target ${wsFolder} --format json --attack-graph`;
+        const cmdLine = `${resolvePython(cfg)} ${absScript} --target ${wsFolder} --format json --attack-graph`;
 
         if (exitGtOne || stdoutEmpty) {
           const reason = stdoutEmpty && !exitGtOne

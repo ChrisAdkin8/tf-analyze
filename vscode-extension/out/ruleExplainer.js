@@ -85,7 +85,7 @@ class RuleExplainerPanel {
             return;
         }
         const argv = [absScript, '--explain', this._ruleId];
-        cp.execFile('python3', argv, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+        cp.execFile((0, scriptResolver_1.resolvePython)(cfg), argv, { maxBuffer: 10 * 1024 * 1024, timeout: 120000 }, (err, stdout, stderr) => {
             const errCode = err?.code;
             if (typeof errCode === 'number' && errCode > 1) {
                 this._panel.webview.html = this._error(`Couldn't load ${this._ruleId}`, `<p><strong>Exit code:</strong> ${errCode}</p>` +

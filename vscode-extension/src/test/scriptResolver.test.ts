@@ -3,7 +3,26 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { resolveScriptPath, defaultSearchPaths, BUNDLED_ENGINE_PATH } from '../scriptResolver';
+import { resolveScriptPath, resolvePython, defaultSearchPaths, BUNDLED_ENGINE_PATH } from '../scriptResolver';
+
+function pyCfg(pythonPath: string): { get<T>(section: string, defaultValue: T): T } {
+  return {
+    get<T>(section: string, defaultValue: T): T {
+      return (section === 'pythonPath' ? pythonPath : defaultValue) as T;
+    },
+  };
+}
+
+test('resolvePython honours tf-analyze.pythonPath when set', () => {
+  assert.equal(resolvePython(pyCfg('/opt/venv/bin/python') as never), '/opt/venv/bin/python');
+});
+
+test('resolvePython falls back to a platform interpreter when unset', () => {
+  // 'python' on win32, 'python3' elsewhere — assert it picked one of them
+  // (the old hardcoded 'python3' broke Windows installs lacking it).
+  const got = resolvePython(pyCfg('') as never);
+  assert.ok(got === 'python' || got === 'python3', `unexpected default: ${got}`);
+});
 
 // Every test in this file disables the bundled-engine check unless it
 // specifically wants to exercise it. The bundled engine ships at

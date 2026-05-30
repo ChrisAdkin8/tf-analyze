@@ -65,12 +65,12 @@ async function startLspClient(context, outputChannel) {
     }
     const serverOptions = {
         run: {
-            command: 'python3',
+            command: (0, scriptResolver_1.resolvePython)(cfg),
             args: [absScript, '--lsp'],
             transport: node_1.TransportKind.stdio,
         },
         debug: {
-            command: 'python3',
+            command: (0, scriptResolver_1.resolvePython)(cfg),
             args: [absScript, '--lsp'],
             transport: node_1.TransportKind.stdio,
         },

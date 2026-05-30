@@ -59,6 +59,8 @@ exports.ENGINE_MAX_BUFFER = exports.ENGINE_TIMEOUT_MS = void 0;
 exports.runEngine = runEngine;
 exports.classifyEngineResult = classifyEngineResult;
 const cp = __importStar(require("child_process"));
+const vscode = __importStar(require("vscode"));
+const scriptResolver_1 = require("./scriptResolver");
 // 120 seconds matches the constant in `extension.ts` so a panel-spawned
 // engine has the same patience as the main scan.  A hung detect.py
 // (Windows FS stall, infinite loop in a new rule, multi-thousand-file
@@ -80,10 +82,11 @@ exports.ENGINE_MAX_BUFFER = 50 * 1024 * 1024;
  *                    the timeout fires.  Always called exactly once.
  */
 function runEngine(scriptPath, args, cb) {
+    const py = (0, scriptResolver_1.resolvePython)(vscode.workspace.getConfiguration('tf-analyze'));
     // Build the pretty cmdLine FIRST so error paths can quote it even if the
     // spawn itself fails synchronously.  The panel renderers display it back
     // to the user so they can re-run from a terminal.
-    const cmdLine = `python3 ${[scriptPath, ...args]
+    const cmdLine = `${py} ${[scriptPath, ...args]
         .map(a => /\s/.test(a) ? `"${a}"` : a)
         .join(' ')}`;
     let settled = false;
@@ -97,7 +100,7 @@ function runEngine(scriptPath, args, cb) {
         clearTimeout(timer);
         cb(result);
     };
-    const proc = cp.execFile('python3', [scriptPath, ...args], { maxBuffer: exports.ENGINE_MAX_BUFFER }, (err, stdout, stderr) => {
+    const proc = cp.execFile(py, [scriptPath, ...args], { maxBuffer: exports.ENGINE_MAX_BUFFER }, (err, stdout, stderr) => {
         finish({
             err: err,
             stdout: stdout || '',

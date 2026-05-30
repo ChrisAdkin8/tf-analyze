@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BUNDLED_ENGINE_PATH = void 0;
 exports.resolveScriptPath = resolveScriptPath;
+exports.resolvePython = resolvePython;
 exports.defaultSearchPaths = defaultSearchPaths;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
@@ -112,6 +113,21 @@ function resolveScriptPath(cfg, wsFolder, options) {
         dir = parent;
     }
     return null;
+}
+/** Resolve the Python interpreter to spawn the engine with.
+ *
+ * `tf-analyze.pythonPath` wins when set (absolute path or a name on PATH).
+ * Otherwise default by platform: Windows installs almost always provide
+ * `python` and frequently lack `python3`, so the previous hardcoded
+ * `python3` made every scan/panel/LSP fail with ENOENT on Windows.
+ * Takes `cfg` (rather than reading the config itself) so this module stays
+ * value-import-free and unit-testable outside VS Code, like
+ * `resolveScriptPath`. */
+function resolvePython(cfg) {
+    const configured = (cfg.get('pythonPath', '') ?? '').trim();
+    if (configured)
+        return configured;
+    return process.platform === 'win32' ? 'python' : 'python3';
 }
 /** A short list of representative paths checked, useful for surfacing
  * "we looked here" guidance in error panels. Not exhaustive — the
