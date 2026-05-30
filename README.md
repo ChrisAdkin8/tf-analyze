@@ -17,12 +17,12 @@
 
 <!-- Content row — what does it cover? -->
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 353](https://img.shields.io/badge/rules-353-brightgreen)
+![Rules: 354](https://img.shields.io/badge/rules-354-brightgreen)
 ![fix_hcl: 93%](https://img.shields.io/badge/fix__hcl-93%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-69%25%20%2F%2053%25%20%2F%2040%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
 ![Tests: 1153](https://img.shields.io/badge/tests-1153%20passing-brightgreen)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-353%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-354%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Integrations](#integrations) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Demo corpora](#demo-corpora--examples) · [Repo layout](#repository-layout) · [Contributing](#contributing--maintenance) · [Provenance](#provenance) · [License](#license)**
 
@@ -36,8 +36,8 @@ Same engine, ten surfaces — Claude Code skill, Python CLI, GitHub Action, Dock
 | GCP | 41 | 47 | 3 | **91** |
 | Azure | 56 | 32 | 3 | **91** |
 | K8s / Helm | 12 | 6 | 0 | **18** |
-| Cross-cloud / engine | 21 | 27 | 14 | **62** |
-| **Total** | **192** | **137** | **24** | **353** |
+| Cross-cloud / engine | 22 | 27 | 14 | **63** |
+| **Total** | **193** | **137** | **24** | **354** |
 
 Hardening = `ROB-*` + `STK-*`; Ops & Reuse = `OPS-*` + `COST-*` + `MOD-*` + `MOD-REUSE-*` + `INT-*` + `CI-*` + `STYLE-*`. Full per-family breakdown and shape-by-cloud commentary in [Detection ↓](#detection).
 
@@ -178,7 +178,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-353 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+354 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -197,7 +197,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | GCP    | 41  | 5   | 42  | 1   | 1    | 1         | **91**    |
 | Azure  | 56  | 7   | 25  | 1   | 1    | 1         | **91**    |
 | K8s/Helm | 12 | —  | 6   | —   | —    | —         | **18**    |
-| Cross-cloud / engine | — | — | — | — | — | — | **62** |
+| Cross-cloud / engine | — | — | — | — | — | — | **63** |
 
 **Why the per-section shapes differ at the same headline count.** Each cloud puts services in different boxes, and the catalogue follows the provider taxonomy rather than forcing a synthetic split:
 

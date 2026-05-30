@@ -131,6 +131,7 @@ The most useful kinds for custom rules:
 | `hcl_attr`            | A resource attribute equals (or doesn't equal) a specific value       |
 | `grep`                | Plain-text regex search                                               |
 | `iam_policy_analysis` | Walk `data.aws_iam_policy_document` statements (see below)            |
+| `high_entropy_string` | A string literal whose Shannon entropy marks it a probable hardcoded secret (any arg name) — complements the name-based secret greps |
 
 Pattern kinds support these suppression mechanisms:
 
