@@ -1939,6 +1939,132 @@ def _make_emitter(args: object):
     return emit, out_file
 
 
+def _run_detection(args: object, all_text: dict, extra_text: dict,
+                   entries: list, diff_files, target: Path) -> list:
+    """Core scan: per-file + corpus detection over the loaded corpus, with the
+    incremental cache, plus --plan-json and --state-json (drift) findings merged
+    in. Returns the findings list.
+
+    Extracted verbatim from main(). `entries` is the provider-filtered ruleset
+    (main() runs that filter first, since downstream consumers reuse the same
+    list). stderr-only side effects; no report output.
+    """
+    # Pass 2 — run per-file detection with the filtered ruleset.
+    # Build per-directory variable-default map once; passed into each
+    # detect_in_file call so plain `var.X` attribute values are resolved
+    # to their declared defaults before pattern matching.
+    var_defaults_by_dir = _extract_var_defaults_by_dir(all_text)
+
+    # Incremental cache: if --cache is set and the corpus hash matches the
+    # stored cache, return the cached findings immediately (skipping the full
+    # scan). The cache covers per-file findings + corpus findings in one shot.
+    _cache_path: Path | None = None
+    _corpus_hash_val: str | None = None
+    _cache_hit = False
+    findings: list[dict] = []
+    if getattr(args, "cache", False) and diff_files is None:
+        # Hash the FULL scanned-file set (.tf + the extra workflow-YAML /
+        # tfvars files scanned below), not just .tf. The extra_text scan
+        # only runs on a cache MISS, so keying the cache on .tf alone let a
+        # warm cache silently skip a secret (or any finding) added to e.g.
+        # a `.github/workflows/*.yml` while the .tf files were unchanged.
+        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries)
+        _cache_path = (
+            Path(args.cache_file).resolve()
+            if getattr(args, "cache_file", None)
+            else target / ".tf-analyze-cache.json"
+        )
+        _cached = _load_scan_cache(_cache_path)
+        if _cached and _cached.get("corpus_hash") == _corpus_hash_val:
+            print("# cache hit — skipping full scan", file=sys.stderr)
+            findings = _cached.get("findings", [])
+            _cache_hit = True
+
+    if not _cache_hit:
+        for fp, text in all_text.items():
+            if diff_files is not None and fp not in diff_files:
+                continue
+            findings.extend(
+                detect_in_file(fp, text, entries,
+                               var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
+            )
+        # Run grep-style rules against workflow YAML / tfvars / any
+        # other non-tf file_glob (--mode diff intentionally skips these
+        # since they are not in the git diff of *.tf files).
+        if diff_files is None:
+            for fp, text in extra_text.items():
+                findings.extend(detect_in_file(fp, text, entries))
+
+    # Plan-mode rule re-evaluation. Findings are merged into the same
+    # list so suppression, comparison, and reporting all see them; the
+    # `mode` field on each finding lets downstream consumers split.
+    if args.plan_json:
+        plan_path = Path(args.plan_json).resolve()
+        if not plan_path.exists():
+            print(
+                f"ERROR: --plan-json path does not exist: {plan_path}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        plan_findings = detect_in_plan(plan_path, entries)
+        if plan_findings:
+            print(
+                f"# {len(plan_findings)} plan-time finding(s) from "
+                f"{plan_path.name}",
+                file=sys.stderr,
+            )
+        findings.extend(plan_findings)
+
+    # Drift mode — re-evaluate rules against `terraform show -json
+    # state.tfstate` output. R30.12 — closes the gap between HCL intent
+    # and actual deployed values for oncalls who need to spot drift
+    # without re-running plan.
+    # Audit item 15 — argparse wires `--state-json` via dest="state_json"
+    # unconditionally; direct access surfaces a rename typo as
+    # AttributeError instead of a silent None.
+    state_json_arg = args.state_json
+    if args.mode == "drift" and not state_json_arg:
+        print(
+            "ERROR: --mode drift requires --state-json PATH",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if state_json_arg:
+        state_path = Path(state_json_arg).resolve()
+        if not state_path.exists():
+            print(
+                f"ERROR: --state-json path does not exist: {state_path}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        state_findings = detect_in_state(state_path, entries)
+        if state_findings:
+            print(
+                f"# {len(state_findings)} drift finding(s) from "
+                f"{state_path.name}",
+                file=sys.stderr,
+            )
+        findings.extend(state_findings)
+
+    # Corpus-level checks run against all files (even in diff mode)
+    if not _cache_hit:
+        corpus_findings = detect_corpus(target, all_text, entries)
+        if diff_files is not None:
+            # Filter corpus findings to only those touching changed files
+            corpus_findings = [
+                f for f in corpus_findings
+                if Path(f["file"]).resolve() in diff_files or f["line"] == 0
+            ]
+        findings.extend(corpus_findings)
+
+        # Persist to cache after all per-file + corpus findings are collected
+        # (before plan / registry findings which require external inputs).
+        if _cache_path and _corpus_hash_val:
+            _save_scan_cache(_cache_path, _corpus_hash_val, findings)
+
+    return findings
+
+
 def _render_report(args: object, findings: list, entries: list, *, emit,
                    summary: dict, suppressed_findings: list,
                    suppressed_by_baseline: list, attack_graph, centrality_scores,
@@ -2837,118 +2963,10 @@ def main():
             file=sys.stderr,
         )
 
-    # Pass 2 — run per-file detection with the filtered ruleset.
-    # Build per-directory variable-default map once; passed into each
-    # detect_in_file call so plain `var.X` attribute values are resolved
-    # to their declared defaults before pattern matching.
-    var_defaults_by_dir = _extract_var_defaults_by_dir(all_text)
-
-    # Incremental cache: if --cache is set and the corpus hash matches the
-    # stored cache, return the cached findings immediately (skipping the full
-    # scan). The cache covers per-file findings + corpus findings in one shot.
-    _cache_path: Path | None = None
-    _corpus_hash_val: str | None = None
-    _cache_hit = False
-    findings: list[dict] = []
-    if getattr(args, "cache", False) and diff_files is None:
-        # Hash the FULL scanned-file set (.tf + the extra workflow-YAML /
-        # tfvars files scanned below), not just .tf. The extra_text scan
-        # only runs on a cache MISS, so keying the cache on .tf alone let a
-        # warm cache silently skip a secret (or any finding) added to e.g.
-        # a `.github/workflows/*.yml` while the .tf files were unchanged.
-        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries)
-        _cache_path = (
-            Path(args.cache_file).resolve()
-            if getattr(args, "cache_file", None)
-            else target / ".tf-analyze-cache.json"
-        )
-        _cached = _load_scan_cache(_cache_path)
-        if _cached and _cached.get("corpus_hash") == _corpus_hash_val:
-            print("# cache hit — skipping full scan", file=sys.stderr)
-            findings = _cached.get("findings", [])
-            _cache_hit = True
-
-    if not _cache_hit:
-        for fp, text in all_text.items():
-            if diff_files is not None and fp not in diff_files:
-                continue
-            findings.extend(
-                detect_in_file(fp, text, entries,
-                               var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
-            )
-        # Run grep-style rules against workflow YAML / tfvars / any
-        # other non-tf file_glob (--mode diff intentionally skips these
-        # since they are not in the git diff of *.tf files).
-        if diff_files is None:
-            for fp, text in extra_text.items():
-                findings.extend(detect_in_file(fp, text, entries))
-
-    # Plan-mode rule re-evaluation. Findings are merged into the same
-    # list so suppression, comparison, and reporting all see them; the
-    # `mode` field on each finding lets downstream consumers split.
-    if args.plan_json:
-        plan_path = Path(args.plan_json).resolve()
-        if not plan_path.exists():
-            print(
-                f"ERROR: --plan-json path does not exist: {plan_path}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        plan_findings = detect_in_plan(plan_path, entries)
-        if plan_findings:
-            print(
-                f"# {len(plan_findings)} plan-time finding(s) from "
-                f"{plan_path.name}",
-                file=sys.stderr,
-            )
-        findings.extend(plan_findings)
-
-    # Drift mode — re-evaluate rules against `terraform show -json
-    # state.tfstate` output. R30.12 — closes the gap between HCL intent
-    # and actual deployed values for oncalls who need to spot drift
-    # without re-running plan.
-    # Audit item 15 — argparse wires `--state-json` via dest="state_json"
-    # unconditionally; direct access surfaces a rename typo as
-    # AttributeError instead of a silent None.
-    state_json_arg = args.state_json
-    if args.mode == "drift" and not state_json_arg:
-        print(
-            "ERROR: --mode drift requires --state-json PATH",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-    if state_json_arg:
-        state_path = Path(state_json_arg).resolve()
-        if not state_path.exists():
-            print(
-                f"ERROR: --state-json path does not exist: {state_path}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        state_findings = detect_in_state(state_path, entries)
-        if state_findings:
-            print(
-                f"# {len(state_findings)} drift finding(s) from "
-                f"{state_path.name}",
-                file=sys.stderr,
-            )
-        findings.extend(state_findings)
-
-    # Corpus-level checks run against all files (even in diff mode)
-    if not _cache_hit:
-        corpus_findings = detect_corpus(target, all_text, entries)
-        if diff_files is not None:
-            # Filter corpus findings to only those touching changed files
-            corpus_findings = [
-                f for f in corpus_findings
-                if Path(f["file"]).resolve() in diff_files or f["line"] == 0
-            ]
-        findings.extend(corpus_findings)
-
-        # Persist to cache after all per-file + corpus findings are collected
-        # (before plan / registry findings which require external inputs).
-        if _cache_path and _corpus_hash_val:
-            _save_scan_cache(_cache_path, _corpus_hash_val, findings)
+    # Pass 2 — per-file + corpus detection (with the incremental cache),
+    # plus --plan-json and --state-json (drift) findings merged in.
+    # See _run_detection. `entries` is already provider-filtered above.
+    findings = _run_detection(args, all_text, extra_text, entries, diff_files, target)
 
     # Registry staleness check (opt-in; requires network access).
     # Audit item 15 — direct attribute access; argparse boolean-flag
