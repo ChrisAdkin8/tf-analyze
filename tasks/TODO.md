@@ -67,10 +67,14 @@ branches + attack-graph + show-fixes/info + fail-on) pinned behaviour first.
 Full suite **1227 passed**; `main()` body ~1339 → **~1041 lines** (of which the
 argparse block is still ~514).
 
+**Done in increment 4 (2026-05-30):** **`_build_parser() -> argparse.Argument
+Parser`** — the ~510-line argparse block moved out via two boundary edits (pure
+move; flags/choices/defaults/help unchanged, `ap` unused after parse_args).
+Guarded by the CLI-docs drift gate + a `--help` smoke + full suite (1227 passed).
+`main()` body **1041 → 529 lines** (≈1500 at the start of the Option-A work →
+529 now, a ~65% cut).
+
 **Remaining:**
-- **`_build_parser() -> ArgumentParser`** — the ~514-line argparse block is now
-  the single largest thing in `main()`. Zero logic risk (pure declarations);
-  the highest-ROI cut left. Do this next.
 - The post-detect enrichment pipeline (`_enrich_findings_for_output` → baseline
   → threat-intel → INFO-filter → `_compute_summary`) still reassigns `findings`
   inline in main(); could become `_postprocess_findings(...)` but the multi-
@@ -78,6 +82,9 @@ argparse block is still ~514).
 - Smaller safe slices: `_apply_threat_intel(...)` (guarded by `test_threat_intel`),
   `_write_compliance_pdf(...)`, `_make_emitter` → single emitter object (when
   render call sites are revisited).
+- What's left in `main()` (~529 lines) is now mostly the linear dispatch spine
+  (output sink → meta-commands → mode early-exits → scan → post-detect pipeline →
+  render → fail-on); further extraction has diminishing returns vs. risk.
 
 ---
 
