@@ -2253,7 +2253,13 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 _emit(_render_compliance_text(compliance_report))
 
 
-def main():
+def _build_parser() -> argparse.ArgumentParser:
+    """Construct the CLI argument parser.
+
+    Extracted verbatim from main() — every flag, choice, default, and help
+    string is unchanged. Kept as its own function so main() reads as dispatch
+    rather than ~510 lines of argument declarations.
+    """
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
     # (--list-rules / --explain / --new-rule). Validation happens after
@@ -2767,6 +2773,11 @@ def main():
     ap.add_argument("--socket", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--port", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--clientProcessId", default=None, help=argparse.SUPPRESS)
+    return ap
+
+
+def main():
+    ap = _build_parser()
     args = ap.parse_args()
     # python-hcl2 fast-path is on by default; `--no-hcl2` (or
     # TF_ANALYZE_NO_HCL2=1) restores the stdlib-only regex path.  When
