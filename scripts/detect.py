@@ -1879,6 +1879,34 @@ def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
     return args.apply_fixes == "apply"
 
 
+def _cmd_auto_stub(args: object, findings: list, entries: list) -> None:
+    """Scaffold catalogue YAML stubs for `--propose-stub` IDs and any finding
+    IDs not already in the catalogue.
+
+    Extracted verbatim from main(); read-only over findings/entries and falls
+    through (no early exit).
+    """
+    stub_dir = Path(args.auto_stub)
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    catalog_ids = {e["id"] for e in entries}
+    stub_targets: dict[str, dict] = {}
+    if args.propose_stub:
+        for pid in [p.strip() for p in args.propose_stub.split(",") if p.strip()]:
+            stub_targets[pid] = {"resource": ""}
+    for f in findings:
+        if f["id"] not in catalog_ids:
+            stub_targets.setdefault(f["id"], f)
+    stubs_created = []
+    for fid, hint in stub_targets.items():
+        stub_path = generate_stub(fid, hint, stub_dir)
+        if stub_path:
+            stubs_created.append(str(stub_path))
+    if stubs_created:
+        print(f"# auto-stubs created: {len(stubs_created)}", file=sys.stderr)
+        for sp in stubs_created:
+            print(f"#   {sp}", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -2797,25 +2825,7 @@ def main():
     #       this only happens if findings carry non-catalogue IDs, e.g. from
     #       an external reconciler).
     if args.auto_stub:
-        stub_dir = Path(args.auto_stub)
-        stub_dir.mkdir(parents=True, exist_ok=True)
-        catalog_ids = {e["id"] for e in entries}
-        stub_targets: dict[str, dict] = {}
-        if args.propose_stub:
-            for pid in [p.strip() for p in args.propose_stub.split(",") if p.strip()]:
-                stub_targets[pid] = {"resource": ""}
-        for f in findings:
-            if f["id"] not in catalog_ids:
-                stub_targets.setdefault(f["id"], f)
-        stubs_created = []
-        for fid, hint in stub_targets.items():
-            stub_path = generate_stub(fid, hint, stub_dir)
-            if stub_path:
-                stubs_created.append(str(stub_path))
-        if stubs_created:
-            print(f"# auto-stubs created: {len(stubs_created)}", file=sys.stderr)
-            for sp in stubs_created:
-                print(f"#   {sp}", file=sys.stderr)
+        _cmd_auto_stub(args, findings, entries)
 
     # Build attack graph when requested (consumes all_text + findings)
     attack_graph: dict | None = None

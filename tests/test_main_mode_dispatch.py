@@ -104,3 +104,16 @@ def test_verify_fixed_json_happy_path(tmp_path: Path) -> None:
     assert set(data["results"]) == {
         "STILL-PRESENT", "RESOLVED", "MOVED", "STALE-LOCATION", "AMBIGUOUS"
     }
+
+
+def test_auto_stub_propose_creates_yaml(tmp_path: Path) -> None:
+    target = tmp_path / "tf"; target.mkdir()
+    (target / "main.tf").write_text('resource "aws_s3_bucket" "b" {\n  bucket = "x"\n}\n')
+    stub_dir = tmp_path / "stubs"
+    res = _run("--target", str(target), "--auto-stub", str(stub_dir),
+               "--propose-stub", "FOO-BAR-001")
+    # auto-stub runs mid-scan and falls through to normal reporting (exit 0,
+    # or 1 only if --fail-on were set, which it isn't here).
+    assert res.returncode in (0, 1), res.stderr
+    assert "auto-stubs created" in res.stderr
+    assert (stub_dir / "FOO-BAR-001.yaml").exists()
