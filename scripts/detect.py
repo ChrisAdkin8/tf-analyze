@@ -2253,8 +2253,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 _emit(_render_compliance_text(compliance_report))
 
 
-def main():
-    ap = argparse.ArgumentParser()
+def _add_target_args(ap: argparse.ArgumentParser) -> None:
+    """What to scan and which catalogue/config to load."""
     # --target is required for scan modes but not for the meta-commands
     # (--list-rules / --explain / --new-rule). Validation happens after
     # parse so users can `--list-rules` without supplying a target.
@@ -2277,6 +2277,90 @@ def main():
         help="Catalog directory",
     )
     ap.add_argument(
+        "--config",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to .tf-analyze.yaml project config file. "
+            "Default: auto-discover in target directory."
+        ),
+    )
+
+
+def _add_catalog_args(ap: argparse.ArgumentParser) -> None:
+    """Catalogue meta-commands and rule-selection scoping."""
+    # Meta-commands — short-circuit before scan logic. None of these
+    # require --target.
+    ap.add_argument(
+        "--list-rules",
+        action="store_true",
+        help=(
+            "Print every catalogue ID with title and urgency, grouped by "
+            "domain. Honors --focus, --include-stubs. No scan is run."
+        ),
+    )
+    ap.add_argument(
+        "--explain",
+        metavar="RULE-ID",
+        default=None,
+        help=(
+            "Print the full catalogue entry for the given rule ID and "
+            "exit. No scan is run."
+        ),
+    )
+    ap.add_argument(
+        "--new-rule",
+        metavar="RULE-ID",
+        default=None,
+        help=(
+            "Scaffold a new catalogue entry and fixture skeleton for the "
+            "given ID (must match DOMAIN-SUBDOMAIN-NNN format). Writes "
+            "catalog/<ID>.yaml and fixtures/<slug>/main.tf with TODO "
+            "markers, then exits."
+        ),
+    )
+    ap.add_argument(
+        "--focus",
+        default=None,
+        help=(
+            "Restrict --list-rules / scans to entries in this section "
+            "(security, robustness, dry, style, simplicity, ops, cicd, "
+            "module, stack, verification)."
+        ),
+    )
+    ap.add_argument(
+        "--strict-catalog",
+        action="store_true",
+        help=(
+            "Abort with exit code 2 on any catalogue schema error. "
+            "Default behaviour is loud-warn-and-skip: print ERROR lines "
+            "to stderr and continue with the entries that did parse."
+        ),
+    )
+    ap.add_argument(
+        "--include-stubs",
+        action="store_true",
+        help="Include catalogue entries with status: stub",
+    )
+    ap.add_argument(
+        "--only-fixture",
+        default=None,
+        help="Restrict catalogue to entries listing this fixture name",
+    )
+    ap.add_argument(
+        "--init",
+        action="store_true",
+        default=False,
+        help=(
+            "Create .tf-analyze.yaml and .tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml "
+            "in the target directory, then exit."
+        ),
+    )
+
+
+def _add_output_args(ap: argparse.ArgumentParser) -> None:
+    """Output format, destination, and what to include / gate on."""
+    ap.add_argument(
         "--format",
         choices=["text", "json", "sarif", "html", "compliance", "mitre", "pr-summary"],
         default="text",
@@ -2289,17 +2373,118 @@ def main():
         ),
     )
     ap.add_argument(
-        "--attack-graph",
+        "--output",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Write report output to PATH instead of stdout. "
+            "The file is created or overwritten. stderr (progress, "
+            "counts, errors) is unaffected."
+        ),
+    )
+    ap.add_argument(
+        "--show-fixes",
         action="store_true",
         default=False,
         help=(
-            "Build a directed attack-path graph from internet-reachable resources to "
-            "crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). "
-            "With --format html adds an interactive Attack Graph tab (force-directed SVG, "
-            "drag, click-to-inspect, critical path highlighted in red). "
-            "With --format text (default) appends a Mermaid flowchart block after findings. "
-            "Also enables adversarial scenario narratives for HIGH/CRITICAL findings."
+            "When a catalogue entry carries a `fix_hcl` snippet, render it "
+            "alongside each finding. HTML: syntax-highlighted block inside "
+            "the finding detail. Text: indented snippet below the finding line."
         ),
+    )
+    ap.add_argument(
+        "--show-info",
+        action="store_true",
+        help=(
+            "Include INFO-tier findings (advisory; e.g. module-reuse "
+            "suggestions) in output. Default off — INFO findings are "
+            "counted in the summary but not rendered."
+        ),
+    )
+    ap.add_argument(
+        "--fail-on",
+        default=None,
+        choices=["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
+        help="Exit with code 1 if any finding at this urgency or above exists",
+    )
+    # Suppressions are on by default; --no-suppress is the opt-out toggle.
+    # An earlier `--suppress` flag was a confusing no-op (it defaulted to
+    # True so passing it changed nothing) and has been removed.
+    ap.add_argument(
+        "--no-suppress",
+        action="store_true",
+        help=(
+            "Disable all suppression (show every finding). Default: "
+            "suppressions from .tf-analyze-ignore.yaml + inline "
+            "`# tf-analyze:ignore <ID>` comments are applied."
+        ),
+    )
+    ap.add_argument(
+        "--mitre-tactic",
+        default=None,
+        help=(
+            "Restrict --format mitre output to one ATT&CK tactic "
+            "(e.g. 'Initial Access', 'Defense Evasion'). "
+            "Case-insensitive; hyphens and underscores accepted "
+            "as separators ('initial-access' is equivalent)."
+        ),
+    )
+
+
+def _add_mode_args(ap: argparse.ArgumentParser) -> None:
+    """Execution mode and its per-mode inputs."""
+    ap.add_argument(
+        "--mode",
+        choices=["static", "diff", "verify-fixed", "fleet", "trend", "pr-review", "drift"],
+        default="static",
+        help=(
+            "Execution mode. fleet: multi-repo scan. trend: risk "
+            "trajectory over git history. drift (R30.12): re-evaluate "
+            "rules against `terraform show -json state.tfstate` output, "
+            "catching the gap between the HCL intent and what's actually "
+            "deployed. Requires --state-json."
+        ),
+    )
+    ap.add_argument(
+        "--diff-base",
+        default=None,
+        help="Git ref to diff against (e.g., main). Only scan changed .tf files.",
+    )
+    ap.add_argument(
+        "--state-json",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to `terraform show -json state.tfstate` output. "
+            "Required by --mode drift. The catalogue's resource_arg / "
+            "resource_missing_arg / resource_present / hcl_attr / "
+            "data_source_present kinds are re-evaluated against the "
+            "deployed values; findings are tagged mode='state' so "
+            "downstream consumers can distinguish drift from "
+            "plan-time / static-time triggers of the same rule."
+        ),
+    )
+    ap.add_argument(
+        "--plan-json",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to `terraform show -json plan.tfplan` output. When "
+            "supplied, the catalogue's resource_arg / resource_missing_arg "
+            "/ resource_present / hcl_attr / data_source_present rules "
+            "are re-evaluated against resolved values from the plan. "
+            "Static findings still run; plan findings are tagged with "
+            "mode='plan' so the report can disambiguate. Required for "
+            "catching variable-resolved violations (e.g. tfvars setting "
+            "an IAM role to a forbidden value)."
+        ),
+    )
+    ap.add_argument(
+        "--lookback",
+        type=int,
+        default=30,
+        metavar="N",
+        help="Days of git history to analyse in --mode trend (default: 30).",
     )
     ap.add_argument(
         "--repo",
@@ -2314,6 +2499,76 @@ def main():
         metavar="N",
         help="GitHub pull request number for --mode pr-review.",
     )
+
+
+def _add_analysis_args(ap: argparse.ArgumentParser) -> None:
+    """Optional analyses layered on top of detection (graph, scoring, registry, tests)."""
+    ap.add_argument(
+        "--attack-graph",
+        action="store_true",
+        default=False,
+        help=(
+            "Build a directed attack-path graph from internet-reachable resources to "
+            "crown jewels (RDS, KMS keys, Secrets Manager, S3/GCS buckets). "
+            "With --format html adds an interactive Attack Graph tab (force-directed SVG, "
+            "drag, click-to-inspect, critical path highlighted in red). "
+            "With --format text (default) appends a Mermaid flowchart block after findings. "
+            "Also enables adversarial scenario narratives for HIGH/CRITICAL findings."
+        ),
+    )
+    ap.add_argument(
+        "--blast-radius",
+        action="store_true",
+        default=False,
+        help=(
+            "Surface the top-N resources sorted by downstream blast "
+            "radius — 'what would a single terraform apply destroy?'. "
+            "Implied by --attack-graph; this flag adds a dedicated text "
+            "table when --format text. JSON output always carries the "
+            "`blast_radius` block when the attack graph is built. "
+            "Findings on high-blast-radius resources also carry a "
+            "per-finding `blast_radius` integer."
+        ),
+    )
+    ap.add_argument(
+        "--explain-score",
+        action="store_true",
+        default=False,
+        help=(
+            "Surface the top-5 findings ranked by score contribution, "
+            "showing the projected score and grade if each is fixed. "
+            "Tells the user which fix is worth most. Renders as a "
+            "header block in text / pr-summary output; surfaces as a "
+            "structured `score_explanation` object in JSON output."
+        ),
+    )
+    ap.add_argument(
+        "--check-registry",
+        action="store_true",
+        default=False,
+        help=(
+            "Query the Terraform Registry for the latest version of each "
+            "registry-style module source and emit MOD-STALE-001 findings "
+            "for modules that are significantly behind (>=1 major or >=3 "
+            "minor versions). Requires outbound HTTPS to registry.terraform.io. "
+            "Off by default so scans remain offline-capable."
+        ),
+    )
+    ap.add_argument(
+        "--gen-tests",
+        default=None,
+        metavar="OUTDIR",
+        help=(
+            "Generate .tftest.hcl assertion files for each finding whose "
+            "catalogue entry defines a `test_template` field. Files are "
+            "written to OUTDIR (created if absent). Native Terraform test "
+            "format (requires Terraform >= 1.6)."
+        ),
+    )
+
+
+def _add_compliance_args(ap: argparse.ArgumentParser) -> None:
+    """Compliance gap reporting and its export formats."""
     ap.add_argument(
         "--compliance",
         action="store_true",
@@ -2369,177 +2624,10 @@ def main():
             "errors with a one-line install hint and exit 2."
         ),
     )
-    ap.add_argument(
-        "--gen-tests",
-        default=None,
-        metavar="OUTDIR",
-        help=(
-            "Generate .tftest.hcl assertion files for each finding whose "
-            "catalogue entry defines a `test_template` field. Files are "
-            "written to OUTDIR (created if absent). Native Terraform test "
-            "format (requires Terraform >= 1.6)."
-        ),
-    )
-    ap.add_argument(
-        "--check-registry",
-        action="store_true",
-        default=False,
-        help=(
-            "Query the Terraform Registry for the latest version of each "
-            "registry-style module source and emit MOD-STALE-001 findings "
-            "for modules that are significantly behind (>=1 major or >=3 "
-            "minor versions). Requires outbound HTTPS to registry.terraform.io. "
-            "Off by default so scans remain offline-capable."
-        ),
-    )
-    ap.add_argument(
-        "--show-fixes",
-        action="store_true",
-        default=False,
-        help=(
-            "When a catalogue entry carries a `fix_hcl` snippet, render it "
-            "alongside each finding. HTML: syntax-highlighted block inside "
-            "the finding detail. Text: indented snippet below the finding line."
-        ),
-    )
-    ap.add_argument(
-        "--output",
-        metavar="PATH",
-        default=None,
-        help=(
-            "Write report output to PATH instead of stdout. "
-            "The file is created or overwritten. stderr (progress, "
-            "counts, errors) is unaffected."
-        ),
-    )
-    ap.add_argument(
-        "--mode",
-        choices=["static", "diff", "verify-fixed", "fleet", "trend", "pr-review", "drift"],
-        default="static",
-        help=(
-            "Execution mode. fleet: multi-repo scan. trend: risk "
-            "trajectory over git history. drift (R30.12): re-evaluate "
-            "rules against `terraform show -json state.tfstate` output, "
-            "catching the gap between the HCL intent and what's actually "
-            "deployed. Requires --state-json."
-        ),
-    )
-    ap.add_argument(
-        "--state-json",
-        default=None,
-        metavar="PATH",
-        help=(
-            "Path to `terraform show -json state.tfstate` output. "
-            "Required by --mode drift. The catalogue's resource_arg / "
-            "resource_missing_arg / resource_present / hcl_attr / "
-            "data_source_present kinds are re-evaluated against the "
-            "deployed values; findings are tagged mode='state' so "
-            "downstream consumers can distinguish drift from "
-            "plan-time / static-time triggers of the same rule."
-        ),
-    )
-    ap.add_argument(
-        "--lookback",
-        type=int,
-        default=30,
-        metavar="N",
-        help="Days of git history to analyse in --mode trend (default: 30).",
-    )
-    ap.add_argument(
-        "--prior-report",
-        default=None,
-        help="Markdown report to verify (for --mode verify-fixed). "
-             "If omitted, picks the most recent tf-analysis-*.md under reports/.",
-    )
-    ap.add_argument(
-        "--reports-dir",
-        default=None,
-        help="Reports directory (default: <skill>/reports). Used for "
-             "auto-discovery in --compare and --mode verify-fixed.",
-    )
-    ap.add_argument(
-        "--auto-compare",
-        action="store_true",
-        help="Auto-discover most recent prior JSON report and compute delta.",
-    )
-    ap.add_argument(
-        "--only-fixture",
-        default=None,
-        help="Restrict catalogue to entries listing this fixture name",
-    )
-    ap.add_argument(
-        "--include-stubs",
-        action="store_true",
-        help="Include catalogue entries with status: stub",
-    )
-    ap.add_argument(
-        "--strict-catalog",
-        action="store_true",
-        help=(
-            "Abort with exit code 2 on any catalogue schema error. "
-            "Default behaviour is loud-warn-and-skip: print ERROR lines "
-            "to stderr and continue with the entries that did parse."
-        ),
-    )
-    ap.add_argument(
-        "--diff-base",
-        default=None,
-        help="Git ref to diff against (e.g., main). Only scan changed .tf files.",
-    )
-    ap.add_argument(
-        "--auto-stub",
-        default=None,
-        help="Directory to write auto-generated catalogue stubs. Combined with "
-             "--propose-stub IDs or with findings whose IDs are novel (not in catalog).",
-    )
-    ap.add_argument(
-        "--propose-stub",
-        default=None,
-        help="Comma-separated list of exploratory IDs to scaffold as stubs. "
-             "Used by the judgement pass to promote novel findings. "
-             "Requires --auto-stub <dir>.",
-    )
-    ap.add_argument(
-        "--fail-on",
-        default=None,
-        choices=["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
-        help="Exit with code 1 if any finding at this urgency or above exists",
-    )
-    ap.add_argument(
-        "--show-info",
-        action="store_true",
-        help=(
-            "Include INFO-tier findings (advisory; e.g. module-reuse "
-            "suggestions) in output. Default off — INFO findings are "
-            "counted in the summary but not rendered."
-        ),
-    )
-    ap.add_argument(
-        "--explain-score",
-        action="store_true",
-        default=False,
-        help=(
-            "Surface the top-5 findings ranked by score contribution, "
-            "showing the projected score and grade if each is fixed. "
-            "Tells the user which fix is worth most. Renders as a "
-            "header block in text / pr-summary output; surfaces as a "
-            "structured `score_explanation` object in JSON output."
-        ),
-    )
-    ap.add_argument(
-        "--blast-radius",
-        action="store_true",
-        default=False,
-        help=(
-            "Surface the top-N resources sorted by downstream blast "
-            "radius — 'what would a single terraform apply destroy?'. "
-            "Implied by --attack-graph; this flag adds a dedicated text "
-            "table when --format text. JSON output always carries the "
-            "`blast_radius` block when the attack graph is built. "
-            "Findings on high-blast-radius resources also carry a "
-            "per-finding `blast_radius` integer."
-        ),
-    )
+
+
+def _add_threat_intel_args(ap: argparse.ArgumentParser) -> None:
+    """CISA KEV / FIRST.org EPSS exploitability ranking."""
     ap.add_argument(
         "--rank-by",
         choices=["urgency", "exploitability", "hybrid"],
@@ -2566,16 +2654,10 @@ def main():
             "air-gapped CI."
         ),
     )
-    ap.add_argument(
-        "--mitre-tactic",
-        default=None,
-        help=(
-            "Restrict --format mitre output to one ATT&CK tactic "
-            "(e.g. 'Initial Access', 'Defense Evasion'). "
-            "Case-insensitive; hyphens and underscores accepted "
-            "as separators ('initial-access' is equivalent)."
-        ),
-    )
+
+
+def _add_comparison_args(ap: argparse.ArgumentParser) -> None:
+    """Compare / baseline against a prior report."""
     ap.add_argument(
         "--compare",
         default=None,
@@ -2594,53 +2676,50 @@ def main():
             "going forward."
         ),
     )
-    # Suppressions are on by default; --no-suppress is the opt-out toggle.
-    # An earlier `--suppress` flag was a confusing no-op (it defaulted to
-    # True so passing it changed nothing) and has been removed.
     ap.add_argument(
-        "--no-suppress",
+        "--prior-report",
+        default=None,
+        help="Markdown report to verify (for --mode verify-fixed). "
+             "If omitted, picks the most recent tf-analysis-*.md under reports/.",
+    )
+    ap.add_argument(
+        "--reports-dir",
+        default=None,
+        help="Reports directory (default: <skill>/reports). Used for "
+             "auto-discovery in --compare and --mode verify-fixed.",
+    )
+    ap.add_argument(
+        "--auto-compare",
         action="store_true",
+        help="Auto-discover most recent prior JSON report and compute delta.",
+    )
+
+
+def _add_cache_args(ap: argparse.ArgumentParser) -> None:
+    """Incremental scan cache."""
+    ap.add_argument(
+        "--cache",
+        action="store_true",
+        default=False,
         help=(
-            "Disable all suppression (show every finding). Default: "
-            "suppressions from .tf-analyze-ignore.yaml + inline "
-            "`# tf-analyze:ignore <ID>` comments are applied."
+            "Enable incremental scan caching. Stores findings keyed on a "
+            "hash of all .tf file contents + catalogue entries in "
+            ".tf-analyze-cache.json inside the target directory. "
+            "Subsequent runs on unchanged code return the cached findings "
+            "instantly. Cache is invalidated automatically when any .tf file "
+            "or catalogue rule changes. Use --cache-file to override the path."
         ),
     )
     ap.add_argument(
-        "--plan-json",
+        "--cache-file",
         default=None,
         metavar="PATH",
-        help=(
-            "Path to `terraform show -json plan.tfplan` output. When "
-            "supplied, the catalogue's resource_arg / resource_missing_arg "
-            "/ resource_present / hcl_attr / data_source_present rules "
-            "are re-evaluated against resolved values from the plan. "
-            "Static findings still run; plan findings are tagged with "
-            "mode='plan' so the report can disambiguate. Required for "
-            "catching variable-resolved violations (e.g. tfvars setting "
-            "an IAM role to a forbidden value)."
-        ),
+        help="Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).",
     )
-    ap.add_argument(
-        "--use-hcl2",
-        action="store_true",
-        default=os.environ.get("TF_ANALYZE_USE_HCL2") == "1",
-        help=(
-            "[deprecated, default-on since v0.2] Enable python-hcl2 "
-            "fast-path. Kept for backwards compat; behaviour is now "
-            "controlled by --no-hcl2."
-        ),
-    )
-    ap.add_argument(
-        "--no-hcl2",
-        action="store_true",
-        default=os.environ.get("TF_ANALYZE_NO_HCL2") == "1",
-        help=(
-            "Disable the python-hcl2 fast-path and use the regex parser "
-            "exclusively. Useful for benchmarking or when running in a "
-            "constrained environment without the optional dependency."
-        ),
-    )
+
+
+def _add_fix_args(ap: argparse.ArgumentParser) -> None:
+    """Auto-remediation (fix_hcl patching) and catalogue-stub scaffolding."""
     ap.add_argument(
         "--apply-fixes",
         default=None,
@@ -2671,81 +2750,46 @@ def main():
         ),
     )
     ap.add_argument(
-        "--cache",
+        "--auto-stub",
+        default=None,
+        help="Directory to write auto-generated catalogue stubs. Combined with "
+             "--propose-stub IDs or with findings whose IDs are novel (not in catalog).",
+    )
+    ap.add_argument(
+        "--propose-stub",
+        default=None,
+        help="Comma-separated list of exploratory IDs to scaffold as stubs. "
+             "Used by the judgement pass to promote novel findings. "
+             "Requires --auto-stub <dir>.",
+    )
+
+
+def _add_engine_args(ap: argparse.ArgumentParser) -> None:
+    """Parser-engine selection (python-hcl2 fast-path vs regex)."""
+    ap.add_argument(
+        "--use-hcl2",
         action="store_true",
-        default=False,
+        default=os.environ.get("TF_ANALYZE_USE_HCL2") == "1",
         help=(
-            "Enable incremental scan caching. Stores findings keyed on a "
-            "hash of all .tf file contents + catalogue entries in "
-            ".tf-analyze-cache.json inside the target directory. "
-            "Subsequent runs on unchanged code return the cached findings "
-            "instantly. Cache is invalidated automatically when any .tf file "
-            "or catalogue rule changes. Use --cache-file to override the path."
+            "[deprecated, default-on since v0.2] Enable python-hcl2 "
+            "fast-path. Kept for backwards compat; behaviour is now "
+            "controlled by --no-hcl2."
         ),
     )
     ap.add_argument(
-        "--cache-file",
-        default=None,
-        metavar="PATH",
-        help="Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).",
-    )
-    # Meta-commands — short-circuit before scan logic. None of these
-    # require --target.
-    ap.add_argument(
-        "--list-rules",
+        "--no-hcl2",
         action="store_true",
+        default=os.environ.get("TF_ANALYZE_NO_HCL2") == "1",
         help=(
-            "Print every catalogue ID with title and urgency, grouped by "
-            "domain. Honors --focus, --include-stubs. No scan is run."
+            "Disable the python-hcl2 fast-path and use the regex parser "
+            "exclusively. Useful for benchmarking or when running in a "
+            "constrained environment without the optional dependency."
         ),
     )
-    ap.add_argument(
-        "--explain",
-        metavar="RULE-ID",
-        default=None,
-        help=(
-            "Print the full catalogue entry for the given rule ID and "
-            "exit. No scan is run."
-        ),
-    )
-    ap.add_argument(
-        "--new-rule",
-        metavar="RULE-ID",
-        default=None,
-        help=(
-            "Scaffold a new catalogue entry and fixture skeleton for the "
-            "given ID (must match DOMAIN-SUBDOMAIN-NNN format). Writes "
-            "catalog/<ID>.yaml and fixtures/<slug>/main.tf with TODO "
-            "markers, then exits."
-        ),
-    )
-    ap.add_argument(
-        "--focus",
-        default=None,
-        help=(
-            "Restrict --list-rules / scans to entries in this section "
-            "(security, robustness, dry, style, simplicity, ops, cicd, "
-            "module, stack, verification)."
-        ),
-    )
-    ap.add_argument(
-        "--config",
-        default=None,
-        metavar="PATH",
-        help=(
-            "Path to .tf-analyze.yaml project config file. "
-            "Default: auto-discover in target directory."
-        ),
-    )
-    ap.add_argument(
-        "--init",
-        action="store_true",
-        default=False,
-        help=(
-            "Create .tf-analyze.yaml and .tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml "
-            "in the target directory, then exit."
-        ),
-    )
+
+
+def _add_lsp_args(ap: argparse.ArgumentParser) -> None:
+    """LSP server mode + the transport hints some LSP clients inject."""
     ap.add_argument(
         "--lsp",
         action="store_true",
@@ -2767,6 +2811,34 @@ def main():
     ap.add_argument("--socket", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--port", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--clientProcessId", default=None, help=argparse.SUPPRESS)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Construct the CLI argument parser.
+
+    Delegates to domain-grouped `_add_*_args` helpers so this stays a short
+    table of contents instead of ~510 lines of declarations. Every flag, choice,
+    default, and help string is unchanged from the original monolith (a
+    parser-spec snapshot guards against drift).
+    """
+    ap = argparse.ArgumentParser()
+    _add_target_args(ap)
+    _add_catalog_args(ap)
+    _add_output_args(ap)
+    _add_mode_args(ap)
+    _add_analysis_args(ap)
+    _add_compliance_args(ap)
+    _add_threat_intel_args(ap)
+    _add_comparison_args(ap)
+    _add_cache_args(ap)
+    _add_fix_args(ap)
+    _add_engine_args(ap)
+    _add_lsp_args(ap)
+    return ap
+
+
+def main():
+    ap = _build_parser()
     args = ap.parse_args()
     # python-hcl2 fast-path is on by default; `--no-hcl2` (or
     # TF_ANALYZE_NO_HCL2=1) restores the stdlib-only regex path.  When
