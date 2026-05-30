@@ -1684,6 +1684,98 @@ def _default_catalog_dir() -> str:
     return str(sibling)
 
 
+def _cmd_init(args: object) -> int:
+    """Create a project config scaffold (`.tf-analyze.yaml` + an example rule).
+
+    Extracted verbatim from main()'s `--init` branch. Returns an exit code.
+    """
+    init_target = Path(args.targets[0]).resolve() if args.targets else Path.cwd()
+    _cfg_path = init_target / ".tf-analyze.yaml"
+    _rules_dir = init_target / ".tf-analyze-rules"
+    _rules_dir.mkdir(parents=True, exist_ok=True)
+    _cfg_path.write_text(
+        "# tf-analyze project configuration\n"
+        "# rules_dir: .tf-analyze-rules/\n"
+        "# ignore_rules: []\n"
+        "# thresholds:\n"
+        "#   password_min_length: 14\n"
+    )
+    (_rules_dir / "CUSTOM-EXAMPLE-001.yaml").write_text(
+        "id: CUSTOM-EXAMPLE-001\n"
+        'title: "Example: resource missing required Owner tag"\n'
+        "section: ops\n"
+        "default_urgency: MEDIUM\n"
+        "blast_radius: single-resource\n"
+        "status: active\n"
+        "patterns:\n"
+        "  - kind: resource_missing_arg\n"
+        "    resource: aws_instance\n"
+        "    arg: tags.Owner\n"
+        "    description: EC2 instance missing Owner tag required by org policy\n"
+        "recommendation: |\n"
+        "  Add an Owner tag identifying the team responsible for this resource.\n"
+        "      resource \"aws_instance\" \"app\" {\n"
+        "        tags = { Owner = \"platform-team\" }\n"
+        "      }\n"
+        "verification: |\n"
+        "  Check that all instances have Owner tag.\n"
+        "fix_hcl: |\n"
+        "  resource \"aws_instance\" \"app\" {\n"
+        "    tags = {\n"
+        "      Owner       = \"platform-team\"\n"
+        "      Environment = var.environment\n"
+        "    }\n"
+        "  }\n"
+        "fix_disruption: none\n"
+        "fixtures: []\n"
+    )
+    print(f"# created {_cfg_path}", file=sys.stderr)
+    print(f"# created {_rules_dir / 'CUSTOM-EXAMPLE-001.yaml'}", file=sys.stderr)
+    return 0
+
+
+def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
+    """Scan multiple repos and cross-correlate (`--mode fleet`).
+
+    Extracted verbatim from main(). `emit`/`out_file` are main()'s report-output
+    sink and (optional) `--output` file handle. Returns an exit code.
+    """
+    fleet_targets = _resolve_fleet_targets(args)
+    if not fleet_targets:
+        print("ERROR: --mode fleet requires at least one --target or --targets-file", file=sys.stderr)
+        return 2
+    fleet_result = _fleet_scan(fleet_targets, entries)
+    total = sum(fleet_result["summary"].values())
+    print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
+    emit(_render_fleet_report(fleet_result, args.format))
+    if out_file is not None:
+        out_file.close()
+    return 0
+
+
+def _mode_trend(args: object, entries: list, emit, out_file) -> int:
+    """Walk git history and compute per-commit finding deltas (`--mode trend`).
+
+    Extracted verbatim from main(). Returns an exit code.
+    """
+    trend_target = Path(args.targets[0]).resolve() if args.targets else None
+    if not trend_target:
+        print("ERROR: --mode trend requires --target <git-repo-dir>", file=sys.stderr)
+        return 2
+    # Round-5 audit fix #11 — argparse defaults `--lookback` to 30
+    # so direct attribute access is safe and fails fast on a
+    # rename typo (consistent with the other 5 sites converted in
+    # R30.8 audit #15).
+    lookback = args.lookback
+    print(f"# trend: analysing {lookback} days of git history in {trend_target}", file=sys.stderr)
+    rows = run_trend(trend_target, entries, lookback)
+    print(f"# trend: {len(rows)} commits analysed", file=sys.stderr)
+    emit(_render_trend_table(rows, args.format))
+    if out_file is not None:
+        out_file.close()
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -2250,49 +2342,7 @@ def main():
 
     # --init: create project config scaffold and exit
     if args.init:
-        init_target = Path(args.targets[0]).resolve() if args.targets else Path.cwd()
-        _cfg_path = init_target / ".tf-analyze.yaml"
-        _rules_dir = init_target / ".tf-analyze-rules"
-        _rules_dir.mkdir(parents=True, exist_ok=True)
-        _cfg_path.write_text(
-            "# tf-analyze project configuration\n"
-            "# rules_dir: .tf-analyze-rules/\n"
-            "# ignore_rules: []\n"
-            "# thresholds:\n"
-            "#   password_min_length: 14\n"
-        )
-        (_rules_dir / "CUSTOM-EXAMPLE-001.yaml").write_text(
-            "id: CUSTOM-EXAMPLE-001\n"
-            'title: "Example: resource missing required Owner tag"\n'
-            "section: ops\n"
-            "default_urgency: MEDIUM\n"
-            "blast_radius: single-resource\n"
-            "status: active\n"
-            "patterns:\n"
-            "  - kind: resource_missing_arg\n"
-            "    resource: aws_instance\n"
-            "    arg: tags.Owner\n"
-            "    description: EC2 instance missing Owner tag required by org policy\n"
-            "recommendation: |\n"
-            "  Add an Owner tag identifying the team responsible for this resource.\n"
-            "      resource \"aws_instance\" \"app\" {\n"
-            "        tags = { Owner = \"platform-team\" }\n"
-            "      }\n"
-            "verification: |\n"
-            "  Check that all instances have Owner tag.\n"
-            "fix_hcl: |\n"
-            "  resource \"aws_instance\" \"app\" {\n"
-            "    tags = {\n"
-            "      Owner       = \"platform-team\"\n"
-            "      Environment = var.environment\n"
-            "    }\n"
-            "  }\n"
-            "fix_disruption: none\n"
-            "fixtures: []\n"
-        )
-        print(f"# created {_cfg_path}", file=sys.stderr)
-        print(f"# created {_rules_dir / 'CUSTOM-EXAMPLE-001.yaml'}", file=sys.stderr)
-        sys.exit(0)
+        sys.exit(_cmd_init(args))
 
     # Load project config from .tf-analyze.yaml
     if args.config:
@@ -2355,36 +2405,11 @@ def main():
 
     # Fleet mode — scan multiple repos and cross-correlate
     if args.mode == "fleet":
-        fleet_targets = _resolve_fleet_targets(args)
-        if not fleet_targets:
-            print("ERROR: --mode fleet requires at least one --target or --targets-file", file=sys.stderr)
-            sys.exit(2)
-        fleet_result = _fleet_scan(fleet_targets, entries)
-        total = sum(fleet_result["summary"].values())
-        print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
-        _emit(_render_fleet_report(fleet_result, args.format))
-        if _out_file is not None:
-            _out_file.close()
-        sys.exit(0)
+        sys.exit(_mode_fleet(args, entries, _emit, _out_file))
 
     # Trend mode — walk git history and compute per-commit finding deltas
     if args.mode == "trend":
-        trend_target = Path(args.targets[0]).resolve() if args.targets else None
-        if not trend_target:
-            print("ERROR: --mode trend requires --target <git-repo-dir>", file=sys.stderr)
-            sys.exit(2)
-        # Round-5 audit fix #11 — argparse defaults `--lookback` to 30
-        # so direct attribute access is safe and fails fast on a
-        # rename typo (consistent with the other 5 sites converted in
-        # R30.8 audit #15).
-        lookback = args.lookback
-        print(f"# trend: analysing {lookback} days of git history in {trend_target}", file=sys.stderr)
-        rows = run_trend(trend_target, entries, lookback)
-        print(f"# trend: {len(rows)} commits analysed", file=sys.stderr)
-        _emit(_render_trend_table(rows, args.format))
-        if _out_file is not None:
-            _out_file.close()
-        sys.exit(0)
+        sys.exit(_mode_trend(args, entries, _emit, _out_file))
 
     target = Path(args.targets[0]).resolve()
 
