@@ -1818,6 +1818,67 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     return 0
 
 
+def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
+    """Apply (or dry-run) `fix_hcl` patches. Returns True if main() should exit.
+
+    Extracted from main(). A real `apply` returns True (main exits so the user
+    re-runs to confirm a clean state); a `dry-run` returns False (main falls
+    through to normal reporting). `findings` is read-only here — only the
+    patcher input is narrowed by `--baseline` / the disruption cap.
+    """
+    # `--apply-fixes` × `--baseline` (R30.11): when a baseline is set,
+    # findings already present in the baseline are not auto-patched.
+    # Closes the "snapshot today, fix only new stuff" UX. The full
+    # finding list is still emitted in the report; only the patcher
+    # input is narrowed.
+    fixable_findings = findings
+    if args.baseline:
+        _baseline_path = Path(args.baseline)
+        if _baseline_path.exists():
+            _retained, _suppressed_b = apply_baseline(findings, _baseline_path)
+            if _suppressed_b:
+                print(
+                    f"# apply-fixes: skipping {len(_suppressed_b)} baselined finding(s) "
+                    f"({len(_retained)} eligible for auto-patch)",
+                    file=sys.stderr,
+                )
+            fixable_findings = _retained
+
+    # R31.2 — disruption-tier cap. Used by the auto-remediation PR bot
+    # to limit itself to fixes that don't force replacement. The entry's
+    # `fix_disruption` field is the source of truth (`none` <
+    # `plan_required` < `forces_replacement`). Default of
+    # `forces_replacement` means no cap — backward-compatible.
+    _max_disr = getattr(args, "apply_fixes_max_disruption", "forces_replacement")
+    if _max_disr != "forces_replacement":
+        _disr_rank = {"none": 0, "plan_required": 1, "forces_replacement": 2}
+        _cap_rank = _disr_rank[_max_disr]
+        _entry_disr = {
+            e["id"]: e.get("fix_disruption", "forces_replacement")
+            for e in entries
+        }
+        _before = len(fixable_findings)
+        fixable_findings = [
+            f for f in fixable_findings
+            if _disr_rank.get(_entry_disr.get(f["id"], "forces_replacement"), 2)
+            <= _cap_rank
+        ]
+        _skipped_disr = _before - len(fixable_findings)
+        if _skipped_disr:
+            print(
+                f"# apply-fixes: skipping {_skipped_disr} finding(s) above "
+                f"disruption cap '{_max_disr}' "
+                f"({len(fixable_findings)} eligible for auto-patch)",
+                file=sys.stderr,
+            )
+
+    _handle_apply_fixes(
+        args, fixable_findings, entries,
+        dry_run=(args.apply_fixes == "dry-run"),
+    )
+    return args.apply_fixes == "apply"
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -2680,60 +2741,8 @@ def main():
     # re-scan (if the user re-runs) won't report those findings.
     # Audit item 15 — direct access on argparse-wired flags.
     if args.apply_fixes:
-        # `--apply-fixes` × `--baseline` (R30.11): when a baseline is set,
-        # findings already present in the baseline are not auto-patched.
-        # Closes the "snapshot today, fix only new stuff" UX. The full
-        # finding list is still emitted in the report; only the patcher
-        # input is narrowed.
-        fixable_findings = findings
-        if args.baseline:
-            _baseline_path = Path(args.baseline)
-            if _baseline_path.exists():
-                _retained, _suppressed_b = apply_baseline(findings, _baseline_path)
-                if _suppressed_b:
-                    print(
-                        f"# apply-fixes: skipping {len(_suppressed_b)} baselined finding(s) "
-                        f"({len(_retained)} eligible for auto-patch)",
-                        file=sys.stderr,
-                    )
-                fixable_findings = _retained
-
-        # R31.2 — disruption-tier cap. Used by the auto-remediation PR bot
-        # to limit itself to fixes that don't force replacement. The entry's
-        # `fix_disruption` field is the source of truth (`none` <
-        # `plan_required` < `forces_replacement`). Default of
-        # `forces_replacement` means no cap — backward-compatible.
-        _max_disr = getattr(args, "apply_fixes_max_disruption", "forces_replacement")
-        if _max_disr != "forces_replacement":
-            _disr_rank = {"none": 0, "plan_required": 1, "forces_replacement": 2}
-            _cap_rank = _disr_rank[_max_disr]
-            _entry_disr = {
-                e["id"]: e.get("fix_disruption", "forces_replacement")
-                for e in entries
-            }
-            _before = len(fixable_findings)
-            fixable_findings = [
-                f for f in fixable_findings
-                if _disr_rank.get(_entry_disr.get(f["id"], "forces_replacement"), 2)
-                <= _cap_rank
-            ]
-            _skipped_disr = _before - len(fixable_findings)
-            if _skipped_disr:
-                print(
-                    f"# apply-fixes: skipping {_skipped_disr} finding(s) above "
-                    f"disruption cap '{_max_disr}' "
-                    f"({len(fixable_findings)} eligible for auto-patch)",
-                    file=sys.stderr,
-                )
-
-        _handle_apply_fixes(
-            args, fixable_findings, entries,
-            dry_run=(args.apply_fixes == "dry-run"),
-        )
-        if args.apply_fixes == "apply":
-            # Exit after applying so the user can re-run to confirm clean state.
-            if getattr(args, "_out_file", None):
-                pass  # _out_file closure is local; normal cleanup via finally is N/A
+        # Exit after a real apply so the user can re-run to confirm clean state.
+        if _cmd_apply_fixes(args, findings, entries):
             return
 
     # Apply project-wide ignore_rules from .tf-analyze.yaml
