@@ -1,0 +1,34 @@
+name: provider
+
+# The Terraform provider (Go) had no CI and could rot uncompiled. Build,
+# vet and test it on any change under terraform-provider/. Path-filtered so
+# it doesn't run on unrelated PRs.
+on:
+  push:
+    paths:
+      - "terraform-provider/**"
+      - ".github/workflows/provider.yml"
+  pull_request:
+    paths:
+      - "terraform-provider/**"
+      - ".github/workflows/provider.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: provider (go build + vet + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform-provider
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: terraform-provider/go.mod
+          cache-dependency-path: terraform-provider/go.sum
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./... -count=1

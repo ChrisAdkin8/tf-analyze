@@ -39,6 +39,22 @@ const fs = __importStar(require("node:fs"));
 const os = __importStar(require("node:os"));
 const path = __importStar(require("node:path"));
 const scriptResolver_1 = require("../scriptResolver");
+function pyCfg(pythonPath) {
+    return {
+        get(section, defaultValue) {
+            return (section === 'pythonPath' ? pythonPath : defaultValue);
+        },
+    };
+}
+(0, node_test_1.test)('resolvePython honours tf-analyze.pythonPath when set', () => {
+    assert.equal((0, scriptResolver_1.resolvePython)(pyCfg('/opt/venv/bin/python')), '/opt/venv/bin/python');
+});
+(0, node_test_1.test)('resolvePython falls back to a platform interpreter when unset', () => {
+    // 'python' on win32, 'python3' elsewhere — assert it picked one of them
+    // (the old hardcoded 'python3' broke Windows installs lacking it).
+    const got = (0, scriptResolver_1.resolvePython)(pyCfg(''));
+    assert.ok(got === 'python' || got === 'python3', `unexpected default: ${got}`);
+});
 // Every test in this file disables the bundled-engine check unless it
 // specifically wants to exercise it. The bundled engine ships at
 // `<extensionRoot>/engine/detect.py` after `npm run bundle-engine`,

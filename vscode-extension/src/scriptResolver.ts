@@ -112,6 +112,21 @@ export function resolveScriptPath(
   return null;
 }
 
+/** Resolve the Python interpreter to spawn the engine with.
+ *
+ * `tf-analyze.pythonPath` wins when set (absolute path or a name on PATH).
+ * Otherwise default by platform: Windows installs almost always provide
+ * `python` and frequently lack `python3`, so the previous hardcoded
+ * `python3` made every scan/panel/LSP fail with ENOENT on Windows.
+ * Takes `cfg` (rather than reading the config itself) so this module stays
+ * value-import-free and unit-testable outside VS Code, like
+ * `resolveScriptPath`. */
+export function resolvePython(cfg: vscode.WorkspaceConfiguration): string {
+  const configured = (cfg.get<string>('pythonPath', '') ?? '').trim();
+  if (configured) return configured;
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
 /** A short list of representative paths checked, useful for surfacing
  * "we looked here" guidance in error panels. Not exhaustive — the
  * parent walk in resolveScriptPath checks more locations than this. */

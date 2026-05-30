@@ -71,7 +71,7 @@ class AttackGraphPanel {
         // workspace path containing backticks or double-quotes inject
         // arbitrary shell. `execFile` passes argv directly to the kernel:
         // no shell, no interpolation, no escape gymnastics.
-        cp.execFile('python3', [absScript, '--target', wsFolder, '--format', 'json', '--attack-graph'], { maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+        cp.execFile((0, scriptResolver_1.resolvePython)(cfg), [absScript, '--target', wsFolder, '--format', 'json', '--attack-graph'], { maxBuffer: 20 * 1024 * 1024, timeout: 120000 }, (err, stdout, stderr) => {
             // exit 1 = findings exist (expected); exit > 1 = real error.
             // BUT: Python emits exit 1 for any unhandled exception, with a
             // traceback on stderr and empty stdout. Don't conflate the two —
@@ -80,7 +80,7 @@ class AttackGraphPanel {
             const errCode = err?.code;
             const exitGtOne = typeof errCode === "number" && errCode > 1;
             const stdoutEmpty = !stdout || !stdout.trim();
-            const cmdLine = `python3 ${absScript} --target ${wsFolder} --format json --attack-graph`;
+            const cmdLine = `${(0, scriptResolver_1.resolvePython)(cfg)} ${absScript} --target ${wsFolder} --format json --attack-graph`;
             if (exitGtOne || stdoutEmpty) {
                 const reason = stdoutEmpty && !exitGtOne
                     ? "detect.py exited without printing JSON. Most often this is an unhandled Python exception — see stderr below."

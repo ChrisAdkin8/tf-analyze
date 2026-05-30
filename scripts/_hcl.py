@@ -182,30 +182,61 @@ def strip_hcl_context(text: str) -> str:
     should be HCL-aware (resource_arg, hcl_attr) rather than grep.
 
     Contract pinned by ``test_strip_hcl_context_preserves_length_and_offsets``
-    in ``tests/test_audit_2026_05_11_regressions.py`` (round-3 audit).
-    Length-preserving alone wasn't enough: a multi-line ``/* ... */``
-    comment used to have its newlines replaced with spaces, which
-    shifted every line count after it. The block-comment substitution
-    now preserves newline positions explicitly.
+    in ``tests/test_audit_2026_05_11_regressions.py`` (round-3 audit):
+    length and every newline position are preserved (comment bytes become
+    spaces; newlines are never touched).
+
+    Now a single-pass, **string-aware** tokenizer. The old regex blanked a
+    ``#``/``//`` even inside a string (``x = "http://foo"`` lost everything
+    after ``//``) and missed a comment that immediately followed a closing
+    quote (``v = "x"# c``). HCL has only double-quoted strings, so quote
+    tracking is double-quote + backslash-escape only — shared lexing with
+    ``brace_walk``.
     """
-    def blank(match: re.Match) -> str:
-        s = match.group(0)
-        # Preserve the first captured char if it's not part of the comment.
-        lead = match.group(1) if match.lastindex else ""
-        # Round-3 audit fix — keep newlines (line-comments don't match
-        # them, but a defensive replace here costs nothing).
-        rest = "".join(c if c == "\n" else " " for c in s[len(lead):])
-        return lead + rest
-    out = _LINE_COMMENT_RE.sub(blank, text)
-    # Round-3 audit fix — block comments span multiple lines, so
-    # replacing the whole match with N spaces previously converted
-    # internal newlines to spaces and shifted line counts in code
-    # following a /* ... */ comment.
-    out = _BLOCK_COMMENT_RE.sub(
-        lambda m: "".join(c if c == "\n" else " " for c in m.group(0)),
-        out,
-    )
-    return out
+    out = list(text)
+    in_dq = in_line = in_block = False
+    prev = ""
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if in_line:
+            if ch == "\n":
+                in_line = False
+            else:
+                out[i] = " "
+            prev = ch
+            i += 1
+            continue
+        if in_block:
+            close = (prev == "*" and ch == "/")
+            if ch != "\n":
+                out[i] = " "
+            in_block = not close
+            prev = "" if close else ch  # consume so the closing `/` is inert
+            i += 1
+            continue
+        if in_dq:
+            if ch == '"' and prev != "\\":
+                in_dq = False
+            prev = ch
+            i += 1
+            continue
+        # outside any string/comment
+        if ch == '"':
+            in_dq = True
+        elif ch == "#":
+            in_line = True
+            out[i] = " "
+        elif ch == "/" and nxt == "/":
+            in_line = True
+            out[i] = " "
+        elif ch == "/" and nxt == "*":
+            in_block = True
+            out[i] = " "
+        prev = ch
+        i += 1
+    return "".join(out)
 
 
 # ---- Quote-aware depth walker ------------------------------------------
@@ -384,6 +415,14 @@ def block_has_arg(body: str, arg: str) -> bool:
 
     Matches both attribute assignments (`arg = value`) and nested block
     declarations (`arg {`), since some arguments appear as blocks in HCL.
+
+    NOTE: this intentionally matches at ANY depth. A depth-0-only variant
+    was tried (audit P3 #28) but several rules legitimately rely on
+    matching an arg nested in a sub-block (e.g. Cloud SQL `settings{}`,
+    K8s ingress), so a blanket restriction false-positived their clean
+    fixtures. The correct fix is per-rule migration to
+    `block_has_nested_path` after a rule-by-rule intent review — tracked
+    in tasks/TODO.md, not done here.
     """
     pat = re.compile(rf'(?m)^\s*{re.escape(arg)}\s*[={{]', re.MULTILINE)
     return bool(pat.search(body))
@@ -530,36 +569,18 @@ def _expand_dynamic_blocks(body: str) -> str:
             break
         result.append(body[i:m.start()])
         block_name = m.group(1)
-        # Find the outer dynamic block boundary
-        depth, j, outer_end = 0, m.end() - 1, None
-        while j < n:
-            c = body[j]
-            if c == '{':
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    outer_end = j
-                    break
-            j += 1
-        if outer_end is None:
+        # Find the outer dynamic block boundary (quote/comment-aware).
+        outer_after = brace_walk(body, m.end() - 1)
+        if outer_after is None:
             result.append(body[m.start():])
             break
+        outer_end = outer_after - 1  # index of the matching `}`
         outer_body = body[m.end():outer_end]
         # Extract the content { ... } block inside the dynamic block
         content_m = re.search(r'(?m)^\s*content\s*\{', outer_body)
         if content_m:
-            depth2, k, content_end = 0, content_m.end() - 1, None
-            while k < len(outer_body):
-                c = outer_body[k]
-                if c == '{':
-                    depth2 += 1
-                elif c == '}':
-                    depth2 -= 1
-                    if depth2 == 0:
-                        content_end = k
-                        break
-                k += 1
+            content_after = brace_walk(outer_body, content_m.end() - 1)
+            content_end = content_after - 1 if content_after is not None else None
             if content_end is not None:
                 content_body = outer_body[content_m.end():content_end]
                 result.append(f'{block_name} {{{content_body}}}')

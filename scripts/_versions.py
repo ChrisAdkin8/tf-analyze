@@ -142,21 +142,13 @@ def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
     )
     for text in all_files_text.values():
         for m in tf_block_re.finditer(text):
-            depth = 0
-            i = m.end() - 1
-            end = None
-            for j in range(i, len(text)):
-                c = text[j]
-                if c == "{":
-                    depth += 1
-                elif c == "}":
-                    depth -= 1
-                    if depth == 0:
-                        end = j
-                        break
-            if end is None:
+            # Quote/comment-aware walk (shared with _extract_terraform_version)
+            # so a `}` inside a string in the terraform{} block doesn't
+            # truncate the body.
+            end_after = brace_walk(text, m.end() - 1)
+            if end_after is None:
                 continue
-            tf_body = text[m.end():end]
+            tf_body = text[m.end():end_after - 1]
             rp = rp_block_re.search(tf_body)
             if not rp:
                 continue

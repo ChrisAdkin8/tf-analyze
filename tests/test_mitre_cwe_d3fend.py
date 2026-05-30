@@ -44,20 +44,22 @@ class TestCatalogCoverage:
 
     def test_mitre_coverage_above_floor(self, active_rules: list[dict]) -> None:
         mapped = sum(1 for d in active_rules if d.get("mitre"))
-        # Round 29 sweep landed at 149/217 (69%). Floor at 60% gives
-        # margin for catalogue churn but catches a regression of >20 rules.
+        # Tightened to within ~5pts of the current ~80% (was a slack 60%,
+        # which let a regression of >40 rules pass silently).
         pct = 100 * mapped / len(active_rules)
-        assert pct >= 60, f"MITRE coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
+        assert pct >= 75, f"MITRE coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
 
     def test_cwe_coverage_above_floor(self, active_rules: list[dict]) -> None:
         mapped = sum(1 for d in active_rules if d.get("cwe"))
+        # Tightened to within ~5pts of the current ~68% (was 45%).
         pct = 100 * mapped / len(active_rules)
-        assert pct >= 45, f"CWE coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
+        assert pct >= 63, f"CWE coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
 
     def test_d3fend_coverage_above_floor(self, active_rules: list[dict]) -> None:
         mapped = sum(1 for d in active_rules if d.get("d3fend"))
+        # Tightened to within ~5pts of the current ~47% (was 35%).
         pct = 100 * mapped / len(active_rules)
-        assert pct >= 35, f"D3FEND coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
+        assert pct >= 42, f"D3FEND coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
 
 
 # ---- Schema validation ------------------------------------------------------

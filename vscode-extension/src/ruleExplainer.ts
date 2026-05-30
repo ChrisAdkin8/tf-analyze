@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
-import { resolveScriptPath } from './scriptResolver';
+import { resolveScriptPath, resolvePython } from './scriptResolver';
 import { ruleDocsUrl } from './urls';
 
 /**
@@ -67,7 +67,7 @@ export class RuleExplainerPanel {
       return;
     }
     const argv = [absScript, '--explain', this._ruleId];
-    cp.execFile('python3', argv, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    cp.execFile(resolvePython(cfg), argv, { maxBuffer: 10 * 1024 * 1024, timeout: 120_000 }, (err, stdout, stderr) => {
       const errCode = (err as cp.ExecException & { code?: number } | null)?.code;
       if (typeof errCode === 'number' && errCode > 1) {
         this._panel.webview.html = this._error(

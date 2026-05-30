@@ -12,6 +12,44 @@ network integrations, VS Code extension, build/CI/packaging, tests/fixtures/cata
 
 ## DONE (this session)
 
+### P1/P2/P3 backlog sweep (2026-05-30)
+
+Cleared the bulk of the remaining P1/P2/P3 list. Suite after the sweep:
+**Python 1189 passed / 2 skipped, extension 68 passed**, zero regressions.
+
+**P1** — catalog `kind` strict-load test (catches a typo'd/undispatched rule that would
+silently never fire); MOD-STALE-001 wired to its `mod_stale_version` fixture (fixes the
+malformed `fixtures: []`, closes the orphan, and proves the rule fires).
+**P2 (engine)** — delta/baseline now uses multiset counts (resolved findings no longer hidden);
+Markdown summary cells escape `|`/newlines (`_md_cell`); `_diff` two-dot fallback warns instead
+of silently scanning nothing; risk score floors (no parity-dependent grade flips); MITRE/CWE/
+D3FEND + SARIF-relationship ratchets tightened to ~5pts of current.
+**P2 (VS Code)** — `tf-analyze.pythonPath` + platform-aware interpreter (Windows fix); Quick Fix
+guards a stale/shrunk buffer; attack-graph + rule-explainer panels get the 120s timeout.
+**P2 (integrations)** — `tf-analyze-security` pre-commit hook fixed (`--section` → `--focus`).
+**P3** — `strip_hcl_context` is string-aware; `block_has_nested_path`/`_expand_dynamic_blocks`/
+`_extract_provider_constraints` migrated onto `brace_walk`; findings de-duplication; PR-diff
+`\ No newline` marker no longer shifts line→position; SARIF crash/`ruleIndex` (also P1-listed);
+`install.sh --copy` strips build artifacts; Terraform-provider Go CI job (`go build/vet/test`);
+`.github/dependabot.yml` for GitHub Actions. Tests in `tests/test_p2_p3_fixes.py` +
+`vscode-extension/src/test/scriptResolver.test.ts`.
+
+**Deferred (with rationale — NOT silently dropped):**
+- `block_has_arg` depth-0 restriction — *reverted*: several rules legitimately match an arg
+  nested in a sub-block (Cloud SQL `settings{}`, K8s ingress), so a blanket restriction
+  false-positived their clean fixtures. Correct fix = per-rule migration to
+  `block_has_nested_path` after intent review.
+- Mutable-in-place enrichers — latent (the CLI emits one `--format` per run, so cross-format
+  mutation doesn't occur in practice); fixing needs per-format deep-copy in `main()`'s dispatch.
+- The two never-fired greps (`SEC-LOG-CROSS-ACCOUNT-001`, `STK-K8S-IMAGE-SIGNED-001`) —
+  *intentionally* deferred by their own catalog comments ("until kubernetes_manifest walker").
+- The ~79 remaining clean fixtures (negative coverage) — ongoing fixture authoring, not a discrete bug.
+- Full commit-SHA pinning of all ~28 Actions — Dependabot added now; hand-pinning risks
+  mis-resolving a SHA and breaking the (now-required) CI gate.
+- `appendIgnoreRule` async + YAML-lib rewrite, and a goreleaser release pipeline for the provider.
+
+---
+
 - [x] **HCL parser family — silent false negatives.** Root cause: load-bearing primitives
   re-implemented naive, string/comment-blind brace counters instead of using the shared
   walker. Fixed by routing `find_blocks`, `find_simple_blocks`, `block_has_nested_path`

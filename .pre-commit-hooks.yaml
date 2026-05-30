@@ -19,7 +19,7 @@
     robustness findings are informational.
   language: python
   entry: python3 scripts/detect.py
-  args: ["--target", ".", "--fail-on", "HIGH", "--section", "security"]
+  args: ["--target", ".", "--fail-on", "HIGH", "--focus", "security"]
   types: [file]
   files: '\.(tf|tfvars)$'
   pass_filenames: false

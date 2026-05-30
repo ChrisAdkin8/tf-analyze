@@ -231,7 +231,7 @@ class TestCliSummary:
         out, _, _ = _run_cli("--target", str(tmp_path), "--format", "html")
         # Banner is identifiable by the score formula text we ship.
         assert "scoring_version 1" in out
-        assert "max(0, 100 - sum(weight * count))" in out
+        assert "max(0, floor(100 - sum(weight * count)))" in out
 
     def test_clean_repo_scores_100(self, tmp_path: Path):
         # An empty workspace with no .tf files should score 100 (A).

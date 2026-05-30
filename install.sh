@@ -84,8 +84,13 @@ case "$MODE" in
     ;;
   copy)
     cp -R "$REPO_DIR" "$TARGET"
-    # Strip git history + caches from the copy so it's a clean snapshot.
-    rm -rf "$TARGET/.git" "$TARGET/scripts/__pycache__" 2>/dev/null || true
+    # Strip git history + build artifacts from the copy so it's a clean
+    # snapshot (cp -R doesn't honour .gitignore, so it would otherwise drag
+    # the generated VS Code engine, test caches and build dirs along).
+    rm -rf "$TARGET/.git" "$TARGET/.pytest_cache" "$TARGET/.hypothesis" \
+           "$TARGET/build" "$TARGET/dist" "$TARGET/vscode-extension/engine" 2>/dev/null || true
+    find "$TARGET" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+    find "$TARGET" -name '*.egg-info' -type d -prune -exec rm -rf {} + 2>/dev/null || true
     echo "installed: $TARGET (copy of $REPO_DIR)"
     echo "NOTE: copy mode is a snapshot. Re-run after pulling repo updates."
     ;;

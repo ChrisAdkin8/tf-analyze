@@ -2,7 +2,7 @@
   "name": "tf-analyze",
   "displayName": "tf-analyze",
   "description": "Terraform security and stack analysis — inline findings, Quick Fix, and attack-graph view",
-  "version": "0.1.57",
+  "version": "0.1.58",
   "publisher": "tfanalyze",
   "license": "Apache-2.0",
   "icon": "assets/icon.png",
@@ -133,6 +133,11 @@
           "type": "string",
           "default": "",
           "description": "Path to detect.py. Leave empty to auto-detect from workspace or PATH."
+        },
+        "tf-analyze.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python interpreter used to run the engine. Leave empty to auto-detect ('python' on Windows, 'python3' elsewhere). Set to an absolute path or a name on PATH (e.g. 'py' or a venv's python) if auto-detection picks the wrong one."
         },
         "tf-analyze.failOn": {
           "type": "string",

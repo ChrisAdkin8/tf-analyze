@@ -178,6 +178,14 @@ def _sarif_safe_text(s: str) -> str:
 _h = html.escape
 
 
+def _md_cell(s: str) -> str:
+    """Escape a value for a GitHub-flavoured Markdown table cell. A literal
+    ``|`` adds a spurious column and an embedded newline truncates the row;
+    catalogue titles are normally clean, but ``--catalog`` supplies user
+    content and resource names can carry unusual characters."""
+    return str(s).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+
+
 # ---- rule-docs canonical URL --------------------------------------------
 # Single source of truth for the per-rule docs URL — drives:
 #   - SARIF `helpUri` on every result + every rule definition
@@ -1456,7 +1464,7 @@ def _render_pr_summary_impl(
         kev_badge = "🔥 " if f.get("kev") else ""
         # Link rule ID to the canonical docs page so reviewers can
         # one-click for full rationale.
-        rule_link = f"[`{rid}`]({RULE_DOCS_URL_BASE.format(id=rid)}) — {title}"
+        rule_link = f"[`{rid}`]({RULE_DOCS_URL_BASE.format(id=rid)}) — {_md_cell(title)}"
         parts.append(f"| {kev_badge}**{urg}** | {rule_link} | {loc} |")
     if len(ranked) > 3:
         parts.append("")

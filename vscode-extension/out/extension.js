@@ -508,12 +508,13 @@ async function runScan(ctx) {
     statusBar.text = "$(sync~spin) tf-analyze scanning…";
     statusBar.color = undefined;
     statusBar.show();
-    outputChannel.appendLine(`[tf-analyze] Running: python3 ${scriptPath} ${args.join(" ")}`);
+    const py = (0, scriptResolver_1.resolvePython)(vscode.workspace.getConfiguration("tf-analyze"));
+    outputChannel.appendLine(`[tf-analyze] Running: ${py} ${scriptPath} ${args.join(" ")}`);
     try {
         const result = await new Promise((resolve, reject) => {
             let stdout = "";
             let stderr = "";
-            const proc = cp.spawn("python3", [scriptPath, ...args], { cwd: target });
+            const proc = cp.spawn(py, [scriptPath, ...args], { cwd: target });
             // Audit item 2 — wall-clock timeout. SIGTERM the engine and
             // reject the promise so the status bar and panels return to
             // a known state instead of spinning forever.
@@ -771,8 +772,17 @@ function activate(context) {
     }), vscode.commands.registerCommand("tf-analyze.applyFix", async (document, _range, finding) => {
         if (!finding.fix_hcl)
             return;
+        // `finding.line` came from the last scan; the buffer may have been
+        // edited since. Guard against a now-shorter file so `lineAt` can't
+        // throw an unhandled rejection, and tell the user to re-scan when
+        // the target line no longer exists (stale Quick Fix).
+        if (finding.line > document.lineCount) {
+            void vscode.window.showWarningMessage(`tf-analyze: ${finding.id}'s line (${finding.line}) is past the end of the file — ` +
+                `re-run the scan and try the fix again.`);
+            return;
+        }
         const edit = new vscode.WorkspaceEdit();
-        const lineIdx = Math.max(0, finding.line - 1);
+        const lineIdx = Math.min(Math.max(0, finding.line - 1), document.lineCount - 1);
         const lineText = document.lineAt(lineIdx).text;
         const insertPos = new vscode.Position(lineIdx, lineText.length);
         const fixText = `\n\n# tf-analyze fix for ${finding.id}:\n${finding.fix_hcl}`;

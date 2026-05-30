@@ -22,6 +22,8 @@
 // caller, but the *boilerplate around them* lives here.
 
 import * as cp from 'child_process';
+import * as vscode from 'vscode';
+import { resolvePython } from './scriptResolver';
 
 // 120 seconds matches the constant in `extension.ts` so a panel-spawned
 // engine has the same patience as the main scan.  A hung detect.py
@@ -59,10 +61,11 @@ export type EngineCallback = (result: EngineResult) => void;
  *                    the timeout fires.  Always called exactly once.
  */
 export function runEngine(scriptPath: string, args: string[], cb: EngineCallback): void {
+  const py = resolvePython(vscode.workspace.getConfiguration('tf-analyze'));
   // Build the pretty cmdLine FIRST so error paths can quote it even if the
   // spawn itself fails synchronously.  The panel renderers display it back
   // to the user so they can re-run from a terminal.
-  const cmdLine = `python3 ${[scriptPath, ...args]
+  const cmdLine = `${py} ${[scriptPath, ...args]
     .map(a => /\s/.test(a) ? `"${a}"` : a)
     .join(' ')}`;
 
@@ -78,7 +81,7 @@ export function runEngine(scriptPath: string, args: string[], cb: EngineCallback
   };
 
   const proc = cp.execFile(
-    'python3',
+    py,
     [scriptPath, ...args],
     { maxBuffer: ENGINE_MAX_BUFFER },
     (err, stdout, stderr) => {

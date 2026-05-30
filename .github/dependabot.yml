@@ -1,0 +1,12 @@
+# Keep third-party GitHub Actions current. The workflows pin to floating
+# major tags (e.g. `@v4`); Dependabot opens weekly bump PRs so a stale or
+# yanked action is surfaced. NOTE: full commit-SHA pinning of every `uses:`
+# (the stronger supply-chain control) is still a follow-up — see tasks/TODO.md.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

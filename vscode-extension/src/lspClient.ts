@@ -5,7 +5,7 @@ import {
   ServerOptions,
   TransportKind,
 } from 'vscode-languageclient/node';
-import { resolveScriptPath } from './scriptResolver';
+import { resolveScriptPath, resolvePython } from './scriptResolver';
 
 let client: LanguageClient | undefined;
 
@@ -39,12 +39,12 @@ export async function startLspClient(
 
   const serverOptions: ServerOptions = {
     run: {
-      command: 'python3',
+      command: resolvePython(cfg),
       args: [absScript, '--lsp'],
       transport: TransportKind.stdio,
     },
     debug: {
-      command: 'python3',
+      command: resolvePython(cfg),
       args: [absScript, '--lsp'],
       transport: TransportKind.stdio,
     },

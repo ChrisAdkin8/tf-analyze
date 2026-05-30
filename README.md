@@ -246,7 +246,7 @@ Every text, JSON, and HTML scan emits a deterministic 0–100 health score and l
   "grade": "B",
   "counts": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 4, "LOW": 6, "INFO": 0},
   "suppressed_count": 0,
-  "formula": "max(0, 100 - sum(weight * count)); weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; suppressed at half weight"
+  "formula": "max(0, floor(100 - sum(weight * count))); weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; suppressed at half weight"
 }
 ```
 
