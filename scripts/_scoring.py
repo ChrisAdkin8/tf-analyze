@@ -30,6 +30,8 @@ the no-behaviour-change invariant of the extraction.
 """
 from __future__ import annotations
 
+import math
+
 
 # Tagged with `_SCORING_VERSION` so downstream gates can pin to a
 # specific weighting; bump it whenever weights change.
@@ -202,7 +204,12 @@ def _compute_summary(
 
     full_penalty = sum(_RISK_WEIGHTS.get(u, 0) * c for u, c in counts.items())
     raw_score = 100 - full_penalty - half_penalty
-    score = max(0, int(round(raw_score)))
+    # Round DOWN (floor), not round-half-to-even. A suppressed finding adds a
+    # half-weight penalty, so raw_score can land on X.5; banker's rounding then
+    # moved the grade up or down depending only on parity (99.5→100 but
+    # 98.5→98), which was surprising. Floor is the conservative, predictable
+    # choice for a penalty-based health score — it never over-credits.
+    score = max(0, math.floor(raw_score))
     return {
         "scoring_version": _SCORING_VERSION,
         "score": score,
@@ -210,7 +217,7 @@ def _compute_summary(
         "counts": counts,
         "suppressed_count": suppressed_count,
         "formula": (
-            "max(0, 100 - sum(weight * count)); "
+            "max(0, floor(100 - sum(weight * count))); "
             "weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; "
             "suppressed at half weight"
         ),

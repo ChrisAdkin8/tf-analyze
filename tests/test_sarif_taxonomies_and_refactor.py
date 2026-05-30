@@ -141,7 +141,7 @@ class TestSarifTaxonomies:
         rules = run["tool"]["driver"]["rules"]
         rules_with_rels = [r for r in rules if r.get("relationships")]
         # Most rules carry at least one taxonomy reference now.
-        assert len(rules_with_rels) >= 100, (
+        assert len(rules_with_rels) >= 250, (
             f"only {len(rules_with_rels)} rules have relationships — "
             "did the taxonomy emit regress?"
         )

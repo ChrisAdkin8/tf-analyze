@@ -1491,6 +1491,12 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
             elif dl.startswith("+"):
                 cur_line += 1
                 pos[cur_line] = position
+            elif dl.startswith("\\"):
+                # `\ No newline at end of file` — a marker, not a content
+                # line. Counting it as context advanced cur_line and shifted
+                # every subsequent line→position mapping (comments landed on
+                # the wrong line or were dropped).
+                continue
             elif not dl.startswith("-"):
                 cur_line += 1
                 pos[cur_line] = position
@@ -2704,6 +2710,25 @@ def main():
         _ignored = _before - len(findings)
         if _ignored:
             print(f"# {_ignored} finding(s) suppressed by project ignore_rules", file=sys.stderr)
+
+    # De-duplicate exact-duplicate findings — a whole-file grep rule or
+    # overlapping detection passes could emit the same (id, file, line,
+    # resource) twice; collapse them so counts/score and every output
+    # format see each finding once. Order-preserving.
+    _seen_fp: set = set()
+    _deduped: list[dict] = []
+    for _f in findings:
+        _fp = (_f.get("id"), _f.get("file"), _f.get("line"), _f.get("resource"))
+        if _fp in _seen_fp:
+            continue
+        _seen_fp.add(_fp)
+        _deduped.append(_f)
+    if len(_deduped) != len(findings):
+        print(
+            f"# {len(findings) - len(_deduped)} duplicate finding(s) collapsed",
+            file=sys.stderr,
+        )
+    findings = _deduped
 
     # Apply suppressions
     suppressed_findings: list[dict] = []

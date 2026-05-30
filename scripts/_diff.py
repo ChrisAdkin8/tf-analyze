@@ -129,6 +129,18 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path]:
             )
             if result is None:
                 return set()
+            if result.returncode != 0:
+                # Both the three-dot and two-dot diffs failed — almost always
+                # a bad/unknown --diff-base ref. Don't silently parse empty
+                # stdout as "0 changed files" (which would let a diff-mode CI
+                # run pass green having scanned nothing). Warn loudly.
+                print(
+                    f"WARN: git diff against base {diff_base!r} failed "
+                    f"(exit {result.returncode}); no changed files resolved. "
+                    f"Check the --diff-base ref.",
+                    file=sys.stderr,
+                )
+                return set()
         # Also include untracked .tf files
         untracked = _run_git(
             ["git", "ls-files", "--others", "--exclude-standard", "--", "*.tf"],

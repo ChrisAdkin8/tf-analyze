@@ -29,6 +29,7 @@ import datetime
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Callable
 
@@ -196,19 +197,33 @@ def compare_reports(current: list[dict], prior_path: Path) -> dict:
         print(f"WARN: cannot load prior report {prior_path}: {e}", file=sys.stderr)
         return {"resolved": [], "new": list(current), "unchanged": []}
 
-    prior_keys = {(f["id"], f.get("file", ""), f.get("resource", "")) for f in prior_findings}
-    current_keys = {(f["id"], f.get("file", ""), f.get("resource", "")) for f in current}
+    # Multiset (counted) semantics — a set collapsed N same-(id,file,resource)
+    # findings into one, so fixing one of two identical-key findings showed
+    # as "unchanged" and the resolution was never reported. Count keys and
+    # match min(prior,cur) as unchanged, the surplus on each side as
+    # resolved/new.
+    def _key(f: dict) -> tuple:
+        return (f["id"], f.get("file", ""), f.get("resource", ""))
 
-    resolved = [
-        f for f in prior_findings
-        if (f["id"], f.get("file", ""), f.get("resource", "")) not in current_keys
-    ]
-    new = [
-        f for f in current
-        if (f["id"], f.get("file", ""), f.get("resource", "")) not in prior_keys
-    ]
-    unchanged = [
-        f for f in current
-        if (f["id"], f.get("file", ""), f.get("resource", "")) in prior_keys
-    ]
+    prior_count = Counter(_key(f) for f in prior_findings)
+    cur_count = Counter(_key(f) for f in current)
+
+    resolved, new, unchanged = [], [], []
+    seen: Counter = Counter()
+    for f in prior_findings:
+        k = _key(f)
+        seen[k] += 1
+        # Surplus prior occurrences (beyond what current still has) resolved.
+        if seen[k] > cur_count[k]:
+            resolved.append(f)
+    seen = Counter()
+    for f in current:
+        k = _key(f)
+        seen[k] += 1
+        # First min(prior,cur) current occurrences are matched (unchanged);
+        # the surplus is genuinely new.
+        if seen[k] <= prior_count[k]:
+            unchanged.append(f)
+        else:
+            new.append(f)
     return {"resolved": resolved, "new": new, "unchanged": unchanged}
