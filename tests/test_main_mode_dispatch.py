@@ -1,14 +1,15 @@
 """Characterization tests for main()'s early-exit mode dispatch.
 
 These pin the *externally-observable* contract of the `--init`, `--mode fleet`,
-and `--mode trend` paths (exit code + the stderr progress markers + side
-effects) so the ongoing extraction of those bodies out of `main()` into
-module-level `_cmd_*` / `_mode_*` helpers stays behaviour-preserving. They run
-the real `detect.py` as a subprocess — the dispatch path had no end-to-end
-coverage before this file.
+`--mode trend`, and `--mode verify-fixed` paths (exit code + the stderr progress
+markers + side effects) so the ongoing extraction of those bodies out of
+`main()` into module-level `_cmd_*` / `_mode_*` helpers stays
+behaviour-preserving. They run the real `detect.py` as a subprocess — the
+dispatch path had no end-to-end coverage before this file.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -71,3 +72,35 @@ def test_trend_mode_runs(tmp_path: Path) -> None:
     res = _run("--mode", "trend", "--target", str(repo), "--lookback", "3650")
     assert res.returncode == 0, res.stderr
     assert "# trend:" in res.stderr
+
+
+def test_verify_fixed_no_prior_report_errors(tmp_path: Path) -> None:
+    target = tmp_path / "tf"; target.mkdir()
+    (target / "main.tf").write_text('resource "aws_s3_bucket" "b" {\n  bucket = "x"\n}\n')
+    empty_reports = tmp_path / "reports"; empty_reports.mkdir()
+    res = _run("--mode", "verify-fixed", "--target", str(target),
+               "--reports-dir", str(empty_reports))
+    assert res.returncode == 2
+    assert "no prior report" in res.stderr.lower()
+
+
+def test_verify_fixed_json_happy_path(tmp_path: Path) -> None:
+    target = tmp_path / "tf"; target.mkdir()
+    (target / "main.tf").write_text('resource "aws_s3_bucket" "b" {\n  bucket = "x"\n}\n')
+    # A regex-matching but synthetic ID re-probes to AMBIGUOUS (not in the
+    # catalogue), so the fixture doesn't couple to real catalogue IDs.
+    prior = tmp_path / "prior.md"
+    prior.write_text(
+        "# tf-analysis report\n\n"
+        "| ID | Urgency | Location | Resource |\n"
+        "|----|---------|----------|----------|\n"
+        "| FOO-BAR-001 | HIGH | main.tf:2 | aws_s3_bucket.b |\n"
+    )
+    res = _run("--mode", "verify-fixed", "--target", str(target),
+               "--prior-report", str(prior), "--format", "json")
+    assert res.returncode == 0, res.stderr
+    data = json.loads(res.stdout)
+    assert data["total_prior"] == 1
+    assert set(data["results"]) == {
+        "STILL-PRESENT", "RESOLVED", "MOVED", "STALE-LOCATION", "AMBIGUOUS"
+    }

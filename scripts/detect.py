@@ -1776,6 +1776,48 @@ def _mode_trend(args: object, entries: list, emit, out_file) -> int:
     return 0
 
 
+def _mode_verify_fixed(args: object, entries: list, project_config: dict,
+                       target: Path, reports_dir: Path, emit) -> int:
+    """Re-probe a prior report's findings and classify fixed/still-present.
+
+    Extracted verbatim from main()'s `--mode verify-fixed` branch. Returns an
+    exit code.
+    """
+    prior = Path(args.prior_report) if args.prior_report else find_latest_prior(reports_dir, ".md")
+    if not prior or not prior.exists():
+        print(
+            f"ERROR: no prior report found (looked in {reports_dir}, "
+            f"or --prior-report <path>)",
+            file=sys.stderr,
+        )
+        return 2
+    # Load corpus for re-probing
+    _ignore_paths_vf = project_config.get("ignore_paths") or []
+    tf_files = [
+        p for p in target.rglob("*.tf")
+        if ".terraform" not in p.parts
+        and not _path_is_ignored(p, target, _ignore_paths_vf)
+    ]
+    all_text = {}
+    for fp in tf_files:
+        try:
+            all_text[fp] = _read_normalized(fp)
+        except Exception:
+            continue
+    verify = verify_fixed(prior, target, all_text, entries)
+    if args.format == "json":
+        emit(json.dumps(verify, indent=2, default=str))
+    else:
+        import datetime
+        out_path = reports_dir / f"tf-analysis-verify-{datetime.date.today()}.md"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        write_verification_report(verify, out_path)
+        print(f"# wrote {out_path}")
+        for state, rows in verify["results"].items():
+            print(f"# {state}: {len(rows)}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -2422,39 +2464,7 @@ def main():
 
     # verify-fixed mode — early exit with dedicated output
     if args.mode == "verify-fixed":
-        prior = Path(args.prior_report) if args.prior_report else find_latest_prior(reports_dir, ".md")
-        if not prior or not prior.exists():
-            print(
-                f"ERROR: no prior report found (looked in {reports_dir}, "
-                f"or --prior-report <path>)",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        # Load corpus for re-probing
-        _ignore_paths_vf = project_config.get("ignore_paths") or []
-        tf_files = [
-            p for p in target.rglob("*.tf")
-            if ".terraform" not in p.parts
-            and not _path_is_ignored(p, target, _ignore_paths_vf)
-        ]
-        all_text = {}
-        for fp in tf_files:
-            try:
-                all_text[fp] = _read_normalized(fp)
-            except Exception:
-                continue
-        verify = verify_fixed(prior, target, all_text, entries)
-        if args.format == "json":
-            _emit(json.dumps(verify, indent=2, default=str))
-        else:
-            import datetime
-            out_path = reports_dir / f"tf-analysis-verify-{datetime.date.today()}.md"
-            reports_dir.mkdir(parents=True, exist_ok=True)
-            write_verification_report(verify, out_path)
-            print(f"# wrote {out_path}")
-            for state, rows in verify["results"].items():
-                print(f"# {state}: {len(rows)}")
-        sys.exit(0)
+        sys.exit(_mode_verify_fixed(args, entries, project_config, target, reports_dir, _emit))
 
     # Determine file set
     diff_files = None
