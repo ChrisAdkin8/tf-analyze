@@ -1907,6 +1907,38 @@ def _cmd_auto_stub(args: object, findings: list, entries: list) -> None:
             print(f"#   {sp}", file=sys.stderr)
 
 
+def _make_emitter(args: object):
+    """Build the report-output sink: returns ``(emit, out_file)``.
+
+    ``emit(text)`` writes a report line to stdout, or to the ``--output`` file
+    when one is given; stderr progress lines are unaffected. ``out_file`` is the
+    handle (or ``None``) so callers can close it on the happy path.
+
+    Audit follow-up #2 / #15 — the file is closed at the bottom of main() and at
+    the early-return sites, but none of those run if a render exception fires
+    partway through the ~860-line output block. ``atexit.register`` guarantees a
+    close on uncaught exceptions too, without wrapping main() in try/finally. The
+    explicit closes are retained (they release the fd sooner on the happy path);
+    atexit is the safety net for the exception case.
+    """
+    out_file = None
+    if args.output:
+        out_file = open(args.output, "w", encoding="utf-8")
+        import atexit
+        atexit.register(
+            lambda: out_file.close() if (out_file is not None and not out_file.closed) else None
+        )
+
+    def emit(text: str) -> None:
+        """Write report output to stdout or --output file."""
+        if out_file is not None:
+            out_file.write(text + "\n")
+        else:
+            print(text)
+
+    return emit, out_file
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -2439,31 +2471,8 @@ def main():
             )
 
     # Route report output: stdout (default) or a file (--output PATH).
-    # We shadow `print` for report output only — stderr progress lines
-    # always go to sys.stderr and are unaffected.
-    #
-    # Audit follow-up #2 / #15 — the file is closed at the bottom of
-    # `main()` and at four early-return sites. None of those paths run
-    # if a render exception fires partway through the ~860-line output
-    # block. `atexit.register` is the smallest patch that guarantees a
-    # close on uncaught exceptions too — without indenting the rest of
-    # `main()` into a `try: ... finally:` block. The existing explicit
-    # closes are retained (they release the fd sooner on the happy
-    # path); atexit is the safety net for the exception case.
-    _out_file = None
-    if args.output:
-        _out_file = open(args.output, "w", encoding="utf-8")
-        import atexit
-        atexit.register(
-            lambda: _out_file.close() if (_out_file is not None and not _out_file.closed) else None
-        )
-
-    def _emit(text: str) -> None:
-        """Write report output to stdout or --output file."""
-        if _out_file is not None:
-            _out_file.write(text + "\n")
-        else:
-            print(text)
+    # See _make_emitter for the atexit safety-net rationale.
+    _emit, _out_file = _make_emitter(args)
 
     catalog_dir = Path(args.catalog).resolve()
 

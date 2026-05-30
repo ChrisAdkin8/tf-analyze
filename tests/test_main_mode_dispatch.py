@@ -117,3 +117,14 @@ def test_auto_stub_propose_creates_yaml(tmp_path: Path) -> None:
     assert res.returncode in (0, 1), res.stderr
     assert "auto-stubs created" in res.stderr
     assert (stub_dir / "FOO-BAR-001.yaml").exists()
+
+
+def test_output_file_receives_report(tmp_path: Path) -> None:
+    # Guards _make_emitter's --output (file) path, which had no coverage.
+    target = tmp_path / "tf"; target.mkdir()
+    (target / "main.tf").write_text('resource "aws_s3_bucket" "b" {\n  bucket = "x"\n}\n')
+    out = tmp_path / "report.txt"
+    res = _run("--target", str(target), "--output", str(out))
+    assert res.returncode in (0, 1), res.stderr
+    assert out.exists() and out.read_text().strip()  # report written to the file
+    assert res.stdout.strip() == ""                  # ...not to stdout
