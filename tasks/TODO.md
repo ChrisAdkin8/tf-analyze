@@ -27,6 +27,27 @@ catalogue policy rules (now trivial catalogue data). Suite: **1208 passed**.
 
 ---
 
+### main() refactor — Option A increment 1 (2026-05-30)
+
+Began shrinking the ~1500-line `main()` by extracting early-exit dispatch
+bodies into module-level helpers, matching the existing
+`_cmd_list_rules`/`_cmd_explain`/`_cmd_new_rule`/`_pr_review_mode` pattern.
+This increment: `_cmd_init`, `_mode_fleet`, `_mode_trend` (verbatim moves, same
+exit codes / stderr markers / side effects). Guarded by new characterization
+tests `tests/test_main_mode_dispatch.py` (the dispatch path had **no** e2e
+coverage before). Suite: **1211 passed**.
+
+**Next increments (Option A, "as you touch them"):**
+- `_mode_verify_fixed` — deferred here only because it has **zero** existing
+  coverage and a fiddly prior-report fixture; extract once a characterization
+  test for it lands.
+- `--mode drift` body + the `--config`/project-config preamble.
+- The **main static scan path** (corpus load → detect → render → `--fail-on`):
+  the big one the audit flagged. High blast radius — extract last, behind
+  characterization tests, once the cheap modes are all out.
+
+---
+
 ### P1/P2/P3 backlog sweep (2026-05-30)
 
 Cleared the bulk of the remaining P1/P2/P3 list. Suite after the sweep:
