@@ -36,6 +36,7 @@ Static + plan-time Terraform analysis with attack-graph prioritisation, MITRE AT
 ### Authoring
 
 - 🧪 [**Custom rules**](custom-rules.md) — author your own `CUSTOM-*` catalogue entries.
+- 📐 [**Policy-as-code DSL**](policy-dsl.md) — cross-resource / conditional / aggregate rules as catalogue data (`kind: policy`).
 - ⚖️ [**Severity calibration**](severity-calibration.md) — methodology behind `default_urgency` and the deterministic risk-score formula.
 
 ## Posts

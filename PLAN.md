@@ -1,5 +1,11 @@
 # tf-analyze — Implementation Plan
 
+> **⚠️ SUPERSEDED — historical (generated 2026-05-09, frozen 2026-05-12).** The live
+> backlog is [`tasks/TODO.md`](tasks/TODO.md) (canonical, per `CLAUDE.md`); this
+> point-in-time plan (232 rules) was replaced by the 2026-05-29 deep-analysis triage.
+> The operator-only launch appendix (Marketplace / fly deploy) is still valid.
+> Recommend port-then-delete.
+
 This file consolidates the engineering recommendations from the five
 deep analyses in this session (search the chat history for *"how this
 skill can be improved"*) into a prioritised backlog **of items Claude

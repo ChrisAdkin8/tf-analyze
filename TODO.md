@@ -1,5 +1,11 @@
 # tf-analyze TODO
 
+> **⚠️ SUPERSEDED — historical (frozen 2026-05-12, Round 31).** The live backlog is
+> [`tasks/TODO.md`](tasks/TODO.md) (canonical, per `CLAUDE.md`). The counts below
+> (238 rules / ext v0.1.53) are stale — the engine is now at 351 active rules. Kept
+> for Round-21→31 history; recommend deletion once any still-wanted items are ported
+> to `tasks/TODO.md`.
+
 This is the at-a-glance checklist. **[`PLAN.md`](PLAN.md) has the full
 detail** for every active item — file paths, test entry-points, why
 this now — and is the single document to update when changing scope.

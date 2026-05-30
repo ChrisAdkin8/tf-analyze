@@ -29,7 +29,8 @@ The minimum viable PR for a new rule:
    - `hcl_attr` for nested-block attribute checks.
    - `resource_body_contains` if you need a regex over the resource body but want to scope by type.
    - `grep` only if the above don't fit; it's the least precise.
-   - `graph_check` for cross-resource conditions (register a Python function in `_GRAPH_CHECKS`).
+   - `policy` for cross-resource / conditional / aggregate conditions authored as **data** — a predicate language, no Python. See [`docs/policy-dsl.md`](docs/policy-dsl.md). Prefer this over `graph_check` for most cross-resource rules.
+   - `graph_check` for cross-resource conditions that need Python (register a function in `_GRAPH_CHECKS` in `scripts/_cross_resource.py`).
 
 3. **Edit the fixture.** Minimum HCL that triggers the rule. Convention: header comment lists `# Expected findings: - RULE-ID URGENCY description`. If the fixture is a *negative* test (the rule should NOT fire), add `# Expected findings: NONE` and `# Guards against: RULE-ID`.
 
@@ -54,7 +55,7 @@ A correctly-shaped PR for a new rule touches: 1 catalogue YAML, 1 fixture, 1 ter
 
 If your rule's logic doesn't fit any existing `pattern_kind`, add a new one. This is heavier but the path is well-trodden:
 
-1. Add the kind handler in `scripts/detect.py`. Per-file kinds go in `detect_in_file`; corpus-level kinds in `detect_corpus`. Cross-resource kinds go in `_GRAPH_CHECKS` as a registered function.
+1. Add a handler function decorated with `@_register_infile("<kind>")` (per-file) or `@_register_corpus("<kind>")` (corpus-level) in the appropriate `scripts/_handlers_<topic>.py` module (`_handlers_generic` / `_security` / `_robustness` / `_infra` / `_modules` / `_policy`). `detect.py`'s `detect_in_file` / `detect_corpus` dispatch loops call it via the `_INFILE_HANDLERS` / `_CORPUS_HANDLERS` registries. Cross-resource graph checks go in `_GRAPH_CHECKS` in `scripts/_cross_resource.py`.
 2. Document the new kind in `catalog/README.md` (the table at the top).
 3. Add at least one rule using the new kind, plus a fixture.
 4. If the kind is generally useful, document it in the SKILL.md too.
@@ -63,7 +64,7 @@ Avoid adding a kind that's only used by one rule — usually that rule should us
 
 ## Adding a new graph check
 
-Cross-resource conditions live in `_GRAPH_CHECKS` (see existing entries: `logging_target_public`, `gke_nodepool_secure_boot`, `kms_location_parity`, `iam_member_breadth`). The pattern:
+Many cross-resource checks no longer need Python — author them as `kind: policy` catalogue data instead (see [`docs/policy-dsl.md`](docs/policy-dsl.md)). Reach for a graph check only when the predicate language can't express it. Cross-resource conditions live in `_GRAPH_CHECKS` in `scripts/_cross_resource.py` (see existing entries: `logging_target_public`, `gke_nodepool_secure_boot`, `kms_location_parity`, `iam_member_breadth`). The pattern:
 
 ```python
 def _graph_my_check(index: dict, all_files_text: dict) -> list[dict]:
@@ -102,14 +103,14 @@ patterns:
       ...
 ```
 
-The graph index is built once per scan via `_build_resource_index(all_files_text)`. If your check needs auxiliary indexing (a name → block map for a specific resource type), build it inside the function and document why it's not in the shared index.
+The graph index is built once per scan via `_build_resource_index(all_files_text)` (in `scripts/_cross_resource.py`). If your check needs auxiliary indexing (a name → block map for a specific resource type), build it inside the function and document why it's not in the shared index.
 
 ## Adding a new applies_when clause
 
 `applies_when` currently supports `min_provider: { name: version }` and `min_terraform: version`. To add a new clause type (e.g. `cloud: gcp`):
 
-1. Extend `_entry_applies_to_providers` in `detect.py`. Default behaviour for an unknown clause should be permissive (return `True`).
-2. Update the schema validator in `validate_catalog_entry` to recognise the new field — but don't reject unknown sub-fields, only validate the ones you know.
+1. Extend `_entry_applies_to_providers` in `scripts/_versions.py`. Default behaviour for an unknown clause should be permissive (return `True`).
+2. Update the schema validator `validate_catalog_entry` in `scripts/_catalog.py` to recognise the new field — but don't reject unknown sub-fields, only validate the ones you know.
 3. Update `catalog/README.md` and the SKILL.md.
 4. Add a regression test in `scripts/test_schema.py`.
 
