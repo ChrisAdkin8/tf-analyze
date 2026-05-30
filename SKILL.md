@@ -107,7 +107,7 @@ The skill has five execution modes. Pick the right one before starting — they 
 
 ## Cloud scope
 
-The skill is **GCP-first**. Catalogue entries, CIS mappings, the IAM compatibility matrix (Appendix A), and stack-specific Step 10 checks are exhaustive for Google Cloud. AWS and Azure are **secondary**: the skill will surface obvious findings (public S3 buckets, hardcoded credentials, missing tags) but does NOT claim CIS coverage or full provider parity for those clouds. If the codebase is AWS- or Azure-dominant, expect lower recall and treat the report as a starting point rather than an audit.
+AWS, GCP, and Azure are at **rule-count parity (91 rules each)** — IAM, storage, compute, networking, KMS/encryption, and managed data services — each carrying CIS and multi-framework compliance tags. GCP retains the most complete CIS Foundations Benchmark mapping and the IAM compatibility matrix (Appendix A); AWS and Azure cover the high-value controls but don't claim line-by-line benchmark completeness. Kubernetes/Helm coverage is lighter (18 rules). As with any static analyzer, treat the report as a high-signal starting point, not a substitute for a manual audit.
 
 **Per-cloud rule counts (regenerate via `python3 scripts/detect.py --list-rules | wc -l`):**
 
