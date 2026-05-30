@@ -1939,6 +1939,320 @@ def _make_emitter(args: object):
     return emit, out_file
 
 
+def _run_detection(args: object, all_text: dict, extra_text: dict,
+                   entries: list, diff_files, target: Path) -> list:
+    """Core scan: per-file + corpus detection over the loaded corpus, with the
+    incremental cache, plus --plan-json and --state-json (drift) findings merged
+    in. Returns the findings list.
+
+    Extracted verbatim from main(). `entries` is the provider-filtered ruleset
+    (main() runs that filter first, since downstream consumers reuse the same
+    list). stderr-only side effects; no report output.
+    """
+    # Pass 2 — run per-file detection with the filtered ruleset.
+    # Build per-directory variable-default map once; passed into each
+    # detect_in_file call so plain `var.X` attribute values are resolved
+    # to their declared defaults before pattern matching.
+    var_defaults_by_dir = _extract_var_defaults_by_dir(all_text)
+
+    # Incremental cache: if --cache is set and the corpus hash matches the
+    # stored cache, return the cached findings immediately (skipping the full
+    # scan). The cache covers per-file findings + corpus findings in one shot.
+    _cache_path: Path | None = None
+    _corpus_hash_val: str | None = None
+    _cache_hit = False
+    findings: list[dict] = []
+    if getattr(args, "cache", False) and diff_files is None:
+        # Hash the FULL scanned-file set (.tf + the extra workflow-YAML /
+        # tfvars files scanned below), not just .tf. The extra_text scan
+        # only runs on a cache MISS, so keying the cache on .tf alone let a
+        # warm cache silently skip a secret (or any finding) added to e.g.
+        # a `.github/workflows/*.yml` while the .tf files were unchanged.
+        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries)
+        _cache_path = (
+            Path(args.cache_file).resolve()
+            if getattr(args, "cache_file", None)
+            else target / ".tf-analyze-cache.json"
+        )
+        _cached = _load_scan_cache(_cache_path)
+        if _cached and _cached.get("corpus_hash") == _corpus_hash_val:
+            print("# cache hit — skipping full scan", file=sys.stderr)
+            findings = _cached.get("findings", [])
+            _cache_hit = True
+
+    if not _cache_hit:
+        for fp, text in all_text.items():
+            if diff_files is not None and fp not in diff_files:
+                continue
+            findings.extend(
+                detect_in_file(fp, text, entries,
+                               var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
+            )
+        # Run grep-style rules against workflow YAML / tfvars / any
+        # other non-tf file_glob (--mode diff intentionally skips these
+        # since they are not in the git diff of *.tf files).
+        if diff_files is None:
+            for fp, text in extra_text.items():
+                findings.extend(detect_in_file(fp, text, entries))
+
+    # Plan-mode rule re-evaluation. Findings are merged into the same
+    # list so suppression, comparison, and reporting all see them; the
+    # `mode` field on each finding lets downstream consumers split.
+    if args.plan_json:
+        plan_path = Path(args.plan_json).resolve()
+        if not plan_path.exists():
+            print(
+                f"ERROR: --plan-json path does not exist: {plan_path}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        plan_findings = detect_in_plan(plan_path, entries)
+        if plan_findings:
+            print(
+                f"# {len(plan_findings)} plan-time finding(s) from "
+                f"{plan_path.name}",
+                file=sys.stderr,
+            )
+        findings.extend(plan_findings)
+
+    # Drift mode — re-evaluate rules against `terraform show -json
+    # state.tfstate` output. R30.12 — closes the gap between HCL intent
+    # and actual deployed values for oncalls who need to spot drift
+    # without re-running plan.
+    # Audit item 15 — argparse wires `--state-json` via dest="state_json"
+    # unconditionally; direct access surfaces a rename typo as
+    # AttributeError instead of a silent None.
+    state_json_arg = args.state_json
+    if args.mode == "drift" and not state_json_arg:
+        print(
+            "ERROR: --mode drift requires --state-json PATH",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if state_json_arg:
+        state_path = Path(state_json_arg).resolve()
+        if not state_path.exists():
+            print(
+                f"ERROR: --state-json path does not exist: {state_path}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        state_findings = detect_in_state(state_path, entries)
+        if state_findings:
+            print(
+                f"# {len(state_findings)} drift finding(s) from "
+                f"{state_path.name}",
+                file=sys.stderr,
+            )
+        findings.extend(state_findings)
+
+    # Corpus-level checks run against all files (even in diff mode)
+    if not _cache_hit:
+        corpus_findings = detect_corpus(target, all_text, entries)
+        if diff_files is not None:
+            # Filter corpus findings to only those touching changed files
+            corpus_findings = [
+                f for f in corpus_findings
+                if Path(f["file"]).resolve() in diff_files or f["line"] == 0
+            ]
+        findings.extend(corpus_findings)
+
+        # Persist to cache after all per-file + corpus findings are collected
+        # (before plan / registry findings which require external inputs).
+        if _cache_path and _corpus_hash_val:
+            _save_scan_cache(_cache_path, _corpus_hash_val, findings)
+
+    return findings
+
+
+def _render_report(args: object, findings: list, entries: list, *, emit,
+                   summary: dict, suppressed_findings: list,
+                   suppressed_by_baseline: list, attack_graph, centrality_scores,
+                   compliance_report, blast_radius_top, compare_target) -> None:
+    """Render findings in the requested ``--format``.
+
+    Handles both the ``--compare`` delta branch and the normal branch. Extracted
+    verbatim from main() — a local ``_emit = emit`` alias keeps the moved block
+    byte-identical. Writes report output through ``emit``; progress/notices go to
+    stderr. No early exit and no file close: main() still owns the ``_out_file``
+    lifecycle and the ``--fail-on`` exit code.
+    """
+    _emit = emit
+    # Report comparison
+    if compare_target:
+        delta = compare_reports(findings, Path(compare_target))
+        print(f"# delta: {len(delta['new'])} new, {len(delta['resolved'])} resolved, "
+              f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
+        if args.format == "json":
+            output = {
+                "summary": summary,
+                "findings": findings,
+                "suppressed": suppressed_findings,
+                "delta": delta,
+            }
+            if attack_graph:
+                output["graph"] = attack_graph
+            if blast_radius_top:
+                output["blast_radius"] = blast_radius_top
+            if getattr(args, "explain_score", False):
+                output["score_explanation"] = explain_score(findings, summary)
+            _emit(json.dumps(output, indent=2))
+        elif args.format == "sarif":
+            sarif = to_sarif(findings, entries)
+            _emit(json.dumps(sarif, indent=2))
+        elif args.format == "html":
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
+        elif args.format == "compliance":
+            if compliance_report:
+                _emit(_render_compliance_text(compliance_report))
+            else:
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
+        elif args.format == "mitre":
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
+        elif args.format == "pr-summary":
+            _emit(_render_pr_summary(
+                findings, entries, summary,
+                attack_graph=attack_graph,
+                centrality=centrality_scores,
+                compliance=compliance_report,
+            ))
+        else:
+            _c = summary["counts"]
+            _emit(
+                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
+                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
+                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
+                + (f" · {summary['suppressed_count']} suppressed"
+                   if summary["suppressed_count"] else "")
+            )
+            if delta["new"]:
+                _emit("# NEW findings:")
+                for f in delta["new"]:
+                    _emit(f"  + {f['id']} {f['file']}:{f['line']} {f['resource']}")
+            if delta["resolved"]:
+                _emit("# RESOLVED findings:")
+                for f in delta["resolved"]:
+                    _emit(f"  - {f['id']} {f['file']}:{f['line']} {f['resource']}")
+            if delta["unchanged"]:
+                _emit(f"# {len(delta['unchanged'])} unchanged finding(s)")
+            if attack_graph:
+                _emit("\n## Attack Graph\n")
+                _emit(graph_to_mermaid(attack_graph))
+            if blast_radius_top and getattr(args, "blast_radius", False):
+                from _blast_radius import render_blast_radius_text
+                _emit("\n" + render_blast_radius_text(blast_radius_top))
+            if compliance_report and args.format == "text":
+                _emit("\n")
+                _emit(_render_compliance_text(compliance_report))
+    else:
+        # --explain-score (R30.8): rank findings by score contribution
+        # so the user sees which fix is worth most. Computed once and
+        # threaded into both JSON (`score_explanation` field) and text
+        # output (header block before the findings list).
+        score_explanation = (
+            explain_score(findings, summary)
+            if getattr(args, "explain_score", False) else None
+        )
+
+        # Standard output
+        if args.format == "json":
+            output_data: dict = {"summary": summary, "findings": findings}
+            if suppressed_findings:
+                output_data["suppressed"] = suppressed_findings
+            if suppressed_by_baseline:
+                output_data["suppressed_by_baseline"] = suppressed_by_baseline
+            if attack_graph:
+                output_data["graph"] = attack_graph
+            if blast_radius_top:
+                output_data["blast_radius"] = blast_radius_top
+            if score_explanation:
+                output_data["score_explanation"] = score_explanation
+            _emit(json.dumps(output_data, indent=2))
+        elif args.format == "sarif":
+            sarif = to_sarif(findings, entries)
+            _emit(json.dumps(sarif, indent=2))
+        elif args.format == "html":
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
+        elif args.format == "compliance":
+            if compliance_report:
+                _emit(_render_compliance_text(compliance_report))
+            else:
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
+        elif args.format == "mitre":
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
+        elif args.format == "pr-summary":
+            _emit(_render_pr_summary(
+                findings, entries, summary,
+                attack_graph=attack_graph,
+                centrality=centrality_scores,
+                compliance=compliance_report,
+            ))
+        else:
+            # Text format: lead with a one-line summary score, then the
+            # finding list. The summary always prints (even on a clean
+            # repo) so CI logs always carry the headline number.
+            _c = summary["counts"]
+            _emit(
+                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
+                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
+                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
+                + (f" · {summary['suppressed_count']} suppressed"
+                   if summary["suppressed_count"] else "")
+            )
+            if score_explanation:
+                _emit("")
+                _emit(render_score_explanation(score_explanation))
+                _emit("")
+            entry_map_out = {e["id"]: e for e in entries}
+            for f in findings:
+                # 🔥 KEV badge: rule's CWE intersects CISA Known Exploited
+                # Vulnerabilities (R30.2). Renders before the ID so the
+                # visual landmark is at the start of the line.
+                kev_badge = "🔥 KEV " if f.get("kev") else ""
+                _emit(f"{kev_badge}{f['id']} {f['file']}:{f['line']} {f['resource']}")
+                if attack_graph:
+                    e_out = entry_map_out.get(f["id"], {})
+                    if e_out.get("default_urgency") in ("HIGH", "CRITICAL"):
+                        narr = _narrative_for_finding(
+                            f["id"], f.get("resource", ""), f.get("file", "")
+                        )
+                        if narr:
+                            _emit(f"  # {narr}")
+                if getattr(args, "show_fixes", False):
+                    e_out = entry_map_out.get(f["id"], {})
+                    if e_out.get("fix_hcl"):
+                        disruption = e_out.get("fix_disruption", "")
+                        if disruption:
+                            _disruption_labels = {
+                                "none": "Non-disruptive",
+                                "plan_required": "Requires plan/apply",
+                                "forces_replacement": "Forces resource replacement",
+                            }
+                            _emit(f"  # Fix disruption: {_disruption_labels.get(disruption, disruption)}")
+                            d_note = e_out.get("fix_disruption_note", "")
+                            if d_note:
+                                _emit(f"  # {d_note}")
+                        for fix_line in e_out["fix_hcl"].strip().splitlines():
+                            _emit(f"    {fix_line}")
+            if suppressed_findings:
+                print(f"# ({len(suppressed_findings)} suppressed)", file=sys.stderr)
+            if not findings:
+                print("# no findings", file=sys.stderr)
+            if attack_graph:
+                _emit("\n## Attack Graph\n")
+                _emit(graph_to_mermaid(attack_graph))
+            if blast_radius_top and getattr(args, "blast_radius", False):
+                from _blast_radius import render_blast_radius_text
+                _emit("\n" + render_blast_radius_text(blast_radius_top))
+            if compliance_report and args.format == "text":
+                _emit("\n")
+                _emit(_render_compliance_text(compliance_report))
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -2649,118 +2963,10 @@ def main():
             file=sys.stderr,
         )
 
-    # Pass 2 — run per-file detection with the filtered ruleset.
-    # Build per-directory variable-default map once; passed into each
-    # detect_in_file call so plain `var.X` attribute values are resolved
-    # to their declared defaults before pattern matching.
-    var_defaults_by_dir = _extract_var_defaults_by_dir(all_text)
-
-    # Incremental cache: if --cache is set and the corpus hash matches the
-    # stored cache, return the cached findings immediately (skipping the full
-    # scan). The cache covers per-file findings + corpus findings in one shot.
-    _cache_path: Path | None = None
-    _corpus_hash_val: str | None = None
-    _cache_hit = False
-    findings: list[dict] = []
-    if getattr(args, "cache", False) and diff_files is None:
-        # Hash the FULL scanned-file set (.tf + the extra workflow-YAML /
-        # tfvars files scanned below), not just .tf. The extra_text scan
-        # only runs on a cache MISS, so keying the cache on .tf alone let a
-        # warm cache silently skip a secret (or any finding) added to e.g.
-        # a `.github/workflows/*.yml` while the .tf files were unchanged.
-        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries)
-        _cache_path = (
-            Path(args.cache_file).resolve()
-            if getattr(args, "cache_file", None)
-            else target / ".tf-analyze-cache.json"
-        )
-        _cached = _load_scan_cache(_cache_path)
-        if _cached and _cached.get("corpus_hash") == _corpus_hash_val:
-            print("# cache hit — skipping full scan", file=sys.stderr)
-            findings = _cached.get("findings", [])
-            _cache_hit = True
-
-    if not _cache_hit:
-        for fp, text in all_text.items():
-            if diff_files is not None and fp not in diff_files:
-                continue
-            findings.extend(
-                detect_in_file(fp, text, entries,
-                               var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
-            )
-        # Run grep-style rules against workflow YAML / tfvars / any
-        # other non-tf file_glob (--mode diff intentionally skips these
-        # since they are not in the git diff of *.tf files).
-        if diff_files is None:
-            for fp, text in extra_text.items():
-                findings.extend(detect_in_file(fp, text, entries))
-
-    # Plan-mode rule re-evaluation. Findings are merged into the same
-    # list so suppression, comparison, and reporting all see them; the
-    # `mode` field on each finding lets downstream consumers split.
-    if args.plan_json:
-        plan_path = Path(args.plan_json).resolve()
-        if not plan_path.exists():
-            print(
-                f"ERROR: --plan-json path does not exist: {plan_path}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        plan_findings = detect_in_plan(plan_path, entries)
-        if plan_findings:
-            print(
-                f"# {len(plan_findings)} plan-time finding(s) from "
-                f"{plan_path.name}",
-                file=sys.stderr,
-            )
-        findings.extend(plan_findings)
-
-    # Drift mode — re-evaluate rules against `terraform show -json
-    # state.tfstate` output. R30.12 — closes the gap between HCL intent
-    # and actual deployed values for oncalls who need to spot drift
-    # without re-running plan.
-    # Audit item 15 — argparse wires `--state-json` via dest="state_json"
-    # unconditionally; direct access surfaces a rename typo as
-    # AttributeError instead of a silent None.
-    state_json_arg = args.state_json
-    if args.mode == "drift" and not state_json_arg:
-        print(
-            "ERROR: --mode drift requires --state-json PATH",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-    if state_json_arg:
-        state_path = Path(state_json_arg).resolve()
-        if not state_path.exists():
-            print(
-                f"ERROR: --state-json path does not exist: {state_path}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        state_findings = detect_in_state(state_path, entries)
-        if state_findings:
-            print(
-                f"# {len(state_findings)} drift finding(s) from "
-                f"{state_path.name}",
-                file=sys.stderr,
-            )
-        findings.extend(state_findings)
-
-    # Corpus-level checks run against all files (even in diff mode)
-    if not _cache_hit:
-        corpus_findings = detect_corpus(target, all_text, entries)
-        if diff_files is not None:
-            # Filter corpus findings to only those touching changed files
-            corpus_findings = [
-                f for f in corpus_findings
-                if Path(f["file"]).resolve() in diff_files or f["line"] == 0
-            ]
-        findings.extend(corpus_findings)
-
-        # Persist to cache after all per-file + corpus findings are collected
-        # (before plan / registry findings which require external inputs).
-        if _cache_path and _corpus_hash_val:
-            _save_scan_cache(_cache_path, _corpus_hash_val, findings)
+    # Pass 2 — per-file + corpus detection (with the incremental cache),
+    # plus --plan-json and --state-json (drift) findings merged in.
+    # See _run_detection. `entries` is already provider-filtered above.
+    findings = _run_detection(args, all_text, extra_text, entries, diff_files, target)
 
     # Registry staleness check (opt-in; requires network access).
     # Audit item 15 — direct attribute access; argparse boolean-flag
@@ -3062,179 +3268,16 @@ def main():
             compare_target = str(prior_json)
             print(f"# auto-compare against {prior_json}", file=sys.stderr)
 
-    # Report comparison
-    if compare_target:
-        delta = compare_reports(findings, Path(compare_target))
-        print(f"# delta: {len(delta['new'])} new, {len(delta['resolved'])} resolved, "
-              f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
-        if args.format == "json":
-            output = {
-                "summary": summary,
-                "findings": findings,
-                "suppressed": suppressed_findings,
-                "delta": delta,
-            }
-            if attack_graph:
-                output["graph"] = attack_graph
-            if blast_radius_top:
-                output["blast_radius"] = blast_radius_top
-            if getattr(args, "explain_score", False):
-                output["score_explanation"] = explain_score(findings, summary)
-            _emit(json.dumps(output, indent=2))
-        elif args.format == "sarif":
-            sarif = to_sarif(findings, entries)
-            _emit(json.dumps(sarif, indent=2))
-        elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
-        elif args.format == "compliance":
-            if compliance_report:
-                _emit(_render_compliance_text(compliance_report))
-            else:
-                _emit(f"# No catalogue entries mapped to compliance framework "
-                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
-        elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries,
-                                tactic_filter=getattr(args, "mitre_tactic", None)))
-        elif args.format == "pr-summary":
-            _emit(_render_pr_summary(
-                findings, entries, summary,
-                attack_graph=attack_graph,
-                centrality=centrality_scores,
-                compliance=compliance_report,
-            ))
-        else:
-            _c = summary["counts"]
-            _emit(
-                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
-                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
-                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
-                + (f" · {summary['suppressed_count']} suppressed"
-                   if summary["suppressed_count"] else "")
-            )
-            if delta["new"]:
-                _emit("# NEW findings:")
-                for f in delta["new"]:
-                    _emit(f"  + {f['id']} {f['file']}:{f['line']} {f['resource']}")
-            if delta["resolved"]:
-                _emit("# RESOLVED findings:")
-                for f in delta["resolved"]:
-                    _emit(f"  - {f['id']} {f['file']}:{f['line']} {f['resource']}")
-            if delta["unchanged"]:
-                _emit(f"# {len(delta['unchanged'])} unchanged finding(s)")
-            if attack_graph:
-                _emit("\n## Attack Graph\n")
-                _emit(graph_to_mermaid(attack_graph))
-            if blast_radius_top and getattr(args, "blast_radius", False):
-                from _blast_radius import render_blast_radius_text
-                _emit("\n" + render_blast_radius_text(blast_radius_top))
-            if compliance_report and args.format == "text":
-                _emit("\n")
-                _emit(_render_compliance_text(compliance_report))
-    else:
-        # --explain-score (R30.8): rank findings by score contribution
-        # so the user sees which fix is worth most. Computed once and
-        # threaded into both JSON (`score_explanation` field) and text
-        # output (header block before the findings list).
-        score_explanation = (
-            explain_score(findings, summary)
-            if getattr(args, "explain_score", False) else None
-        )
-
-        # Standard output
-        if args.format == "json":
-            output_data: dict = {"summary": summary, "findings": findings}
-            if suppressed_findings:
-                output_data["suppressed"] = suppressed_findings
-            if suppressed_by_baseline:
-                output_data["suppressed_by_baseline"] = suppressed_by_baseline
-            if attack_graph:
-                output_data["graph"] = attack_graph
-            if blast_radius_top:
-                output_data["blast_radius"] = blast_radius_top
-            if score_explanation:
-                output_data["score_explanation"] = score_explanation
-            _emit(json.dumps(output_data, indent=2))
-        elif args.format == "sarif":
-            sarif = to_sarif(findings, entries)
-            _emit(json.dumps(sarif, indent=2))
-        elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
-        elif args.format == "compliance":
-            if compliance_report:
-                _emit(_render_compliance_text(compliance_report))
-            else:
-                _emit(f"# No catalogue entries mapped to compliance framework "
-                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
-        elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries,
-                                tactic_filter=getattr(args, "mitre_tactic", None)))
-        elif args.format == "pr-summary":
-            _emit(_render_pr_summary(
-                findings, entries, summary,
-                attack_graph=attack_graph,
-                centrality=centrality_scores,
-                compliance=compliance_report,
-            ))
-        else:
-            # Text format: lead with a one-line summary score, then the
-            # finding list. The summary always prints (even on a clean
-            # repo) so CI logs always carry the headline number.
-            _c = summary["counts"]
-            _emit(
-                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
-                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
-                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
-                + (f" · {summary['suppressed_count']} suppressed"
-                   if summary["suppressed_count"] else "")
-            )
-            if score_explanation:
-                _emit("")
-                _emit(render_score_explanation(score_explanation))
-                _emit("")
-            entry_map_out = {e["id"]: e for e in entries}
-            for f in findings:
-                # 🔥 KEV badge: rule's CWE intersects CISA Known Exploited
-                # Vulnerabilities (R30.2). Renders before the ID so the
-                # visual landmark is at the start of the line.
-                kev_badge = "🔥 KEV " if f.get("kev") else ""
-                _emit(f"{kev_badge}{f['id']} {f['file']}:{f['line']} {f['resource']}")
-                if attack_graph:
-                    e_out = entry_map_out.get(f["id"], {})
-                    if e_out.get("default_urgency") in ("HIGH", "CRITICAL"):
-                        narr = _narrative_for_finding(
-                            f["id"], f.get("resource", ""), f.get("file", "")
-                        )
-                        if narr:
-                            _emit(f"  # {narr}")
-                if getattr(args, "show_fixes", False):
-                    e_out = entry_map_out.get(f["id"], {})
-                    if e_out.get("fix_hcl"):
-                        disruption = e_out.get("fix_disruption", "")
-                        if disruption:
-                            _disruption_labels = {
-                                "none": "Non-disruptive",
-                                "plan_required": "Requires plan/apply",
-                                "forces_replacement": "Forces resource replacement",
-                            }
-                            _emit(f"  # Fix disruption: {_disruption_labels.get(disruption, disruption)}")
-                            d_note = e_out.get("fix_disruption_note", "")
-                            if d_note:
-                                _emit(f"  # {d_note}")
-                        for fix_line in e_out["fix_hcl"].strip().splitlines():
-                            _emit(f"    {fix_line}")
-            if suppressed_findings:
-                print(f"# ({len(suppressed_findings)} suppressed)", file=sys.stderr)
-            if not findings:
-                print("# no findings", file=sys.stderr)
-            if attack_graph:
-                _emit("\n## Attack Graph\n")
-                _emit(graph_to_mermaid(attack_graph))
-            if blast_radius_top and getattr(args, "blast_radius", False):
-                from _blast_radius import render_blast_radius_text
-                _emit("\n" + render_blast_radius_text(blast_radius_top))
-            if compliance_report and args.format == "text":
-                _emit("\n")
-                _emit(_render_compliance_text(compliance_report))
+    # Report comparison + render — both the --compare delta branch and the
+    # normal branch, across every --format. See _render_report.
+    _render_report(
+        args, findings, entries, emit=_emit, summary=summary,
+        suppressed_findings=suppressed_findings,
+        suppressed_by_baseline=suppressed_by_baseline,
+        attack_graph=attack_graph, centrality_scores=centrality_scores,
+        compliance_report=compliance_report,
+        blast_radius_top=blast_radius_top, compare_target=compare_target,
+    )
 
     if _out_file is not None:
         _out_file.close()

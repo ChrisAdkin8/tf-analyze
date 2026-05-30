@@ -52,22 +52,32 @@ Deliberately did **not** collapse `(emit, out_file)` into one emitter object —
 that churns all ~30 `_emit(...)` render-block call sites for marginal gain;
 do it when the render block itself moves.
 
-**Remaining (Tier 4 — the real size of `main()`, high blast radius):**
-- **`_render_report(...)`** — the `args.format` dispatch (text/json/sarif/html/
-  compliance/mitre/pr-summary). ~860 lines, but note it appears **duplicated**
-  across the compare-delta branch and the normal branch — extracting unifies
-  them. Consumes ~10 locals (findings, entries, suppressed, suppressed_by_
-  baseline, attack_graph, centrality_scores, compliance_report, blast_radius_
-  top, summary, delta, emit). **Well-guarded** by `tests/test_output_formats.py`
-  — lower behaviour risk than the mode bodies, but a large diff.
-- **`_run_scan(...) -> findings`** — diff/plan file-set resolution + detect loop.
-  Harder: the post-detect pipeline (enrich → baseline → threat-intel → INFO-
-  filter) reassigns `findings` ~5× inline before render, so the boundary is
-  fuzzy. Best paired with the `_render_report` extraction as one dedicated PR.
-- Smaller safe slices available first if desired: `_apply_threat_intel(...)`
-  (guarded by `test_threat_intel`), `_write_compliance_pdf(...)`.
-- `--mode drift` rides with `_run_scan` (re-evaluates within the scan path,
-  not a clean early-exit).
+### main() refactor — Option A increment 3 (2026-05-30) — Tier 4
+
+The two big ones, as a focused PR. **`_render_report(args, findings, entries, *,
+emit, …)`** — the whole `args.format` tail (both the `--compare` delta branch
+and the normal branch, all 7 formats), ~170 lines, moved verbatim (a local
+`_emit = emit` alias kept it byte-identical). **`_run_detection(args, all_text,
+extra_text, entries, diff_files, target) -> findings`** — the scan core (cache
+read+write, pass-2 per-file loop, extra-file loop, `--plan-json` + `--state-json`
+drift merges), ~110 lines, single return value; the provider-constraint filter
+stays in main() since downstream reuses the filtered `entries`. New
+`tests/test_render_report_characterization.py` (12 tests: every format × both
+branches + attack-graph + show-fixes/info + fail-on) pinned behaviour first.
+Full suite **1227 passed**; `main()` body ~1339 → **~1041 lines** (of which the
+argparse block is still ~514).
+
+**Remaining:**
+- **`_build_parser() -> ArgumentParser`** — the ~514-line argparse block is now
+  the single largest thing in `main()`. Zero logic risk (pure declarations);
+  the highest-ROI cut left. Do this next.
+- The post-detect enrichment pipeline (`_enrich_findings_for_output` → baseline
+  → threat-intel → INFO-filter → `_compute_summary`) still reassigns `findings`
+  inline in main(); could become `_postprocess_findings(...)` but the multi-
+  output (findings + summary + suppressed_by_baseline) makes it a bundle.
+- Smaller safe slices: `_apply_threat_intel(...)` (guarded by `test_threat_intel`),
+  `_write_compliance_pdf(...)`, `_make_emitter` → single emitter object (when
+  render call sites are revisited).
 
 ---
 
