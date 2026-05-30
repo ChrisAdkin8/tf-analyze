@@ -27,6 +27,50 @@ catalogue policy rules (now trivial catalogue data). Suite: **1208 passed**.
 
 ---
 
+### main() refactor — Option A increment 1 (2026-05-30)
+
+Began shrinking the ~1500-line `main()` by extracting early-exit dispatch
+bodies into module-level helpers, matching the existing
+`_cmd_list_rules`/`_cmd_explain`/`_cmd_new_rule`/`_pr_review_mode` pattern.
+This increment: `_cmd_init`, `_mode_fleet`, `_mode_trend` (verbatim moves, same
+exit codes / stderr markers / side effects). Guarded by new characterization
+tests `tests/test_main_mode_dispatch.py` (the dispatch path had **no** e2e
+coverage before). Suite: **1211 passed**.
+
+### main() refactor — Option A increment 2 (2026-05-30)
+
+Continued in recommended order. Extracted: **`_mode_verify_fixed`** (early-exit
+mode set now complete), **`_cmd_apply_fixes`** (returns a bool — True ⇒ main
+exits after a real apply; dry-run falls through), **`_cmd_auto_stub`**, and the
+**`_make_emitter(args) -> (emit, out_file)`** polish. All verbatim/behaviour-
+preserving. New characterization tests: verify-fixed (error + json happy path),
+auto-stub (`--propose-stub`), and a **`--output`** file guard (that path had no
+coverage). `apply-fixes` was already guarded by `test_apply_fixes_composition`.
+Suite: **1215 passed**. `main()` body ~1465 → ~1339 lines.
+
+Deliberately did **not** collapse `(emit, out_file)` into one emitter object —
+that churns all ~30 `_emit(...)` render-block call sites for marginal gain;
+do it when the render block itself moves.
+
+**Remaining (Tier 4 — the real size of `main()`, high blast radius):**
+- **`_render_report(...)`** — the `args.format` dispatch (text/json/sarif/html/
+  compliance/mitre/pr-summary). ~860 lines, but note it appears **duplicated**
+  across the compare-delta branch and the normal branch — extracting unifies
+  them. Consumes ~10 locals (findings, entries, suppressed, suppressed_by_
+  baseline, attack_graph, centrality_scores, compliance_report, blast_radius_
+  top, summary, delta, emit). **Well-guarded** by `tests/test_output_formats.py`
+  — lower behaviour risk than the mode bodies, but a large diff.
+- **`_run_scan(...) -> findings`** — diff/plan file-set resolution + detect loop.
+  Harder: the post-detect pipeline (enrich → baseline → threat-intel → INFO-
+  filter) reassigns `findings` ~5× inline before render, so the boundary is
+  fuzzy. Best paired with the `_render_report` extraction as one dedicated PR.
+- Smaller safe slices available first if desired: `_apply_threat_intel(...)`
+  (guarded by `test_threat_intel`), `_write_compliance_pdf(...)`.
+- `--mode drift` rides with `_run_scan` (re-evaluates within the scan path,
+  not a clean early-exit).
+
+---
+
 ### P1/P2/P3 backlog sweep (2026-05-30)
 
 Cleared the bulk of the remaining P1/P2/P3 list. Suite after the sweep:

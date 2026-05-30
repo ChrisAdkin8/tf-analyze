@@ -1684,6 +1684,261 @@ def _default_catalog_dir() -> str:
     return str(sibling)
 
 
+def _cmd_init(args: object) -> int:
+    """Create a project config scaffold (`.tf-analyze.yaml` + an example rule).
+
+    Extracted verbatim from main()'s `--init` branch. Returns an exit code.
+    """
+    init_target = Path(args.targets[0]).resolve() if args.targets else Path.cwd()
+    _cfg_path = init_target / ".tf-analyze.yaml"
+    _rules_dir = init_target / ".tf-analyze-rules"
+    _rules_dir.mkdir(parents=True, exist_ok=True)
+    _cfg_path.write_text(
+        "# tf-analyze project configuration\n"
+        "# rules_dir: .tf-analyze-rules/\n"
+        "# ignore_rules: []\n"
+        "# thresholds:\n"
+        "#   password_min_length: 14\n"
+    )
+    (_rules_dir / "CUSTOM-EXAMPLE-001.yaml").write_text(
+        "id: CUSTOM-EXAMPLE-001\n"
+        'title: "Example: resource missing required Owner tag"\n'
+        "section: ops\n"
+        "default_urgency: MEDIUM\n"
+        "blast_radius: single-resource\n"
+        "status: active\n"
+        "patterns:\n"
+        "  - kind: resource_missing_arg\n"
+        "    resource: aws_instance\n"
+        "    arg: tags.Owner\n"
+        "    description: EC2 instance missing Owner tag required by org policy\n"
+        "recommendation: |\n"
+        "  Add an Owner tag identifying the team responsible for this resource.\n"
+        "      resource \"aws_instance\" \"app\" {\n"
+        "        tags = { Owner = \"platform-team\" }\n"
+        "      }\n"
+        "verification: |\n"
+        "  Check that all instances have Owner tag.\n"
+        "fix_hcl: |\n"
+        "  resource \"aws_instance\" \"app\" {\n"
+        "    tags = {\n"
+        "      Owner       = \"platform-team\"\n"
+        "      Environment = var.environment\n"
+        "    }\n"
+        "  }\n"
+        "fix_disruption: none\n"
+        "fixtures: []\n"
+    )
+    print(f"# created {_cfg_path}", file=sys.stderr)
+    print(f"# created {_rules_dir / 'CUSTOM-EXAMPLE-001.yaml'}", file=sys.stderr)
+    return 0
+
+
+def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
+    """Scan multiple repos and cross-correlate (`--mode fleet`).
+
+    Extracted verbatim from main(). `emit`/`out_file` are main()'s report-output
+    sink and (optional) `--output` file handle. Returns an exit code.
+    """
+    fleet_targets = _resolve_fleet_targets(args)
+    if not fleet_targets:
+        print("ERROR: --mode fleet requires at least one --target or --targets-file", file=sys.stderr)
+        return 2
+    fleet_result = _fleet_scan(fleet_targets, entries)
+    total = sum(fleet_result["summary"].values())
+    print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
+    emit(_render_fleet_report(fleet_result, args.format))
+    if out_file is not None:
+        out_file.close()
+    return 0
+
+
+def _mode_trend(args: object, entries: list, emit, out_file) -> int:
+    """Walk git history and compute per-commit finding deltas (`--mode trend`).
+
+    Extracted verbatim from main(). Returns an exit code.
+    """
+    trend_target = Path(args.targets[0]).resolve() if args.targets else None
+    if not trend_target:
+        print("ERROR: --mode trend requires --target <git-repo-dir>", file=sys.stderr)
+        return 2
+    # Round-5 audit fix #11 — argparse defaults `--lookback` to 30
+    # so direct attribute access is safe and fails fast on a
+    # rename typo (consistent with the other 5 sites converted in
+    # R30.8 audit #15).
+    lookback = args.lookback
+    print(f"# trend: analysing {lookback} days of git history in {trend_target}", file=sys.stderr)
+    rows = run_trend(trend_target, entries, lookback)
+    print(f"# trend: {len(rows)} commits analysed", file=sys.stderr)
+    emit(_render_trend_table(rows, args.format))
+    if out_file is not None:
+        out_file.close()
+    return 0
+
+
+def _mode_verify_fixed(args: object, entries: list, project_config: dict,
+                       target: Path, reports_dir: Path, emit) -> int:
+    """Re-probe a prior report's findings and classify fixed/still-present.
+
+    Extracted verbatim from main()'s `--mode verify-fixed` branch. Returns an
+    exit code.
+    """
+    prior = Path(args.prior_report) if args.prior_report else find_latest_prior(reports_dir, ".md")
+    if not prior or not prior.exists():
+        print(
+            f"ERROR: no prior report found (looked in {reports_dir}, "
+            f"or --prior-report <path>)",
+            file=sys.stderr,
+        )
+        return 2
+    # Load corpus for re-probing
+    _ignore_paths_vf = project_config.get("ignore_paths") or []
+    tf_files = [
+        p for p in target.rglob("*.tf")
+        if ".terraform" not in p.parts
+        and not _path_is_ignored(p, target, _ignore_paths_vf)
+    ]
+    all_text = {}
+    for fp in tf_files:
+        try:
+            all_text[fp] = _read_normalized(fp)
+        except Exception:
+            continue
+    verify = verify_fixed(prior, target, all_text, entries)
+    if args.format == "json":
+        emit(json.dumps(verify, indent=2, default=str))
+    else:
+        import datetime
+        out_path = reports_dir / f"tf-analysis-verify-{datetime.date.today()}.md"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        write_verification_report(verify, out_path)
+        print(f"# wrote {out_path}")
+        for state, rows in verify["results"].items():
+            print(f"# {state}: {len(rows)}")
+    return 0
+
+
+def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
+    """Apply (or dry-run) `fix_hcl` patches. Returns True if main() should exit.
+
+    Extracted from main(). A real `apply` returns True (main exits so the user
+    re-runs to confirm a clean state); a `dry-run` returns False (main falls
+    through to normal reporting). `findings` is read-only here — only the
+    patcher input is narrowed by `--baseline` / the disruption cap.
+    """
+    # `--apply-fixes` × `--baseline` (R30.11): when a baseline is set,
+    # findings already present in the baseline are not auto-patched.
+    # Closes the "snapshot today, fix only new stuff" UX. The full
+    # finding list is still emitted in the report; only the patcher
+    # input is narrowed.
+    fixable_findings = findings
+    if args.baseline:
+        _baseline_path = Path(args.baseline)
+        if _baseline_path.exists():
+            _retained, _suppressed_b = apply_baseline(findings, _baseline_path)
+            if _suppressed_b:
+                print(
+                    f"# apply-fixes: skipping {len(_suppressed_b)} baselined finding(s) "
+                    f"({len(_retained)} eligible for auto-patch)",
+                    file=sys.stderr,
+                )
+            fixable_findings = _retained
+
+    # R31.2 — disruption-tier cap. Used by the auto-remediation PR bot
+    # to limit itself to fixes that don't force replacement. The entry's
+    # `fix_disruption` field is the source of truth (`none` <
+    # `plan_required` < `forces_replacement`). Default of
+    # `forces_replacement` means no cap — backward-compatible.
+    _max_disr = getattr(args, "apply_fixes_max_disruption", "forces_replacement")
+    if _max_disr != "forces_replacement":
+        _disr_rank = {"none": 0, "plan_required": 1, "forces_replacement": 2}
+        _cap_rank = _disr_rank[_max_disr]
+        _entry_disr = {
+            e["id"]: e.get("fix_disruption", "forces_replacement")
+            for e in entries
+        }
+        _before = len(fixable_findings)
+        fixable_findings = [
+            f for f in fixable_findings
+            if _disr_rank.get(_entry_disr.get(f["id"], "forces_replacement"), 2)
+            <= _cap_rank
+        ]
+        _skipped_disr = _before - len(fixable_findings)
+        if _skipped_disr:
+            print(
+                f"# apply-fixes: skipping {_skipped_disr} finding(s) above "
+                f"disruption cap '{_max_disr}' "
+                f"({len(fixable_findings)} eligible for auto-patch)",
+                file=sys.stderr,
+            )
+
+    _handle_apply_fixes(
+        args, fixable_findings, entries,
+        dry_run=(args.apply_fixes == "dry-run"),
+    )
+    return args.apply_fixes == "apply"
+
+
+def _cmd_auto_stub(args: object, findings: list, entries: list) -> None:
+    """Scaffold catalogue YAML stubs for `--propose-stub` IDs and any finding
+    IDs not already in the catalogue.
+
+    Extracted verbatim from main(); read-only over findings/entries and falls
+    through (no early exit).
+    """
+    stub_dir = Path(args.auto_stub)
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    catalog_ids = {e["id"] for e in entries}
+    stub_targets: dict[str, dict] = {}
+    if args.propose_stub:
+        for pid in [p.strip() for p in args.propose_stub.split(",") if p.strip()]:
+            stub_targets[pid] = {"resource": ""}
+    for f in findings:
+        if f["id"] not in catalog_ids:
+            stub_targets.setdefault(f["id"], f)
+    stubs_created = []
+    for fid, hint in stub_targets.items():
+        stub_path = generate_stub(fid, hint, stub_dir)
+        if stub_path:
+            stubs_created.append(str(stub_path))
+    if stubs_created:
+        print(f"# auto-stubs created: {len(stubs_created)}", file=sys.stderr)
+        for sp in stubs_created:
+            print(f"#   {sp}", file=sys.stderr)
+
+
+def _make_emitter(args: object):
+    """Build the report-output sink: returns ``(emit, out_file)``.
+
+    ``emit(text)`` writes a report line to stdout, or to the ``--output`` file
+    when one is given; stderr progress lines are unaffected. ``out_file`` is the
+    handle (or ``None``) so callers can close it on the happy path.
+
+    Audit follow-up #2 / #15 — the file is closed at the bottom of main() and at
+    the early-return sites, but none of those run if a render exception fires
+    partway through the ~860-line output block. ``atexit.register`` guarantees a
+    close on uncaught exceptions too, without wrapping main() in try/finally. The
+    explicit closes are retained (they release the fd sooner on the happy path);
+    atexit is the safety net for the exception case.
+    """
+    out_file = None
+    if args.output:
+        out_file = open(args.output, "w", encoding="utf-8")
+        import atexit
+        atexit.register(
+            lambda: out_file.close() if (out_file is not None and not out_file.closed) else None
+        )
+
+    def emit(text: str) -> None:
+        """Write report output to stdout or --output file."""
+        if out_file is not None:
+            out_file.write(text + "\n")
+        else:
+            print(text)
+
+    return emit, out_file
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -2216,31 +2471,8 @@ def main():
             )
 
     # Route report output: stdout (default) or a file (--output PATH).
-    # We shadow `print` for report output only — stderr progress lines
-    # always go to sys.stderr and are unaffected.
-    #
-    # Audit follow-up #2 / #15 — the file is closed at the bottom of
-    # `main()` and at four early-return sites. None of those paths run
-    # if a render exception fires partway through the ~860-line output
-    # block. `atexit.register` is the smallest patch that guarantees a
-    # close on uncaught exceptions too — without indenting the rest of
-    # `main()` into a `try: ... finally:` block. The existing explicit
-    # closes are retained (they release the fd sooner on the happy
-    # path); atexit is the safety net for the exception case.
-    _out_file = None
-    if args.output:
-        _out_file = open(args.output, "w", encoding="utf-8")
-        import atexit
-        atexit.register(
-            lambda: _out_file.close() if (_out_file is not None and not _out_file.closed) else None
-        )
-
-    def _emit(text: str) -> None:
-        """Write report output to stdout or --output file."""
-        if _out_file is not None:
-            _out_file.write(text + "\n")
-        else:
-            print(text)
+    # See _make_emitter for the atexit safety-net rationale.
+    _emit, _out_file = _make_emitter(args)
 
     catalog_dir = Path(args.catalog).resolve()
 
@@ -2250,49 +2482,7 @@ def main():
 
     # --init: create project config scaffold and exit
     if args.init:
-        init_target = Path(args.targets[0]).resolve() if args.targets else Path.cwd()
-        _cfg_path = init_target / ".tf-analyze.yaml"
-        _rules_dir = init_target / ".tf-analyze-rules"
-        _rules_dir.mkdir(parents=True, exist_ok=True)
-        _cfg_path.write_text(
-            "# tf-analyze project configuration\n"
-            "# rules_dir: .tf-analyze-rules/\n"
-            "# ignore_rules: []\n"
-            "# thresholds:\n"
-            "#   password_min_length: 14\n"
-        )
-        (_rules_dir / "CUSTOM-EXAMPLE-001.yaml").write_text(
-            "id: CUSTOM-EXAMPLE-001\n"
-            'title: "Example: resource missing required Owner tag"\n'
-            "section: ops\n"
-            "default_urgency: MEDIUM\n"
-            "blast_radius: single-resource\n"
-            "status: active\n"
-            "patterns:\n"
-            "  - kind: resource_missing_arg\n"
-            "    resource: aws_instance\n"
-            "    arg: tags.Owner\n"
-            "    description: EC2 instance missing Owner tag required by org policy\n"
-            "recommendation: |\n"
-            "  Add an Owner tag identifying the team responsible for this resource.\n"
-            "      resource \"aws_instance\" \"app\" {\n"
-            "        tags = { Owner = \"platform-team\" }\n"
-            "      }\n"
-            "verification: |\n"
-            "  Check that all instances have Owner tag.\n"
-            "fix_hcl: |\n"
-            "  resource \"aws_instance\" \"app\" {\n"
-            "    tags = {\n"
-            "      Owner       = \"platform-team\"\n"
-            "      Environment = var.environment\n"
-            "    }\n"
-            "  }\n"
-            "fix_disruption: none\n"
-            "fixtures: []\n"
-        )
-        print(f"# created {_cfg_path}", file=sys.stderr)
-        print(f"# created {_rules_dir / 'CUSTOM-EXAMPLE-001.yaml'}", file=sys.stderr)
-        sys.exit(0)
+        sys.exit(_cmd_init(args))
 
     # Load project config from .tf-analyze.yaml
     if args.config:
@@ -2355,36 +2545,11 @@ def main():
 
     # Fleet mode — scan multiple repos and cross-correlate
     if args.mode == "fleet":
-        fleet_targets = _resolve_fleet_targets(args)
-        if not fleet_targets:
-            print("ERROR: --mode fleet requires at least one --target or --targets-file", file=sys.stderr)
-            sys.exit(2)
-        fleet_result = _fleet_scan(fleet_targets, entries)
-        total = sum(fleet_result["summary"].values())
-        print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
-        _emit(_render_fleet_report(fleet_result, args.format))
-        if _out_file is not None:
-            _out_file.close()
-        sys.exit(0)
+        sys.exit(_mode_fleet(args, entries, _emit, _out_file))
 
     # Trend mode — walk git history and compute per-commit finding deltas
     if args.mode == "trend":
-        trend_target = Path(args.targets[0]).resolve() if args.targets else None
-        if not trend_target:
-            print("ERROR: --mode trend requires --target <git-repo-dir>", file=sys.stderr)
-            sys.exit(2)
-        # Round-5 audit fix #11 — argparse defaults `--lookback` to 30
-        # so direct attribute access is safe and fails fast on a
-        # rename typo (consistent with the other 5 sites converted in
-        # R30.8 audit #15).
-        lookback = args.lookback
-        print(f"# trend: analysing {lookback} days of git history in {trend_target}", file=sys.stderr)
-        rows = run_trend(trend_target, entries, lookback)
-        print(f"# trend: {len(rows)} commits analysed", file=sys.stderr)
-        _emit(_render_trend_table(rows, args.format))
-        if _out_file is not None:
-            _out_file.close()
-        sys.exit(0)
+        sys.exit(_mode_trend(args, entries, _emit, _out_file))
 
     target = Path(args.targets[0]).resolve()
 
@@ -2397,39 +2562,7 @@ def main():
 
     # verify-fixed mode — early exit with dedicated output
     if args.mode == "verify-fixed":
-        prior = Path(args.prior_report) if args.prior_report else find_latest_prior(reports_dir, ".md")
-        if not prior or not prior.exists():
-            print(
-                f"ERROR: no prior report found (looked in {reports_dir}, "
-                f"or --prior-report <path>)",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        # Load corpus for re-probing
-        _ignore_paths_vf = project_config.get("ignore_paths") or []
-        tf_files = [
-            p for p in target.rglob("*.tf")
-            if ".terraform" not in p.parts
-            and not _path_is_ignored(p, target, _ignore_paths_vf)
-        ]
-        all_text = {}
-        for fp in tf_files:
-            try:
-                all_text[fp] = _read_normalized(fp)
-            except Exception:
-                continue
-        verify = verify_fixed(prior, target, all_text, entries)
-        if args.format == "json":
-            _emit(json.dumps(verify, indent=2, default=str))
-        else:
-            import datetime
-            out_path = reports_dir / f"tf-analysis-verify-{datetime.date.today()}.md"
-            reports_dir.mkdir(parents=True, exist_ok=True)
-            write_verification_report(verify, out_path)
-            print(f"# wrote {out_path}")
-            for state, rows in verify["results"].items():
-                print(f"# {state}: {len(rows)}")
-        sys.exit(0)
+        sys.exit(_mode_verify_fixed(args, entries, project_config, target, reports_dir, _emit))
 
     # Determine file set
     diff_files = None
@@ -2645,60 +2778,8 @@ def main():
     # re-scan (if the user re-runs) won't report those findings.
     # Audit item 15 — direct access on argparse-wired flags.
     if args.apply_fixes:
-        # `--apply-fixes` × `--baseline` (R30.11): when a baseline is set,
-        # findings already present in the baseline are not auto-patched.
-        # Closes the "snapshot today, fix only new stuff" UX. The full
-        # finding list is still emitted in the report; only the patcher
-        # input is narrowed.
-        fixable_findings = findings
-        if args.baseline:
-            _baseline_path = Path(args.baseline)
-            if _baseline_path.exists():
-                _retained, _suppressed_b = apply_baseline(findings, _baseline_path)
-                if _suppressed_b:
-                    print(
-                        f"# apply-fixes: skipping {len(_suppressed_b)} baselined finding(s) "
-                        f"({len(_retained)} eligible for auto-patch)",
-                        file=sys.stderr,
-                    )
-                fixable_findings = _retained
-
-        # R31.2 — disruption-tier cap. Used by the auto-remediation PR bot
-        # to limit itself to fixes that don't force replacement. The entry's
-        # `fix_disruption` field is the source of truth (`none` <
-        # `plan_required` < `forces_replacement`). Default of
-        # `forces_replacement` means no cap — backward-compatible.
-        _max_disr = getattr(args, "apply_fixes_max_disruption", "forces_replacement")
-        if _max_disr != "forces_replacement":
-            _disr_rank = {"none": 0, "plan_required": 1, "forces_replacement": 2}
-            _cap_rank = _disr_rank[_max_disr]
-            _entry_disr = {
-                e["id"]: e.get("fix_disruption", "forces_replacement")
-                for e in entries
-            }
-            _before = len(fixable_findings)
-            fixable_findings = [
-                f for f in fixable_findings
-                if _disr_rank.get(_entry_disr.get(f["id"], "forces_replacement"), 2)
-                <= _cap_rank
-            ]
-            _skipped_disr = _before - len(fixable_findings)
-            if _skipped_disr:
-                print(
-                    f"# apply-fixes: skipping {_skipped_disr} finding(s) above "
-                    f"disruption cap '{_max_disr}' "
-                    f"({len(fixable_findings)} eligible for auto-patch)",
-                    file=sys.stderr,
-                )
-
-        _handle_apply_fixes(
-            args, fixable_findings, entries,
-            dry_run=(args.apply_fixes == "dry-run"),
-        )
-        if args.apply_fixes == "apply":
-            # Exit after applying so the user can re-run to confirm clean state.
-            if getattr(args, "_out_file", None):
-                pass  # _out_file closure is local; normal cleanup via finally is N/A
+        # Exit after a real apply so the user can re-run to confirm clean state.
+        if _cmd_apply_fixes(args, findings, entries):
             return
 
     # Apply project-wide ignore_rules from .tf-analyze.yaml
@@ -2753,25 +2834,7 @@ def main():
     #       this only happens if findings carry non-catalogue IDs, e.g. from
     #       an external reconciler).
     if args.auto_stub:
-        stub_dir = Path(args.auto_stub)
-        stub_dir.mkdir(parents=True, exist_ok=True)
-        catalog_ids = {e["id"] for e in entries}
-        stub_targets: dict[str, dict] = {}
-        if args.propose_stub:
-            for pid in [p.strip() for p in args.propose_stub.split(",") if p.strip()]:
-                stub_targets[pid] = {"resource": ""}
-        for f in findings:
-            if f["id"] not in catalog_ids:
-                stub_targets.setdefault(f["id"], f)
-        stubs_created = []
-        for fid, hint in stub_targets.items():
-            stub_path = generate_stub(fid, hint, stub_dir)
-            if stub_path:
-                stubs_created.append(str(stub_path))
-        if stubs_created:
-            print(f"# auto-stubs created: {len(stubs_created)}", file=sys.stderr)
-            for sp in stubs_created:
-                print(f"#   {sp}", file=sys.stderr)
+        _cmd_auto_stub(args, findings, entries)
 
     # Build attack graph when requested (consumes all_text + findings)
     attack_graph: dict | None = None
