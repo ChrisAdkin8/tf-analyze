@@ -85,7 +85,7 @@ Live diagnostics, Quick Fix, attack graph, Module Reuse Advisor, and a `vscode:/
 code --install-extension tfanalyze.tf-analyze
 
 # Or from a downloaded .vsix (current path until the Marketplace listing publishes)
-code --install-extension tf-analyze-0.1.57.vsix
+code --install-extension tf-analyze-0.1.58.vsix
 ```
 
 Open any Terraform workspace and the six status-bar shortcuts appear bottom-left:
@@ -282,7 +282,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 |---|------|-----|
 | GitHub Action (marketplace) | [`action.yml`](action.yml) | Published composite action — `uses: ChrisAdkin8/tf-analyze@v1`. SARIF upload, inline PR `suggestion` blocks, engine-rendered PR summary (`--format pr-summary`), optional `compliance-framework` / `attack-graph` inputs, pin via `ref:` or `image:` for reproducible CI. |
 | GitHub Action (workflow template) | [`integrations/github-action.yml`](integrations/github-action.yml) | Alternative reference workflow that installs the engine from source instead of pulling the Docker image. Adds `show-info` input. Copy into your own `.github/workflows/`. |
-| VS Code extension (v0.1.57) | [`vscode-extension/`](vscode-extension/) | Self-contained `.vsix` (engine + catalogue bundled). LSP-driven diagnostics, Quick Fix, status-bar score+grade badge, attack-graph + 🌊 blast-radius + module-reuse panels, bulk apply-fixes with diff preview, baseline suppression UI, `vscode://` URI handler. Full feature list: [`docs/vscode-extension.md`](docs/vscode-extension.md). |
+| VS Code extension (v0.1.58) | [`vscode-extension/`](vscode-extension/) | Self-contained `.vsix` (engine + catalogue bundled). LSP-driven diagnostics, Quick Fix, status-bar score+grade badge, attack-graph + 🌊 blast-radius + module-reuse panels, bulk apply-fixes with diff preview, baseline suppression UI, `vscode://` URI handler. Full feature list: [`docs/vscode-extension.md`](docs/vscode-extension.md). |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
 | Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
@@ -327,7 +327,7 @@ Additional screenshots: [compliance report](docs/images/compliance-report.png) �
 | Catalogue rule schema | [`catalog/README.md`](catalog/README.md) |
 | Sample reports against terragoat | [`reports/README.md`](reports/README.md) |
 | Skill prose (LLM-facing instructions) | [`SKILL.md`](SKILL.md) |
-| Roadmap and TODO | [`TODO.md`](TODO.md) |
+| Roadmap and backlog | [`tasks/TODO.md`](tasks/TODO.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Blog (design notes, debugging tours, retros) | [`docs/blog/`](docs/blog/) |
 
@@ -380,7 +380,6 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (239 positive + 146 clea
 ├── SKILL.md                    # Skill prose loaded as /tf-analyze in Claude Code
 ├── README.md                   # This file
 ├── CHANGELOG.md                # Per-round release notes
-├── TODO.md                     # Roadmap and backlog
 ├── CONTRIBUTING.md
 ├── LICENSE                     # MPL-2.0
 ├── Dockerfile                  # ghcr.io/chrisadkin8/tf-analyze
