@@ -125,6 +125,7 @@ Per-file kinds (run inside `detect_in_file`):
 | `data_source_present` | Any `data` block of the named type triggers the finding (e.g. `vault_kv_secret_v2`) |
 | `grep` | A regex against the raw file body — last resort, use sparingly |
 | `hcl_attr` | A specific HCL nested-block attribute path (e.g., `lifecycle.prevent_destroy`) |
+| `high_entropy_string` | A string literal whose Shannon entropy marks it as a probable hardcoded secret (token / access key), regardless of the argument name — complements the name-based `grep` secret rules. Optional fields: `min_length` (20), `max_length` (100), `min_entropy` (4.0). |
 | `moved_block_present` | TF 1.5+ `moved` block — flagged for cleanup once apply has run |
 | `removed_block_present` | TF 1.7+ `removed` block — flagged for cleanup once destroy has run |
 | `count_index_ref`, `count_bool_pattern`, `count_length_unguarded`, `count_foreach_mix` | `count`/`for_each` anti-patterns |

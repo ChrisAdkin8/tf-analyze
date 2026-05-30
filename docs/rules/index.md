@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**353 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**354 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -113,7 +113,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-UNUSED-002`](./ROB-UNUSED-002.md) | LOW | Declared output is never consumed by any caller |
 | [`ROB-VERSION-002`](./ROB-VERSION-002.md) | LOW | Submodule directory has no required_version |
 
-## security (193)
+## security (194)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -239,6 +239,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-K8S-SECRET-001`](./SEC-K8S-SECRET-001.md) | HIGH | kubernetes_secret carries literal `data` (vs ExternalSecret / Vault Secrets Operator) |
 | [`SEC-PROVISIONER-001`](./SEC-PROVISIONER-001.md) | HIGH | Provisioner block used for shell execution |
 | [`SEC-SECRETS-002`](./SEC-SECRETS-002.md) | HIGH | aws_ssm_parameter stores a sensitive value as plain `String` (not `SecureString`) |
+| [`SEC-SECRETS-ENTROPY-001`](./SEC-SECRETS-ENTROPY-001.md) | HIGH | High-entropy string literal — probable hardcoded secret (API token / access key) |
 | [`SEC-SENSITIVE-001`](./SEC-SENSITIVE-001.md) | HIGH | Sensitive output not marked sensitive=true |
 | [`SEC-SENSITIVE-002`](./SEC-SENSITIVE-002.md) | HIGH | Sensitive marker dropped at module boundary |
 | [`SEC-SENSITIVE-003`](./SEC-SENSITIVE-003.md) | HIGH | Sensitive variable passed to templatefile() |
