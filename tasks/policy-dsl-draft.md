@@ -1,8 +1,15 @@
 # Policy-as-code DSL — design draft
 
-> **STATUS: DRAFT / NOT IMPLEMENTED.** A design for review, not shipped behaviour.
+> **STATUS: v1 IMPLEMENTED (2026-05-30).** Engine: `scripts/_policy.py` (parser +
+> evaluator + regex/"hcl1" resource view) + `scripts/_handlers_policy.py`
+> (`kind: policy` corpus handler), load-time validation in `_catalog`, tests in
+> `tests/test_policy_dsl.py`. User guide: `docs/policy-dsl.md`.
+> **Still on this design but NOT yet built:** the Scope-A hcl2-backed attr
+> accessor (§6/§10 — removes the repeated-block / coercion limits), graph
+> predicates (`reaches`/`is_crown_jewel`, phase 2), and the first shipped
+> catalogue policy rules (now trivial — they're just catalogue data).
+>
 > Closes the audit's #1 capability gap (cross-resource / conditional custom rules).
-> Goal of this doc: agree the authoring experience + data model before any code.
 
 ## 1. Problem
 

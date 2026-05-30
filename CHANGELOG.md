@@ -5,6 +5,30 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 33 — Policy-as-code DSL (`kind: policy`) — 2026-05-30
+
+Closes the long-standing #1 capability gap: custom rules could only match a
+single resource (regex / arg-presence). The new `kind: policy` pattern lets
+authors write **cross-resource, conditional, and aggregate** rules as catalogue
+data — e.g. "every `aws_s3_bucket` must have an `aws_s3_bucket_logging`
+referencing it", "if tagged `prod`, require `deletion_protection`", "no security
+group opens `0.0.0.0/0` on 22".
+
+A small, **safe** predicate language (hand-rolled recursive-descent parser +
+tree-walking evaluator — no `eval`, so `--catalog` user files can't execute
+code): `and/or/not`, comparisons (`== != < <= > >= in "not in" matches`),
+`has(...)`, and `exists/all/none/count(TYPE where …)` quantifiers over the
+resource model (`resource.type/.name/.attr.<path>/.tags.<key>`, `that` for the
+candidate inside a quantifier). v1 runs on the existing parser with best-effort
+scalar/list/bool coercion; a future hcl2-backed accessor and graph predicates
+(`reaches`/`is_crown_jewel`) are tracked in `tasks/policy-dsl-draft.md`.
+Findings flow through the normal id/urgency/SARIF/score/suppression pipeline.
+
+New: `scripts/_policy.py`, `scripts/_handlers_policy.py`; load-time validation
+in `_catalog`; `docs/policy-dsl.md`; `tests/test_policy_dsl.py` (19 tests).
+
+---
+
 ## Round 32.1 — K8s/Helm rule coverage 8 → 18 + version-drift sweep — 2026-05-13
 
 Brings the catalogue from 343 → **353 active rules** by closing the

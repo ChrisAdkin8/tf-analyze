@@ -12,6 +12,21 @@ network integrations, VS Code extension, build/CI/packaging, tests/fixtures/cata
 
 ## DONE (this session)
 
+### Policy-as-code DSL v1 (2026-05-30) — the audit's #1 capability gap
+
+Author cross-resource / conditional / aggregate rules as catalogue data
+(`kind: policy`) — no Python, no vendored Rego. `scripts/_policy.py` (safe
+hand-rolled parser + evaluator + a regex/"hcl1" resource view with scalar/list/
+bool coercion), `scripts/_handlers_policy.py` (corpus handler), load-time
+expression validation in `_catalog`, 19 tests in `tests/test_policy_dsl.py`
+(unit + end-to-end through `detect.py`). User guide `docs/policy-dsl.md`; design
+`tasks/policy-dsl-draft.md` (de-risked by the §7 evaluator spike, which caught a
+draft bug + a parser bug). **Remaining:** Scope-A hcl2 attr accessor (removes
+repeated-block/coercion limits), graph predicates (phase 2), first shipped
+catalogue policy rules (now trivial catalogue data). Suite: **1208 passed**.
+
+---
+
 ### P1/P2/P3 backlog sweep (2026-05-30)
 
 Cleared the bulk of the remaining P1/P2/P3 list. Suite after the sweep:
