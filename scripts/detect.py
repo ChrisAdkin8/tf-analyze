@@ -1939,6 +1939,194 @@ def _make_emitter(args: object):
     return emit, out_file
 
 
+def _render_report(args: object, findings: list, entries: list, *, emit,
+                   summary: dict, suppressed_findings: list,
+                   suppressed_by_baseline: list, attack_graph, centrality_scores,
+                   compliance_report, blast_radius_top, compare_target) -> None:
+    """Render findings in the requested ``--format``.
+
+    Handles both the ``--compare`` delta branch and the normal branch. Extracted
+    verbatim from main() — a local ``_emit = emit`` alias keeps the moved block
+    byte-identical. Writes report output through ``emit``; progress/notices go to
+    stderr. No early exit and no file close: main() still owns the ``_out_file``
+    lifecycle and the ``--fail-on`` exit code.
+    """
+    _emit = emit
+    # Report comparison
+    if compare_target:
+        delta = compare_reports(findings, Path(compare_target))
+        print(f"# delta: {len(delta['new'])} new, {len(delta['resolved'])} resolved, "
+              f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
+        if args.format == "json":
+            output = {
+                "summary": summary,
+                "findings": findings,
+                "suppressed": suppressed_findings,
+                "delta": delta,
+            }
+            if attack_graph:
+                output["graph"] = attack_graph
+            if blast_radius_top:
+                output["blast_radius"] = blast_radius_top
+            if getattr(args, "explain_score", False):
+                output["score_explanation"] = explain_score(findings, summary)
+            _emit(json.dumps(output, indent=2))
+        elif args.format == "sarif":
+            sarif = to_sarif(findings, entries)
+            _emit(json.dumps(sarif, indent=2))
+        elif args.format == "html":
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
+        elif args.format == "compliance":
+            if compliance_report:
+                _emit(_render_compliance_text(compliance_report))
+            else:
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
+        elif args.format == "mitre":
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
+        elif args.format == "pr-summary":
+            _emit(_render_pr_summary(
+                findings, entries, summary,
+                attack_graph=attack_graph,
+                centrality=centrality_scores,
+                compliance=compliance_report,
+            ))
+        else:
+            _c = summary["counts"]
+            _emit(
+                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
+                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
+                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
+                + (f" · {summary['suppressed_count']} suppressed"
+                   if summary["suppressed_count"] else "")
+            )
+            if delta["new"]:
+                _emit("# NEW findings:")
+                for f in delta["new"]:
+                    _emit(f"  + {f['id']} {f['file']}:{f['line']} {f['resource']}")
+            if delta["resolved"]:
+                _emit("# RESOLVED findings:")
+                for f in delta["resolved"]:
+                    _emit(f"  - {f['id']} {f['file']}:{f['line']} {f['resource']}")
+            if delta["unchanged"]:
+                _emit(f"# {len(delta['unchanged'])} unchanged finding(s)")
+            if attack_graph:
+                _emit("\n## Attack Graph\n")
+                _emit(graph_to_mermaid(attack_graph))
+            if blast_radius_top and getattr(args, "blast_radius", False):
+                from _blast_radius import render_blast_radius_text
+                _emit("\n" + render_blast_radius_text(blast_radius_top))
+            if compliance_report and args.format == "text":
+                _emit("\n")
+                _emit(_render_compliance_text(compliance_report))
+    else:
+        # --explain-score (R30.8): rank findings by score contribution
+        # so the user sees which fix is worth most. Computed once and
+        # threaded into both JSON (`score_explanation` field) and text
+        # output (header block before the findings list).
+        score_explanation = (
+            explain_score(findings, summary)
+            if getattr(args, "explain_score", False) else None
+        )
+
+        # Standard output
+        if args.format == "json":
+            output_data: dict = {"summary": summary, "findings": findings}
+            if suppressed_findings:
+                output_data["suppressed"] = suppressed_findings
+            if suppressed_by_baseline:
+                output_data["suppressed_by_baseline"] = suppressed_by_baseline
+            if attack_graph:
+                output_data["graph"] = attack_graph
+            if blast_radius_top:
+                output_data["blast_radius"] = blast_radius_top
+            if score_explanation:
+                output_data["score_explanation"] = score_explanation
+            _emit(json.dumps(output_data, indent=2))
+        elif args.format == "sarif":
+            sarif = to_sarif(findings, entries)
+            _emit(json.dumps(sarif, indent=2))
+        elif args.format == "html":
+            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
+        elif args.format == "compliance":
+            if compliance_report:
+                _emit(_render_compliance_text(compliance_report))
+            else:
+                _emit(f"# No catalogue entries mapped to compliance framework "
+                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
+        elif args.format == "mitre":
+            _emit(_render_mitre(findings, entries,
+                                tactic_filter=getattr(args, "mitre_tactic", None)))
+        elif args.format == "pr-summary":
+            _emit(_render_pr_summary(
+                findings, entries, summary,
+                attack_graph=attack_graph,
+                centrality=centrality_scores,
+                compliance=compliance_report,
+            ))
+        else:
+            # Text format: lead with a one-line summary score, then the
+            # finding list. The summary always prints (even on a clean
+            # repo) so CI logs always carry the headline number.
+            _c = summary["counts"]
+            _emit(
+                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
+                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
+                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
+                + (f" · {summary['suppressed_count']} suppressed"
+                   if summary["suppressed_count"] else "")
+            )
+            if score_explanation:
+                _emit("")
+                _emit(render_score_explanation(score_explanation))
+                _emit("")
+            entry_map_out = {e["id"]: e for e in entries}
+            for f in findings:
+                # 🔥 KEV badge: rule's CWE intersects CISA Known Exploited
+                # Vulnerabilities (R30.2). Renders before the ID so the
+                # visual landmark is at the start of the line.
+                kev_badge = "🔥 KEV " if f.get("kev") else ""
+                _emit(f"{kev_badge}{f['id']} {f['file']}:{f['line']} {f['resource']}")
+                if attack_graph:
+                    e_out = entry_map_out.get(f["id"], {})
+                    if e_out.get("default_urgency") in ("HIGH", "CRITICAL"):
+                        narr = _narrative_for_finding(
+                            f["id"], f.get("resource", ""), f.get("file", "")
+                        )
+                        if narr:
+                            _emit(f"  # {narr}")
+                if getattr(args, "show_fixes", False):
+                    e_out = entry_map_out.get(f["id"], {})
+                    if e_out.get("fix_hcl"):
+                        disruption = e_out.get("fix_disruption", "")
+                        if disruption:
+                            _disruption_labels = {
+                                "none": "Non-disruptive",
+                                "plan_required": "Requires plan/apply",
+                                "forces_replacement": "Forces resource replacement",
+                            }
+                            _emit(f"  # Fix disruption: {_disruption_labels.get(disruption, disruption)}")
+                            d_note = e_out.get("fix_disruption_note", "")
+                            if d_note:
+                                _emit(f"  # {d_note}")
+                        for fix_line in e_out["fix_hcl"].strip().splitlines():
+                            _emit(f"    {fix_line}")
+            if suppressed_findings:
+                print(f"# ({len(suppressed_findings)} suppressed)", file=sys.stderr)
+            if not findings:
+                print("# no findings", file=sys.stderr)
+            if attack_graph:
+                _emit("\n## Attack Graph\n")
+                _emit(graph_to_mermaid(attack_graph))
+            if blast_radius_top and getattr(args, "blast_radius", False):
+                from _blast_radius import render_blast_radius_text
+                _emit("\n" + render_blast_radius_text(blast_radius_top))
+            if compliance_report and args.format == "text":
+                _emit("\n")
+                _emit(_render_compliance_text(compliance_report))
+
+
 def main():
     ap = argparse.ArgumentParser()
     # --target is required for scan modes but not for the meta-commands
@@ -3062,179 +3250,16 @@ def main():
             compare_target = str(prior_json)
             print(f"# auto-compare against {prior_json}", file=sys.stderr)
 
-    # Report comparison
-    if compare_target:
-        delta = compare_reports(findings, Path(compare_target))
-        print(f"# delta: {len(delta['new'])} new, {len(delta['resolved'])} resolved, "
-              f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
-        if args.format == "json":
-            output = {
-                "summary": summary,
-                "findings": findings,
-                "suppressed": suppressed_findings,
-                "delta": delta,
-            }
-            if attack_graph:
-                output["graph"] = attack_graph
-            if blast_radius_top:
-                output["blast_radius"] = blast_radius_top
-            if getattr(args, "explain_score", False):
-                output["score_explanation"] = explain_score(findings, summary)
-            _emit(json.dumps(output, indent=2))
-        elif args.format == "sarif":
-            sarif = to_sarif(findings, entries)
-            _emit(json.dumps(sarif, indent=2))
-        elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
-        elif args.format == "compliance":
-            if compliance_report:
-                _emit(_render_compliance_text(compliance_report))
-            else:
-                _emit(f"# No catalogue entries mapped to compliance framework "
-                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
-        elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries,
-                                tactic_filter=getattr(args, "mitre_tactic", None)))
-        elif args.format == "pr-summary":
-            _emit(_render_pr_summary(
-                findings, entries, summary,
-                attack_graph=attack_graph,
-                centrality=centrality_scores,
-                compliance=compliance_report,
-            ))
-        else:
-            _c = summary["counts"]
-            _emit(
-                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
-                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
-                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
-                + (f" · {summary['suppressed_count']} suppressed"
-                   if summary["suppressed_count"] else "")
-            )
-            if delta["new"]:
-                _emit("# NEW findings:")
-                for f in delta["new"]:
-                    _emit(f"  + {f['id']} {f['file']}:{f['line']} {f['resource']}")
-            if delta["resolved"]:
-                _emit("# RESOLVED findings:")
-                for f in delta["resolved"]:
-                    _emit(f"  - {f['id']} {f['file']}:{f['line']} {f['resource']}")
-            if delta["unchanged"]:
-                _emit(f"# {len(delta['unchanged'])} unchanged finding(s)")
-            if attack_graph:
-                _emit("\n## Attack Graph\n")
-                _emit(graph_to_mermaid(attack_graph))
-            if blast_radius_top and getattr(args, "blast_radius", False):
-                from _blast_radius import render_blast_radius_text
-                _emit("\n" + render_blast_radius_text(blast_radius_top))
-            if compliance_report and args.format == "text":
-                _emit("\n")
-                _emit(_render_compliance_text(compliance_report))
-    else:
-        # --explain-score (R30.8): rank findings by score contribution
-        # so the user sees which fix is worth most. Computed once and
-        # threaded into both JSON (`score_explanation` field) and text
-        # output (header block before the findings list).
-        score_explanation = (
-            explain_score(findings, summary)
-            if getattr(args, "explain_score", False) else None
-        )
-
-        # Standard output
-        if args.format == "json":
-            output_data: dict = {"summary": summary, "findings": findings}
-            if suppressed_findings:
-                output_data["suppressed"] = suppressed_findings
-            if suppressed_by_baseline:
-                output_data["suppressed_by_baseline"] = suppressed_by_baseline
-            if attack_graph:
-                output_data["graph"] = attack_graph
-            if blast_radius_top:
-                output_data["blast_radius"] = blast_radius_top
-            if score_explanation:
-                output_data["score_explanation"] = score_explanation
-            _emit(json.dumps(output_data, indent=2))
-        elif args.format == "sarif":
-            sarif = to_sarif(findings, entries)
-            _emit(json.dumps(sarif, indent=2))
-        elif args.format == "html":
-            _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
-        elif args.format == "compliance":
-            if compliance_report:
-                _emit(_render_compliance_text(compliance_report))
-            else:
-                _emit(f"# No catalogue entries mapped to compliance framework "
-                      f"{getattr(args, 'compliance_framework', 'cis')!r}.")
-        elif args.format == "mitre":
-            _emit(_render_mitre(findings, entries,
-                                tactic_filter=getattr(args, "mitre_tactic", None)))
-        elif args.format == "pr-summary":
-            _emit(_render_pr_summary(
-                findings, entries, summary,
-                attack_graph=attack_graph,
-                centrality=centrality_scores,
-                compliance=compliance_report,
-            ))
-        else:
-            # Text format: lead with a one-line summary score, then the
-            # finding list. The summary always prints (even on a clean
-            # repo) so CI logs always carry the headline number.
-            _c = summary["counts"]
-            _emit(
-                f"# tf-analyze: {summary['score']} ({summary['grade']}) · "
-                f"{_c['CRITICAL']} CRITICAL · {_c['HIGH']} HIGH · "
-                f"{_c['MEDIUM']} MEDIUM · {_c['LOW']} LOW · {_c['INFO']} INFO"
-                + (f" · {summary['suppressed_count']} suppressed"
-                   if summary["suppressed_count"] else "")
-            )
-            if score_explanation:
-                _emit("")
-                _emit(render_score_explanation(score_explanation))
-                _emit("")
-            entry_map_out = {e["id"]: e for e in entries}
-            for f in findings:
-                # 🔥 KEV badge: rule's CWE intersects CISA Known Exploited
-                # Vulnerabilities (R30.2). Renders before the ID so the
-                # visual landmark is at the start of the line.
-                kev_badge = "🔥 KEV " if f.get("kev") else ""
-                _emit(f"{kev_badge}{f['id']} {f['file']}:{f['line']} {f['resource']}")
-                if attack_graph:
-                    e_out = entry_map_out.get(f["id"], {})
-                    if e_out.get("default_urgency") in ("HIGH", "CRITICAL"):
-                        narr = _narrative_for_finding(
-                            f["id"], f.get("resource", ""), f.get("file", "")
-                        )
-                        if narr:
-                            _emit(f"  # {narr}")
-                if getattr(args, "show_fixes", False):
-                    e_out = entry_map_out.get(f["id"], {})
-                    if e_out.get("fix_hcl"):
-                        disruption = e_out.get("fix_disruption", "")
-                        if disruption:
-                            _disruption_labels = {
-                                "none": "Non-disruptive",
-                                "plan_required": "Requires plan/apply",
-                                "forces_replacement": "Forces resource replacement",
-                            }
-                            _emit(f"  # Fix disruption: {_disruption_labels.get(disruption, disruption)}")
-                            d_note = e_out.get("fix_disruption_note", "")
-                            if d_note:
-                                _emit(f"  # {d_note}")
-                        for fix_line in e_out["fix_hcl"].strip().splitlines():
-                            _emit(f"    {fix_line}")
-            if suppressed_findings:
-                print(f"# ({len(suppressed_findings)} suppressed)", file=sys.stderr)
-            if not findings:
-                print("# no findings", file=sys.stderr)
-            if attack_graph:
-                _emit("\n## Attack Graph\n")
-                _emit(graph_to_mermaid(attack_graph))
-            if blast_radius_top and getattr(args, "blast_radius", False):
-                from _blast_radius import render_blast_radius_text
-                _emit("\n" + render_blast_radius_text(blast_radius_top))
-            if compliance_report and args.format == "text":
-                _emit("\n")
-                _emit(_render_compliance_text(compliance_report))
+    # Report comparison + render — both the --compare delta branch and the
+    # normal branch, across every --format. See _render_report.
+    _render_report(
+        args, findings, entries, emit=_emit, summary=summary,
+        suppressed_findings=suppressed_findings,
+        suppressed_by_baseline=suppressed_by_baseline,
+        attack_graph=attack_graph, centrality_scores=centrality_scores,
+        compliance_report=compliance_report,
+        blast_radius_top=blast_radius_top, compare_target=compare_target,
+    )
 
     if _out_file is not None:
         _out_file.close()
