@@ -93,14 +93,13 @@ class TestCrossResourceModule:
         assert findings[0]["resource"] == "aws_dynamodb_table.t"
 
     def test_block_arg_value_moved_to_hcl(self) -> None:
-        """Session F also moved `block_arg_value` + the `_USE_HCL2`
-        toggle from detect.py into `_hcl.py` so `_cross_resource.py`
-        could import cleanly. Lock the new binding chain:
-        `detect.block_arg_value` is `_hcl.block_arg_value`."""
+        """Session F also moved `block_arg_value` from detect.py into
+        `_hcl.py` so `_cross_resource.py` could import cleanly. Lock the
+        new binding chain: `detect.block_arg_value` is
+        `_hcl.block_arg_value`. (The `_USE_HCL2` toggle that moved with it
+        was removed when the vendored parser became always-on.)"""
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
         import detect
         import _hcl
         assert detect.block_arg_value is _hcl.block_arg_value
-        assert detect._enable_hcl2_default is _hcl._enable_hcl2_default
-        # _HAS_HCL2 is a bool — `is` is appropriate for True/False
-        assert detect._HAS_HCL2 is _hcl._HAS_HCL2
+        assert not hasattr(_hcl, "_USE_HCL2")

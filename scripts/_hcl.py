@@ -8,8 +8,10 @@ presence checks, JSON-from-HCL coercion, nested-path lookup, and the
 Scope rule — same as `_versions.py` and `_scoring.py`:
 
   * Pure functions and immutable regex constants only.
-  * Zero engine state. Anything that reads the `_USE_HCL2` toggle, the
-    var-resolution layer, or the catalogue stays in `detect.py` for now.
+  * Zero engine state. Anything that reads the var-resolution layer or
+    the catalogue stays in `detect.py` for now. (Loading the vendored
+    python-hcl2 and choosing its grammar-cache path is one-time import
+    setup, not engine state.)
 
 That rule is what made the seam shippable: every helper here can be
 reasoned about in isolation, and the test surface is already locked
@@ -68,43 +70,100 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
+import sys
 from pathlib import Path
 
 
-# ---- Optional python-hcl2 fast-path -------------------------------------
+# ---- python-hcl2 (vendored) ---------------------------------------------
 #
-# The skill's default contract is stdlib-only — no pip install required to
-# run a scan. python-hcl2 (when installed) provides heredoc-aware
-# attribute extraction that the regex path can't match. Off by default,
-# enabled per-run via `--use-hcl2` or `TF_ANALYZE_USE_HCL2=1`.
-#
-# Lives here (rather than in detect.py) as of Session F so that callers
-# from other seamed modules (`_cross_resource.py`) can reach
-# `block_arg_value` without circular imports back into detect.
+# The engine always parses with the python-hcl2 + lark copies vendored in
+# `_vendor/` (refreshed only by `scripts/vendor_deps.py`), so every surface
+# runs the same parser version with no `pip install`. The vendored
+# directory goes first on `sys.path`, so it wins over any installed hcl2.
+# This lives in `_hcl.py` rather than `detect.py` because several entry
+# points (tests, `self_test.py`, `gen_rule_docs.py`) import `_hcl` without
+# `detect`. See tasks/hcl-parser-migration.md §4.1–4.2.
+
+def _vendor_dir() -> Path | None:
+    """`_vendor/` next to this file (source checkout, Docker, .vsix), or
+    the `tf_analyze_vendor` package-data dir (pip-installed wheel)."""
+    here = Path(__file__).resolve().parent / "_vendor"
+    if (here / "hcl2").is_dir():
+        return here
+    try:
+        import tf_analyze_vendor  # type: ignore
+    except ImportError:
+        return None
+    return Path(tf_analyze_vendor.__file__).resolve().parent
+
+
+_VENDOR_DIR = _vendor_dir()
+if _VENDOR_DIR is not None and str(_VENDOR_DIR) not in sys.path:
+    sys.path.insert(0, str(_VENDOR_DIR))
+
 try:
     import hcl2 as _hcl2  # type: ignore
-    _HAS_HCL2 = True
-except Exception:
-    _hcl2 = None  # type: ignore
-    _HAS_HCL2 = False
+    import hcl2.parser as _hcl2_parser  # type: ignore
+    import lark as _lark  # type: ignore
+except ImportError as e:  # pragma: no cover - broken install only
+    raise ImportError(
+        "tf-analyze: the vendored HCL parser is missing (expected "
+        f"{Path(__file__).resolve().parent / '_vendor'}). Copy the whole "
+        "scripts/ directory, including _vendor/, not just the .py files."
+    ) from e
 
-_USE_HCL2 = False  # toggled by main() in detect.py after argparse
+HCL2_VERSION: str = _hcl2.__version__
+LARK_VERSION: str = _lark.__version__
+HCL2_PATH: Path = Path(_hcl2.__file__).resolve().parent
 
 
-def _enable_hcl2_or_warn() -> None:
-    """[legacy] Old explicit-opt-in path. Kept as a thin wrapper around
-    `_enable_hcl2_default()` so any caller using --use-hcl2 still works.
+def _user_cache_dir() -> Path:
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    if xdg:
+        return Path(xdg)
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches"
+    local = os.environ.get("LOCALAPPDATA")
+    if os.name == "nt" and local:
+        return Path(local)
+    return Path.home() / ".cache"
+
+
+def _grammar_cache_path() -> Path:
+    """Where lark should cache the built HCL grammar.
+
+    Building the grammar takes ~0.35s, longer than a small scan, so it is
+    cached. Order: next to the vendored `parser.py` (pre-built in the
+    .vsix and Docker images; written on first use in a checkout, where it
+    is gitignored); else a per-user cache dir; else os.devnull, which
+    makes lark rebuild in memory every run (it tolerates an unreadable or
+    unwritable cache). Never a shared directory such as /tmp: lark loads
+    the cache with pickle.
     """
-    _enable_hcl2_default()
+    default = Path(_hcl2_parser.PARSER_FILE)
+    if default.exists() or os.access(default.parent, os.W_OK):
+        return default
+    try:
+        d = _user_cache_dir() / "tf-analyze"
+        d.mkdir(parents=True, exist_ok=True)
+        if os.access(d, os.W_OK):
+            return d / f"hcl2-{HCL2_VERSION}-lark-{LARK_VERSION}.lark_cache.bin"
+    except OSError:
+        pass
+    return Path(os.devnull)
 
 
-def _enable_hcl2_default() -> None:
-    """Enable the python-hcl2 fast-path. Silent no-op when the dependency
-    isn't present — the caller already decided whether to print a notice."""
-    global _USE_HCL2
-    if _HAS_HCL2:
-        _USE_HCL2 = True
+_hcl2_parser.PARSER_FILE = _grammar_cache_path()
+
+
+def warm_grammar_cache() -> str:
+    """Build (or load) the grammar once so the cache file exists. Used by
+    `scripts/vendor_deps.py --warm-cache` in image / bundle builds.
+    Returns the cache path."""
+    _hcl2.loads("")
+    return str(_hcl2_parser.PARSER_FILE)
 
 
 def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
@@ -112,8 +171,6 @@ def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
     block so hcl2 will parse it, then walks the parse tree for `arg`.
     Returns None on any error so callers fall back to the regex path.
     """
-    if not (_USE_HCL2 and _HAS_HCL2):
-        return None
     try:
         # hcl2.load expects a top-level construct; wrap the bare body.
         wrapped = f'_arg_extract {{\n{body}\n}}'
@@ -296,8 +353,8 @@ def brace_walk(
 
     * Heredoc bodies (``<<-EOF ... EOF``) are NOT specially handled here.
       Callers that need heredoc-aware extraction should use
-      ``block_arg_value`` (which delegates to the hcl2 parser when
-      available) instead of building on this walker. In practice the
+      ``block_arg_value`` (which delegates to the hcl2 parser for
+      heredoc bodies) instead of building on this walker. In practice the
       detector branches don't encounter raw heredoc text — the regex
       pattern that triggers each branch matches HCL keywords
       (``statement``, ``set``, etc.) that don't appear inside heredoc
@@ -458,15 +515,14 @@ def block_arg_value(body: str, arg: str) -> str | None:
 
     Heredoc-bearing values (`arg = <<-EOF\\n...\\nEOF`) are not handled by the
     regex path — the trailing `<<-EOF` is returned verbatim, which is rarely
-    useful. When the optional hcl2 fast-path is enabled
-    (`--use-hcl2` or `TF_ANALYZE_USE_HCL2=1`), heredoc bodies are extracted
-    structurally so callers see the actual string value.
+    useful — so heredoc-bearing bodies are first tried through python-hcl2,
+    which extracts the heredoc structurally and returns the actual string.
 
     Moved from detect.py into `_hcl.py` in Session F so that
     `_cross_resource.py` can call this without a circular import back
     into detect.
     """
-    if _USE_HCL2 and "<<" in body:
+    if "<<" in body:
         v = _hcl2_block_arg_value(body, arg)
         if v is not None:
             return v

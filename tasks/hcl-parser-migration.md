@@ -1,6 +1,7 @@
 # HCL parser migration — make python-hcl2 required and primary
 
-> **STATUS: DRAFT r2 (2026-10-25).** Not started. Revision 2 follows an
+> **STATUS: IN PROGRESS (r2, 2026-10-25).** Step 0 done (#36); Step 1 in
+> review. Revision 2 follows an
 > independent review of r1; every factual claim in r2 was checked against the
 > code on 2026-10-25. Supersedes the "Scope B is a separate ~1–2 week
 > initiative" note in `tasks/policy-dsl-draft.md` §10 and builds on the
@@ -101,6 +102,14 @@ heredocs, `jsonencode`, list rendering). If 7.2.1 fails any criterion, pin
 4.3.5 (already known to meet all three). Re-check the MIT licence for the
 pinned version.
 
+**Step-1 check result (2026-10-25): 7.2.1 pinned, with lark 1.3.1.** It
+imports only the stdlib and lark; parses all 676 `.tf` files (two were added
+since r2); emits the same 1,887 `__start_line__` keys as 4.3.5. Its output
+differs from 4.3.5 in 91 values, all improvements: `jsonencode(...)` and
+other nested expressions use JSON-style double quotes (66 + 18), `\"`
+escapes are unescaped (7), and `type = string` gives `string` rather than
+`${string}`. Both licences are MIT.
+
 ### 4.2 Distribution: one vendored copy everywhere
 
 - `scripts/_vendor/` holds `hcl2/` and `lark/` (all `.py` files **and** all
@@ -121,8 +130,10 @@ pinned version.
   that also provide a module named `hcl2`. Therefore `pyproject.toml` does
   **not** declare `python-hcl2` as a dependency; the wheel ships the vendored
   copy instead.
-- The three Dockerfiles drop their `pip install python-hcl2==4.3.5` and use
-  the vendored copy via the copied `scripts/` tree.
+- The Dockerfiles drop their `pip install python-hcl2==4.3.5` and copy
+  `scripts/_vendor/` with the engine. That is four images, not three:
+  `demo/Dockerfile` (the public scanner) also bundles the engine, and never
+  installed `python-hcl2`.
 - `bundle-engine.js` bundles `scripts/_vendor/`, and its smoke test asserts
   that `import hcl2` resolves to the bundled copy.
 
@@ -330,10 +341,14 @@ Each PR includes:
    matters: the depth-0 trial changed nothing in `examples/` but one result
    in `fixtures/`.)
 4. **Fallback run** (§4.7) green from Step 2 onward.
-5. **Performance.** `tests/test_perf.py` budget unchanged; the
-   `examples/terragoat` scan, **including a cold start with no grammar
-   cache**, is no more than 1.5× today's time, and a warm start is no more
-   than 1.2×.
+5. **Performance.** `tests/test_perf.py` budget unchanged; a warm
+   `examples/terragoat` scan is no more than 1.2× today's time. A cold start
+   (no grammar cache) is recorded but has no ratio limit: building the
+   grammar takes ~0.45s, longer than the whole scan (~0.27s), so no cold
+   run can meet a ratio against today. It happens once per fresh checkout
+   or pip install; the Docker images and `.vsix` ship the cache pre-built.
+   *(Amended in Step 1; r2 had a 1.5× cold-start limit. Step 1 measured:
+   warm 1.11×, cold 2.70×.)*
 
 ## 6. Step 0 — fix the MCP and Run Task images (est. ½ day, independent)
 
@@ -468,7 +483,7 @@ already handles port ranges) rather than adding a new kind. For AWS cover:
 
 ## 12. Progress
 
-- [ ] §6 Step 0 — MCP / Run Task images
+- [x] §6 Step 0 — MCP / Run Task images (#36)
 - [ ] §7 Step 1 — vendored parser
 - [ ] §8 Step 2 — one parse pass, fallback, `block_has_arg`
 - [ ] §9 Step 3 — values, main kinds, plan mode
@@ -510,6 +525,12 @@ Added in r2:
 6. **Line numbers** — unchanged; the off-by-one is a separate fix (§4.5).
 7. **`escalation:`** — engine evaluates structured `match:` only; free-text
    conditions stay as judgement-pass metadata (§4.10).
+
+Added in Step 1:
+
+8. **Cold-start budget** — no ratio limit on a cold start; warm-start
+   limit stays 1.2× (§5.5). Committing the grammar cache to git was
+   rejected: it is a pickle, which can't be reviewed.
 
 Open:
 

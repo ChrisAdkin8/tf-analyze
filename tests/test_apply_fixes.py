@@ -67,7 +67,6 @@ def _run_detect(target: Path, *extra_args: str) -> tuple[str, int]:
         sys.executable, str(DETECT_PY),
         "--target", str(target),
         "--format", "json",
-        "--no-hcl2",
         *extra_args,
     ]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)

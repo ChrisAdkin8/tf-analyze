@@ -107,13 +107,6 @@ Directory to write auto-generated catalogue stubs. Combined with --propose-stub 
 Comma-separated list of exploratory IDs to scaffold as stubs. Used by the judgement pass to promote novel findings. Requires --auto-stub <dir>.
 
 
-## Optional fast-path
-
-### `--use-hcl2`
-
-[deprecated, default-on since v0.2] Enable python-hcl2 fast-path. Kept for backwards compat; behaviour is now controlled by --no-hcl2.
-
-
 ## Meta-commands
 
 ### `--list-rules`
@@ -243,31 +236,7 @@ Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff
 
 Cap which findings --apply-fixes will touch by their fix_disruption tier. Default is 'forces_replacement' (no cap — every fixable finding is applied). 'none' applies only non-disruptive fixes (the auto-remediation-bot default). 'plan_required' applies non-disruptive plus changes visible in `terraform plan` but not forcing replacement. Tier ordering: none < plan_required < forces_replacement.
 
-### `--no-hcl2`
-
-Disable the python-hcl2 fast-path and use the regex parser exclusively. Useful for benchmarking or when running in a constrained environment without the optional dependency.
-
 ### `--lsp`
 
 Run as a JSON-RPC 2.0 LSP server on stdin/stdout. Provides real-time diagnostics and code actions for .tf files.
-
-### `--stdio`
-
-==SUPPRESS==
-
-### `--node-ipc`
-
-==SUPPRESS==
-
-### `--socket`
-
-==SUPPRESS==
-
-### `--port`
-
-==SUPPRESS==
-
-### `--clientProcessId`
-
-==SUPPRESS==
 

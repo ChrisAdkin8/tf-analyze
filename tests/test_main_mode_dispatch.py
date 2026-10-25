@@ -20,7 +20,7 @@ DETECT_PY = REPO_ROOT / "scripts" / "detect.py"
 
 def _run(*argv: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, str(DETECT_PY), "--no-hcl2", *argv],
+        [sys.executable, str(DETECT_PY), *argv],
         capture_output=True, text=True, timeout=120,
         cwd=str(cwd) if cwd else None,
     )

@@ -50,8 +50,8 @@ ext install hashicorp.tf-analyze
 ## Requirements
 
 - VS Code 1.85+
-- Python 3.9+ on `$PATH` (the bundled `detect.py` uses Python stdlib only —
-  no `pip install` step required)
+- Python 3.9+ on `$PATH` (the bundled engine needs only the stdlib plus its
+  bundled HCL parser — no `pip install` step required)
 
 ## Features
 

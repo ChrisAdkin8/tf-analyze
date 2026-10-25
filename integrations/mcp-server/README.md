@@ -22,8 +22,7 @@ The catalogue index is also exposed as an MCP resource at
 ## Install
 
 ```sh
-pip install -r requirements.txt    # MCP SDK only
-pip install python-hcl2            # Optional fast-path; engine works without it
+pip install -r requirements.txt    # MCP SDK only (the engine vendors its HCL parser)
 ```
 
 ## Wire into Claude Desktop

@@ -9,11 +9,6 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 
-# python-hcl2 is the heredoc-aware fast-path; bundling it removes a class
-# of false positives around multi-line attributes. detect.py still works
-# without it (regex fallback) — this is a quality upgrade, not a hard dep.
-RUN pip install --no-cache-dir python-hcl2==4.3.5
-
 # R31.7 — copy every Python module in scripts/, not just detect.py.
 # The R30.13 → R30.15 refactor split detect.py into 24 sibling modules
 # (`_apply_fixes.py`, `_attack_graph.py`, `_handlers_*.py`, …); the
@@ -23,6 +18,11 @@ RUN pip install --no-cache-dir python-hcl2==4.3.5
 # image since 2026-05-11. Globbing fixes this both retroactively and for
 # any future siblings.
 COPY scripts/*.py ./
+# The engine's HCL parser (python-hcl2 + lark) is vendored in
+# scripts/_vendor/; copy it with the modules and pre-build its grammar
+# cache so each run doesn't rebuild it (~0.35s).
+COPY scripts/_vendor/ ./_vendor/
+RUN python3 vendor_deps.py --warm-cache
 COPY catalog/ ./catalog/
 
 RUN python3 detect.py --list-rules --catalog ./catalog/ > /dev/null

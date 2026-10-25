@@ -423,8 +423,7 @@ class TestComplianceLinkSurface:
         )
         res = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "detect.py"),
-             "--target", str(tmp_path), "--format", "compliance",
-             "--no-hcl2"],
+             "--target", str(tmp_path), "--format", "compliance"],
             capture_output=True, text=True, timeout=60,
         )
         # Header line that explains the URL convention is always present.
@@ -442,8 +441,7 @@ class TestComplianceLinkSurface:
         )
         res = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "detect.py"),
-             "--target", str(tmp_path), "--format", "html", "--compliance",
-             "--no-hcl2"],
+             "--target", str(tmp_path), "--format", "html", "--compliance"],
             capture_output=True, text=True, timeout=60,
         )
         # At least one <a> with the docs URL must be present in compliance section.
@@ -460,8 +458,7 @@ class TestComplianceLinkSurface:
         )
         res = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "detect.py"),
-             "--target", str(tmp_path), "--format", "html",
-             "--no-hcl2"],
+             "--target", str(tmp_path), "--format", "html"],
             capture_output=True, text=True, timeout=60,
         )
         # Findings tab header must wrap the rule ID in an anchor.

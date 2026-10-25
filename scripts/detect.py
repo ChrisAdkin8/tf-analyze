@@ -77,12 +77,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-# ---- Optional python-hcl2 fast-path -------------------------------------
-# Moved into `scripts/_hcl.py` in Session F so `_cross_resource.py` and
-# any other sibling module can reach `block_arg_value` without
-# circular-importing back through `detect`. The toggle (`_USE_HCL2`)
-# and detection wrappers are re-imported below alongside the other
-# pure HCL primitives.
+# ---- python-hcl2 ----------------------------------------------------------
+# The vendored parser is loaded by `scripts/_hcl.py` (always on since the
+# parser migration, tasks/hcl-parser-migration.md §7); `block_arg_value`
+# lives there too so `_cross_resource.py` can reach it without
+# circular-importing back through `detect`.
 
 # Provider/Terraform version-constraint helpers live in
 # `scripts/_versions.py`. Re-imported here under the legacy private
@@ -98,16 +97,15 @@ from _versions import (
 )
 
 
-# HCL primitives + `_USE_HCL2` toggle + `block_arg_value` wrapper all
-# live in `scripts/_hcl.py`. Fourth seam in the modularisation; Session
-# F (R30.0.12) brought the toggle + `block_arg_value` into `_hcl.py` so
-# `_cross_resource.py` could import them cleanly without a circular
+# HCL primitives + `block_arg_value` wrapper all live in
+# `scripts/_hcl.py`. Fourth seam in the modularisation; Session F
+# (R30.0.12) brought `block_arg_value` into `_hcl.py` so
+# `_cross_resource.py` could import it cleanly without a circular
 # import back through `detect`.
 from _hcl import (
     _LINE_COMMENT_RE,
     _BLOCK_COMMENT_RE,
     _DYNAMIC_BLOCK_START_RE,
-    _HAS_HCL2,
     _read_normalized,
     _parse_scalar,
     strip_hcl_context,
@@ -120,8 +118,6 @@ from _hcl import (
     block_has_nested_path,
     _expand_dynamic_blocks,
     _hcl2_block_arg_value,
-    _enable_hcl2_or_warn,
-    _enable_hcl2_default,
 )
 
 
@@ -2764,28 +2760,33 @@ def _add_fix_args(ap: argparse.ArgumentParser) -> None:
     )
 
 
+# Parser-selection switches removed by the parser migration. Accepted as
+# hidden no-ops for one minor release so existing pipelines (the GitHub
+# Action defaults to the `:latest` image) don't break; see
+# tasks/hcl-parser-migration.md §7.
+_DEPRECATED_PARSER_FLAGS = ("--use-hcl2", "--no-hcl2")
+_DEPRECATED_PARSER_ENV = ("TF_ANALYZE_USE_HCL2", "TF_ANALYZE_NO_HCL2")
+
+
 def _add_engine_args(ap: argparse.ArgumentParser) -> None:
-    """Parser-engine selection (python-hcl2 fast-path vs regex)."""
-    ap.add_argument(
-        "--use-hcl2",
-        action="store_true",
-        default=os.environ.get("TF_ANALYZE_USE_HCL2") == "1",
-        help=(
-            "[deprecated, default-on since v0.2] Enable python-hcl2 "
-            "fast-path. Kept for backwards compat; behaviour is now "
-            "controlled by --no-hcl2."
-        ),
-    )
-    ap.add_argument(
-        "--no-hcl2",
-        action="store_true",
-        default=os.environ.get("TF_ANALYZE_NO_HCL2") == "1",
-        help=(
-            "Disable the python-hcl2 fast-path and use the regex parser "
-            "exclusively. Useful for benchmarking or when running in a "
-            "constrained environment without the optional dependency."
-        ),
-    )
+    """Deprecated parser-engine switches (now no-ops)."""
+    for flag in _DEPRECATED_PARSER_FLAGS:
+        ap.add_argument(flag, action="store_true", help=argparse.SUPPRESS)
+
+
+def _warn_deprecated_parser_switches(args: argparse.Namespace) -> None:
+    """One stderr line per deprecated switch in use. They have no effect:
+    the vendored python-hcl2 parser is always used."""
+    used = [f for f in _DEPRECATED_PARSER_FLAGS
+            if getattr(args, f.lstrip("-").replace("-", "_"))]
+    used += [v for v in _DEPRECATED_PARSER_ENV if v in os.environ]
+    for name in used:
+        print(
+            f"NOTE: {name} is deprecated and has no effect; tf-analyze "
+            "always uses its bundled HCL parser. It will be removed in the "
+            "next minor release.",
+            file=sys.stderr,
+        )
 
 
 def _add_lsp_args(ap: argparse.ArgumentParser) -> None:
@@ -2840,21 +2841,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main():
     ap = _build_parser()
     args = ap.parse_args()
-    # python-hcl2 fast-path is on by default; `--no-hcl2` (or
-    # TF_ANALYZE_NO_HCL2=1) restores the stdlib-only regex path.  When
-    # python-hcl2 isn't installed we silently fall back, but emit a
-    # one-line stderr notice the first time so the user knows they're
-    # missing the heredoc-aware parser.
-    if not args.no_hcl2:
-        if _HAS_HCL2:
-            _enable_hcl2_default()
-        else:
-            print(
-                "NOTE: python-hcl2 not installed; using regex parser. "
-                "`pip install python-hcl2` removes a class of false positives "
-                "around heredoc/multi-line attributes. (Pass --no-hcl2 to silence.)",
-                file=sys.stderr,
-            )
+    _warn_deprecated_parser_switches(args)
 
     # Route report output: stdout (default) or a file (--output PATH).
     # See _make_emitter for the atexit safety-net rationale.

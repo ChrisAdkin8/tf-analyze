@@ -59,8 +59,7 @@ open report.html
 ```sh
 git clone https://github.com/ChrisAdkin8/tf-analyze.git
 cd tf-analyze
-./install.sh                                          # installs as a Claude Code skill
-pip install python-hcl2                               # optional fast-path (default-on if present)
+./install.sh                                          # installs as a Claude Code skill (no pip install needed)
 
 python3 scripts/detect.py --target /path/to/terraform
 python3 scripts/detect.py --target . --mode diff --fail-on HIGH --format sarif > out.sarif
@@ -155,7 +154,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Native Terraform provider (`data "tfanalyze_scan"`) | ✅ | ❌ | ❌ | ❌ |
 | MCP server for AI agents (Cursor / Claude Desktop / …) | ✅ | ❌ | ❌ | ❌ |
 | YAML custom rules | ✅ pattern **+ policy DSL** (cross-resource / conditional / aggregate) | ✅ (Rego) | ✅ (Python+YAML) | ✅ (Python) |
-| Stdlib-only core (optional fast-path) | ✅ | n/a | ❌ (pip) | ❌ (pip) |
+| No `pip install` needed (HCL parser vendored) | ✅ | n/a | ❌ (pip) | ❌ (pip) |
 
 > Comparison reflects features documented as of 2026-05; corrections welcome via issue.
 
@@ -265,7 +264,6 @@ Suppressed and baseline-suppressed findings count at half weight (acknowledged, 
 | `--apply-fixes dry-run\|apply` | Preview / write `fix_hcl` patches to source files |
 | `--cache` | Incremental scan cache keyed on file + catalogue hash |
 | `--diff-base REF` | Limit to `.tf` files changed since `REF` |
-| `--no-hcl2` | Disable the python-hcl2 fast-path (env: `TF_ANALYZE_NO_HCL2=1`) |
 | `--show-info` | Render INFO-tier findings (e.g. `MOD-REUSE-*` module-reuse advisories). Default off — INFO is counted in `summary.counts.INFO` but not displayed |
 | `--rank-by exploitability\|hybrid` | Promote findings whose rule touches a CISA KEV-listed CWE one urgency tier; surface 🔥 KEV badge in text/PR-summary/SARIF. Daily-cached at `~/.cache/tf-analyze/`. Pair with `--no-threat-intel` for air-gapped CI. |
 | `--explain-score` | Top-5 findings ranked by score impact, with projected score/grade if each is fixed. Tells you which fix is worth most. Surfaces as a header block in text output and a structured `score_explanation` field in JSON. |
@@ -285,7 +283,7 @@ Full CLI reference: [`docs/cli.md`](docs/cli.md).
 | VS Code extension (v0.1.58) | [`vscode-extension/`](vscode-extension/) | Self-contained `.vsix` (engine + catalogue bundled). LSP-driven diagnostics, Quick Fix, status-bar score+grade badge, attack-graph + 🌊 blast-radius + module-reuse panels, bulk apply-fixes with diff preview, baseline suppression UI, `vscode://` URI handler. Full feature list: [`docs/vscode-extension.md`](docs/vscode-extension.md). |
 | Score badge service | [`integrations/badge-service/`](integrations/badge-service/) | FastAPI app — embeddable SVG score badges per repo (`https://<host>/score/<owner>/<repo>.svg`); HMAC-signed `/ingest` endpoint accepts `detect.py --format json` output. Engineering complete; awaits `flyctl deploy`. |
 | LSP server (`--lsp`) | `scripts/detect.py --lsp` | [`docs/lsp.md`](docs/lsp.md) |
-| Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64`; bundles `python-hcl2` |
+| Docker image | `ghcr.io/chrisadkin8/tf-analyze` | Multi-arch `linux/amd64` + `linux/arm64` |
 | Web demo | [`demo/`](demo/) | FastAPI + CodeMirror 6 + d3 attack graph |
 | Pre-commit hook | [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) | [`docs/pre-commit.md`](docs/pre-commit.md) |
 | HCP Terraform Run Task | [`integrations/run-task/`](integrations/run-task/) | [`docs/run-task.md`](docs/run-task.md) |

@@ -160,7 +160,7 @@ _RULE = textwrap.dedent("""\
 def _scan(target: Path, catalog: Path) -> set[str]:
     res = subprocess.run(
         [sys.executable, str(DETECT_PY), "--target", str(target),
-         "--catalog", str(catalog), "--format", "json", "--no-hcl2"],
+         "--catalog", str(catalog), "--format", "json"],
         capture_output=True, text=True, timeout=60,
     )
     try:

@@ -29,3 +29,7 @@ docs/launch/scan-service-todo.md
 # Companion overnight-analysis brief for the virality push — local-only
 # alongside the strategy docs above.
 tasks/viral-overnight-analysis.md
+# lark's built-grammar cache for the vendored HCL parser. Written on first
+# use; pre-built only in shipped artefacts (Docker images, .vsix) by
+# `scripts/vendor_deps.py --warm-cache`.
+scripts/_vendor/hcl2/.lark_cache.bin

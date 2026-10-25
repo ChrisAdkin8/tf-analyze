@@ -21,7 +21,7 @@ DETECT_PY = REPO_ROOT / "scripts" / "detect.py"
 def _scan(target: Path, *extra: str) -> set[str]:
     cmd = [
         sys.executable, str(DETECT_PY), "--target", str(target),
-        "--format", "json", "--no-hcl2", *extra,
+        "--format", "json", *extra,
     ]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     try:

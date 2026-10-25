@@ -165,7 +165,7 @@ Skipping any of (2)–(4) is a doc bug; skipping (5)–(6) is a release bug. Bot
 
 ## Style
 
-- **Python:** stdlib only by default. The optional `python-hcl2` fast-path is the only third-party dependency the engine knows about, and it's gated by `--use-hcl2`. Don't add a new dependency without discussion.
+- **Python:** stdlib plus the vendored HCL parser only. `python-hcl2` and `lark` are vendored in `scripts/_vendor/` (refresh with `python3 scripts/vendor_deps.py`, never by hand) so no surface needs a `pip install`. Don't add a new dependency without discussion.
 - **Type hints** on public functions; existing code is partial — fill in as you touch.
 - **Comments** explain why, not what. If the regex is non-obvious, say what edge case it's defending against — not "match the resource block".
 - **YAML** uses block-style lists (`- foo` then `- bar`), not inline `[foo, bar]` — the minimal YAML loader doesn't parse inline lists correctly.

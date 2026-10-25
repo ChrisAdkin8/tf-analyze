@@ -5,6 +5,33 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 34 — Vendored HCL parser, always on — 2026-10-25
+
+Step 1 of `tasks/hcl-parser-migration.md`. The engine now ships its own
+copy of `python-hcl2` 7.2.1 and `lark` 1.3.1 in `scripts/_vendor/` and
+always uses it, so every surface (CLI from a checkout, Claude Code skill,
+Docker images, VS Code `.vsix`, pip wheel) runs the same parser with no
+`pip install`. Previously the parser was optional: CI and the public
+scanner ran the regex-only path while the Docker image used `python-hcl2`
+4.3.5.
+
+- `scripts/vendor_deps.py` refreshes `_vendor/` from pinned versions and
+  checks each wheel's sha256; never edit `_vendor/` by hand.
+- lark's built-grammar cache sits next to the vendored `parser.py`
+  (gitignored), else in the per-user cache dir, never in a shared temp dir.
+  Docker images and the `.vsix` ship it pre-built.
+- **Deprecated:** `--no-hcl2`, `--use-hcl2`, `TF_ANALYZE_NO_HCL2`,
+  `TF_ANALYZE_USE_HCL2` are now no-ops that print a notice, hidden from
+  `--help`. They will be removed in the next minor release.
+- `--cache` files move to format v2; the cache key now covers the engine
+  source and parser versions, so old caches are rebuilt once.
+- No detection results change: every finding on `examples/` and
+  `fixtures/` is identical to the previous release.
+- New strict-xfail probe fixtures `fixtures/parser_probe_p1`–`p6` record
+  known false positives/negatives that later migration steps fix.
+
+---
+
 ## Round 33 — Policy-as-code DSL (`kind: policy`) — 2026-05-30
 
 Closes the long-standing #1 capability gap: custom rules could only match a

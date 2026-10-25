@@ -39,7 +39,7 @@ resource "aws_security_group" "sg" {
 
 def _run(target: Path, *argv: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, str(DETECT_PY), "--no-hcl2", "--target", str(target), *argv],
+        [sys.executable, str(DETECT_PY), "--target", str(target), *argv],
         capture_output=True, text=True, timeout=120,
     )
 

@@ -80,13 +80,17 @@ _GROUPS = [
     ("Suppression", ("--no-suppress",)),
     ("Comparison & gating", ("--compare", "--auto-compare", "--fail-on")),
     ("Auto-stub", ("--auto-stub", "--propose-stub")),
-    ("Optional fast-path", ("--use-hcl2",)),
     ("Meta-commands", ("--list-rules", "--explain", "--new-rule")),
 ]
 
 
 def _render_md(parser: argparse.ArgumentParser) -> str:
-    actions = [a for a in parser._actions if a.option_strings]
+    # Hidden (help=SUPPRESS) flags are deprecated no-ops; keep them out of
+    # the reference.
+    actions = [
+        a for a in parser._actions
+        if a.option_strings and a.help != argparse.SUPPRESS
+    ]
     by_flag: dict[str, argparse.Action] = {}
     for a in actions:
         for opt in a.option_strings:
