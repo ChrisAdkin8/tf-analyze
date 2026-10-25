@@ -29,6 +29,7 @@ from _hcl import (
     block_arg_value,
     block_has_arg,
     block_has_nested_path,
+    resource_has_path,
     brace_walk,
     strip_hcl_context,
 )
@@ -154,6 +155,14 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
     """``resource_missing_arg`` — fire when the named argument (or
     dotted nested path) is absent from a resource body.
 
+    Presence is top-level: a same-named key inside a nested block or an
+    object attribute (e.g. a ``tags`` key) does not count — rules that
+    mean a nested setting use ``nested_path``. When a path segment is a
+    repeated block, every instance must have the rest of the path, unless
+    the pattern sets ``instances: any`` (tasks/hcl-parser-migration.md
+    §4.4). Uses the parse tree when the file parsed, else the regex
+    fallback with the same rules.
+
     Honours ``suppress_if`` (don't fire when a sibling arg has a
     specific value), ``suppress_if_body_contains``, the ``count = 0``
     escape hatch, and the AWS ``default_tags`` propagation (R30.0.12 —
@@ -184,10 +193,11 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
             continue
         if suppress_body_contains and suppress_body_contains in blk["body"]:
             continue
-        if "." in arg_path:
-            present = block_has_nested_path(blk["body"], arg_path)
-        else:
-            present = block_has_arg(blk["body"], arg_path)
+        # Parse tree when the file parsed, else the regex fallback with
+        # the same top-level / every-instance rules (_hcl.resource_has_path).
+        present = resource_has_path(
+            blk, arg_path, every=pat.get("instances", "all") != "any",
+        )
         if not present:
             if suppress_if:
                 s_arg = suppress_if.get("arg", "")

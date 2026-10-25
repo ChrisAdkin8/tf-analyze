@@ -41,7 +41,6 @@ def test_p4_cidr_text_inside_heredoc_is_clean() -> None:
     assert "SEC-AWS-SG-001" not in _ids("p4")
 
 
-@pytest.mark.xfail(strict=True, reason="Step 2: block_has_arg is top-level only")
 def test_p5_tags_key_does_not_satisfy_missing_arg() -> None:
     assert "COST-AWS-RISK-001" in _ids("p5")
 

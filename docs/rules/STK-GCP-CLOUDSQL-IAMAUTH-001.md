@@ -41,7 +41,7 @@ keywords: "stack, medium, terraform, iac, gcp, cis-6.4, mitre-T1078, cwe-287, ni
 
 ## What this checks
 
-1. **`resource_missing_arg`** on `google_sql_database_instance` (`database_flags`) — _the resource is missing a required attribute (or nested attribute path)._
+1. **`resource_missing_arg`** on `google_sql_database_instance` (`settings.database_flags`) — _the resource is missing a required attribute (or nested attribute path)._
   `google_sql_database_instance` has no `database_flags` block, so
 no `cloudsql.iam_authentication = on` flag is set. The instance
 authenticates only with built-in passwords — IAM-based identity

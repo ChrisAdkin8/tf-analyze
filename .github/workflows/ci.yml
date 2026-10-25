@@ -141,6 +141,23 @@ jobs:
       - name: Compare against snapshot
         run: python3 scripts/check_terragoat_snapshot.py
 
+  fallback-path:
+    # Parser migration §4.7: every rule must still work on a file
+    # python-hcl2 can't parse. TF_ANALYZE_TEST_FORCE_FALLBACK=1 makes every
+    # file take the regex fallback, so the whole fixture suite exercises it.
+    name: pytest + self-test on the regex fallback path
+    runs-on: ubuntu-latest
+    env:
+      TF_ANALYZE_TEST_FORCE_FALLBACK: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pytest-xdist pytest-timeout hypothesis pyyaml --quiet
+      - run: pytest tests/ --tb=short -q -n auto --timeout=300 --timeout-method=thread
+      - run: python3 scripts/self_test.py
+
   docker-images:
     # docker.yml only builds the root image, and only on push to main /
     # tags, so nothing gated a PR that broke an image: the root image went

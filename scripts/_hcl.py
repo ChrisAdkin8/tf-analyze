@@ -68,6 +68,7 @@ existing call sites and tests need no migration.
 
 from __future__ import annotations
 
+import functools
 import io
 import json
 import os
@@ -195,6 +196,124 @@ def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
         # hcl2 strips heredoc markers; return the literal content.
         return val
     return str(val)
+
+
+# ---- Parse tree (python-hcl2) -------------------------------------------
+#
+# Step 2 of tasks/hcl-parser-migration.md: each `.tf` file is parsed once
+# per process and the tree is shared by every caller. Memoised on the text
+# itself rather than threading a per-run map through every consumer — the
+# effect is the same (one parse per distinct file), it needs no plumbing,
+# and long-lived callers (LSP, trend, fleet) re-parse only text that
+# actually changed.
+
+# Test-only switch: treat every file as unparseable so the whole suite can
+# be run through the regex fallback (tasks/hcl-parser-migration.md §4.7).
+_FORCE_FALLBACK_ENV = "TF_ANALYZE_TEST_FORCE_FALLBACK"
+
+
+@functools.lru_cache(maxsize=1024)
+def _parse_tf_cached(text: str) -> tuple[dict | None, str | None]:
+    try:
+        return _hcl2.loads(text.lstrip("﻿"), with_meta=True), None
+    except Exception as e:  # lark raises a family of exception types
+        first = str(e).strip().splitlines()[0] if str(e).strip() else ""
+        return None, f"{type(e).__name__}: {first}"[:200]
+
+
+def parse_tf(text: str) -> tuple[dict | None, str | None]:
+    """Parse `.tf` text. Returns ``(tree, None)`` on success, or
+    ``(None, reason)`` when python-hcl2 rejects it — callers then fall
+    back to the regex model for that file. A leading UTF-8 BOM is
+    ignored. Under the test-only fallback switch returns ``(None, None)``
+    (no tree, but nothing to report)."""
+    if os.environ.get(_FORCE_FALLBACK_ENV) == "1":
+        return None, None
+    return _parse_tf_cached(text)
+
+
+def normalise_attrs(body: dict) -> dict:
+    """Return a copy of a resource/block subtree with every
+    ``dynamic "X" { content { ... } }`` folded in as a plain ``X`` block,
+    recursively — the tree counterpart of `_expand_dynamic_blocks`. The
+    ``for_each`` value is dropped: values that come from it
+    (``${X.value}``) are unknown at parse time."""
+    out: dict = {}
+    dynamic = body.get("dynamic")
+    for k, v in body.items():
+        if k == "dynamic":
+            continue
+        if isinstance(v, list):
+            out[k] = [normalise_attrs(i) if isinstance(i, dict) else i for i in v]
+        elif isinstance(v, dict):
+            out[k] = normalise_attrs(v)
+        else:
+            out[k] = v
+    for item in dynamic or []:
+        if not isinstance(item, dict):
+            continue
+        for name, spec in item.items():
+            if not isinstance(spec, dict):
+                continue
+            for content in spec.get("content") or []:
+                if isinstance(content, dict):
+                    out.setdefault(name, [])
+                    if isinstance(out[name], list):
+                        out[name].append(normalise_attrs(content))
+    return out
+
+
+def resource_subtrees(tree: dict | None) -> dict[tuple[str, str], list[dict]]:
+    """``{(type, name): [subtree, ...]}`` for every ``resource`` block in a
+    parsed file. A key with more than one subtree is ambiguous (invalid
+    Terraform, or resource text the regex scanner also saw twice)."""
+    out: dict[tuple[str, str], list[dict]] = {}
+    for item in (tree or {}).get("resource") or []:
+        if not isinstance(item, dict):
+            continue
+        for rtype, named in item.items():
+            if not isinstance(named, dict):
+                continue
+            for rname, body in named.items():
+                if isinstance(body, dict):
+                    out.setdefault((rtype, rname), []).append(body)
+    return out
+
+
+def attrs_has_path(attrs: dict, path: str, *, every: bool = True) -> bool:
+    """Tree counterpart of `block_has_nested_path` (§4.4 rules 1–3).
+
+    A one-segment path is a key of the block itself — never a key inside
+    an object attribute or nested block. Each further segment walks into
+    a nested block, a list-of-objects attribute (``ingress = [{...}]``),
+    or an object attribute named by the path. When the segment is
+    repeated (several blocks / list items), the rest of the path must
+    hold for **every** instance — or, with ``every=False`` (a pattern's
+    ``instances: any``), for at least one.
+    """
+    head, _, rest = path.partition(".")
+    if not isinstance(attrs, dict) or head not in attrs:
+        return False
+    if not rest:
+        return True
+    value = attrs[head]
+    instances = value if isinstance(value, list) else [value]
+    instances = [i for i in instances if isinstance(i, dict)]
+    check = all if every else any
+    return bool(instances) and check(attrs_has_path(i, rest, every=every) for i in instances)
+
+
+def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
+    """Presence check for a resource block found by `find_blocks`: uses
+    the parse tree when `detect_in_file` attached one (``blk["attrs"]``),
+    else the regex fallback, which follows the same rules as far as text
+    allows."""
+    attrs = blk.get("attrs")
+    if attrs is not None:
+        return attrs_has_path(attrs, path, every=every)
+    if "." in path:
+        return block_has_nested_path(blk["body"], path, every=every)
+    return block_has_arg(blk["body"], path)
 
 
 # ---- Text normalisation -------------------------------------------------
@@ -467,22 +586,123 @@ def find_simple_blocks(text: str, regex: re.Pattern) -> list[dict]:
     return blocks
 
 
+# ---- Top-level masking (regex fallback) ---------------------------------
+
+_HEREDOC_START_RE = re.compile(r'<<-?[ \t]*([A-Za-z_][\w-]*)[ \t]*\r?\n')
+
+
+def _string_end(text: str, i: int) -> int:
+    """Index just past the double-quoted string starting at ``text[i]``.
+    Handles ``\\`` escapes, ``$${`` / ``%%{`` literals and ``${ }`` /
+    ``%{ }`` interpolations (which may contain nested strings and braces).
+    An unterminated string ends at the newline."""
+    n = len(text)
+    j = i + 1
+    while j < n:
+        ch = text[j]
+        if ch == "\\":
+            j += 2
+            continue
+        if ch == "\n":
+            return j
+        if ch == '"':
+            return j + 1
+        if ch in "$%" and text.startswith(ch * 2 + "{", j):
+            j += 3
+            continue
+        if ch in "$%" and j + 1 < n and text[j + 1] == "{":
+            depth = 1
+            j += 2
+            while j < n and depth:
+                c = text[j]
+                if c == '"':
+                    j = _string_end(text, j)
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                j += 1
+            continue
+        j += 1
+    return n
+
+
+@functools.lru_cache(maxsize=4096)
+def _mask_to_top_level(body: str) -> str:
+    """Return ``body`` with everything that is not top-level code blanked
+    to spaces (newlines kept, so offsets and line numbers line up):
+    comments, string literals, heredoc bodies, and the contents of every
+    ``{}`` / ``[]`` / ``()``. The brackets that open and close a top-level
+    construct are kept, so ``ingress {`` and ``tags = {`` stay visible but
+    nothing inside them does."""
+    out = list(body)
+    n = len(body)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, min(b, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    depth = 0
+    i = 0
+    while i < n:
+        ch = body[i]
+        nxt = body[i + 1] if i + 1 < n else ""
+        if ch == "#" or (ch == "/" and nxt == "/"):
+            j = body.find("\n", i)
+            j = n if j < 0 else j
+            blank(i, j)
+            i = j
+        elif ch == "/" and nxt == "*":
+            j = body.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            blank(i, j)
+            i = j
+        elif ch == '"':
+            j = _string_end(body, i)
+            blank(i, j)
+            i = j
+        elif ch == "<" and nxt == "<" and _HEREDOC_START_RE.match(body, i):
+            m = _HEREDOC_START_RE.match(body, i)
+            assert m is not None
+            term = re.compile(rf'(?m)^[ \t]*{re.escape(m.group(1))}[ \t]*\r?$')
+            t = term.search(body, m.end())
+            j = n if t is None else t.end()
+            blank(i, j)
+            i = j
+        elif ch in "{[(":
+            if depth:
+                out[i] = " "
+            depth += 1
+            i += 1
+        elif ch in "}])":
+            depth = max(0, depth - 1)
+            if depth:
+                out[i] = " "
+            i += 1
+        else:
+            if depth and ch != "\n":
+                out[i] = " "
+            i += 1
+    return "".join(out)
+
+
 def block_has_arg(body: str, arg: str) -> bool:
     """Check if a block body has a top-level argument named `arg`.
 
     Matches both attribute assignments (`arg = value`) and nested block
-    declarations (`arg {`), since some arguments appear as blocks in HCL.
+    declarations (`arg {`, `arg "label" {`), since some arguments appear
+    as blocks in HCL. Top-level only: a same-named key inside a nested
+    block or an object attribute (e.g. a `tags` map key) does not count,
+    and nor does text inside strings, heredocs or comments. Rules that
+    mean a nested setting use `block_has_nested_path` / `nested_path`.
 
-    NOTE: this intentionally matches at ANY depth. A depth-0-only variant
-    was tried (audit P3 #28) but several rules legitimately rely on
-    matching an arg nested in a sub-block (e.g. Cloud SQL `settings{}`,
-    K8s ingress), so a blanket restriction false-positived their clean
-    fixtures. The correct fix is per-rule migration to
-    `block_has_nested_path` after a rule-by-rule intent review — tracked
-    in tasks/TODO.md, not done here.
+    This is the regex fallback; resource checks prefer the parse tree via
+    `resource_has_path` (tasks/hcl-parser-migration.md §4.4, §4.7).
     """
-    pat = re.compile(rf'(?m)^\s*{re.escape(arg)}\s*[={{]', re.MULTILINE)
-    return bool(pat.search(body))
+    pat = re.compile(rf'(?m)^[ \t]*{re.escape(arg)}[ \t]*[={{]')
+    return bool(pat.search(_mask_to_top_level(body)))
 
 
 def _hcl_object_to_json(text: str) -> dict | None:
@@ -577,24 +797,36 @@ def block_arg_value(body: str, arg: str) -> str | None:
     return val
 
 
-def block_has_nested_path(body: str, path: str) -> bool:
-    """Check if a nested HCL path like `settings.backup_configuration.enabled` is set."""
-    parts = path.split(".")
-    if len(parts) == 1:
-        return block_has_arg(body, parts[0])
-    head, tail = parts[0], parts[1:]
-    nested_re = re.compile(rf'(?m)^\s*{re.escape(head)}\s*\{{')
-    for m in nested_re.finditer(body):
-        # Quote-aware walk — see find_blocks. brace_walk returns the
-        # index one past the matching `}`; the inner body excludes it.
-        end_after = brace_walk(body, m.end() - 1)
-        if end_after is None:
-            continue
-        inner = body[m.end():end_after - 1]
-        if block_has_nested_path(inner, ".".join(tail)):
-            return True
-    return False
+def block_has_nested_path(body: str, path: str, *, every: bool = True) -> bool:
+    """Check if a nested HCL path like `settings.backup_configuration.enabled` is set.
 
+    Regex fallback for `attrs_has_path`, with the same rules as far as text
+    allows: each segment is looked up at the top level of the enclosing
+    block; a segment may be a nested block (`head {`) or an object
+    attribute (`head = {`); and when the segment occurs more than once,
+    the rest of the path must hold for every instance (any one instance
+    with ``every=False``). (The
+    list-of-objects form `head = [{...}]` is only handled on the tree
+    path.)
+    """
+    head, _, rest = path.partition(".")
+    if not rest:
+        return block_has_arg(body, head)
+    masked = _mask_to_top_level(body)
+    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
+    instances = []
+    for m in opener.finditer(masked):
+        open_pos = m.end() - 1
+        # Inside the top-level mask every nested bracket is blanked, so
+        # the next `}` is this construct's own closer.
+        close_pos = masked.find("}", open_pos + 1)
+        if close_pos < 0:
+            continue
+        instances.append(body[open_pos + 1:close_pos])
+    check = all if every else any
+    return bool(instances) and check(
+        block_has_nested_path(i, rest, every=every) for i in instances
+    )
 
 # ---- Dynamic block expansion --------------------------------------------
 

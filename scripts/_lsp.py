@@ -112,6 +112,11 @@ def findings_to_diagnostics(
         severity = _uplift_severity(base_severity, blast)
         title = id_map.get(f["id"], {}).get("title", "")
         message = f"{f['id']}: {title}"
+        # Engine diagnostics that aren't rule findings (e.g. "file scanned
+        # in parse-fallback mode") carry their own severity and message.
+        if "lsp_severity" in f:
+            severity = int(f["lsp_severity"])
+            message = f.get("lsp_message", message)
         if blast >= 1:
             message += f"  🌊 blast: {blast}"
         diags.append({

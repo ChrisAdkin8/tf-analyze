@@ -118,6 +118,9 @@ from _hcl import (
     block_has_nested_path,
     _expand_dynamic_blocks,
     _hcl2_block_arg_value,
+    parse_tf,
+    normalise_attrs,
+    resource_subtrees,
 )
 
 
@@ -559,6 +562,25 @@ def detect_in_file(
     # match attributes that live inside dynamically-generated nested blocks.
     for _blk in resources:
         _blk["body"] = _expand_dynamic_blocks(_blk["body"])
+    # Parser migration Step 2: attach each resource's parsed subtree as
+    # `attrs` (dynamic blocks folded in). Joined to the regex block on
+    # (type, name); `attrs` is None — and handlers use the regex fallback —
+    # when the file did not parse, is not `.tf`, or the key is ambiguous
+    # (seen twice by either side). Line numbers still come from
+    # find_blocks (tasks/hcl-parser-migration.md §4.3, §4.5).
+    _tree = parse_tf(text)[0] if file_path.suffix == ".tf" else None
+    _subtrees = resource_subtrees(_tree)
+    _regex_keys: dict[tuple, int] = {}
+    for _blk in resources:
+        _k = tuple(_blk["groups"])
+        _regex_keys[_k] = _regex_keys.get(_k, 0) + 1
+    for _blk in resources:
+        _k = tuple(_blk["groups"])
+        _found = _subtrees.get(_k, [])
+        _blk["attrs"] = (
+            normalise_attrs(_found[0])
+            if len(_found) == 1 and _regex_keys[_k] == 1 else None
+        )
     modules = find_blocks(text, MODULE_START)
     variables = find_blocks(text, VARIABLE_START)
 
@@ -1039,6 +1061,7 @@ from _output import (
     _sarif_taxonomies,
     _sarif_rule_relationships,
     to_sarif,
+    parse_fallback_notice,
     _narrative_for_finding,
     _render_executive_view,
     _disruption_badge,
@@ -1640,9 +1663,23 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
             for p in target_dir.glob("*.tf") if p.exists()
         }
         var_defaults = _extract_var_defaults_by_dir(all_files)
-        return detect_in_file(
+        findings = detect_in_file(
             path, text, entries, var_defaults.get(str(target_dir), {}),
         )
+        # A file the HCL parser can't read is still scanned (regex
+        # fallback); tell the user once, as an Information diagnostic.
+        _parse_error = parse_tf(text)[1] if path.suffix == ".tf" else None
+        if _parse_error:
+            findings.append({
+                "id": "tf-analyze/parse-fallback",
+                "line": 1,
+                "lsp_severity": 3,
+                "lsp_message": (
+                    "tf-analyze: the HCL parser could not read this file; "
+                    f"scanned in fallback mode ({_parse_error})"
+                ),
+            })
+        return findings
 
     _lsp_run(
         catalog_dir, project_config,
@@ -1936,10 +1973,13 @@ def _make_emitter(args: object):
 
 
 def _run_detection(args: object, all_text: dict, extra_text: dict,
-                   entries: list, diff_files, target: Path) -> list:
+                   entries: list, diff_files, target: Path) -> tuple[list, list]:
     """Core scan: per-file + corpus detection over the loaded corpus, with the
     incremental cache, plus --plan-json and --state-json (drift) findings merged
-    in. Returns the findings list.
+    in. Returns ``(findings, parse_fallback_files)``: the second is one
+    ``{"file", "reason"}`` per scanned `.tf` file python-hcl2 could not parse
+    (scanned with the regex fallback instead; tasks/hcl-parser-migration.md
+    §4.8). It is cached alongside the findings.
 
     Extracted verbatim from main(). `entries` is the provider-filtered ruleset
     (main() runs that filter first, since downstream consumers reuse the same
@@ -1958,6 +1998,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     _corpus_hash_val: str | None = None
     _cache_hit = False
     findings: list[dict] = []
+    parse_fallback_files: list[dict] = []
     if getattr(args, "cache", False) and diff_files is None:
         # Hash the FULL scanned-file set (.tf + the extra workflow-YAML /
         # tfvars files scanned below), not just .tf. The extra_text scan
@@ -1974,6 +2015,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         if _cached and _cached.get("corpus_hash") == _corpus_hash_val:
             print("# cache hit — skipping full scan", file=sys.stderr)
             findings = _cached.get("findings", [])
+            parse_fallback_files = _cached.get("parse_fallback_files", [])
             _cache_hit = True
 
     if not _cache_hit:
@@ -1984,6 +2026,10 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 detect_in_file(fp, text, entries,
                                var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
             )
+            # parse_tf is memoised, so this re-reads detect_in_file's result.
+            _parse_error = parse_tf(text)[1]
+            if _parse_error:
+                parse_fallback_files.append({"file": str(fp), "reason": _parse_error})
         # Run grep-style rules against workflow YAML / tfvars / any
         # other non-tf file_glob (--mode diff intentionally skips these
         # since they are not in the git diff of *.tf files).
@@ -2056,9 +2102,10 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         # Persist to cache after all per-file + corpus findings are collected
         # (before plan / registry findings which require external inputs).
         if _cache_path and _corpus_hash_val:
-            _save_scan_cache(_cache_path, _corpus_hash_val, findings)
+            _save_scan_cache(_cache_path, _corpus_hash_val, findings,
+                             parse_fallback_files=parse_fallback_files)
 
-    return findings
+    return findings, parse_fallback_files
 
 
 def _render_report(args: object, findings: list, entries: list, *, emit,
@@ -2094,7 +2141,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 output["score_explanation"] = explain_score(findings, summary)
             _emit(json.dumps(output, indent=2))
         elif args.format == "sarif":
-            sarif = to_sarif(findings, entries)
+            sarif = to_sarif(findings, entries,
+                             parse_fallback_files=summary.get("parse_fallback_files"))
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
@@ -2123,6 +2171,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 + (f" · {summary['suppressed_count']} suppressed"
                    if summary["suppressed_count"] else "")
             )
+            if parse_fallback_notice(summary):
+                _emit(f"# {parse_fallback_notice(summary)}")
             if delta["new"]:
                 _emit("# NEW findings:")
                 for f in delta["new"]:
@@ -2167,7 +2217,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 output_data["score_explanation"] = score_explanation
             _emit(json.dumps(output_data, indent=2))
         elif args.format == "sarif":
-            sarif = to_sarif(findings, entries)
+            sarif = to_sarif(findings, entries,
+                             parse_fallback_files=summary.get("parse_fallback_files"))
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
@@ -2199,6 +2250,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 + (f" · {summary['suppressed_count']} suppressed"
                    if summary["suppressed_count"] else "")
             )
+            if parse_fallback_notice(summary):
+                _emit(f"# {parse_fallback_notice(summary)}")
             if score_explanation:
                 _emit("")
                 _emit(render_score_explanation(score_explanation))
@@ -3025,7 +3078,15 @@ def main():
     # Pass 2 — per-file + corpus detection (with the incremental cache),
     # plus --plan-json and --state-json (drift) findings merged in.
     # See _run_detection. `entries` is already provider-filtered above.
-    findings = _run_detection(args, all_text, extra_text, entries, diff_files, target)
+    findings, parse_fallback_files = _run_detection(
+        args, all_text, extra_text, entries, diff_files, target,
+    )
+    for _pf in parse_fallback_files:
+        print(
+            f"WARN: {_pf['file']}: parse failed, scanned in fallback mode: "
+            f"{_pf['reason']}",
+            file=sys.stderr,
+        )
 
     # Registry staleness check (opt-in; requires network access).
     # Audit item 15 — direct attribute access; argparse boolean-flag
@@ -3297,6 +3358,10 @@ def main():
     # the single source of truth and the LLM-driven markdown report should
     # cite this same number.
     summary = _compute_summary(findings, suppressed_findings, suppressed_by_baseline)
+    # Tool diagnostic, not a finding: no score impact. Present only when
+    # non-empty so the summary is unchanged for files that all parse.
+    if parse_fallback_files:
+        summary["parse_fallback_files"] = parse_fallback_files
 
     # INFO-tier findings (e.g. module-reuse suggestions) are advisory and
     # noisy by default. They stay in `summary["counts"]["INFO"]` for

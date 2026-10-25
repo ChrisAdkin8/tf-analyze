@@ -23,6 +23,8 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_wafv2_web_acl
     nested_path: rule.statement.rate_based_statement
+    # A web ACL has many `rule` blocks; one rate-based rule is enough.
+    instances: any
     description: |
       A WAFv2 web ACL without any `rate_based_statement` rule has no
       automatic flood protection. ManagedRuleGroupStatement entries

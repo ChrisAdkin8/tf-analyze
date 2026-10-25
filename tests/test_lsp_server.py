@@ -27,6 +27,7 @@ fragile. A real subprocess is the same thing the user gets.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -246,6 +247,43 @@ class TestLspDiagnostics:
         assert isinstance(d.get("message"), str) and d["message"]
         # Rule ID lives in either `code` or the structured `code` form per spec.
         assert d.get("code"), f"diagnostic missing rule ID: {d}"
+
+    def test_unparseable_file_gets_a_parse_fallback_diagnostic(
+        self, lsp: LspClient, tmp_path: Path,
+    ) -> None:
+        """A file python-hcl2 can't read is still scanned (regex fallback)
+        and the user is told once, as an Information diagnostic on line 1
+        (tasks/hcl-parser-migration.md §4.3)."""
+        if os.environ.get("TF_ANALYZE_TEST_FORCE_FALLBACK") == "1":
+            pytest.skip("parser disabled by the forced-fallback CI job")
+        tf = tmp_path / "main.tf"
+        tf.write_text(
+            'resource "aws_db_instance" "x" {\n'
+            '  storage_encrypted = false\n'
+            '  ingress { a = 1, b = 2 }\n'  # invalid HCL: commas
+            '}\n'
+        )
+        _initialize(lsp)
+        uri = _file_uri(tf)
+        lsp.send_notification("textDocument/didOpen", {
+            "textDocument": {
+                "uri": uri, "languageId": "terraform", "version": 1,
+                "text": tf.read_text(),
+            }
+        })
+        msg = lsp.read_until(
+            lambda m: m.get("method") == "textDocument/publishDiagnostics"
+                      and m.get("params", {}).get("uri") == uri,
+            timeout=10.0,
+        )
+        diags = msg["params"]["diagnostics"]
+        notes = [d for d in diags if d.get("code") == "tf-analyze/parse-fallback"]
+        assert len(notes) == 1, diags
+        assert notes[0]["severity"] == 3
+        assert notes[0]["range"]["start"]["line"] == 0
+        assert "fallback mode" in notes[0]["message"]
+        # The file was still scanned: real rule diagnostics are present too.
+        assert any(d.get("code") != "tf-analyze/parse-fallback" for d in diags), diags
 
     def test_did_close_clears_diagnostics(
         self, lsp: LspClient, tmp_path: Path,
