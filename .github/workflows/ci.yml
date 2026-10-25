@@ -155,7 +155,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pytest pytest-xdist pytest-timeout hypothesis pyyaml --quiet
-      - run: pytest tests/ --tb=short -q -n auto --timeout=300 --timeout-method=thread
+      # Serial, like the unit-tests job: tests/test_perf.py times a corpus
+      # scan against a wall-clock budget, and under `-n auto` it competes
+      # with the rest of the suite on a 2-4 core runner (7.1s vs a 5s
+      # budget on #39, while the same scan takes ~1.2s on its own).
+      - run: pytest tests/ --tb=short -q --timeout=300 --timeout-method=thread
       - run: python3 scripts/self_test.py
 
   docker-images:
