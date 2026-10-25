@@ -1,6 +1,6 @@
 # Custom rules
 
-tf-analyze ships a 200-rule built-in catalogue, but every team has
+tf-analyze ships a 353-rule built-in catalogue, but every team has
 patterns that aren't generally applicable: company-wide tagging
 conventions, naming schemes, blocked module sources, vendor-specific
 limits. The custom-rules system lets you ship those rules alongside
@@ -132,6 +132,7 @@ The most useful kinds for custom rules:
 | `grep`                | Plain-text regex search                                               |
 | `iam_policy_analysis` | Walk `data.aws_iam_policy_document` statements (see below)            |
 | `high_entropy_string` | A string literal whose Shannon entropy marks it a probable hardcoded secret (any arg name) — complements the name-based secret greps |
+| `policy`              | Cross-resource / conditional / aggregate predicate — see the [policy DSL guide](policy-dsl.md) |
 
 Pattern kinds support these suppression mechanisms:
 
@@ -139,7 +140,8 @@ Pattern kinds support these suppression mechanisms:
 - `suppress_if_body_contains: '<substring>'` — resource_arg / resource_missing_arg / hcl_attr
 
 See [`SKILL.md`](../SKILL.md) for the full catalogue of pattern kinds
-and engine semantics.
+and engine semantics, and the [policy DSL guide](policy-dsl.md) for the
+`kind: policy` predicate language (cross-resource / conditional / aggregate).
 
 ## Suppressing built-in rules
 
