@@ -6,14 +6,17 @@ blast_radius: module
 status: active
 patterns:
   - kind: grep
+    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
     regex: 'source\s*=\s*"git::[^"]*"\s*$'
     description: git source without ?ref= pin
   - kind: grep
+    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
     regex: 'source\s*=\s*"github\.com/[^"]*"\s*$'
     description: github.com source without ?ref= pin
   - kind: grep
+    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
     regex: 'source\s*=\s*"bitbucket\.org/[^"]*"\s*$'
     description: bitbucket.org source without ?ref= pin

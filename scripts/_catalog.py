@@ -254,6 +254,41 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
                         errs.append(f"{source}: patterns[{i}].{field} — invalid policy expression: {exc}")
     elif pats is not None:
         errs.append(f"{source}: 'patterns' must be a list")
+    # `escalation:` (tasks/hcl-parser-migration.md §4.10): each item raises
+    # urgency. A structured `match:` mapping is evaluated by the engine
+    # (`ports: [int, ...]` for network rules, else attribute path -> regex);
+    # an item with only a free-text `condition:` is read by the skill's
+    # judgement pass. An item with neither would silently never apply.
+    esc = data.get("escalation")
+    if esc is not None and not isinstance(esc, list):
+        errs.append(f"{source}: 'escalation' must be a list")
+    for i, x in enumerate(esc if isinstance(esc, list) else []):
+        if not isinstance(x, dict):
+            errs.append(f"{source}: escalation[{i}] is not a mapping")
+            continue
+        target = x.get("urgency") or x.get("new_urgency")
+        if target not in _VALID_URGENCIES:
+            errs.append(f"{source}: escalation[{i}] needs 'urgency' (or 'new_urgency') "
+                        f"in {sorted(_VALID_URGENCIES)}")
+        match = x.get("match")
+        if match is None and not x.get("condition"):
+            errs.append(f"{source}: escalation[{i}] needs a structured 'match' or a 'condition'")
+        if match is not None:
+            if not isinstance(match, dict) or not match:
+                errs.append(f"{source}: escalation[{i}].match must be a non-empty mapping")
+                continue
+            for key, want in match.items():
+                if key == "ports":
+                    # The stdlib YAML loader yields flow-list items as
+                    # strings, so accept anything int() takes.
+                    if not (isinstance(want, list) and want
+                            and all(str(v).strip().isdigit() for v in want)):
+                        errs.append(f"{source}: escalation[{i}].match.ports must be a list of port numbers")
+                    continue
+                try:
+                    re.compile(str(want))
+                except re.error as exc:
+                    errs.append(f"{source}: escalation[{i}].match.{key} — invalid regex: {exc}")
     narrative = data.get("narrative")
     if narrative is not None and not isinstance(narrative, str):
         errs.append(f"{source}: 'narrative' must be a string if present")

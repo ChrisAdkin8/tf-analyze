@@ -8,10 +8,12 @@ cis:
 status: active
 patterns:
   - kind: grep
+    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     file_glob: "**/*.tf"
     regex: '"Resource"\s*:\s*"\*"'
     description: IAM policy document with Resource = "*"
   - kind: grep
+    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     file_glob: "**/*.tf"
     regex: 'resources\s*=\s*\["\*"\]'
     description: aws_iam_policy_document statement with resources = ["*"]

@@ -25,6 +25,7 @@ owasp:
   - "A06"
 patterns:
   - kind: grep
+    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
     regex: '^\s*version\s*=\s*"\s*>=\s*[0-9]+\.[0-9]+'
     description: |

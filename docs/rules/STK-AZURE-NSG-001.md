@@ -41,13 +41,18 @@ keywords: "stack, high, terraform, iac, azure, cis-6.1, cis-6.2, cwe-284, d3-iaa
 
 ## What this checks
 
-1. **`grep`** matching `/source_address_prefix\s*=\s*"\*"/` — _a textual regex matched somewhere in the file._
-2. **`grep`** matching `/source_address_prefix\s*=\s*"Internet"/` — _a textual regex matched somewhere in the file._
-3. **`grep`** matching `/source_address_prefix\s*=\s*"0\.0\.0\.0/0"/` — _a textual regex matched somewhere in the file._
+1. **`firewall_open_port`** on `azurerm_network_security_group` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+  inline `security_rule` with direction Inbound, access Allow and a
+source of `*` / `Internet` / `Any` / 0.0.0.0/0
+2. **`firewall_open_port`** on `azurerm_network_security_rule` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+  standalone `azurerm_network_security_rule`, Inbound + Allow, source `*` / `Internet` / `Any` / 0.0.0.0/0
 
 ## Why it likely fired
 
-Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
+inline `security_rule` with direction Inbound, access Allow and a
+source of `*` / `Internet` / `Any` / 0.0.0.0/0
+
+standalone `azurerm_network_security_rule`, Inbound + Allow, source `*` / `Internet` / `Any` / 0.0.0.0/0
 
 ## Adversarial scenario
 

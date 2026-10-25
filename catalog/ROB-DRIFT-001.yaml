@@ -6,6 +6,7 @@ blast_radius: single-resource
 status: active
 patterns:
   - kind: grep
+    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
     regex: '(?m)^\s*ignore_changes\s*=\s*all\s*$'
     hcl_context: true

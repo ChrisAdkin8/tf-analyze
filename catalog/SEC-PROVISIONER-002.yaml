@@ -24,6 +24,7 @@ owasp:
   - "CICD-SEC-4"
 patterns:
   - kind: grep
+    text_scan: "matches shell-script text inside user_data / provisioner command strings"
     file_glob: "**/*.tf"
     regex: 'command\s*=\s*"[^"]*curl[^"]*\|\s*(?:bash|sh|zsh)'
     description: |

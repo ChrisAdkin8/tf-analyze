@@ -16,6 +16,7 @@ csa_ccm:
   - "IAM-09"
 patterns:
   - kind: grep
+    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     regex: '"privileged"\s*:\s*true|^\s*privileged\s*=\s*true'
     hcl_context: true
     description: |

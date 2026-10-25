@@ -40,7 +40,9 @@ from detect import (
     RESOURCE_START,
     SENSITIVE_TRUE_RE,
     VAR_REF_RE,
+    _resource_is_count_zero,
 )
+from _network import view_for, world_open_rules
 
 
 # ---- In-file handlers ---------------------------------------------------
@@ -294,62 +296,41 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
 
 @_register_infile("firewall_open_port")
 def _detect_firewall_open_port(c: InFileCtx) -> list[dict]:
-    """``firewall_open_port`` — ``google_compute_firewall`` with
-    ``source_ranges`` containing 0.0.0.0/0 AND an ``allow {}`` block
-    whose ``ports`` list contains the configured port. Detects the
-    classic "world-open SSH/RDP/SQL" pattern. Supports port ranges
-    like ``"22-22"`` via numeric containment.
+    """``firewall_open_port`` — an inbound allow rule open to the whole
+    internet (``0.0.0.0/0`` / ``::/0``; for Azure also ``*`` /
+    ``Internet``), on any of ``ports`` if given, else on any port.
+
+    ``resource`` picks the type (default ``google_compute_firewall``, for
+    the original GCP rules); see `_network` for the supported types and
+    how each is reduced to inbound rules — egress, deny and outbound rules
+    never match. Port ranges (``"1000-2000"``, ``from_port``/``to_port``)
+    match by containment, and ``var.X`` / ``local.X`` sources are resolved
+    against variable defaults. The finding carries the open ranges under
+    ``_open_port_ranges`` for the structured ``escalation`` pass in
+    `detect_in_file`, which removes it.
     """
-    ports = c.pat.get("ports") or []
-    if not ports:
-        return []
-    want_ports = {str(p) for p in ports}
+    rt = c.pat.get("resource", "google_compute_firewall")
+    want = [int(p) for p in (c.pat.get("ports") or [])]
     out: list[dict] = []
     for blk in c.resources:
         btype, bname = blk["groups"]
-        if btype != "google_compute_firewall":
+        if btype != rt:
             continue
-        body = blk["body"]
-        if "0.0.0.0/0" not in body:
+        # Skip only a literal `count = 0`: a count that comes from a
+        # variable default can be overridden by tfvars at apply time, and
+        # the text scan this replaced never skipped on count at all.
+        if _resource_is_count_zero(blk["body"], {}):
             continue
-        matched = False
-        for am in re.finditer(r'(?m)^\s*allow\s*\{', body):
-            a_end_after = brace_walk(body, am.end() - 1)
-            if a_end_after is None:
-                continue
-            a_end = a_end_after - 1
-            allow_body = body[am.end():a_end]
-            port_match = re.search(r'ports\s*=\s*\[([^\]]+)\]', allow_body)
-            if not port_match:
-                continue
-            listed = re.findall(r'"([^"]+)"', port_match.group(1))
-            for p in listed:
-                if p in want_ports:
-                    matched = True
-                    break
-                if "-" in p:
-                    try:
-                        lo, hi = (int(x) for x in p.split("-", 1))
-                    except ValueError:
-                        continue
-                    for wp in want_ports:
-                        try:
-                            wpi = int(wp)
-                        except ValueError:
-                            continue
-                        if lo <= wpi <= hi:
-                            matched = True
-                            break
-                if matched:
-                    break
-            if matched:
-                break
-        if matched:
+        open_rules = world_open_rules(rt, view_for(blk), c.var_defaults)
+        if want:
+            open_rules = [r for r in open_rules if any(r.covers(p) for p in want)]
+        if open_rules:
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
                 "line": blk["start_line"],
                 "resource": f"{btype}.{bname}",
+                "_open_port_ranges": [r.ports for r in open_rules],
             })
     return out
 

@@ -21,6 +21,7 @@ owasp:
   - "A02"
 patterns:
   - kind: grep
+    text_scan: "matches shell-script text inside user_data / provisioner command strings"
     file_glob: "**/*.tf"
     regex: '\$\{var\.(password|secret|token|api_key|private_key|access_key)\b'
     scope: resource_body
@@ -33,6 +34,7 @@ patterns:
       on every boot. Bake secrets into Parameter Store / Secrets
       Manager and pull at runtime via instance role.
   - kind: grep
+    text_scan: "matches shell-script text inside user_data / provisioner command strings"
     file_glob: "**/*.tf"
     regex: 'curl[^\n]*\|\s*(?:bash|sh)'
     scope: resource_body

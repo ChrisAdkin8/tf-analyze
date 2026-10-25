@@ -21,14 +21,21 @@ csa_ccm:
 status: active
 escalation:
   - condition: "destination_port_range matches (^22$|^3389$)"
+    # Evaluated by the engine: any internet-open inbound rule covering 22 / 3389.
+    match:
+      ports:
+        - 22
+        - 3389
     urgency: CRITICAL
 patterns:
-  - kind: grep
-    regex: 'source_address_prefix\s*=\s*"\*"'
-  - kind: grep
-    regex: 'source_address_prefix\s*=\s*"Internet"'
-  - kind: grep
-    regex: 'source_address_prefix\s*=\s*"0\.0\.0\.0/0"'
+  - kind: firewall_open_port
+    resource: azurerm_network_security_group
+    description: |
+      inline `security_rule` with direction Inbound, access Allow and a
+      source of `*` / `Internet` / `Any` / 0.0.0.0/0
+  - kind: firewall_open_port
+    resource: azurerm_network_security_rule
+    description: standalone `azurerm_network_security_rule`, Inbound + Allow, source `*` / `Internet` / `Any` / 0.0.0.0/0
 recommendation: |
   Replace `source_address_prefix = "*"` with a specific CIDR or Azure service
   tag. For SSH/RDP, use Azure Bastion instead of opening ports to the internet.

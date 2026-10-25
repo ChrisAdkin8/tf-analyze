@@ -5,6 +5,45 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 37 — Structured network exposure rules; engine-evaluated escalation — 2026-10-25
+
+Step 4 of `tasks/hcl-parser-migration.md`.
+
+- **`SEC-AWS-SG-001` and `STK-AZURE-NSG-001` no longer text-search the
+  whole file.** A new inbound-exposure model (`scripts/_network.py`)
+  covers `aws_security_group` (`ingress` blocks and `ingress = [{...}]`),
+  `aws_security_group_rule` (`type = "ingress"`),
+  `aws_vpc_security_group_ingress_rule`, Azure NSGs and NSG rules
+  (Inbound + Allow), and GCP firewalls. Egress, outbound and deny rules,
+  private ranges, comments and heredoc text no longer match; `var.X` /
+  `local.X` sources are resolved, so `cidr_blocks = var.open` with a
+  world-open default is caught. `firewall_open_port` (used by the GCP
+  network rules) gains a `resource:` key and the same model.
+- **Structured escalation.** `escalation:` items with a `match:` are now
+  evaluated by the engine: open SSH / RDP raises `SEC-AWS-SG-001` and
+  `STK-AZURE-NSG-001` to CRITICAL, and `allUsers` /
+  `allAuthenticatedUsers` raises `SEC-GCP-IAM-001`. Free-text
+  `condition:` items stay judgement-pass metadata. Escalations are
+  validated at catalogue load.
+- Every remaining `grep` pattern records why it stays a text scan
+  (`text_scan:`), enforced by a test.
+- All six parser-migration probes now pass.
+- The network rules fail closed: a rule whose `type` / `direction` /
+  `access` can't be resolved is treated as possibly inbound and allowed,
+  and only a literal `count = 0` skips a resource.
+- False positives removed in the bundled corpora: comment lines matched
+  by the old NSG grep, and a CRITICAL `SEC-GCP-NETWORK-001` on an
+  IAP-only firewall (`35.235.240.0/20`) whose comment mentioned
+  `0.0.0.0/0`.
+
+**Upgrade note — baselines:** `SEC-AWS-SG-001` / `STK-AZURE-NSG-001` now
+report one finding per exposed resource at the resource's first line
+(previously one per matching line, egress included). Baseline entries for
+these two rules will not match and the findings will show as new once;
+re-snapshot the baseline after upgrading.
+
+---
+
 ## Round 36 — Value checks on the parse tree; plan mode agrees with static — 2026-10-25
 
 Step 3 of `tasks/hcl-parser-migration.md`.

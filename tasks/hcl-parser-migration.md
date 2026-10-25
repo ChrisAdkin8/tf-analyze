@@ -1,7 +1,7 @@
 # HCL parser migration — make python-hcl2 required and primary
 
 > **STATUS: IN PROGRESS (r2, 2026-10-25).** Steps 0–1 done (#36, #37); Steps
-> 2–3 in review. Revision 2 follows an
+> 2–4 in review. Revision 2 follows an
 > independent review of r1; every factual claim in r2 was checked against the
 > code on 2026-10-25. Supersedes the "Scope B is a separate ~1–2 week
 > initiative" note in `tasks/policy-dsl-draft.md` §10 and builds on the
@@ -463,6 +463,14 @@ corpus diffs reviewed.
 
 ## 10. Step 4 — `grep` rules on `.tf`, and `escalation:` (est. ~1 week)
 
+> **As built:** `scripts/_network.py` reduces six firewall / security-group
+> resource types to one inbound-rule model (tree and text views, `var.X` /
+> `local.X` resolution); `firewall_open_port` uses it; `SEC-AWS-SG-001` and
+> `STK-AZURE-NSG-001` are rewritten onto it; structured `escalation:
+> match:` is evaluated in `detect_in_file` and validated in `_catalog`;
+> every remaining `grep` pattern carries a `text_scan:` reason (enforced
+> by a test). All six probes pass. See §14 items 17–21.
+
 30 catalogue entries use `kind: grep` (49 patterns). The CRITICAL/HIGH ones,
 in priority order, network first:
 
@@ -607,7 +615,57 @@ Added in Step 3:
     directions, e.g. `enable_deletion_protection = false` never fired
     `ROB-AWS-ALB-001` in plan mode. Now 0 of 2,041.
 
+Added in Step 4:
+
+17. **Typed variable values come from `var_defaults`.** `_network.parse_literal`
+    turns the stored default text (`["0.0.0.0/0"]`) into a list, which
+    works identically on the tree and the fallback path — no separate
+    tree-built `var_values` map was needed (§14 item 13).
+18. **Network findings: one per resource, at the resource line.** The old
+    `grep` emitted one finding per matching line — ingress *and* egress —
+    at that line. The rewrite emits one per exposed resource at its
+    `find_blocks` line, like every other resource kind. This changes the
+    baseline key of those findings once (CHANGELOG upgrade note). The
+    corpus diff also showed the old rules matching comments: two NSG
+    "findings" on comment lines, and a CRITICAL `SEC-GCP-NETWORK-001` on
+    an IAP-only firewall because a comment mentioned `0.0.0.0/0`.
+19. **`firewall_open_port` semantics, GCP included.** Sources must be in
+    `source_ranges` (not anywhere in the body); `direction = "EGRESS"` is
+    skipped; an `allow` block without `ports` (or protocol `all`) means
+    all ports. Escalation keys accept `urgency:` or the documented
+    `new_urgency:`.
+20. **`resource_body_contains` is not being converted** (reverses §14 item
+    14's deferral). With comments and heredocs masked, the remaining risk
+    is low, while converting needs exact per-provider paths (e.g.
+    `viewer_protocol_policy` lives in two CloudFront blocks) and a wrong
+    path silently loses detection.
+21. **`grep` patterns on `.tf` that stay text scans:** secrets
+    (`SEC-SECRETS-001`), scripts in strings (`SEC-USERDATA-001`,
+    `SEC-PROVISIONER-002`), JSON documents (`SEC-AWS-IAM-001/002`,
+    `SEC-AWS-IAM-OIDC-001`, `SEC-AWS-ECS-001/002`) by design; module
+    sources, version constraints, `lifecycle`, `data` and `provisioner`
+    blocks (`MOD-*`, `ROB-DRIFT-*`, `ROB-VERSION-001`, `SEC-PROVIDER-001`,
+    `SEC-DATASOURCE-*`, `SEC-PROVISIONER-001`, `SEC-USERDATA-002`,
+    `STK-GCP-DEPRECATION-001`) until structured kinds for non-resource
+    blocks exist — candidates for Step 5. The YAML loader keeps flow lists
+    as strings and misreads a nested mapping that is an item's first key;
+    documented in `catalog/README.md`.
+22. **Network rules fail closed.** (From an automated security review of
+    the Step 4 commit.) An unresolvable `type` / `direction` / `access`
+    (e.g. `type = var.rule_type`) is treated as possibly
+    ingress / inbound / allow rather than dropping the rule, and only a
+    literal `count = 0` skips a resource — a count from a variable
+    default can be overridden by tfvars, and the replaced text scan never
+    skipped on count. Other rule kinds still skip a resource whose count
+    resolves to 0 through a variable default (`_resource_is_count_zero`,
+    pre-existing); reviewing that engine-wide is left open below.
+
 Open:
+
+- `_resource_is_count_zero` resolves `count` through variable defaults
+  for every resource kind, so a rule can be skipped for a resource that
+  tfvars would create. Decide whether to restrict it to literals
+  engine-wide.
 
 - Whether and when to fix the `find_blocks` line off-by-one (needs a
   baseline-migration plan).
