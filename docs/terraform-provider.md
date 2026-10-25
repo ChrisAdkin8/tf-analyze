@@ -10,7 +10,7 @@ external CI, without extra credentials**.
 Source lives at
 [`terraform-provider/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/terraform-provider)
 and is structured as a standalone Go module so the engine itself stays
-stdlib-Python.
+pure Python with no `pip install` step.
 
 ## Why a provider on top of the GitHub Action
 

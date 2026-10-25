@@ -120,7 +120,36 @@ for (const entry of fs.readdirSync(sourceCatalogDir)) {
   catalogBytes += fs.statSync(dst).size;
 }
 
+// Vendored HCL parser (python-hcl2 + lark) — `_hcl.py` loads it from
+// `scripts/_vendor/` next to itself, so it must ship in the bundle or
+// every scan fails at import. Copied recursively, minus bytecode and any
+// locally built grammar cache (a fresh one is built below).
+const sourceVendorDir = path.join(sourceScriptsDir, '_vendor');
+const targetVendorDir = path.join(targetScriptsDir, '_vendor');
+if (!fs.existsSync(path.join(sourceVendorDir, 'hcl2'))) {
+  fail(`${sourceVendorDir} not found — run \`python3 scripts/vendor_deps.py\``);
+}
+let vendorFiles = 0;
+let vendorBytes = 0;
+function copyVendorTree(src, dst) {
+  fs.mkdirSync(dst, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (entry.name === '__pycache__' || entry.name === '.lark_cache.bin') continue;
+    const from = path.join(src, entry.name);
+    const to = path.join(dst, entry.name);
+    if (entry.isDirectory()) {
+      copyVendorTree(from, to);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(from, to);
+      vendorFiles++;
+      vendorBytes += fs.statSync(to).size;
+    }
+  }
+}
+copyVendorTree(sourceVendorDir, targetVendorDir);
+
 console.log(`[bundle-engine] scripts: ${ENGINE_SIBLING_FILES.length} files, ${(scriptsBytes / 1024).toFixed(1)} KB -> ${targetScriptsDir}`);
+console.log(`[bundle-engine] vendor: ${vendorFiles} files, ${(vendorBytes / 1024).toFixed(1)} KB -> ${targetVendorDir}`);
 console.log(`[bundle-engine] catalog: ${catalogCount} entries, ${(catalogBytes / 1024).toFixed(1)} KB -> ${targetCatalogDir}`);
 
 // ─── Smoke test ──────────────────────────────────────────────────
@@ -133,9 +162,12 @@ console.log(`[bundle-engine] catalog: ${catalogCount} entries, ${(catalogBytes /
 //      crashes on every invocation inside the .vsix.
 //   2. Catalogue YAML parse error introduced in this build. Engine
 //      runs but `--list-rules` exits non-zero on strict-load.
-//   3. Missing top-level Python dependency — though detect.py is
-//      stdlib-only by contract, a regression here is silent in a
-//      .vsix and triggers a runtime crash.
+//   3. Missing top-level Python dependency — detect.py needs only the
+//      stdlib plus the vendored parser bundled above, so a regression
+//      here is silent in a .vsix and triggers a runtime crash.
+// A second probe after it checks that the engine imports the *bundled*
+// parser (not some other installed hcl2) and pre-builds its grammar
+// cache, so the first scan doesn't pay ~0.35s to build the grammar.
 //
 // A red CI / failed `npm run package` here is the right outcome —
 // shipping a broken engine in a .vsix is the only failure that's
@@ -187,7 +219,7 @@ if (probe.error) {
 } else {
   // --list-rules emits lines like '  SEC-AWS-IAM-001       HIGH     <title>'.
   // Indented + starts with a rule-ID-shaped token. Headers (`# Section (N)`)
-  // and the python-hcl2 stderr note are ignored.
+  // and any stderr NOTE lines are ignored.
   const ruleCount = (probe.stdout || '').split('\n')
     .filter(l => /^\s+[A-Z]+(?:-[A-Z0-9-]+)+\s/.test(l)).length;
   if (ruleCount < MIN_RULE_COUNT) {
@@ -200,4 +232,32 @@ if (probe.error) {
     process.exit(1);
   }
   console.log(`[bundle-engine] smoke test OK (${python} listed ${ruleCount} rules from the bundled engine).`);
+}
+
+// ─── Vendored-parser probe + grammar cache ───────────────────────
+//
+// Import `_hcl` from the bundle, confirm `hcl2` resolved to the bundled
+// `_vendor/` copy, and build the grammar cache in place. Skipped (with
+// the same warning as above) when no Python is on PATH.
+if (!probe.error) {
+  const vendorProbe = spawnSync(python, ['-c', [
+    'import sys',
+    `sys.path.insert(0, ${JSON.stringify(targetScriptsDir)})`,
+    'import _hcl',
+    'print(_hcl.HCL2_PATH)',
+    'print(_hcl.warm_grammar_cache())',
+  ].join('; ')], {
+    cwd: engineRoot,
+    env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' },
+    encoding: 'utf8',
+  });
+  const [hcl2Path = '', cachePath = ''] = (vendorProbe.stdout || '').trim().split('\n');
+  const expectedHcl2 = path.join(targetVendorDir, 'hcl2');
+  if (vendorProbe.status !== 0 || path.resolve(hcl2Path) !== path.resolve(expectedHcl2)) {
+    console.error('[bundle-engine] FATAL: bundled engine did not load the bundled HCL parser.');
+    console.error(`[bundle-engine] expected hcl2 at ${expectedHcl2}, got ${hcl2Path || '(nothing)'}`);
+    console.error((vendorProbe.stderr || '').replace(/^/gm, '  | '));
+    process.exit(1);
+  }
+  console.log(`[bundle-engine] vendored parser OK; grammar cache at ${cachePath}`);
 }

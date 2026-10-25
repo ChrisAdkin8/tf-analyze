@@ -8,8 +8,8 @@ external caller consumes.
 Scope rule — same as `_versions.py`, `_scoring.py`, `_hcl.py`:
 
   * Pure functions and immutable validation constants only.
-  * No engine state. The `_USE_HCL2` toggle, the var-resolution
-    layer, the runtime catalogue index — all stay in `detect.py`.
+  * No engine state. The var-resolution layer and the runtime
+    catalogue index stay in `detect.py`.
   * I/O is allowed when it's the gateway between the filesystem and
     a structured Python value (file → YAML → dict, same shape as
     `_hcl._read_normalized`).

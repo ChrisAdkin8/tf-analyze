@@ -53,7 +53,7 @@ Full CI integration with SARIF upload to Code Scanning, an engine-rendered PR su
 
 - `security-events: write` permission (already in the workflow).
 - Public repo OR Advanced Security enabled (for Code Scanning uploads).
-- Python 3.12 on the runner (stdlib only — no pip install needed).
+- Python 3.12 on the runner (no pip install needed — the HCL parser is vendored).
 
 ## Verify-fixed workflow
 
@@ -187,7 +187,7 @@ Pre-apply gate that scans Terraform Cloud / HCP Terraform plans before they run.
 
 ## Other CI systems
 
-The core invocation is just a single `python3` call with stdlib-only dependencies, so adapting to GitLab CI, CircleCI, Buildkite, etc. is trivial:
+The core invocation is just a single `python3` call with no `pip install` step (the engine vendors its HCL parser), so adapting to GitLab CI, CircleCI, Buildkite, etc. is trivial:
 
 ```bash
 python3 scripts/detect.py --target . --mode diff --format sarif --fail-on HIGH

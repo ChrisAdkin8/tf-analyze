@@ -54,7 +54,7 @@ class LspClient:
 
     def __init__(self) -> None:
         self.proc = subprocess.Popen(
-            [sys.executable, str(DETECT_PY), "--lsp", "--no-hcl2"],
+            [sys.executable, str(DETECT_PY), "--lsp"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

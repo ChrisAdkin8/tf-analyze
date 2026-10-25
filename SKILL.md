@@ -45,7 +45,7 @@ scripts/stub-status.py --age 90d              # find stubs older than 90 days
 5. [Urgency Levels](#urgency-levels)
 6. [Blast Radius](#blast-radius)
 7. [Suppression](#suppression)
-8. [CI Integration](#ci-integration) — SARIF, HTML, `--compare`, `--fail-on`, optional python-hcl2
+8. [CI Integration](#ci-integration) — SARIF, HTML, `--compare`, `--fail-on`, the vendored HCL parser
 9. **Step 0** — Pre-Analysis: credential scan + hygiene
 10. **Step 1** — Discovery (file enumeration, dependency graph, sentinel tempdir)
 11. **Step 2** — Security Posture
@@ -257,33 +257,30 @@ The detection pass supports CI gating via exit codes and multiple output formats
 - **`--baseline PATH`** *(new in Round 24)* — load a prior JSON report and suppress findings whose `(id, file, line, resource)` tuple is already present. Only retained findings affect the `--fail-on` exit code; suppressed-by-baseline findings are surfaced under the JSON `suppressed_by_baseline` key. Use to ratchet on legacy repos: snapshot once, gate on no-regressions thereafter.
 - **`--format mitre`** *(updated in the 2026-05-10 sweep)* — group findings by **ATT&CK tactic → technique** using catalogue `mitre:` fields. Output uses the canonical kill-chain order (Initial Access → Execution → ... → Impact); each technique is rendered with its human name (`T1078.004 — Valid Accounts: Cloud Accounts`), not just the bare ID. Pinned against ATT&CK v17 via `MITRE_ATTACK_VERSION` in `detect.py`. Findings without a mapping fall into a final `(unmapped)` group so coverage gaps stay visible. SARIF output additionally tags every finding with `cis:`, `mitre:Tnnnn`, `cwe:CWE-<n>`, and `d3fend:D3-<TOKEN>` properties — GitHub Code Scanning consumers can filter by any of the four taxonomies.
 - **`--mitre-tactic <tactic>`** *(new in the 2026-05-10 sweep)* — restrict `--format mitre` output to one ATT&CK tactic. Case-insensitive, separator-tolerant (`initial-access`, `Initial Access`, and `INITIAL_ACCESS` are all equivalent). Powers tactic-scoped audits ("show me only the Defense Evasion findings on this branch").
-- **`--no-hcl2`** *(new in Round 24)* — disable the python-hcl2 fast-path (which is now ON by default when the dependency is installed). Use for benchmarking or in stdlib-only environments. Equivalent env var: `TF_ANALYZE_NO_HCL2=1`. The legacy `--use-hcl2` flag still works but is now a no-op.
+- **`--no-hcl2` / `--use-hcl2`** *(deprecated)* — no-ops kept for one minor release; each prints a deprecation notice. The vendored HCL parser is always used. The env vars `TF_ANALYZE_NO_HCL2` / `TF_ANALYZE_USE_HCL2` are likewise ignored with a notice.
 - **`--show-info`** *(new with module-reuse advisor)* — render INFO-tier findings (advisory; e.g. module-reuse suggestions). Default off — INFO findings are still counted in `summary.counts.INFO` but are filtered out of the rendered output so they don't drown the signal. INFO carries weight 0 in the score formula, so this flag only affects display, not gating.
 
 Ready-to-use configs for pre-commit and GitHub Actions live under `integrations/`. The GitHub Actions workflow (`integrations/github-action.yml`) now includes a PR comment fallback that posts findings as a collapsible comment on every pull request — works on free-tier repos that don't have Code Scanning enabled.
 
-### `python-hcl2` fast-path (default-on since Round 24)
+### Vendored HCL parser (python-hcl2)
 
-By default `detect.py` enables the python-hcl2 fast-path when the
-dependency is installed (the Docker image bundles it). When it isn't,
-the regex parser is used and a one-line stderr notice is emitted. A
-known limitation of the regex parser is that heredoc-bearing attributes
-(`user_data = <<-EOF\n...\nEOF`) return `None` from `block_arg_value`,
-so any check looking at the value of such an attribute silently misses.
+The engine ships its own copy of
+[`python-hcl2`](https://pypi.org/project/python-hcl2/) and its only
+dependency, `lark`, in `scripts/_vendor/` (pinned versions in
+`scripts/_vendor/VERSIONS`). `scripts/_hcl.py` always loads this copy, ahead
+of any installed `hcl2`, so every surface — this skill, the CLI, the
+Docker images, the VS Code extension, the pip wheel — runs the same
+parser with **no `pip install` step**. Refresh it only with
+`python3 scripts/vendor_deps.py`, which checks each wheel's sha256.
 
-Pass `--use-hcl2` (or set `TF_ANALYZE_USE_HCL2=1`) to enable an optional
-fast-path that uses [`python-hcl2`](https://pypi.org/project/python-hcl2/)
-for heredoc-aware extraction. If `python-hcl2` isn't installed, the flag
-prints a one-line warning and the regex path is used unchanged — so the
-default behaviour is preserved and the flag is safe to set globally in
-CI. Install with `pip install python-hcl2` once on the runner; the
-performance overhead is negligible because it only kicks in for blocks
-that contain `<<` (the regex path stays the default for everything else).
+Today the parser is used for heredoc-aware attribute extraction
+(`block_arg_value` on bodies containing `<<`); the regex scanner handles
+everything else. Moving rule evaluation onto the parse tree is planned in
+`tasks/hcl-parser-migration.md`.
 
-This is the extension point for richer hcl2-backed detectors. Add new
-checks under the existing `pattern_kind` system; call
-`_hcl2_block_arg_value` (or load the parse tree directly via
-`hcl2.load`) when the check needs structural awareness regex can't give.
+lark caches the built grammar next to the vendored `parser.py` (gitignored;
+pre-built in the Docker images and `.vsix`). The first run in a fresh
+checkout builds it once (~0.4s).
 
 ---
 
@@ -1905,7 +1902,7 @@ Refer operators to `infracost` or the official cloud pricing calculator for proc
 
 Items that would extend `detect.py` beyond its current regex-first scope. None of these are wired — tracked here so future contributors don't re-discover the design space:
 
-- **Structured HCL parsing.** Swap the regex scanner for `python-hcl2` as an optional dependency. Would improve recall on dynamic blocks, interpolation-inside-strings, and multi-line attribute values. The regex path stays as fallback so the skill remains stdlib-only by default.
+- **Structured HCL parsing.** Move rule evaluation from the regex scanner onto the vendored `python-hcl2` parse tree. Would improve recall on dynamic blocks, interpolation-inside-strings, and multi-line attribute values. In progress: see `tasks/hcl-parser-migration.md`.
 - **External reconciler.** Read `tflint` / `tfsec` / `trivy` JSON output and cross-reference with catalogue IDs. Novel IDs become `--propose-stub` input; duplicates are collapsed by file+line fingerprint. Reduces double-reporting when teams run both this skill and a dedicated scanner.
 - **Plan-time checks.** `mode:plan` already exists but is thinly implemented. Expand to parse `terraform show -json <plan>` for drift, destroy-on-create, and sensitive-attribute exposure that only manifest at plan time.
 - **`TF_BINARY` env var** for pointing at `tofu` or a specific `terraform` build in hermetic environments. Currently the skill invokes `terraform` by name.

@@ -186,8 +186,7 @@ class TestOwaspIacCli:
         )
         out = _run("--target", str(tmp_path),
                    "--format", "compliance",
-                   "--compliance-framework", "owasp_iac",
-                   "--no-hcl2")
+                   "--compliance-framework", "owasp_iac")
         # Section header must appear.
         assert "OWASP IaC Cheat Sheet" in out, out
         # Long control labels must NOT collide with the Status column —
@@ -213,8 +212,7 @@ class TestOwaspIacCli:
         out = _run("--target", str(tmp_path),
                    "--format", "html",
                    "--compliance",
-                   "--compliance-framework", "owasp_iac",
-                   "--no-hcl2")
+                   "--compliance-framework", "owasp_iac")
         assert "OWASP IaC Cheat Sheet" in out
 
     def test_compliance_html_escapes_control_and_framework(self) -> None:

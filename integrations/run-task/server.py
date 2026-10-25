@@ -174,7 +174,6 @@ def _run_detect(plan_json_path: Path) -> tuple[dict, int]:
         "--plan-json", str(plan_json_path),
         "--format", "json",
         "--fail-on", FAIL_ON,
-        "--no-hcl2",  # plan path doesn't need heredoc parser
     ]
     if COMPLIANCE_FRAMEWORK:
         cmd.extend(["--compliance-framework", COMPLIANCE_FRAMEWORK])

@@ -47,7 +47,6 @@ def run_detect(target: Path) -> dict:
         "--target", str(target),
         "--format", "json",
         "--attack-graph",
-        "--no-hcl2",   # keep the regex parser for reproducibility
     ]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if res.returncode > 1:

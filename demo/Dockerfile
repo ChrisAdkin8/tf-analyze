@@ -20,6 +20,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # until the public scanner started 500'ing.
 COPY scripts/detect.py scripts/detect.py
 COPY scripts/_*.py scripts/
+# The engine's HCL parser (python-hcl2 + lark) is vendored in
+# scripts/_vendor/; copy it with the modules and pre-build its grammar
+# cache so each run doesn't rebuild it (~0.35s).
+COPY scripts/_vendor/ scripts/_vendor/
+RUN python3 -c "import sys; sys.path.insert(0, 'scripts'); import _hcl; _hcl.warm_grammar_cache()"
 COPY catalog/ catalog/
 
 # Web app — keep `demo/` layout so app.py's `Path(__file__).parent.parent`

@@ -470,7 +470,7 @@ class TestComplianceSection:
 class TestPrSummaryCli:
     def test_clean_workspace_reports_clean(self, tmp_path: Path) -> None:
         (tmp_path / "main.tf").write_text('output "ok" { value = "ok" }\n')
-        out = _run("--target", str(tmp_path), "--format", "pr-summary", "--no-hcl2")
+        out = _run("--target", str(tmp_path), "--format", "pr-summary")
         assert "## tf-analyze:" in out
         assert "🟢" in out or "🔵" in out  # A or B for a near-empty workspace
 
@@ -489,7 +489,7 @@ class TestPrSummaryCli:
             '}\n'
         )
         out = _run("--target", str(tmp_path), "--format", "pr-summary",
-                   "--attack-graph", "--no-hcl2")
+                   "--attack-graph")
         # Even if the graph has 0 edges (no inferred path), the format
         # must still emit the score banner.
         assert "## tf-analyze:" in out
@@ -506,7 +506,7 @@ class TestPrSummaryCli:
             '  storage_encrypted = false\n'
             '}\n'
         )
-        out = _run("--target", str(tmp_path), "--format", "pr-summary", "--no-hcl2")
+        out = _run("--target", str(tmp_path), "--format", "pr-summary")
         assert "### Top findings" in out
         assert "| Urgency | Rule | Location |" in out
         # Every rule mentioned must include the docs URL — pinned so
