@@ -8,9 +8,16 @@ RUN pip install --no-cache-dir -r requirements.txt python-hcl2==4.3.5
 # Bundle the engine alongside the server so the container is self-
 # contained — the same pattern used by the bundled-engine VS Code
 # extension and the run-task / badge-service deploys.
-COPY scripts/detect.py /tf-analyze/scripts/detect.py
+#
+# Copy every engine module, not just detect.py: detect.py imports its
+# `_*.py` siblings, so a detect.py-only COPY builds fine but crashes on the
+# first scan (the same regression the root Dockerfile hit in R31.7).
+COPY scripts/*.py /tf-analyze/scripts/
 COPY catalog/ /tf-analyze/catalog/
 COPY integrations/mcp-server/server.py /app/server.py
+
+# Build-time smoke test: fail the build if the bundled engine can't load.
+RUN python3 /tf-analyze/scripts/detect.py --list-rules > /dev/null
 
 ENV TFA_REPO_ROOT=/tf-analyze
 ENV TFA_DETECT_PY=/tf-analyze/scripts/detect.py
