@@ -216,10 +216,28 @@ def _aws_rule(view, vd: dict, *, cidr_keys, protocol_key) -> InboundRule:
     )
 
 
+def _is_not(value, expected: str) -> bool:
+    """True only when ``value`` is *known* to differ from ``expected``.
+
+    Fails closed: a missing or unresolvable value (a reference such as
+    ``var.rule_type`` with no usable default) might be ``expected`` at
+    apply time, so it is not treated as a mismatch — a security scanner
+    should report a possibly-open rule rather than drop it.
+    """
+    if value is None:
+        return False
+    s = str(value).strip()
+    if "${" in s or _REF_RE.match(s) or re.match(r"^(data|module)\.", s):
+        return False
+    return s.lower() != expected
+
+
 def _azure_rules(view, vd: dict) -> list[InboundRule]:
-    if str(resolve(view.get("direction"), vd)).lower() != "inbound":
+    # A missing `direction` / `access` is a provider error, so only a known
+    # non-matching value (e.g. "Outbound", "Deny") skips the rule.
+    if _is_not(resolve(view.get("direction"), vd), "inbound"):
         return []
-    if str(resolve(view.get("access"), vd)).lower() != "allow":
+    if _is_not(resolve(view.get("access"), vd), "allow"):
         return []
     sources = _str_list(view, ("source_address_prefix", "source_address_prefixes"), vd)
     specs = _as_list(resolve(view.get("destination_port_range"), vd)) + _as_list(
@@ -261,7 +279,7 @@ def inbound_rules(resource_type: str, view, var_defaults: dict) -> list[InboundR
             for i in view.blocks("ingress")
         ]
     if resource_type == "aws_security_group_rule":
-        if str(resolve(view.get("type"), vd)).lower() != "ingress":
+        if _is_not(resolve(view.get("type"), vd), "ingress"):
             return []
         return [
             _aws_rule(

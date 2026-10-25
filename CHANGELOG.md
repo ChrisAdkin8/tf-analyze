@@ -28,6 +28,9 @@ Step 4 of `tasks/hcl-parser-migration.md`.
 - Every remaining `grep` pattern records why it stays a text scan
   (`text_scan:`), enforced by a test.
 - All six parser-migration probes now pass.
+- The network rules fail closed: a rule whose `type` / `direction` /
+  `access` can't be resolved is treated as possibly inbound and allowed,
+  and only a literal `count = 0` skips a resource.
 - False positives removed in the bundled corpora: comment lines matched
   by the old NSG grep, and a CRITICAL `SEC-GCP-NETWORK-001` on an
   IAP-only firewall (`35.235.240.0/20`) whose comment mentioned

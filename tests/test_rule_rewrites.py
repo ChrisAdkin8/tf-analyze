@@ -137,6 +137,31 @@ def test_vpc_ingress_rule_resource(tmp_path, path_mode) -> None:
     assert _urgency(_scan(text, "SEC-AWS-SG-001", tmp_path), "SEC-AWS-SG-001") == "CRITICAL"
 
 
+def test_count_zero_skips_only_a_literal(tmp_path, path_mode) -> None:
+    """`count = 0` literally means the resource isn't created; a count from
+    a variable default can be overridden by tfvars, so it still reports."""
+    sg = _sg(_block("ingress", 443))
+    literal = sg.replace('  name = "sg"\n', '  name = "sg"\n  count = 0\n')
+    assert _scan(literal, "SEC-AWS-SG-001", tmp_path) == []
+    text = 'variable "n" {\n  default = 0\n}\n' + sg.replace('  name = "sg"\n', '  name = "sg"\n  count = var.n\n')
+    vd = detect._extract_var_defaults_by_dir({str(tmp_path / "main.tf"): text})[str(tmp_path)]
+    assert _scan(text, "SEC-AWS-SG-001", tmp_path, vd)
+
+
+def test_unresolvable_rule_type_fails_closed(tmp_path, path_mode) -> None:
+    text = ('resource "aws_security_group_rule" "r" {\n  type = var.rule_type\n  from_port = 22\n'
+            '  to_port = 22\n  protocol = "tcp"\n  cidr_blocks = ["0.0.0.0/0"]\n'
+            '  security_group_id = "sg-1"\n}\n')
+    assert _urgency(_scan(text, "SEC-AWS-SG-001", tmp_path), "SEC-AWS-SG-001") == "CRITICAL"
+
+
+def test_dynamic_ingress_counts(tmp_path, path_mode) -> None:
+    text = ('resource "aws_security_group" "sg" {\n  dynamic "ingress" {\n    for_each = [22]\n'
+            '    content {\n      from_port = 22\n      to_port = 22\n      protocol = "tcp"\n'
+            '      cidr_blocks = ["0.0.0.0/0"]\n    }\n  }\n}\n')
+    assert _urgency(_scan(text, "SEC-AWS-SG-001", tmp_path), "SEC-AWS-SG-001") == "CRITICAL"
+
+
 # ---- STK-AZURE-NSG-001 --------------------------------------------------------
 
 def _nsg_rule(direction="Inbound", access="Allow", source='"*"', port='"22"') -> str:
@@ -155,6 +180,12 @@ def test_nsg_inbound_allow_internet(tmp_path, path_mode) -> None:
                                 {"source": '"10.0.0.0/8"'}, {"source": '"VirtualNetwork"'}])
 def test_nsg_non_exposing_rules_are_clean(kw, tmp_path, path_mode) -> None:
     assert _scan(_nsg_rule(**kw), "STK-AZURE-NSG-001", tmp_path) == []
+
+
+def test_nsg_unresolvable_direction_and_access_fail_closed(tmp_path, path_mode) -> None:
+    f = _scan(_nsg_rule(direction="${var.direction}", access="${var.access}"),
+              "STK-AZURE-NSG-001", tmp_path)
+    assert _urgency(f, "STK-AZURE-NSG-001") == "CRITICAL"
 
 
 def test_nsg_inline_security_rule(tmp_path, path_mode) -> None:

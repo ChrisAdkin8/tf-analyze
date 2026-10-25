@@ -316,7 +316,10 @@ def _detect_firewall_open_port(c: InFileCtx) -> list[dict]:
         btype, bname = blk["groups"]
         if btype != rt:
             continue
-        if _resource_is_count_zero(blk["body"], c.var_defaults):
+        # Skip only a literal `count = 0`: a count that comes from a
+        # variable default can be overridden by tfvars at apply time, and
+        # the text scan this replaced never skipped on count at all.
+        if _resource_is_count_zero(blk["body"], {}):
             continue
         open_rules = world_open_rules(rt, view_for(blk), c.var_defaults)
         if want:

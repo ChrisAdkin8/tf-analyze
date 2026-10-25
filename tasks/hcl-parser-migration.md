@@ -650,8 +650,22 @@ Added in Step 4:
     blocks exist — candidates for Step 5. The YAML loader keeps flow lists
     as strings and misreads a nested mapping that is an item's first key;
     documented in `catalog/README.md`.
+22. **Network rules fail closed.** (From an automated security review of
+    the Step 4 commit.) An unresolvable `type` / `direction` / `access`
+    (e.g. `type = var.rule_type`) is treated as possibly
+    ingress / inbound / allow rather than dropping the rule, and only a
+    literal `count = 0` skips a resource — a count from a variable
+    default can be overridden by tfvars, and the replaced text scan never
+    skipped on count. Other rule kinds still skip a resource whose count
+    resolves to 0 through a variable default (`_resource_is_count_zero`,
+    pre-existing); reviewing that engine-wide is left open below.
 
 Open:
+
+- `_resource_is_count_zero` resolves `count` through variable defaults
+  for every resource kind, so a rule can be skipped for a resource that
+  tfvars would create. Decide whether to restrict it to literals
+  engine-wide.
 
 - Whether and when to fix the `find_blocks` line off-by-one (needs a
   baseline-migration plan).
