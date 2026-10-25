@@ -7,9 +7,9 @@ table by virtue of the ``@_register_infile`` / ``@_register_corpus``
 decorator on its definition; importing this module is what triggers
 the registration. See the matching block in ``detect.py``.
 
-In-file handlers (5):
+In-file handlers (6):
     variable_credential_pattern, iam_policy_analysis, helm_set_value,
-    iam_json_policy_analysis, firewall_open_port
+    iam_json_policy_analysis, firewall_open_port, high_entropy_string
 
 Corpus handlers (4):
     output_sensitive_leak, cross_module, templatefile_sensitive_leak,
@@ -17,6 +17,7 @@ Corpus handlers (4):
 """
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from _hcl import (
     find_blocks,
     block_arg_value,
     brace_walk,
+    strip_hcl_context,
     _hcl_object_to_json,
 )
 from detect import (
@@ -348,6 +350,114 @@ def _detect_firewall_open_port(c: InFileCtx) -> list[dict]:
                 "file": str(c.file_path),
                 "line": blk["start_line"],
                 "resource": f"{btype}.{bname}",
+            })
+    return out
+
+
+# ---- high-entropy secret detection -------------------------------------
+
+# Token charset: base64 (standard + url-safe) and hex. Real hex strings
+# (16 symbols → H tops out ≈3.7) sit *below* the default 4.0 threshold, so
+# git SHAs / image digests fall out naturally while genuine base64 tokens
+# (62+ symbols, H≈4.1–4.6) clear it — entropy itself does the separation.
+_ENTROPY_TOKEN_RE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
+
+# `name = "value"` single-line literal assignments. Interpolations and
+# references are filtered out by inspecting the captured value below.
+_ENTROPY_ASSIGN_RE = re.compile(r'(?m)([A-Za-z_][\w-]*)\s*=\s*"([^"\n]*)"')
+
+# Cloud resource-id prefixes: structured, base64-charset, occasionally
+# H>4.0 (e.g. `ami-0abcdef1234567890`) but never secrets.
+_ENTROPY_ID_PREFIXES = (
+    "ami-", "vol-", "vpc-", "subnet-", "sg-", "snap-", "rtb-", "acl-",
+    "eni-", "igw-", "nat-", "i-", "eipalloc-", "pl-", "fsg-", "tgw-",
+)
+
+
+def _shannon_entropy(s: str) -> float:
+    """Shannon entropy of ``s`` in bits/character (0.0 for empty)."""
+    if not s:
+        return 0.0
+    n = len(s)
+    counts: dict[str, int] = {}
+    for ch in s:
+        counts[ch] = counts.get(ch, 0) + 1
+    return -sum((c / n) * math.log2(c / n) for c in counts.values())
+
+
+def _is_high_entropy_secret(value: str, *, min_len: int, max_len: int,
+                            min_entropy: float) -> bool:
+    """True when ``value`` looks like a hardcoded high-entropy token.
+
+    Charset-gated (base64/token) + length-bounded + entropy-thresholded,
+    excluding interpolations/references and cloud resource-ids. The
+    charset+entropy combination lets hex strings (git SHAs, image digests,
+    H≈3.7) fall out below a base64 token (H≈4.1+), so v1 needs no separate
+    hex handling — and avoids the git-SHA false-positive class.
+    """
+    if not (min_len <= len(value) <= max_len):
+        return False
+    if "${" in value or "$(" in value:          # interpolation / shell
+        return False
+    if not _ENTROPY_TOKEN_RE.match(value):       # not token charset
+        return False
+    low = value.lower()
+    if any(low.startswith(p) for p in _ENTROPY_ID_PREFIXES):
+        return False
+    # Readable kebab/snake-case names (bucket names, resource names) can clear
+    # the entropy bar by length while using a single character class; genuine
+    # tokens mix at least two of {lowercase, uppercase, digit}. This filters the
+    # common `my-app-prod-logs-bucket-name`-style false positive.
+    classes = (any(c.islower() for c in value)
+               + any(c.isupper() for c in value)
+               + any(c.isdigit() for c in value))
+    if classes < 2:
+        return False
+    return _shannon_entropy(value) >= min_entropy
+
+
+@_register_infile("high_entropy_string")
+def _detect_high_entropy_string(c: InFileCtx) -> list[dict]:
+    """``high_entropy_string`` — flag string literals whose Shannon entropy
+    marks them as probable hardcoded secrets (API tokens, access keys),
+    *regardless of the argument name*. Complements the name/prefix-based
+    ``grep`` secret rules, which miss tokens in oddly-named fields.
+
+    Catalogue pattern fields (all optional, with defaults):
+      ``min_length`` (20), ``max_length`` (100), ``min_entropy`` (4.0).
+    Comments are stripped first (length-preserving, so line numbers stay
+    accurate); interpolations/references, cloud resource-ids, and
+    hex/git-SHA-class strings are excluded (see _is_high_entropy_secret).
+    """
+    min_len = int(c.pat.get("min_length", 20))
+    max_len = int(c.pat.get("max_length", 100))
+    min_entropy = float(c.pat.get("min_entropy", 4.0))
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        body = strip_hcl_context(blk["body"])   # blank comments, keep offsets
+        seen: set[tuple[str, str]] = set()
+        for m in _ENTROPY_ASSIGN_RE.finditer(body):
+            arg, value = m.group(1), m.group(2)
+            if (arg, value) in seen:
+                continue
+            if not _is_high_entropy_secret(
+                value, min_len=min_len, max_len=max_len, min_entropy=min_entropy
+            ):
+                continue
+            seen.add((arg, value))
+            line = blk["start_line"] + body.count("\n", 0, m.start())
+            ent = _shannon_entropy(value)
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": line,
+                "resource": f"{btype}.{bname}",
+                "context": (
+                    f"high-entropy string assigned to `{arg}` "
+                    f"(entropy {ent:.2f} bits/char, length {len(value)}) "
+                    f"— probable hardcoded secret"
+                ),
             })
     return out
 
