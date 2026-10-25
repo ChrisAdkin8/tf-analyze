@@ -31,6 +31,7 @@ owasp:
 # against once the engine grows a `kubernetes_manifest` walker.
 patterns:
   - kind: grep
+    text_scan: "stub rule (inactive) - not yet reviewed for a structured rewrite"
     file_glob: "**/*.tf"
     regex: 'image\s*=\s*"(?!.*@sha256:)[^"]+:latest"'
     description: K8s container image with `:latest` tag, no SHA pin

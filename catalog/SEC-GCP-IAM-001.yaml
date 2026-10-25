@@ -29,6 +29,14 @@ verification: |
   mode:verify-fixed and confirm SEC-IAM-001 is RESOLVED.
 escalation:
   - condition: "member matches '^(allUsers|allAuthenticatedUsers)$'"
+    # Evaluated by the engine on google_project_iam_member.member and
+    # google_project_iam_binding.members.
+    match:
+      member: '^(allUsers|allAuthenticatedUsers)$'
+    new_urgency: CRITICAL
+  - condition: "members contains allUsers / allAuthenticatedUsers"
+    match:
+      members: '^(allUsers|allAuthenticatedUsers)$'
     new_urgency: CRITICAL
 pci_dss:
   - "Req-7.1"

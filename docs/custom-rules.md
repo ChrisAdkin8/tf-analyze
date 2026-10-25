@@ -129,7 +129,8 @@ The most useful kinds for custom rules:
 | `resource_present`    | A resource of this type exists at all                                 |
 | `resource_absent`     | NO resource of this type exists in the corpus                         |
 | `hcl_attr`            | A resource attribute equals (or doesn't equal) a specific value       |
-| `grep`                | Plain-text regex search                                               |
+| `grep`                | Plain-text regex search (each pattern records why in `text_scan:`)    |
+| `firewall_open_port`  | An inbound allow rule open to the internet (`0.0.0.0/0`, `::/0`; Azure `*` / `Internet`), optionally only on `ports:` — `resource:` one of `aws_security_group`, `aws_security_group_rule`, `aws_vpc_security_group_ingress_rule`, `azurerm_network_security_group`, `azurerm_network_security_rule`, `google_compute_firewall` (default). Egress / deny / outbound rules never match; `var.X` sources are resolved |
 | `iam_policy_analysis` | Walk `data.aws_iam_policy_document` statements (see below)            |
 | `high_entropy_string` | A string literal whose Shannon entropy marks it a probable hardcoded secret (any arg name) — complements the name-based secret greps |
 | `policy`              | Cross-resource / conditional / aggregate predicate — see the [policy DSL guide](policy-dsl.md) |
@@ -169,6 +170,11 @@ The most useful kinds for custom rules:
 
 These rules are evaluated on the parsed HCL tree, or — for a file the
 parser can't read — by a text fallback that follows the same rules.
+
+Rules can raise a finding's urgency with `escalation:` — a structured
+`match:` (e.g. `ports:` for `firewall_open_port`, or an attribute path →
+regex) is evaluated by the engine; see
+[`catalog/README.md`](../catalog/README.md#escalation-semantics).
 
 Pattern kinds support these suppression mechanisms:
 

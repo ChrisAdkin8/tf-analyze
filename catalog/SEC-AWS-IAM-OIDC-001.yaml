@@ -28,6 +28,7 @@ slsa:
   - "build"
 patterns:
   - kind: grep
+    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     file_glob: "**/*.tf"
     regex: '"token\.actions\.githubusercontent\.com:sub"\s*=\s*"(?:\*|repo:\*|repo:[^"/]+/\*|repo:[^"]*:ref:refs/heads/\*)"'
     description: |
@@ -38,6 +39,7 @@ patterns:
       both turned on this pattern — a less-trusted repo or branch
       gets to mint cloud credentials.
   - kind: grep
+    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     file_glob: "**/*.tf"
     regex: '"token\.actions\.githubusercontent\.com:sub"\s*=\s*"\*"'
     description: bare wildcard `sub`

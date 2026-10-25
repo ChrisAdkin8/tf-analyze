@@ -25,6 +25,7 @@ owasp:
   - "CICD-SEC-3"
 patterns:
   - kind: grep
+    text_scan: "non-HCL input - GitHub Actions workflow YAML"
     file_glob: ".github/workflows/*.yml"
     regex: 'terraform\s+apply'
     # Suppress when the workflow declares any `environment:` block —

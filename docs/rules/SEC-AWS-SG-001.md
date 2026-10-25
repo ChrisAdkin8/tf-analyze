@@ -41,16 +41,22 @@ keywords: "security, high, terraform, iac, aws, cis-5.2, cis-5.3, nist-csf-pr.ac
 
 ## What this checks
 
-1. **`grep`** matching `/cidr_blocks\s*=\s*\["0\.0\.0\.0/0"\]/` — _a textual regex matched somewhere in the file._
-  security group ingress rule open to all IPv4
-2. **`grep`** matching `/ipv6_cidr_blocks\s*=\s*\["::/0"\]/` — _a textual regex matched somewhere in the file._
-  security group ingress rule open to all IPv6
+1. **`firewall_open_port`** on `aws_security_group` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+  security group `ingress` block (or `ingress = [{...}]`) open to
+0.0.0.0/0 or ::/0 — egress rules are not checked
+2. **`firewall_open_port`** on `aws_security_group_rule` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+  standalone `aws_security_group_rule` with `type = "ingress"` open to 0.0.0.0/0 or ::/0
+3. **`firewall_open_port`** on `aws_vpc_security_group_ingress_rule` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+  `aws_vpc_security_group_ingress_rule` with `cidr_ipv4 = 0.0.0.0/0` or `cidr_ipv6 = ::/0`
 
 ## Why it likely fired
 
-security group ingress rule open to all IPv4
+security group `ingress` block (or `ingress = [{...}]`) open to
+0.0.0.0/0 or ::/0 — egress rules are not checked
 
-security group ingress rule open to all IPv6
+standalone `aws_security_group_rule` with `type = "ingress"` open to 0.0.0.0/0 or ::/0
+
+`aws_vpc_security_group_ingress_rule` with `cidr_ipv4 = 0.0.0.0/0` or `cidr_ipv6 = ::/0`
 
 ## Adversarial scenario
 

@@ -64,6 +64,7 @@ py-modules = [
     "_lsp",
     "_mitre",
     "_modes",
+    "_network",
     "_output",
     "_plan_state",
     "_policy",

@@ -64,8 +64,14 @@ verification: |              # required, multiline. how to verify the fix landed
   is created. Re-run tf-analyze in mode:verify-fixed.
 related: []                  # optional, list of related catalogue IDs
 escalation:                  # optional, conditions that bump urgency
-  - condition: "estimated_monthly_cost_usd > 1000"
-    new_urgency: HIGH
+  - condition: "estimated_monthly_cost_usd > 1000"   # free text: read by the
+    new_urgency: HIGH                                # skill's judgement pass only
+  - condition: "open on SSH / RDP"                   # human-readable label
+    match:                       # structured: evaluated by the engine
+      ports:                     # network rules: an open rule covers a port
+        - 22
+        - 3389
+    new_urgency: CRITICAL        # (`urgency:` is accepted too)
 fixtures:                    # optional, list of fixture directories that exercise this finding
   - iam_too_broad
 applies_when:                # optional, gate the rule on provider/Terraform version
@@ -73,6 +79,31 @@ applies_when:                # optional, gate the rule on provider/Terraform ver
     aws: "5.0"
   min_terraform: "1.10"      # rule fires only when terraform.required_version allows ≥ 1.10
 ```
+
+### `escalation` semantics
+
+Each `escalation:` item raises the finding's urgency when its condition
+holds (never lowers it). Two forms:
+
+- **Structured — `match:`** — evaluated by the engine on every finding
+  the rule produces. `ports: [22, 3389]` (network rules using
+  `firewall_open_port`) holds when an open inbound rule covers one of the
+  ports. Any other key is an attribute path of the finding's resource
+  (dotted, like `nested_path`) mapped to a regex; it holds when the value,
+  or any element of a list value, matches (after resolving `var.X` /
+  `local.X` to defaults). All keys must hold.
+- **Free text — `condition:` only** — read by the skill's judgement pass
+  (cost, environment, data sensitivity — things the engine can't know).
+  The engine ignores it.
+
+`condition:` may also accompany `match:` as a human-readable label. The
+target urgency is `new_urgency:` (or `urgency:`). An item with neither
+`match` nor `condition` is a catalogue error.
+
+Write lists in block style (`- 22` on its own line) and put `condition:`
+first in each item: the stdlib YAML loader keeps flow lists
+(`[22, 3389]`) as strings, and misreads a nested mapping that is the
+*first* key of a list item.
 
 ### `applies_when` semantics
 

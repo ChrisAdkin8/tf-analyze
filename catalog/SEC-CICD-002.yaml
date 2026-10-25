@@ -25,6 +25,7 @@ owasp:
   - "CICD-SEC-2"
 patterns:
   - kind: grep
+    text_scan: "non-HCL input - GitHub Actions workflow YAML"
     file_glob: ".github/workflows/*.yml"
     regex: 'permissions\s*:\s*write-all'
     scope: file

@@ -121,7 +121,9 @@ from _hcl import (
     parse_tf,
     normalise_attrs,
     resource_subtrees,
+    resource_values_at,
 )
+from _network import parse_literal as _net_parse_literal, resolve as _net_resolve
 
 
 # Catalogue lifecycle (YAML loader, schema validation, load_catalog,
@@ -541,6 +543,59 @@ def _register_infile(kind: str):
     return deco
 
 
+_URGENCY_ORDER = ("INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL")
+
+
+def _escalation_matches(match: dict, finding: dict, blk: dict | None,
+                        var_defaults: dict) -> bool:
+    """True when every condition in a structured ``escalation: match:``
+    holds for this finding. ``ports: [..]`` checks the open port ranges a
+    network handler attached (``_open_port_ranges``); any other key is an
+    attribute path whose value (or any list element, after resolving
+    ``var.X`` / ``local.X``) must match the regex given."""
+    for key, want in match.items():
+        if key == "ports":
+            ranges = [r for r in finding.get("_open_port_ranges") or [] if r]
+            if not any(lo <= int(p) <= hi for lo, hi in ranges for p in want):
+                return False
+            continue
+        if blk is None:
+            return False
+        regex = re.compile(str(want))
+        candidates: list = []
+        for raw in resource_values_at(blk, key):
+            v = _net_resolve(_net_parse_literal(raw), var_defaults)
+            candidates.extend(v if isinstance(v, list) else [v])
+        if not any(regex.search(str(v)) for v in candidates):
+            return False
+    return True
+
+
+def _apply_structured_escalation(found: list[dict], entry: dict,
+                                 resources: list[dict], var_defaults: dict) -> None:
+    """Raise a finding's urgency per the entry's structured escalations
+    (``- match: {...}  urgency: CRITICAL``). Free-text ``condition:``
+    escalations are judgement-pass metadata (SKILL.md) and are ignored
+    here. Urgency only ever goes up. Removes the handler-internal
+    ``_open_port_ranges`` key either way (tasks/hcl-parser-migration.md
+    §4.10)."""
+    rules = [x for x in entry.get("escalation") or []
+             if isinstance(x, dict) and isinstance(x.get("match"), dict)]
+    by_addr = {f"{b['groups'][0]}.{b['groups'][1]}": b for b in resources}
+    for f in found:
+        if rules:
+            current = f.get("urgency") or entry.get("default_urgency", "MEDIUM")
+            for x in rules:
+                if _escalation_matches(x["match"], f, by_addr.get(f.get("resource", "")),
+                                       var_defaults):
+                    target = str(x.get("urgency") or x.get("new_urgency") or current).upper()
+                    if _URGENCY_ORDER.index(target) > _URGENCY_ORDER.index(current):
+                        current = target
+            if current != entry.get("default_urgency", "MEDIUM") or "urgency" in f:
+                f["urgency"] = current
+        f.pop("_open_port_ranges", None)
+
+
 def detect_in_file(
     file_path: Path,
     text: str,
@@ -608,7 +663,9 @@ def detect_in_file(
                 eid=eid,
                 pat=pat,
             )
-            findings.extend(_handler(_ctx))
+            _found = _handler(_ctx)
+            _apply_structured_escalation(_found, entry, resources, _vd)
+            findings.extend(_found)
     return findings
 
 

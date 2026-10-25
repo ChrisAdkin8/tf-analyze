@@ -9,16 +9,24 @@ cis:
 status: active
 escalation:
   - condition: "port 22 or 3389"
+    # Evaluated by the engine: any world-open inbound rule covering 22 / 3389.
+    match:
+      ports:
+        - 22
+        - 3389
     urgency: CRITICAL
 patterns:
-  - kind: grep
-    file_glob: "**/*.tf"
-    regex: 'cidr_blocks\s*=\s*\["0\.0\.0\.0/0"\]'
-    description: security group ingress rule open to all IPv4
-  - kind: grep
-    file_glob: "**/*.tf"
-    regex: 'ipv6_cidr_blocks\s*=\s*\["::/0"\]'
-    description: security group ingress rule open to all IPv6
+  - kind: firewall_open_port
+    resource: aws_security_group
+    description: |
+      security group `ingress` block (or `ingress = [{...}]`) open to
+      0.0.0.0/0 or ::/0 — egress rules are not checked
+  - kind: firewall_open_port
+    resource: aws_security_group_rule
+    description: standalone `aws_security_group_rule` with `type = "ingress"` open to 0.0.0.0/0 or ::/0
+  - kind: firewall_open_port
+    resource: aws_vpc_security_group_ingress_rule
+    description: "`aws_vpc_security_group_ingress_rule` with `cidr_ipv4 = 0.0.0.0/0` or `cidr_ipv6 = ::/0`"
 recommendation: |
   Restrict `cidr_blocks` to the specific IP ranges that need access.
   For SSH/RDP, use a bastion host or AWS Systems Manager Session Manager

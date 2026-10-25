@@ -6,6 +6,7 @@ blast_radius: module
 status: active
 patterns:
   - kind: grep
+    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
     regex: 'source\s*=\s*"[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*"'
     description: Module block without a version = "..." argument
