@@ -27,6 +27,8 @@ import re
 import sys
 from pathlib import Path
 
+from _hcl import attrs_values_at, render_hcl
+
 
 # Pattern kinds whose evaluation only needs the resolved attribute
 # values (no HCL source position, no regex over raw text). Anything
@@ -83,6 +85,38 @@ def plan_value_at_path(values: dict, path: str):
     return cur
 
 
+def _plan_empty(value) -> bool:
+    """Plan / state JSON lists every unset attribute as ``null`` and every
+    unset nested block as ``[]``, so "present" means present and non-empty
+    — unlike static HCL, where an unset argument is simply absent."""
+    return value is None or value == [] or value == {}
+
+
+def plan_has_path(values: dict, path: str, *, every: bool = True) -> bool:
+    """Plan counterpart of `_hcl.attrs_has_path`: same walk (blocks are
+    lists of dicts, maps are dicts) and the same repeated-block rule —
+    every instance must have the rest of the path, or any one with
+    ``every=False`` — with `_plan_empty` values counting as absent."""
+    head, _, rest = path.partition(".")
+    if not isinstance(values, dict) or _plan_empty(values.get(head)):
+        return False
+    if not rest:
+        return True
+    value = values[head]
+    instances = value if isinstance(value, list) else [value]
+    instances = [i for i in instances if isinstance(i, dict)]
+    check = all if every else any
+    return bool(instances) and check(plan_has_path(i, rest, every=every) for i in instances)
+
+
+def plan_values_at(values: dict, path: str) -> list[str]:
+    """Every non-empty value at ``path`` across all instances, rendered as
+    HCL text with `_hcl.render_hcl` — so catalogue regexes see ``true``
+    (not Python's ``True``) and ``["a", "b"]`` (not ``['a', 'b']``), as
+    they do on the static path."""
+    return [render_hcl(v) for v in attrs_values_at(values, path) if not _plan_empty(v)]
+
+
 def evaluate_against_resources(
     resources: list[dict],
     entries: list[dict],
@@ -106,25 +140,34 @@ def evaluate_against_resources(
             if kind not in PLAN_SUPPORTED_KINDS:
                 continue
             if kind == "resource_arg":
+                # Same semantics as the static handler: value at
+                # nested_path or (possibly dotted) arg, any instance
+                # matching fires, fire_if_absent fires when any instance
+                # lacks it.
                 rt = pat.get("resource")
-                arg = pat.get("arg")
+                path = pat.get("nested_path") or pat.get("arg")
                 regex_str = pat.get("regex")
                 not_regex_str = pat.get("not_regex")
-                if not (rt and arg and (regex_str or not_regex_str)):
+                if not (rt and path and (regex_str or not_regex_str)):
                     continue
                 regex = re.compile(regex_str) if regex_str else None
                 not_regex = re.compile(not_regex_str) if not_regex_str else None
+                fire_if_absent = pat.get("fire_if_absent", False)
                 for r in resources:
                     if r.get("type") != rt:
                         continue
-                    val = (r.get("values") or {}).get(arg)
-                    if val is None:
+                    rvalues = r.get("values") or {}
+                    vals = plan_values_at(rvalues, path)
+                    if fire_if_absent and (not vals or not plan_has_path(rvalues, path)):
+                        hit = True
+                    elif not vals:
                         continue
-                    hit = False
-                    if regex and regex.search(str(val)):
-                        hit = True
-                    if not_regex and not not_regex.search(str(val)):
-                        hit = True
+                    else:
+                        hit = any(
+                            (regex and regex.search(v))
+                            or (not_regex and not not_regex.search(v))
+                            for v in vals
+                        )
                     if hit:
                         findings.append({
                             "id": eid,
@@ -135,15 +178,16 @@ def evaluate_against_resources(
                         })
             elif kind == "resource_missing_arg":
                 rt = pat.get("resource")
-                arg_path = pat.get("arg") or pat.get("nested_path")
+                # nested_path first, as on the static path.
+                arg_path = pat.get("nested_path") or pat.get("arg")
                 if not (rt and arg_path):
                     continue
                 suppress_if = pat.get("suppress_if")
+                every = pat.get("instances", "all") != "any"
                 for r in resources:
                     if r.get("type") != rt:
                         continue
-                    val = plan_value_at_path(r.get("values") or {}, arg_path)
-                    if val in (None, [], {}):
+                    if not plan_has_path(r.get("values") or {}, arg_path, every=every):
                         if suppress_if:
                             s_arg = suppress_if.get("arg", "")
                             s_val = suppress_if.get("equals")
@@ -190,13 +234,16 @@ def evaluate_against_resources(
                 not_equal = pat.get("not_equal")
                 if not (rt and path):
                     continue
+                if not_equal is None:
+                    continue
+                ne_norm = str(not_equal).strip().strip('"').strip("'").lower()
                 for r in resources:
                     if r.get("type") != rt:
                         continue
-                    val = plan_value_at_path(r.get("values") or {}, path)
-                    if val is None:
-                        continue
-                    if not_equal is not None and str(val).lower() != str(not_equal).lower():
+                    if any(
+                        v.strip().strip('"').strip("'").lower() != ne_norm
+                        for v in plan_values_at(r.get("values") or {}, path)
+                    ):
                         findings.append({
                             "id": eid,
                             "file": file_marker,

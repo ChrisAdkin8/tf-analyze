@@ -1,7 +1,7 @@
 # HCL parser migration — make python-hcl2 required and primary
 
-> **STATUS: IN PROGRESS (r2, 2026-10-25).** Steps 0–1 done (#36, #37); Step 2
-> in review. Revision 2 follows an
+> **STATUS: IN PROGRESS (r2, 2026-10-25).** Steps 0–1 done (#36, #37); Steps
+> 2–3 in review. Revision 2 follows an
 > independent review of r1; every factual claim in r2 was checked against the
 > code on 2026-10-25. Supersedes the "Scope B is a separate ~1–2 week
 > initiative" note in `tasks/policy-dsl-draft.md` §10 and builds on the
@@ -435,6 +435,14 @@ paths; corpus diffs reviewed.
 
 ## 9. Step 3 — values, the other main kinds, plan mode (est. ~2 weeks)
 
+> **As built:** `render_hcl`, `single_interpolation`, `attrs_values_at` /
+> `resource_values_at` (tree) and `block_values_at` (fallback);
+> `resource_arg` and `hcl_attr` moved onto them; `resource_body_contains`
+> masks comments and heredocs; plan / state mode shares the renderer, the
+> path walk and the instance rules. Two items moved to Step 4 — see §14
+> items 13–14 (typed `var_values`, and converting `resource_body_contains`
+> uses).
+
 | Kind | Uses | Change |
 |---|---:|---|
 | `resource_arg` | 86 | `render_hcl` values; `var_values` resolution; any-instance matching; `nested_path` support (§4.4.5) |
@@ -568,6 +576,36 @@ Added in Step 2:
     `resource_missing_arg` path that applies (2,180 checks): no
     disagreements, so no rule needs `fallback_limitations:` yet. The
     whole suite also passes with the fallback forced (new CI job).
+
+Added in Step 3:
+
+13. **Typed `var_values` moved to Step 4.** With values rendered back to
+    HCL text, the existing string `var_defaults` already resolves every
+    `resource_arg` / `hcl_attr` value the catalogue checks (the golden
+    and agreement tests pass). The first consumer that needs typed list
+    defaults is the `SEC-AWS-SG-001` rewrite (probe P2), so the typed map
+    is built there.
+14. **`resource_body_contains`: comments and heredocs masked, not
+    strings; conversions moved to Step 4.** Masking string contents (as
+    r2 said) would break the 43 of the 63 regexes that match quoted
+    values such as `"allow-all"`. Comments and heredoc bodies are the
+    false-positive source, so those are masked. Converting individual
+    uses to `resource_arg` / `nested_path` needs per-rule paths through
+    repeatable blocks — the same work as the Step 4 `grep` rewrites — so
+    it is done there.
+15. **Five `resource_arg` patterns had never fired.** They put a dotted
+    path in `arg` (`metadata_options.http_tokens`,
+    `versioning_configuration.status`, …), which the old line-based lookup
+    could never match: `ROB-AWS-S3-001`, `ROB-AZURE-STORAGE-001`,
+    `SEC-AWS-SSRF-001`, `STK-AZURE-FUNCTION-001`, `STK-GCP-FUNCTIONS-001`.
+    Dotted `arg` is now walked like `nested_path`. New true positive:
+    terragoat `aws_instance.imds_v1_explicit` (`http_tokens =
+    "optional"`) now gets `SEC-AWS-SSRF-001`.
+16. **Plan mode disagreed with static mode 52 times** on literal-only
+    fixture resources (Python `True`/`['a']` rendering, dotted paths,
+    `arg` preferred over `nested_path`, first-instance only) — in both
+    directions, e.g. `enable_deletion_protection = false` never fired
+    `ROB-AWS-ALB-001` in plan mode. Now 0 of 2,041.
 
 Open:
 

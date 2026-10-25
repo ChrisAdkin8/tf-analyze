@@ -5,6 +5,39 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 36 — Value checks on the parse tree; plan mode agrees with static — 2026-10-25
+
+Step 3 of `tasks/hcl-parser-migration.md`.
+
+- **`resource_arg` and `hcl_attr` read values from the parse tree**,
+  rendered back to the HCL text their regexes were written against
+  (`_hcl.render_hcl`: strings unquoted, references bare, `true`/`false`,
+  lists and maps in HCL syntax). A golden test checks the rendering
+  matches the old text lookup on every fixture. Values are top-level, a
+  dotted path may be given in `arg` or `nested_path`, and through a
+  repeated block the rule fires if any copy matches (`fire_if_absent`:
+  if any copy lacks it). The regex fallback follows the same rules.
+- **Five patterns that had never fired now work.** They used a dotted
+  `arg` the old lookup couldn't match: `ROB-AWS-S3-001` (versioning
+  `Suspended`/`Disabled`), `ROB-AZURE-STORAGE-001` (soft-delete days),
+  `SEC-AWS-SSRF-001` (`http_tokens = "optional"`),
+  `STK-AZURE-FUNCTION-001` (EOL Python), `STK-GCP-FUNCTIONS-001` (EOL
+  gen-2 runtime). New true positive in terragoat:
+  `aws_instance.imds_v1_explicit` → `SEC-AWS-SSRF-001`.
+- **Plan / state mode uses the same rules as static mode.** It used to
+  compare Python's `True` / `['a']`, ignore dotted paths and
+  `nested_path` on `resource_arg`, and look only at the first copy of a
+  repeated block — 52 disagreements with static mode on literal-only
+  fixture resources, both missed findings (e.g. `ROB-AWS-ALB-001` on
+  `enable_deletion_protection = false`) and false positives. Now none.
+- **`resource_body_contains` ignores comments and heredoc bodies**, so
+  commented-out code and inline scripts / policy documents can't match.
+- Corpus diff vs Round 35: no finding removed; the two additions above
+  (`SEC-AWS-SSRF-001` in terragoat, `ROB-AWS-S3-001` on the
+  `aws_s3_no_versioning` fixture's `Suspended` versioning resource).
+
+---
+
 ## Round 35 — Parse tree for presence checks; parse-failure reporting — 2026-10-25
 
 Step 2 of `tasks/hcl-parser-migration.md`.

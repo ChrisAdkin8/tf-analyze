@@ -30,6 +30,8 @@ from _hcl import (
     block_has_arg,
     block_has_nested_path,
     resource_has_path,
+    resource_values_at,
+    mask_comments_and_heredocs,
     brace_walk,
     strip_hcl_context,
 )
@@ -104,6 +106,13 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     ``suppress_if_body_contains`` and ``count = 0`` (resource definitely
     not created) escape hatches. Variable references in the value are
     resolved via the directory-scoped var_defaults.
+
+    The value is looked up at ``nested_path`` if set, else at ``arg``;
+    either may be dotted (``metadata_options.http_tokens``). Lookups are
+    top-level, like ``resource_missing_arg``. Through a repeated block
+    the rule fires if **any** instance's value matches, and
+    ``fire_if_absent`` fires if any instance lacks it
+    (tasks/hcl-parser-migration.md §4.4).
     """
     pat = c.pat
     has_regex = "regex" in pat
@@ -114,7 +123,7 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     if not has_regex and not has_not_regex:
         return []
     rt = pat["resource"]
-    arg = pat["arg"]
+    path = pat.get("nested_path") or pat["arg"]
     regex = re.compile(pat["regex"]) if has_regex else None
     not_regex = re.compile(pat["not_regex"]) if has_not_regex else None
     suppress_body_contains = pat.get("suppress_if_body_contains")
@@ -127,19 +136,19 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
             continue
         if suppress_body_contains and suppress_body_contains in blk["body"]:
             continue
-        val = block_arg_value(blk["body"], arg)
-        if val is None:
-            if fire_if_absent:
-                hit = True
-            else:
-                continue
+        values = resource_values_at(blk, path)
+        if fire_if_absent and (not values or not resource_has_path(blk, path)):
+            hit = True
+        elif not values:
+            continue
         else:
-            val = _resolve_var_ref(val, c.var_defaults)
             hit = False
-            if regex and regex.search(val):
-                hit = True
-            if not_regex and not not_regex.search(val):
-                hit = True
+            for val in values:
+                val = _resolve_var_ref(val, c.var_defaults)
+                if regex and regex.search(val):
+                    hit = True
+                if not_regex and not not_regex.search(val):
+                    hit = True
         if hit:
             out.append({
                 "id": c.eid,
@@ -223,6 +232,10 @@ def _detect_resource_body_contains(c: InFileCtx) -> list[dict]:
     type whose body matches a regex. Unlike ``grep``, this scopes to a
     specific resource type and respects block boundaries — the regex
     doesn't need to limit itself to ``[^}]``.
+
+    Comments and heredoc bodies are blanked before matching, so
+    commented-out code and heredoc text (user-data scripts, inline policy
+    documents) can't match; ordinary quoted values still can.
     """
     pat = c.pat
     if "resource" not in pat or "regex" not in pat:
@@ -234,7 +247,7 @@ def _detect_resource_body_contains(c: InFileCtx) -> list[dict]:
         btype, bname = blk["groups"]
         if btype != rt:
             continue
-        if regex.search(blk["body"]):
+        if regex.search(mask_comments_and_heredocs(blk["body"])):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
@@ -251,9 +264,10 @@ def _detect_hcl_attr(c: InFileCtx) -> list[dict]:
 
     Used for rules like "the
     ``server_side_encryption_configuration.rule.apply_server_side_encryption_by_default.sse_algorithm``
-    must be ``aws:kms``". Honours ``suppress_if_body_contains``. Uses
-    the shared ``brace_walk`` (R30.13) to descend through nested
-    blocks.
+    must be ``aws:kms``". Honours ``suppress_if_body_contains``. The
+    path is walked top-level like ``nested_path`` (parse tree, or the
+    regex fallback with the same rules); through a repeated block the
+    rule fires if any instance's value differs.
     """
     pat = c.pat
     if "resource" not in pat or "path" not in pat:
@@ -269,28 +283,12 @@ def _detect_hcl_attr(c: InFileCtx) -> list[dict]:
             continue
         if suppress_body_contains and suppress_body_contains in blk["body"]:
             continue
-        parts = path.split(".")
-        parent_body = blk["body"]
-        for p in parts[:-1]:
-            m = re.search(rf'(?m)^\s*{re.escape(p)}\s*\{{', parent_body)
-            if not m:
-                parent_body = None
-                break
-            end_after = brace_walk(parent_body, m.end() - 1)
-            if end_after is None:
-                parent_body = None
-                break
-            end = end_after - 1
-            parent_body = parent_body[m.end():end]
-        if parent_body is None:
+        if not_equal is None:
             continue
-        val = block_arg_value(parent_body, parts[-1])
-        if val is None:
-            continue
-        val = _resolve_var_ref(val, c.var_defaults)
-        if not_equal is not None:
+        ne_norm = str(not_equal).strip().strip('"').strip("'").lower()
+        for val in resource_values_at(blk, path):
+            val = _resolve_var_ref(val, c.var_defaults)
             v_norm = str(val).strip().strip('"').strip("'").lower()
-            ne_norm = str(not_equal).strip().strip('"').strip("'").lower()
             if v_norm != ne_norm:
                 out.append({
                     "id": c.eid,
@@ -298,6 +296,7 @@ def _detect_hcl_attr(c: InFileCtx) -> list[dict]:
                     "line": blk["start_line"],
                     "resource": f"{btype}.{bname}",
                 })
+                break
     return out
 
 
