@@ -140,3 +140,27 @@ jobs:
       # snapshot is the deliberate "I added rules" gate.
       - name: Compare against snapshot
         run: python3 scripts/check_terragoat_snapshot.py
+
+  docker-images:
+    # docker.yml only builds the root image, and only on push to main /
+    # tags, so nothing gated a PR that broke an image: the root image went
+    # 20+ builds broken (R31.7) and the MCP-server / Run Task images
+    # shipped a detect.py-only COPY that couldn't import the engine. Each
+    # Dockerfile runs its own build-time smoke test, so a plain build is
+    # the check.
+    name: docker build (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: root
+            dockerfile: Dockerfile
+          - image: mcp-server
+            dockerfile: integrations/mcp-server/Dockerfile
+          - image: run-task
+            dockerfile: integrations/run-task/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image (runs the in-build smoke test)
+        run: docker build --file ${{ matrix.dockerfile }} --tag tf-analyze-${{ matrix.image }}:ci .

@@ -52,7 +52,13 @@ except ImportError:  # pragma: no cover
 LOG = logging.getLogger("tf-analyze.runtask")
 logging.basicConfig(level=os.environ.get("TFA_LOG_LEVEL", "INFO"))
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# TFA_REPO_ROOT lets the container point at its bundled engine
+# (/tf-analyze); the default is the source-checkout layout. `.parent` chains
+# rather than `.parents[2]`, which raises IndexError for /app/server.py.
+REPO_ROOT = Path(os.environ.get(
+    "TFA_REPO_ROOT",
+    str(Path(__file__).resolve().parent.parent.parent),
+))
 DETECT_PY = REPO_ROOT / "scripts" / "detect.py"
 HMAC_KEY = os.environ.get("TFA_RUN_TASK_HMAC_KEY", "").encode()
 FAIL_ON = os.environ.get("TFA_RUN_TASK_FAIL_ON", "HIGH")

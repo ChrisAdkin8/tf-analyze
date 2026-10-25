@@ -10,22 +10,35 @@ a row without anyone noticing — no required-check gates the workflow.
 These tests assert the COPY surface keeps including every sibling
 module, so the same regression can't sneak back in even if the
 docker workflow stays unmonitored.
+
+The MCP-server and Run Task images bundle the engine the same way and
+had the same detect.py-only COPY until 2026-10-25, so every gate runs
+against all three Dockerfiles.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parent.parent
-DOCKERFILE = REPO_ROOT / "Dockerfile"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 
+DOCKERFILES = [
+    REPO_ROOT / "Dockerfile",
+    REPO_ROOT / "integrations" / "mcp-server" / "Dockerfile",
+    REPO_ROOT / "integrations" / "run-task" / "Dockerfile",
+]
+_IDS = [str(p.relative_to(REPO_ROOT)) for p in DOCKERFILES]
 
-def test_dockerfile_copies_scripts_glob() -> None:
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=_IDS)
+def test_dockerfile_copies_scripts_glob(dockerfile: Path) -> None:
     """The COPY must use a glob (or list every sibling) so adding a
     new ``scripts/_foo.py`` import doesn't silently break the build
     weeks later when the import is exercised at runtime."""
-    text = DOCKERFILE.read_text()
+    text = dockerfile.read_text()
     # The straight-forward fix is `COPY scripts/*.py ./` — accept that
     # OR an explicit list that names every existing sibling module.
     if "COPY scripts/*.py" in text:
@@ -39,10 +52,11 @@ def test_dockerfile_copies_scripts_glob() -> None:
     )
 
 
-def test_dockerfile_does_not_narrow_to_detect_only() -> None:
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=_IDS)
+def test_dockerfile_does_not_narrow_to_detect_only(dockerfile: Path) -> None:
     """The pre-R31.7 form. If this comes back, the build will start
     failing again as soon as ``detect.py`` imports a new sibling."""
-    text = DOCKERFILE.read_text()
+    text = dockerfile.read_text()
     # Tolerate the line appearing inside a comment block (the fix
     # quotes the old form as part of the rationale).
     non_comment_lines = [
@@ -57,13 +71,14 @@ def test_dockerfile_does_not_narrow_to_detect_only() -> None:
     )
 
 
-def test_smoke_test_step_still_present() -> None:
-    """The build-time smoke test (``RUN python3 detect.py --list-rules``)
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=_IDS)
+def test_smoke_test_step_still_present(dockerfile: Path) -> None:
+    """The build-time smoke test (``RUN python3 [path/]detect.py --list-rules``)
     is what surfaced the missing-modules bug. Without it, a broken
     image could publish and we'd only find out via user reports. Keep
     the gate."""
-    text = DOCKERFILE.read_text()
-    assert re.search(r"RUN python3 detect\.py --list-rules", text), (
+    text = dockerfile.read_text()
+    assert re.search(r"RUN python3 \S*detect\.py --list-rules", text), (
         "Dockerfile must keep the in-build smoke test — it's the only "
         "gate that catches missing sibling modules before publish"
     )

@@ -112,3 +112,21 @@ def test_validate_outbound_url_rejects_allowlisted_host_resolving_private(monkey
     )
     with pytest.raises(HTTPException):
         m._validate_outbound_url("https://app.terraform.io/x", "plan")
+
+
+# ---- engine location --------------------------------------------------------
+
+def test_repo_root_honours_env_override(tmp_path):
+    """The container puts server.py at /app and the engine at /tf-analyze,
+    so the engine path must come from TFA_REPO_ROOT, not from server.py's
+    own location (which raised IndexError at import for /app/server.py)."""
+    m = _load(TFA_REPO_ROOT=str(tmp_path))
+    try:
+        assert m.DETECT_PY == tmp_path / "scripts" / "detect.py"
+    finally:
+        _load(TFA_REPO_ROOT=None)
+
+
+def test_repo_root_defaults_to_source_checkout():
+    m = _load(TFA_REPO_ROOT=None)
+    assert m.DETECT_PY == Path(__file__).resolve().parent.parent / "scripts" / "detect.py"
