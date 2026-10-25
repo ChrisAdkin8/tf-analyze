@@ -5,6 +5,39 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 35 — Parse tree for presence checks; parse-failure reporting — 2026-10-25
+
+Step 2 of `tasks/hcl-parser-migration.md`.
+
+- **`resource_missing_arg` reads the parse tree.** Each `.tf` file is
+  parsed once (memoised) and every resource gets its parsed settings.
+  `arg` is now top-level only: a same-named key in a nested block, a map
+  such as `tags`, a string, a heredoc or a comment no longer satisfies
+  it. Fixes e.g. a log group passing `COST-AWS-RISK-001` /
+  `OPS-AWS-CWL-001` because it had a `retention_in_days` *tag*.
+- **`nested_path` walks map attributes** (`tags.cost_center` now matches
+  `tags = { cost_center = ... }` — the `docs/custom-rules.md` example
+  previously fired on every resource) and list-of-objects attributes.
+  When a segment is a repeated block, every copy must have the rest of
+  the path; new pattern key `instances: any` opts out
+  (`SEC-AWS-WAF-002` uses it).
+- `STK-K8S-INGRESS-001` (`spec.tls`) and `STK-GCP-CLOUDSQL-IAMAUTH-001`
+  (`settings.database_flags`) now use `nested_path`; they relied on the
+  old any-depth matching.
+- **Files the parser can't read are still scanned** by a regex fallback
+  that follows the same rules, and are reported as a tool diagnostic
+  (not a finding, no score impact): stderr `WARN`, JSON
+  `summary.parse_fallback_files`, a SARIF tool-execution notification,
+  a one-line notice in text / HTML / pr-summary, and an Information
+  diagnostic in the LSP. Kept across `--cache` hits.
+- The resource index is built once per scan instead of twice.
+- New CI job runs the whole suite with the regex fallback forced
+  (`TF_ANALYZE_TEST_FORCE_FALLBACK=1`).
+- Corpus diff vs Round 34: no finding removed on `examples/` or
+  `fixtures/`; additions only on the new fixtures and probe P5.
+
+---
+
 ## Round 34 — Vendored HCL parser, always on — 2026-10-25
 
 Step 1 of `tasks/hcl-parser-migration.md`. The engine now ships its own

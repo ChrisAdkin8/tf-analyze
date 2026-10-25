@@ -35,7 +35,7 @@ owasp:
 patterns:
   - kind: resource_missing_arg
     resource: kubernetes_ingress_v1
-    arg: tls
+    nested_path: spec.tls
     description: |
       `kubernetes_ingress_v1` has no `tls` block. Every host this
       Ingress routes is reachable over plaintext HTTP — auth tokens
@@ -47,7 +47,7 @@ patterns:
       upstream but wasn't.
   - kind: resource_missing_arg
     resource: kubernetes_ingress
-    arg: tls
+    nested_path: spec.tls
     description: |
       `kubernetes_ingress` is the legacy v1beta1 alias. Same anti-pattern,
       same fix.

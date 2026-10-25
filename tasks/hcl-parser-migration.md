@@ -1,7 +1,7 @@
 # HCL parser migration — make python-hcl2 required and primary
 
-> **STATUS: IN PROGRESS (r2, 2026-10-25).** Step 0 done (#36); Step 1 in
-> review. Revision 2 follows an
+> **STATUS: IN PROGRESS (r2, 2026-10-25).** Steps 0–1 done (#36, #37); Step 2
+> in review. Revision 2 follows an
 > independent review of r1; every factual claim in r2 was checked against the
 > code on 2026-10-25. Supersedes the "Scope B is a separate ~1–2 week
 > initiative" note in `tasks/policy-dsl-draft.md` §10 and builds on the
@@ -151,6 +151,20 @@ longer than a whole scan of `examples/terragoat` (~0.3s). So:
 
 ### 4.3 One parse pass (`FileModel`)
 
+> **As built in Step 2:** instead of a `FileModel` map threaded through
+> every consumer, `_hcl.parse_tf(text)` is memoised on the file text
+> (LRU, 1,024 entries). The effect is the same — each distinct `.tf` text
+> is parsed once per process and every caller shares the tree — with no
+> signature changes, and long-lived callers (LSP, trend, fleet) re-parse
+> only text that actually changed, which replaces the mtime cache below.
+> Consumers that still scan text (var defaults, provider constraints,
+> module sources, …) don't parse, so the one-parse property holds; they
+> move onto the tree in Steps 3–5. The joining rules below (`(type,
+> name)`, ambiguous → `attrs = None`), BOM stripping, `.tf`-only parsing
+> and the LSP Information diagnostic are implemented as written.
+> `_build_resource_index` is memoised on the last corpus, so it is built
+> once per scan.
+
 Built once, in `main`'s pass-1 read loop (`detect.py` ~2997–3005, where
 `all_text` is filled), for `*.tf` files only:
 
@@ -288,10 +302,13 @@ files can produce one (§4.3).
 
 - stderr: one `WARN: <file>: parse failed, scanned in fallback mode: <reason>`
   line per file.
-- JSON: `summary.parse_fallback_files: [{"file": ..., "reason": ...}]`.
+- JSON: `summary.parse_fallback_files: [{"file": ..., "reason": ...}]`,
+  present only when non-empty (so output is unchanged for corpora that
+  parse cleanly).
 - SARIF: SARIF output has no `invocations` today. Add one
   `runs[].invocations[0]` with `executionSuccessful: true` and one
-  `toolExecutionNotifications` entry (level `warning`) per file.
+  `toolExecutionNotifications` entry (level `warning`) per file — again
+  only when there is at least one.
 - text / HTML / PR summary: one line, `N file(s) scanned in fallback mode`,
   only when N > 0.
 - LSP: see §4.3.
@@ -484,7 +501,7 @@ already handles port ranges) rather than adding a new kind. For AWS cover:
 ## 12. Progress
 
 - [x] §6 Step 0 — MCP / Run Task images (#36)
-- [ ] §7 Step 1 — vendored parser
+- [x] §7 Step 1 — vendored parser (#37)
 - [ ] §8 Step 2 — one parse pass, fallback, `block_has_arg`
 - [ ] §9 Step 3 — values, main kinds, plan mode
 - [ ] §10 Step 4 — `grep` rewrites, `escalation:`
@@ -531,6 +548,26 @@ Added in Step 1:
 8. **Cold-start budget** — no ratio limit on a cold start; warm-start
    limit stays 1.2× (§5.5). Committing the grammar cache to git was
    rejected: it is a pickle, which can't be reviewed.
+
+Added in Step 2:
+
+9. **Parse once by memo, not by map** — see the note in §4.3.
+10. **`instances: any` is needed by exactly one rule today.** Of the 64
+    `nested_path` uses, only `SEC-AWS-WAF-002`
+    (`rule.statement.rate_based_statement` on `aws_wafv2_web_acl`) passes
+    through a block that repeats; one rate-based rule is enough, so it
+    sets `instances: any`, pinned by a new `SEC-AWS-WAF-002_clean`
+    fixture. Every other path goes through blocks that occur once.
+11. **Map attributes are walked when the path names them** (§4.4 rule
+    2), on the tree and in the regex fallback. The old regex helper only
+    walked blocks, so `nested_path: tags.cost_center` — the worked example
+    in `docs/custom-rules.md` — fired on every resource even with the tag
+    set. No built-in rule uses a `tags.*` path.
+12. **Tree and fallback agree.** A differential test checks both on every
+    resource in `fixtures/` and `examples/` for every
+    `resource_missing_arg` path that applies (2,180 checks): no
+    disagreements, so no rule needs `fallback_limitations:` yet. The
+    whole suite also passes with the fallback forced (new CI job).
 
 Open:
 

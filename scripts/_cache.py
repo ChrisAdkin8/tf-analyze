@@ -105,8 +105,16 @@ def load_scan_cache(cache_path: Path) -> dict | None:
         return None
 
 
-def save_scan_cache(cache_path: Path, corpus_hash_value: str, findings: list) -> None:
-    """Persist findings to the cache file. Failure is silent — non-fatal."""
+def save_scan_cache(
+    cache_path: Path,
+    corpus_hash_value: str,
+    findings: list,
+    *,
+    parse_fallback_files: list | None = None,
+) -> None:
+    """Persist findings (and the files scanned in parse-fallback mode, so a
+    cache hit still reports them) to the cache file. Failure is silent —
+    non-fatal."""
     try:
         with open(cache_path, "w") as f:
             json.dump(
@@ -114,6 +122,7 @@ def save_scan_cache(cache_path: Path, corpus_hash_value: str, findings: list) ->
                     "version": CACHE_FORMAT_VERSION,
                     "corpus_hash": corpus_hash_value,
                     "findings": findings,
+                    "parse_fallback_files": parse_fallback_files or [],
                 },
                 f,
             )

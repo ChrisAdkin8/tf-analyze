@@ -19,7 +19,7 @@ nist_800_53:
 patterns:
   - kind: resource_missing_arg
     resource: google_sql_database_instance
-    arg: database_flags
+    nested_path: settings.database_flags
     description: |
       `google_sql_database_instance` has no `database_flags` block, so
       no `cloudsql.iam_authentication = on` flag is set. The instance

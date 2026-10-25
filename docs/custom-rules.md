@@ -134,6 +134,26 @@ The most useful kinds for custom rules:
 | `high_entropy_string` | A string literal whose Shannon entropy marks it a probable hardcoded secret (any arg name) — complements the name-based secret greps |
 | `policy`              | Cross-resource / conditional / aggregate predicate — see the [policy DSL guide](policy-dsl.md) |
 
+### How `arg` and `nested_path` match (`resource_missing_arg`)
+
+- **`arg` is top-level.** `arg: retention_in_days` is satisfied only by
+  the resource's own `retention_in_days = ...` (or `retention_in_days {`
+  block). The same name inside a nested block, as a key of a map such as
+  `tags`, or inside a string, heredoc or comment does **not** count.
+- **`nested_path` walks into blocks and maps.** Each segment after the
+  first can be a nested block (`settings { ... }`), a map attribute
+  (`tags = { ... }`), or a list of objects (`ingress = [{ ... }]`). So
+  `tags.cost_center` is satisfied by `tags = { cost_center = "..." }`.
+- **Repeated blocks need every copy.** If a segment is a block that
+  appears more than once, *every* copy must have the rest of the path.
+  Set `instances: any` on the pattern when one copy is enough — e.g.
+  `SEC-AWS-WAF-002` (`rule.statement.rate_based_statement` with
+  `instances: any`: one rate-based rule among a web ACL's rules is fine).
+- `dynamic "X" { content { ... } }` counts as an `X` block.
+
+These rules are evaluated on the parsed HCL tree, or — for a file the
+parser can't read — by a text fallback that follows the same rules.
+
 Pattern kinds support these suppression mechanisms:
 
 - `suppress_if: { arg: <name>, equals: <value> }` — resource_arg / resource_missing_arg

@@ -41,7 +41,7 @@ keywords: "stack, high, terraform, iac, cis-5.3.2, mitre-T1040, mitre-T1557, cwe
 
 ## What this checks
 
-1. **`resource_missing_arg`** on `kubernetes_ingress_v1` (`tls`) — _the resource is missing a required attribute (or nested attribute path)._
+1. **`resource_missing_arg`** on `kubernetes_ingress_v1` (`spec.tls`) — _the resource is missing a required attribute (or nested attribute path)._
   `kubernetes_ingress_v1` has no `tls` block. Every host this
 Ingress routes is reachable over plaintext HTTP — auth tokens
 in headers, form bodies, and URL parameters are exposed to
@@ -50,7 +50,7 @@ anyone on the network path. The 2018 British Airways breach
 "safe" without TLS; the 2017 Equifax customer-portal breach
 exposed traffic that the ops team believed was TLS-terminated
 upstream but wasn't.
-2. **`resource_missing_arg`** on `kubernetes_ingress` (`tls`) — _the resource is missing a required attribute (or nested attribute path)._
+2. **`resource_missing_arg`** on `kubernetes_ingress` (`spec.tls`) — _the resource is missing a required attribute (or nested attribute path)._
   `kubernetes_ingress` is the legacy v1beta1 alias. Same anti-pattern,
 same fix.
 

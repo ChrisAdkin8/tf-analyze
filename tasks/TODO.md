@@ -324,8 +324,11 @@ All three original P0s are **fixed and verified this session** — see DONE abov
   single-pass tokenizer (length-preserving) reusing the `brace_walk` state machine.
 - [ ] `[~]` **No findings de-duplication** between `findings.extend(...)` and output — full-file
   grep scope can emit duplicates. Add a `(id, file, line, resource)` dedupe step.
-- [ ] `[~]` **`block_has_arg`/`block_has_nested_path` match nested args as top-level** (`_hcl.py:376`)
+- [x] **`block_has_arg`/`block_has_nested_path` match nested args as top-level** (`_hcl.py:376`)
   — `resource_missing_arg` can be falsely satisfied by a nested same-named arg. Restrict to depth-0.
+  *Done in parser-migration Step 2 (`tasks/hcl-parser-migration.md` §8): top-level only on the
+  parse tree and in the regex fallback; the two rules that relied on any-depth matching now use
+  `nested_path`.*
 - [ ] `[~]` **PR-review diff parser miscounts after `\ No newline at end of file`** (`detect.py:1485`)
   → comment posted on wrong line. Skip lines starting with `\`.
 - [ ] `[~]` **Mutable-in-place enrichers** (`_output.py`, `_threat_intel.py`, `_baseline.py`) make

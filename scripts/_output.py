@@ -65,7 +65,7 @@ SARIF:
   * ``_sarif_fingerprint(finding)``
   * ``_sarif_taxonomies(entries)``
   * ``_sarif_rule_relationships(entry)``
-  * ``to_sarif(findings, entries)``
+  * ``to_sarif(findings, entries, parse_fallback_files=None)``
 
 Per-finding helpers:
   * ``_effective_urgency(finding, entry)``
@@ -408,8 +408,33 @@ def _sarif_rule_relationships(entry: dict) -> list[dict]:
     return rels
 
 
-def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
-    """Convert findings to SARIF v2.1.0 format with proper taxonomies."""
+def parse_fallback_notice(summary: dict | None) -> str:
+    """One-line notice for files python-hcl2 could not parse (scanned with
+    the regex fallback instead), or "" when there were none. Shared by the
+    text, HTML and pr-summary renderers (tasks/hcl-parser-migration.md §4.8).
+    """
+    files = (summary or {}).get("parse_fallback_files") or []
+    if not files:
+        return ""
+    names = [Path(f["file"]).name for f in files[:5]]
+    more = f" (+{len(files) - 5} more)" if len(files) > 5 else ""
+    return (
+        f"{len(files)} file(s) scanned in fallback mode "
+        f"(HCL parser could not read them): {', '.join(names)}{more}"
+    )
+
+
+def to_sarif(
+    findings: list[dict],
+    entries: list[dict],
+    parse_fallback_files: list[dict] | None = None,
+) -> dict:
+    """Convert findings to SARIF v2.1.0 format with proper taxonomies.
+
+    Files the HCL parser could not read are tool diagnostics, not results:
+    each becomes a ``toolExecutionNotifications`` entry on the run's
+    invocation, so it never shows up as a code-scanning alert.
+    """
     rules = []
     rule_index = {}
     level_map = {
@@ -544,6 +569,25 @@ def to_sarif(findings: list[dict], entries: list[dict]) -> dict:
             {"name": t["name"], "guid": t["guid"]} for t in taxonomies
         ]
         run["taxonomies"] = taxonomies
+    if parse_fallback_files:
+        run["invocations"] = [{
+            "executionSuccessful": True,
+            "toolExecutionNotifications": [
+                {
+                    "level": "warning",
+                    "message": {
+                        "text": "HCL parser could not read this file; scanned "
+                                f"in fallback mode: {pf.get('reason', '')}",
+                    },
+                    "locations": [{
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": str(pf["file"])},
+                        },
+                    }],
+                }
+                for pf in parse_fallback_files
+            ],
+        }]
 
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
@@ -1387,6 +1431,9 @@ def _render_pr_summary_impl(
         for tier in ("CRITICAL", "HIGH", "MEDIUM", "LOW")
     )
     parts.append(f"{counts_line} · {len(findings)} total")
+    _fallback = parse_fallback_notice(summary)
+    if _fallback:
+        parts.append(f"⚠️ {_fallback}")
     parts.append("")
 
     if not findings:
@@ -1903,6 +1950,13 @@ def to_html(
             f"</div>"
             f"</div>"
         )
+        _fallback = parse_fallback_notice(summary)
+        if _fallback:
+            summary_banner += (
+                f"<div style='background:#fff3cd;border-left:6px solid #b07d00;"
+                f"padding:.4em 1em;margin-bottom:1em;font-size:13px'>"
+                f"&#9888; {_h(_fallback)}</div>"
+            )
 
     tab_bar = ""
     tab_js = ""

@@ -84,8 +84,22 @@ _RESOURCE_START = re.compile(
 #   2. Register it in _GRAPH_CHECKS.
 #   3. Reference it from a catalogue YAML via `kind: graph_check, function: <name>`.
 
+# Last (corpus, index) pair. main() needs the index for the corpus checks
+# and again for --attack-graph on the same text; build it once
+# (tasks/hcl-parser-migration.md §4.3). Consumers treat it as read-only.
+_INDEX_CACHE: tuple[tuple, dict] | None = None
+
+
 def _build_resource_index(all_files_text: dict) -> dict:
-    """Index every resource block by `<type>.<name>` → {file, line, body}."""
+    """Index every resource block by `<type>.<name>` → {file, line, body}.
+
+    Memoised on the last corpus seen (by file path and text), so repeated
+    calls for the same scan return the same, read-only dict.
+    """
+    global _INDEX_CACHE
+    key = tuple((str(fp), text) for fp, text in all_files_text.items())
+    if _INDEX_CACHE is not None and _INDEX_CACHE[0] == key:
+        return _INDEX_CACHE[1]
     idx: dict[str, dict] = {}
     for fp, text in all_files_text.items():
         for blk in find_blocks(text, _RESOURCE_START):
@@ -97,6 +111,7 @@ def _build_resource_index(all_files_text: dict) -> dict:
                 "type": btype,
                 "name": bname,
             }
+    _INDEX_CACHE = (key, idx)
     return idx
 
 
