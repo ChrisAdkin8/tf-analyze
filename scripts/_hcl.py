@@ -303,6 +303,156 @@ def attrs_has_path(attrs: dict, path: str, *, every: bool = True) -> bool:
     return bool(instances) and check(attrs_has_path(i, rest, every=every) for i in instances)
 
 
+# ---- Rendering tree values (Step 3) -------------------------------------
+#
+# Catalogue regexes were written against HCL source text as
+# `block_arg_value` returns it: strings unquoted, expressions bare,
+# collections in HCL syntax with quoted strings, bools lower-case. Tree
+# values are rendered back to that text so the same regexes keep matching
+# (tasks/hcl-parser-migration.md §4.6).
+
+_HCL_IDENT_RE = re.compile(r'^[A-Za-z_][\w-]*$')
+
+
+def single_interpolation(value: str) -> str | None:
+    """If ``value`` is exactly one ``${ ... }`` covering the whole string,
+    return the expression inside it, else None.
+
+    ``"${var.a}-${var.b}"`` (two interpolations), ``"pre-${var.x}"``
+    (literal text) and ``"$${x}"`` (an escaped, literal ``${``) are not
+    single interpolations. Braces and quotes inside the expression are
+    tracked, so ``${{for k, v in m : k => v}}`` is one interpolation.
+    """
+    if not (value.startswith("${") and value.endswith("}")):
+        return None
+    depth = 1
+    i = 2
+    n = len(value)
+    while i < n:
+        ch = value[i]
+        if ch == '"':
+            i = _string_end(value, i)
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return value[2:i] if i == n - 1 else None
+        i += 1
+    return None
+
+
+def _render_scalar_in_collection(value) -> str:
+    if isinstance(value, str):
+        expr = single_interpolation(value)
+        if expr is not None:
+            return expr
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return render_hcl(value)
+
+
+def render_hcl(value) -> str:
+    """Render a python-hcl2 value as the HCL text `block_arg_value` would
+    return for it: a top-level string is unquoted (and a single
+    interpolation is unwrapped to its expression, ``"${var.x}"`` ->
+    ``var.x``); ``true``/``false``/``null``; numbers as written; lists and
+    objects in HCL syntax with double-quoted strings, e.g.
+    ``["0.0.0.0/0", var.z]`` and ``{Name = "n", "k-2" = 3}``."""
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        expr = single_interpolation(value)
+        return expr if expr is not None else value
+    if isinstance(value, list):
+        return "[" + ", ".join(_render_scalar_in_collection(v) for v in value) + "]"
+    if isinstance(value, dict):
+        items = []
+        for k, v in value.items():
+            if k.startswith("__") and k.endswith("__"):
+                continue  # __start_line__ / __end_line__ metadata
+            key = k if _HCL_IDENT_RE.match(k) else '"' + k.replace('"', '\\"') + '"'
+            items.append(f"{key} = {_render_scalar_in_collection(v)}")
+        return "{" + ", ".join(items) + "}"
+    return str(value)
+
+
+def attrs_values_at(attrs: dict, path: str) -> list:
+    """Every value at ``path`` (dotted, walked like `attrs_has_path`),
+    across all instances of repeated blocks, in source order. Empty when
+    the path is absent anywhere. A one-segment path is a top-level key."""
+    head, _, rest = path.partition(".")
+    if not isinstance(attrs, dict) or head not in attrs:
+        return []
+    value = attrs[head]
+    if not rest:
+        return [value]
+    instances = value if isinstance(value, list) else [value]
+    out: list = []
+    for inst in instances:
+        if isinstance(inst, dict):
+            out.extend(attrs_values_at(inst, rest))
+    return out
+
+def _is_block_list(value) -> bool:
+    """A nested block in the tree: a list of dicts carrying line metadata."""
+    return (
+        isinstance(value, list) and bool(value)
+        and all(isinstance(v, dict) and "__start_line__" in v for v in value)
+    )
+
+
+def _top_level_arg_value(body: str, arg: str) -> str | None:
+    """`block_arg_value` restricted to a top-level ``arg = ...`` (not one
+    inside a nested block, string, heredoc or comment)."""
+    m = re.search(
+        rf'(?m)^[ \t]*{re.escape(arg)}[ \t]*=', _mask_to_top_level(body),
+    )
+    if not m:
+        return None
+    line_start = body.rfind("\n", 0, m.start()) + 1
+    return block_arg_value(body[line_start:], arg)
+
+
+def block_values_at(body: str, path: str) -> list[str]:
+    """Regex fallback for `resource_values_at`: every value at ``path``,
+    walked like `block_has_nested_path` (top-level lookups; blocks and
+    object attributes; all instances of a repeated segment)."""
+    head, _, rest = path.partition(".")
+    if not rest:
+        v = _top_level_arg_value(body, head)
+        return [] if v is None else [v]
+    masked = _mask_to_top_level(body)
+    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
+    out: list[str] = []
+    for m in opener.finditer(masked):
+        open_pos = m.end() - 1
+        close_pos = masked.find("}", open_pos + 1)
+        if close_pos >= 0:
+            out.extend(block_values_at(body[open_pos + 1:close_pos], rest))
+    return out
+
+
+def resource_values_at(blk: dict, path: str) -> list[str]:
+    """Every value at ``path`` in a resource block, as HCL text (strings
+    unquoted, expressions bare — what `block_arg_value` returns), across
+    all instances of repeated blocks. A path that ends at a nested block
+    (not a value) yields nothing. Uses the parse tree when attached, else
+    the regex fallback with the same rules."""
+    attrs = blk.get("attrs")
+    if attrs is None:
+        return block_values_at(blk["body"], path)
+    return [
+        render_hcl(v) for v in attrs_values_at(attrs, path)
+        if not _is_block_list(v)
+    ]
+
 def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
     """Presence check for a resource block found by `find_blocks`: uses
     the parse tree when `detect_in_file` attached one (``blk["attrs"]``),
@@ -687,6 +837,51 @@ def _mask_to_top_level(body: str) -> str:
             i += 1
     return "".join(out)
 
+
+@functools.lru_cache(maxsize=4096)
+def mask_comments_and_heredocs(body: str) -> str:
+    """Return ``body`` with comments and heredoc bodies blanked to spaces
+    (newlines kept, so offsets and line numbers line up). Ordinary string
+    literals are kept — regexes over a body commonly match quoted values
+    like ``"allow-all"`` — but they are stepped over, so a ``#`` inside a
+    string is not taken for a comment. Used by ``resource_body_contains``
+    so commented-out code and heredoc text (scripts, policy documents)
+    don't match (tasks/hcl-parser-migration.md §9)."""
+    out = list(body)
+    n = len(body)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, min(b, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    i = 0
+    while i < n:
+        ch = body[i]
+        nxt = body[i + 1] if i + 1 < n else ""
+        if ch == "#" or (ch == "/" and nxt == "/"):
+            j = body.find("\n", i)
+            j = n if j < 0 else j
+            blank(i, j)
+            i = j
+        elif ch == "/" and nxt == "*":
+            j = body.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            blank(i, j)
+            i = j
+        elif ch == '"':
+            i = _string_end(body, i)
+        elif ch == "<" and nxt == "<" and _HEREDOC_START_RE.match(body, i):
+            m = _HEREDOC_START_RE.match(body, i)
+            assert m is not None
+            term = re.compile(rf'(?m)^[ \t]*{re.escape(m.group(1))}[ \t]*\r?$')
+            t = term.search(body, m.end())
+            j = n if t is None else t.end()
+            blank(i, j)
+            i = j
+        else:
+            i += 1
+    return "".join(out)
 
 def block_has_arg(body: str, arg: str) -> bool:
     """Check if a block body has a top-level argument named `arg`.

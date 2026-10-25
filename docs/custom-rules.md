@@ -151,6 +151,22 @@ The most useful kinds for custom rules:
   `instances: any`: one rate-based rule among a web ACL's rules is fine).
 - `dynamic "X" { content { ... } }` counts as an `X` block.
 
+### How values are matched (`resource_arg`, `hcl_attr`)
+
+- The value is looked up at `nested_path` if set, else at `arg`; either
+  may be dotted (`arg: metadata_options.http_tokens`). Lookups are
+  top-level and walk blocks and maps exactly as above.
+- The value your `regex` / `not_regex` sees is HCL text: strings without
+  their quotes (`"allow-all"` → `allow-all`), references bare
+  (`var.x`), booleans as `true` / `false`, lists and maps in HCL syntax
+  with quoted strings (`["0.0.0.0/0", var.z]`). Plan / state mode
+  (`--plan-json`, `--mode drift`) renders resolved values the same way.
+- Through a repeated block the rule fires if **any** copy's value
+  matches; `fire_if_absent: true` also fires if any copy lacks the value.
+- `resource_body_contains` regexes don't see comments or heredoc bodies,
+  so commented-out code and inline scripts / policy documents can't
+  match. Ordinary quoted strings are still searched.
+
 These rules are evaluated on the parsed HCL tree, or — for a file the
 parser can't read — by a text fallback that follows the same rules.
 
