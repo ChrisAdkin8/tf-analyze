@@ -34,15 +34,8 @@ KNOWN_FALSE_POSITIVES: dict[str, dict[str, str]] = {
         "SEC-AZURE-SQL-001": "wants a resource that does not exist; ignores azuread_administrator",
         "STK-AZURE-SQL-TDE-001": "wants a resource that does not exist; TDE is on by default",
     },
-    "git_module_sha_pin": {
-        "MOD-PIN-001": "a 40-char SHA ?ref= is a pin",
-        "SEC-SUPPLY-001": "looks for a module argument `ref`; the ref lives in the source URL",
-    },
     "kubernetes_secret_from_sensitive_var": {
         "SEC-K8S-SECRET-001": "fires on any data, even from a sensitive variable",
-    },
-    "pinned_registry_module": {
-        "MOD-SUPPLY-003": "grep on the source line ignores the version argument",
     },
 }
 

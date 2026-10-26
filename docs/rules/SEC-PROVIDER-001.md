@@ -41,8 +41,8 @@ keywords: "security, medium, terraform, iac, nist-csf-pr.ds-5, nist-800-53-sc-28
 
 ## What this checks
 
-1. **`grep`** matching `/(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]/` — _a textual regex matched somewhere in the file._
-2. **`grep`** matching `/required_providers\s*\{[^}]*(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]/` — _a textual regex matched somewhere in the file._
+1. **`grep`** matching `/(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9][^"<~]*"/` — _a textual regex matched somewhere in the file._
+2. **`grep`** matching `/required_providers\s*\{[^}]*(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9][^"<~]*"/` — _a textual regex matched somewhere in the file._
 
 ## Why it likely fired
 

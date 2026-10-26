@@ -24,11 +24,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tf-analyze on attack-graph-demo
+        id: scan
         uses: ./
+        # The demo is vulnerable on purpose: SSH open to the world on the
+        # web security group is one CRITICAL (SEC-AWS-SG-001, escalated).
+        # The gate must fail on it; the next step checks that it did, and
+        # on exactly that finding. (Until Round 51, --attack-graph wrongly
+        # demoted it to HIGH and this step passed.)
+        continue-on-error: true
         with:
           target: examples/attack-graph-demo
-          # Demo has 0 CRITICAL by design — set threshold so the workflow
-          # itself doesn't fail; we want to observe the PR comment, not block.
           fail-on: CRITICAL
           attack-graph: 'true'
           # Pin to static: mode=auto resolves to "diff" on PR events, but the
@@ -36,3 +41,22 @@ jobs:
           # with FileNotFoundError. Tracked as a separate bug (Dockerfile
           # needs `apt-get install -y git`).
           mode: static
+      - name: Expect exactly the demo's known CRITICAL
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")) as f:
+              findings = json.load(f)["findings"]
+          critical = sorted(
+              (f["id"], f.get("resource", "")) for f in findings if f.get("urgency") == "CRITICAL"
+          )
+          expected = [("SEC-AWS-SG-001", "aws_security_group.web")]
+          outcome = os.environ["SCAN_OUTCOME"]
+          print(f"scan outcome: {outcome}; CRITICAL findings: {critical}")
+          if outcome != "failure":
+              sys.exit(f"::error::fail-on CRITICAL should have failed the scan (outcome: {outcome})")
+          if critical != expected:
+              sys.exit(f"::error::expected CRITICAL {expected}, got {critical}")
+          PY

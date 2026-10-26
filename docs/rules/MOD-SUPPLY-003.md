@@ -41,12 +41,12 @@ keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist
 
 ## What this checks
 
-1. **`grep`** matching `/source\s*=\s*"[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*"/` — _a textual regex matched somewhere in the file._
-  Module block without a version = "..." argument
+1. **`module_block_missing_arg`** (`version`) — _a `module_block_missing_arg` pattern._
+  Registry module block without a version = "..." argument
 
 ## Why it likely fired
 
-Module block without a version = "..." argument
+Registry module block without a version = "..." argument
 
 ## Adversarial scenario
 

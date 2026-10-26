@@ -84,6 +84,7 @@ KIND_EXPLAINER = {
     "moved_block_present": "a `moved { ... }` block points at a target that no longer exists",
     "templatefile_sensitive_leak": "a `templatefile()` call passes a sensitive variable to a template",
     "tfstate_in_repo": "a `*.tfstate` file is committed to the repository",
+    "registry_check": "the opt-in `--check-registry` pass found the pinned version well behind the registry's latest (offline scans never report it)",
 }
 
 

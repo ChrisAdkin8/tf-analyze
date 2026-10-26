@@ -41,12 +41,16 @@ keywords: "dry, low, terraform, iac, mitre-T1195.002, cwe-1395, d3-sca, nist-csf
 
 ## What this checks
 
-1. **`grep`** matching `/source\s*=\s*"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+"/` — _a textual regex matched somewhere in the file._
-  Registry-style module source present (staleness checked via --check-registry)
+1. **`registry_check`** — _the opt-in `--check-registry` pass found the pinned version well behind the registry's latest (offline scans never report it)._
+  Pinned version is >= 1 major or >= 3 minor versions behind the
+registry's latest. Needs --check-registry (network); offline
+scans never report it.
 
 ## Why it likely fired
 
-Registry-style module source present (staleness checked via --check-registry)
+Pinned version is >= 1 major or >= 3 minor versions behind the
+registry's latest. Needs --check-registry (network); offline
+scans never report it.
 
 ## Adversarial scenario
 
