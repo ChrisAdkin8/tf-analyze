@@ -162,26 +162,29 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
 def _has_companion(blk: dict, spec: dict, candidates: list[dict]) -> bool:
     """Whether a resource of type ``spec["resource"]`` among `candidates`
     points at `blk` through its ``spec["via"]`` argument (default
-    ``bucket``): by reference (``aws_s3_bucket.x.id``, ``.bucket``,
-    ``[0].id`` …) or by the same literal value `blk` has for that
-    argument (``bucket = "my-bucket"`` on both)."""
+    ``bucket``; a list means any of them): by reference
+    (``aws_s3_bucket.x.id``, ``.bucket``, ``[0].id`` …) or by the same
+    literal value `blk` has for that argument (``bucket = "my-bucket"`` on
+    both)."""
     ctype = spec.get("resource")
     via = spec.get("via", "bucket")
+    vias = via if isinstance(via, list) else [via]
     if not ctype:
         return False
     btype, bname = blk["groups"]
     ref = re.compile(rf'(?<![\w.]){re.escape(btype)}\.{re.escape(bname)}(?![\w-])')
-    literal = block_arg_value(blk["body"], via)
-    if literal and literal.startswith(("var.", "local.", "data.", "${")):
-        literal = None
+    literals: dict[str, str] = {}
+    for arg in vias:
+        literal = block_arg_value(blk["body"], arg)
+        if literal and not literal.startswith(("var.", "local.", "data.", "${")):
+            literals[arg] = literal
     for cand in candidates:
         if cand["groups"][0] != ctype:
             continue
-        value = block_arg_value(cand["body"], via)
-        if not value:
-            continue
-        if ref.search(value) or (literal is not None and value == literal):
-            return True
+        for arg in vias:
+            value = block_arg_value(cand["body"], arg)
+            if value and (ref.search(value) or literals.get(arg) == value):
+                return True
     return False
 
 
@@ -271,6 +274,51 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
                 "line": blk["start_line"],
                 "resource": f"{btype}.{bname}",
             })
+    return out
+
+
+@_register_infile("resource_missing_companion")
+def _detect_resource_missing_companion(c: InFileCtx) -> list[dict]:
+    """``resource_missing_companion`` — fire on each ``resource`` that no
+    ``companion`` in the same module points at through ``via`` (see
+    `_has_companion`): every S3 bucket needs *its own* public access
+    block, every VPC its own flow log.
+
+    The per-resource form of ``resource_absent``, which fires only when
+    the companion type is missing from the whole repository — so one
+    public access block anywhere passed every bucket. Keep
+    ``resource_absent`` for account-level singletons (GuardDuty, a
+    password policy).
+
+    ``exempt_if_companion: {resource, via}`` exempts a resource that such
+    a resource points at — e.g. a bucket that is some
+    ``aws_s3_bucket_logging``'s ``target_bucket`` is a log destination and
+    does not log its own access.
+    """
+    pat = c.pat
+    rt, ctype, via = pat.get("resource"), pat.get("companion"), pat.get("via")
+    if not (rt and ctype and via):
+        return []
+    spec = {"resource": ctype, "via": via}
+    exempt = pat.get("exempt_if_companion")
+    candidates = c.resources if c.module_resources is None else c.module_resources
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        if btype != rt:
+            continue
+        if _resource_is_count_zero(blk["body"], c.var_defaults):
+            continue
+        if _has_companion(blk, spec, candidates):
+            continue
+        if exempt and _has_companion(blk, exempt, candidates):
+            continue
+        out.append({
+            "id": c.eid,
+            "file": str(c.file_path),
+            "line": blk["start_line"],
+            "resource": f"{btype}.{bname}",
+        })
     return out
 
 

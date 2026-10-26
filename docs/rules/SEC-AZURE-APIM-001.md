@@ -41,7 +41,7 @@ keywords: "security, medium, terraform, iac, azure, mitre-T1562.008, cwe-778, d3
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_api_management_diagnostic` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_api_management` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `azurerm_api_management` is declared but no
 `azurerm_api_management_diagnostic` resource is bound. Request /
 response logs (including auth failures, 4xx/5xx rates) are not

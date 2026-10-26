@@ -41,7 +41,7 @@ keywords: "security, medium, terraform, iac, azure, mitre-T1498, cwe-770, nist-c
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_api_management_product_policy` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_api_management_product` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `azurerm_api_management_product` exists but no
 `azurerm_api_management_product_policy` is bound. Subscribers
 can call APIs without rate limits — abuse traffic, scraping,

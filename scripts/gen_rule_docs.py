@@ -70,6 +70,7 @@ KIND_EXPLAINER = {
     "resource_missing_arg": "the resource is missing a required attribute (or nested attribute path)",
     "resource_present": "this resource type exists in the corpus and is itself a finding",
     "resource_absent": "the corpus is missing a resource type we expected to find given other resources present",
+    "resource_missing_companion": "no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)",
     "resource_body_contains": "the resource body matches a regex inside the block",
     "hcl_attr": "an attribute value differs from the expected literal",
     "iam_policy_analysis": "a `data \"aws_iam_policy_document\"` Allow statement matches the listed check",

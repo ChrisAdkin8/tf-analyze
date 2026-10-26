@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, azure, cis-4.1.1, mitre-T1562.008, cw
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_mssql_server_extended_auditing_policy` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_mssql_server` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `azurerm_mssql_server` exists but no
 `azurerm_mssql_server_extended_auditing_policy` resource is bound.
 Login attempts, query execution, and DDL changes are not logged

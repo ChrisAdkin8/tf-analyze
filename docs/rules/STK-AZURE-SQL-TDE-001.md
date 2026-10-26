@@ -41,7 +41,7 @@ keywords: "stack, high, terraform, iac, azure, cis-4.1.1, mitre-T1530, cwe-311, 
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_mssql_database_transparent_data_encryption` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_mssql_database` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `azurerm_mssql_database` present but no
 `azurerm_mssql_database_transparent_data_encryption` resource in
 the repository. TDE encrypts data files, log files, and backups at
