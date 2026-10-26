@@ -640,6 +640,7 @@ def brace_walk(
     in_block_comment = False  # after /* until */
     seen_open = False
     prev = ""
+    misses = _Misses()
     i = start_pos
     n = len(text)
     while i < n:
@@ -664,7 +665,7 @@ def brace_walk(
         elif ch == "<" and nxt == "<" and (hd := _HEREDOC_START_RE.match(text, i)):
             # A heredoc body is opaque: a `#`, quote or bracket in a
             # script must not start a comment or move the depth.
-            i = _heredoc_end(text, hd.end(), hd.group(1))
+            i = _heredoc_end(text, hd.end(), hd.group(1), misses)
             prev = ""
             continue
         elif ch == "#":
@@ -709,7 +710,7 @@ _LEX_RE = re.compile(
     r'(?P<nl>\n)'
     r'|(?P<ws>[ \t\r\f\v\ufeff]+)'
     r'|(?P<lc>(?:#|//)[^\n]*)'
-    r'|(?P<bc>/\*.*?(?:\*/|\Z))'
+    r'|(?P<bc>/\*)'
     r'|(?P<hd><<-?[ \t]*(?P<hid>[A-Za-z_][\w-]*)[ \t]*\r?\n)'
     r'|(?P<dq>")'
     r'|(?P<lb>\{)'
@@ -718,7 +719,7 @@ _LEX_RE = re.compile(
     r'|(?P<other>.)',
     re.DOTALL,
 )
-_STRING_STOP_RE = re.compile(r'["\\\n$%]')
+_STRING_STOP_RE = re.compile(r'["\\$%]')
 _BLOCK_LABEL_RE = re.compile(r'^[\w-]+$')
 _IDENT_LABEL_RE = re.compile(r'^[A-Za-z_][\w-]*$')
 
@@ -727,16 +728,52 @@ _IDENT_LABEL_RE = re.compile(r'^[A-Za-z_][\w-]*$')
 # is invalid HCL. Rather than let it swallow the rest of the file (and so
 # hide every block after it), the lexer gives up on that construct and
 # resumes on the next line — a broken construct costs at most its line.
+#
+# Cost rule: every helper is linear. A quoted string (with any `${…}` in
+# it) never crosses its line — the vendored parser rejects a newline or
+# comment there too — and nesting is capped. Searches to EOF that fail are
+# remembered in `_Misses`, so a run of unclosed heredocs or comments costs
+# one scan, not one each.
+
+_MAX_TEMPLATE_DEPTH = 32
 
 
-def _heredoc_end(text: str, pos: int, ident: str) -> int:
+class _Misses:
+    """Searches that already failed. A search that found no terminator
+    from offset p finds none from any later offset either."""
+
+    __slots__ = ("heredoc", "comment")
+
+    def __init__(self) -> None:
+        self.heredoc: dict[str, int] = {}
+        self.comment: int | None = None
+
+
+def _heredoc_end(text: str, pos: int, ident: str, misses: _Misses) -> int:
     """Index just past the line that closes a heredoc whose body starts at
     `pos`; `pos` itself when the terminator is missing, so the body is
     lexed as code."""
+    failed = misses.heredoc.get(ident)
+    if failed is not None and pos >= failed:
+        return pos
     m = re.compile(
         r'^[ \t]*' + re.escape(ident) + r'[ \t]*\r?$', re.MULTILINE
     ).search(text, pos)
-    return pos if m is None else m.end()
+    if m is None:
+        misses.heredoc[ident] = pos
+        return pos
+    return m.end()
+
+
+def _comment_end(text: str, i: int, misses: _Misses) -> int | None:
+    """`i` is just past `/*`. Index past the closing `*/`, or None."""
+    if misses.comment is not None and i >= misses.comment:
+        return None
+    j = text.find("*/", i)
+    if j < 0:
+        misses.comment = i
+        return None
+    return j + 2
 
 
 def _next_line(text: str, i: int) -> int:
@@ -744,48 +781,56 @@ def _next_line(text: str, i: int) -> int:
     return len(text) if nl < 0 else nl
 
 
-def _template_end(text: str, i: int) -> int | None:
-    """`i` is just past a `${` / `%{`. Return the index past its `}`, or
-    None when it never closes. The interpolation is an expression, so it
-    is lexed like code: comments, strings and heredocs inside it cannot
-    move the depth."""
-    depth, n = 1, len(text)
-    while i < n:
-        m = _LEX_RE.match(text, i)
+def _template_end(text: str, i: int, limit: int, depth: int) -> int | None:
+    """`i` is just past a `${` / `%{` in a quoted string whose line ends at
+    `limit`. Return the index past its `}`, or None when it does not close
+    on that line. The interpolation is an expression, so it is lexed like
+    code: comments and strings inside it cannot move the depth."""
+    braces = 1
+    while i < limit:
+        m = _LEX_RE.match(text, i, limit)
         kind = m.lastgroup
         i = m.end()
-        if kind == "bc" and not m.group().endswith("*/"):
-            return None
-        if kind == "hd":
-            i = _heredoc_end(text, i, m.group("hid"))
+        if kind == "bc":
+            j = text.find("*/", i, limit)
+            if j < 0:
+                return None
+            i = j + 2
+        elif kind in ("lc", "hd"):
+            return None  # runs past the line, so the template cannot close
         elif kind == "dq":
-            i = _lex_string_end(text, m.start())[0]
+            end, _plain, ok = _lex_string_end(text, m.start(), limit, depth + 1)
+            if not ok:
+                return None
+            i = end
         elif kind == "lb":
-            depth += 1
+            braces += 1
         elif kind == "rb":
-            depth -= 1
-            if depth == 0:
+            braces -= 1
+            if braces == 0:
                 return i
     return None
 
 
-def _lex_string_end(text: str, i: int) -> tuple[int, bool]:
-    """`text[i]` is an opening `"`. Return ``(end, plain)``: the index past
-    the closing quote, and whether the literal had no escapes or
-    templates. A quoted string cannot span lines in HCL, so an
-    unterminated one ends at the newline instead of eating the file."""
-    n, plain = len(text), True
+def _lex_string_end(
+    text: str, i: int, limit: int, depth: int = 0,
+) -> tuple[int, bool, bool]:
+    """`text[i]` is an opening `"` on a line that ends at `limit`. Return
+    ``(end, plain, closed)``: the index past the closing quote, whether
+    the literal had no escapes or templates, and whether it closed at
+    all. An unclosed string ends at `limit` instead of eating the file."""
+    if depth > _MAX_TEMPLATE_DEPTH:
+        return limit, False, False
+    plain = True
     i += 1
-    while i < n:
-        m = _STRING_STOP_RE.search(text, i)
+    while True:
+        m = _STRING_STOP_RE.search(text, i, limit)
         if m is None:
-            return n, False
+            return limit, False, False
         i = m.start()
         ch = m.group()
         if ch == '"':
-            return i + 1, plain
-        if ch == "\n":
-            return i, False
+            return i + 1, plain, True
         if ch == "\\":
             plain = False
             i += 2
@@ -794,13 +839,12 @@ def _lex_string_end(text: str, i: int) -> tuple[int, bool]:
             i += 3
         elif text.startswith("{", i + 1):
             plain = False
-            end = _template_end(text, i + 2)
+            end = _template_end(text, i + 2, limit, depth)
             if end is None:
-                return _next_line(text, i), False
+                return limit, False, False
             i = end
         else:
             i += 1
-    return n, False
 
 
 @functools.lru_cache(maxsize=1024)
@@ -819,6 +863,8 @@ def _block_index(text: str) -> tuple[tuple, ...]:
     stack: list[int] = []
     pending: list | None = []  # tokens of the statement being read
     line_start = True          # `pending` began at the start of a line
+    line_end = -1              # end of the line holding `i`, computed lazily
+    misses = _Misses()
     i = 0
     while i < n:
         m = _LEX_RE.match(text, i)
@@ -826,16 +872,24 @@ def _block_index(text: str) -> tuple[tuple, ...]:
         i = m.end()
         if kind == "nl":
             pending, line_start = [], True
-        elif kind == "bc" and not m.group().endswith("*/"):
-            i = _next_line(text, m.start())
-            pending = None
-        elif kind in ("ws", "lc", "bc"):
+        elif kind == "bc":
+            end = _comment_end(text, i, misses)
+            if end is None:
+                i, pending = _next_line(text, m.start()), None
+            else:
+                i = end
+        elif kind in ("ws", "lc"):
             pass
         elif kind == "hd":
-            i = _heredoc_end(text, i, m.group("hid"))
-            pending = None
+            end = _heredoc_end(text, i, m.group("hid"), misses)
+            # No terminator: resume on the line after `<<EOT`, which the
+            # token already consumed the newline of.
+            pending, line_start = ([], True) if end == i else (None, False)
+            i = end
         elif kind == "dq":
-            end, plain = _lex_string_end(text, m.start())
+            if m.start() > line_end:
+                line_end = _next_line(text, m.start())
+            end, plain, _closed = _lex_string_end(text, m.start(), line_end)
             label = text[m.start() + 1 : end - 1]
             if pending and plain and _BLOCK_LABEL_RE.match(label):
                 pending.append((label, m.start()))

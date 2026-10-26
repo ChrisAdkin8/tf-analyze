@@ -149,6 +149,25 @@ def test_many_unclosed_headers_are_linear() -> None:
     assert time.perf_counter() - t0 < 5  # quadratic took minutes at 3000
 
 
+def test_hostile_unclosed_constructs_are_linear_and_recover() -> None:
+    later = 'resource "aws_thing" "a" {\n}\n'
+    for broken in (
+        'x = "' + '${"' * 5000 + "\n",  # deep nesting: no RecursionError
+        "x = <<EOT\n" * 5000,           # back-to-back unterminated heredocs
+        "/*\n" * 5000,                  # unterminated block comments
+        'x = "${ {\n' * 5000,           # unclosed templates
+    ):
+        t0 = time.perf_counter()
+        assert [g for g, _ in _resources(broken + later)] == [("aws_thing", "a")]
+        assert time.perf_counter() - t0 < 5
+
+
+def test_brace_walk_many_unterminated_heredocs_is_linear() -> None:
+    t0 = time.perf_counter()
+    _hcl.brace_walk("{ x = <<A\n" * 5000 + "}")
+    assert time.perf_counter() - t0 < 5
+
+
 def test_brace_walk_skips_heredoc_body() -> None:
     body = "{\n  s = <<EOT\n# }\n}\nEOT\n  y = 1\n}\ntail"
     assert body[: _hcl.brace_walk(body)].endswith("y = 1\n}")
