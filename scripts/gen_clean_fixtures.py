@@ -33,6 +33,7 @@ SCANNABLE_KINDS = {
     "resource_arg",
     "resource_missing_arg",
     "resource_absent",
+    "resource_missing_companion",
     "resource_present",
     "resource_body_contains",
     "hcl_attr",

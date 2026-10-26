@@ -5,10 +5,10 @@ default_urgency: MEDIUM
 blast_radius: environment
 status: active
 patterns:
-  - kind: resource_absent
-    resource: aws_route53_key_signing_key
-    when_present: aws_route53_zone
-    scope: repo
+  - kind: resource_missing_companion
+    resource: aws_route53_zone
+    companion: aws_route53_key_signing_key
+    via: hosted_zone_id
     description: |
       `aws_route53_zone` present but no `aws_route53_key_signing_key` in the
       repository. Without DNSSEC, DNS responses for the zone can be spoofed

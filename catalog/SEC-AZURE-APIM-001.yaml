@@ -21,9 +21,10 @@ nist_800_53:
 csa_ccm:
   - "LOG-08"
 patterns:
-  - kind: resource_absent
-    resource: azurerm_api_management_diagnostic
-    when_present: azurerm_api_management
+  - kind: resource_missing_companion
+    resource: azurerm_api_management
+    companion: azurerm_api_management_diagnostic
+    via: api_management_name
     description: |
       `azurerm_api_management` is declared but no
       `azurerm_api_management_diagnostic` resource is bound. Request /

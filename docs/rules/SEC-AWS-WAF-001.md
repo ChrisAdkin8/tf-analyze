@@ -41,7 +41,7 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1562.004, cwe-693, nist
 
 ## What this checks
 
-1. **`resource_absent`** on `aws_wafv2_logging_configuration` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `aws_wafv2_web_acl` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `aws_wafv2_web_acl` exists but no `aws_wafv2_logging_configuration`
 is defined. Without logging, blocked and allowed requests are invisible:
 you cannot investigate incidents, tune rules to reduce false positives,

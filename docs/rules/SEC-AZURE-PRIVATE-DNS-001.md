@@ -41,7 +41,7 @@ keywords: "security, low, terraform, iac, azure, mitre-T1583.002, nist-csf-pr.ac
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_private_dns_zone_virtual_network_link` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_private_dns_zone` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `azurerm_private_dns_zone` exists but no
 `azurerm_private_dns_zone_virtual_network_link` is bound. The
 zone is orphaned — no VNet resolves names from it, so the zone

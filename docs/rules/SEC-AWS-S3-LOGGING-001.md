@@ -41,9 +41,10 @@ keywords: "security, medium, terraform, iac, aws, cis-3.6, mitre-T1562.008, cwe-
 
 ## What this checks
 
-1. **`resource_absent`** on `aws_s3_bucket_logging` — _the corpus is missing a resource type we expected to find given other resources present._
-  Repository contains `aws_s3_bucket` resources but no
-`aws_s3_bucket_logging` resource. S3 server access logs record every
+1. **`resource_missing_companion`** on `aws_s3_bucket` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
+  An `aws_s3_bucket` that no `aws_s3_bucket_logging` in the same module
+points at (a bucket that is another bucket's log `target_bucket` is
+exempt). S3 server access logs record every
 request made to a bucket — GETs, PUTs, DELETEs — and are the primary
 evidence source for post-incident investigation and compliance auditing.
 CIS AWS Foundations Benchmark §3.6 requires server access logging
@@ -56,8 +57,9 @@ an unexpected IP?" have no answer.
 
 ## Why it likely fired
 
-Repository contains `aws_s3_bucket` resources but no
-`aws_s3_bucket_logging` resource. S3 server access logs record every
+An `aws_s3_bucket` that no `aws_s3_bucket_logging` in the same module
+points at (a bucket that is another bucket's log `target_bucket` is
+exempt). S3 server access logs record every
 request made to a bucket — GETs, PUTs, DELETEs — and are the primary
 evidence source for post-incident investigation and compliance auditing.
 CIS AWS Foundations Benchmark §3.6 requires server access logging

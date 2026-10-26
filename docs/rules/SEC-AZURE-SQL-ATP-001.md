@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, azure, mitre-T1078, cwe-693, d3-nta, 
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_mssql_server_security_alert_policy` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_mssql_server` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `azurerm_mssql_server` is declared but no
 `azurerm_mssql_server_security_alert_policy` is bound. SQL
 injection, anomalous logins, and brute-force attacks are not

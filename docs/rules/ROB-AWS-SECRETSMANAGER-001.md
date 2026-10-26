@@ -41,7 +41,7 @@ keywords: "robustness, medium, terraform, iac, aws, mitre-T1078.004, mitre-T1098
 
 ## What this checks
 
-1. **`resource_absent`** on `aws_secretsmanager_secret_rotation` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `aws_secretsmanager_secret` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   An `aws_secretsmanager_secret` exists but no `aws_secretsmanager_secret_rotation`
 resource is defined. Without automatic rotation, long-lived credentials accumulate
 blast radius over time. A leaked credential that is never rotated provides

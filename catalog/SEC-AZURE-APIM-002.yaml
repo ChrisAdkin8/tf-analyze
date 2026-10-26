@@ -13,9 +13,10 @@ nist_csf:
 nist_800_53:
   - "SC-5"
 patterns:
-  - kind: resource_absent
-    resource: azurerm_api_management_product_policy
-    when_present: azurerm_api_management_product
+  - kind: resource_missing_companion
+    resource: azurerm_api_management_product
+    companion: azurerm_api_management_product_policy
+    via: product_id
     description: |
       `azurerm_api_management_product` exists but no
       `azurerm_api_management_product_policy` is bound. Subscribers

@@ -28,10 +28,10 @@ nist_800_53:
 csa_ccm:
   - "CEK-03"
 patterns:
-  - kind: resource_absent
-    resource: azurerm_mssql_database_transparent_data_encryption
-    when_present: azurerm_mssql_database
-    scope: repo
+  - kind: resource_missing_companion
+    resource: azurerm_mssql_database
+    companion: azurerm_mssql_database_transparent_data_encryption
+    via: database_id
     description: |
       `azurerm_mssql_database` present but no
       `azurerm_mssql_database_transparent_data_encryption` resource in

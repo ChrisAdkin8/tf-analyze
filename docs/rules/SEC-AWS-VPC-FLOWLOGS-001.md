@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, aws, cis-3.9, mitre-T1562.008, cwe-77
 
 ## What this checks
 
-1. **`resource_absent`** on `aws_flow_log` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `aws_vpc` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
 
 ## Why it likely fired
 
