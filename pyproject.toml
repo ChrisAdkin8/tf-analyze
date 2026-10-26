@@ -61,6 +61,7 @@ py-modules = [
     "_handlers_robustness",
     "_handlers_security",
     "_hcl",
+    "_iam_policy",
     "_lsp",
     "_mitre",
     "_modes",

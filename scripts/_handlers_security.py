@@ -25,9 +25,17 @@ from _hcl import (
     find_blocks,
     block_arg_value,
     brace_walk,
+    parse_tf,
     strip_hcl_context,
     _hcl_object_to_json,
 )
+from _iam_policy import (
+    argument_policies,
+    document_statements,
+    json_statements,
+    policy_document_subtrees,
+)
+from _tfjson import is_tf_source
 from detect import (
     InFileCtx,
     CorpusCtx,
@@ -94,70 +102,93 @@ def _detect_iam_policy_analysis(c: InFileCtx) -> list[dict]:
     * ``wildcard_action_and_resource`` — both action and resource ``"*"``
     * ``not_action_or_not_resource`` — uses NotAction/NotResource
 
-    Uses the shared ``brace_walk`` for both the outer statement and
-    inner principals blocks (quote-aware — an action ARN containing
-    ``bucket-{*}-policy`` no longer corrupts the depth count).
+    Statements come from the parse tree (``_iam_policy``), which also
+    sees ``dynamic "statement"`` blocks. A file that did not parse, or a
+    document name seen twice, falls back to the text walk below.
     """
     check = c.pat.get("check")
     if not check:
         return []
     out: list[dict] = []
+    tree = parse_tf(c.text)[0] if is_tf_source(c.file_path) else None
+    documents = policy_document_subtrees(tree)
     for dblk in find_blocks(c.text, DATA_START):
         dtype, dname = dblk["groups"]
         if dtype != "aws_iam_policy_document":
             continue
-        body = dblk["body"]
-        for sm in re.finditer(r'(?m)^\s*statement\s*\{', body):
-            s_end_after = brace_walk(body, sm.end() - 1)
-            if s_end_after is None:
+        subtrees = documents.get(dname, [])
+        if len(subtrees) == 1:
+            for st in document_statements(subtrees[0]):
+                if st.matches(check):
+                    out.append({
+                        "id": c.eid,
+                        "file": str(c.file_path),
+                        "line": st.line or dblk["start_line"],
+                        "resource": f"data.aws_iam_policy_document.{dname}",
+                    })
+            continue
+        out.extend(_legacy_policy_document(c, check, dblk, dname))
+    return out
+
+
+def _legacy_policy_document(
+    c: InFileCtx, check: str, dblk: dict, dname: str,
+) -> list[dict]:
+    """Text walk of one ``aws_iam_policy_document`` block — the regex
+    fallback for a file the parser could not read."""
+    out: list[dict] = []
+    body = dblk["body"]
+    for sm in re.finditer(r'(?m)^\s*statement\s*\{', body):
+        s_end_after = brace_walk(body, sm.end() - 1)
+        if s_end_after is None:
+            continue
+        s_end = s_end_after - 1
+        sbody = body[sm.end():s_end]
+        eff = block_arg_value(sbody, "effect")
+        if eff and eff.strip().strip('"').lower() == "deny":
+            continue
+        actions = block_arg_value(sbody, "actions") or ""
+        resources_l = block_arg_value(sbody, "resources") or ""
+        not_actions = block_arg_value(sbody, "not_actions") or ""
+        not_resources = block_arg_value(sbody, "not_resources") or ""
+        has_wild_action = '"*"' in actions
+        has_wild_resource = '"*"' in resources_l
+        has_iam_wild = bool(re.search(r'"iam:[^"]*\*"', actions))
+        has_public_principal = False
+        for pm in re.finditer(r'(?m)^\s*principals\s*\{', sbody):
+            p_end_after = brace_walk(sbody, pm.end() - 1)
+            if p_end_after is None:
                 continue
-            s_end = s_end_after - 1
-            sbody = body[sm.end():s_end]
-            eff = block_arg_value(sbody, "effect")
-            if eff and eff.strip().strip('"').lower() == "deny":
-                continue
-            actions = block_arg_value(sbody, "actions") or ""
-            resources_l = block_arg_value(sbody, "resources") or ""
-            not_actions = block_arg_value(sbody, "not_actions") or ""
-            not_resources = block_arg_value(sbody, "not_resources") or ""
-            has_wild_action = '"*"' in actions
-            has_wild_resource = '"*"' in resources_l
-            has_iam_wild = bool(re.search(r'"iam:[^"]*\*"', actions))
-            has_public_principal = False
-            for pm in re.finditer(r'(?m)^\s*principals\s*\{', sbody):
-                p_end_after = brace_walk(sbody, pm.end() - 1)
-                if p_end_after is None:
-                    continue
-                p_end = p_end_after - 1
-                pbody = sbody[pm.end():p_end]
-                ids = block_arg_value(pbody, "identifiers") or ""
-                if '"*"' in ids:
-                    has_public_principal = True
-                    break
-            triggered = False
-            if check == "wildcard_action" and has_wild_action:
-                triggered = True
-            elif check == "wildcard_resource" and has_wild_resource:
-                triggered = True
-            elif check == "public_principal" and has_public_principal:
-                triggered = True
-            elif check == "wildcard_action_iam" and has_iam_wild:
-                triggered = True
-            elif (check == "wildcard_action_and_resource"
-                  and has_wild_action and has_wild_resource):
-                triggered = True
-            elif check == "not_action_or_not_resource" and (
-                not_actions or not_resources
-            ):
-                triggered = True
-            if triggered:
-                stmt_line = dblk["start_line"] + body[: sm.start()].count("\n")
-                out.append({
-                    "id": c.eid,
-                    "file": str(c.file_path),
-                    "line": stmt_line,
-                    "resource": f"data.aws_iam_policy_document.{dname}",
-                })
+            p_end = p_end_after - 1
+            pbody = sbody[pm.end():p_end]
+            ids = block_arg_value(pbody, "identifiers") or ""
+            if '"*"' in ids:
+                has_public_principal = True
+                break
+        triggered = False
+        if check == "wildcard_action" and has_wild_action:
+            triggered = True
+        elif check == "wildcard_resource" and has_wild_resource:
+            triggered = True
+        elif check == "public_principal" and has_public_principal:
+            triggered = True
+        elif check == "wildcard_action_iam" and has_iam_wild:
+            triggered = True
+        elif (check == "wildcard_action_and_resource"
+              and has_wild_action and has_wild_resource):
+            triggered = True
+        elif check == "not_action_or_not_resource" and (
+            not_actions or not_resources
+        ):
+            triggered = True
+        if triggered:
+            stmt_line = dblk["start_line"] + body[: sm.start()].count("\n")
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": stmt_line,
+                "resource": f"data.aws_iam_policy_document.{dname}",
+            })
     return out
 
 
@@ -201,13 +232,16 @@ def _detect_helm_set_value(c: InFileCtx) -> list[dict]:
 @_register_infile("iam_json_policy_analysis")
 def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
     """``iam_json_policy_analysis`` — inline JSON-policy analysis on
-    resources like ``aws_iam_policy`` / ``aws_iam_role_policy`` whose
-    ``policy`` argument is ``jsonencode({...})``. The same ``check``
-    vocabulary as ``iam_policy_analysis`` (wildcard_action, etc.).
+    resources like ``aws_iam_policy`` / ``aws_iam_role_policy``. The same
+    ``check`` vocabulary as ``iam_policy_analysis`` (wildcard_action, etc.).
 
-    The ``jsonencode(...)`` call body is extracted via ``brace_walk``
-    with paren delimiters, then run through ``_hcl_object_to_json``
-    for structural inspection.
+    Pattern fields: ``resources`` (resource types) and ``args`` (the
+    policy-valued arguments, default ``[policy]``; e.g.
+    ``assume_role_policy``). Each argument may hold ``jsonencode({...})``,
+    a heredoc or a quoted JSON string; an ``inline_policy`` block's
+    ``policy`` is read too. Policies come from the parse tree
+    (``_iam_policy``); a file that did not parse falls back to the text
+    path below, which reads ``policy = jsonencode(...)`` only.
     """
     check = c.pat.get("check")
     resource_types = c.pat.get("resources") or [
@@ -215,7 +249,9 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
         "aws_iam_role_policy",
         "aws_iam_user_policy",
         "aws_iam_group_policy",
+        "aws_iam_role",  # its `inline_policy` blocks
     ]
+    args = c.pat.get("args") or ["policy"]
     if not check:
         return []
     out: list[dict] = []
@@ -223,8 +259,23 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
         btype, bname = blk["groups"]
         if btype not in resource_types:
             continue
+        attrs = blk.get("attrs")
+        if attrs is not None:
+            if any(
+                st.matches(check)
+                for doc in argument_policies(attrs, args)
+                for st in json_statements(doc)
+            ):
+                out.append({
+                    "id": c.eid,
+                    "file": str(c.file_path),
+                    "line": blk["start_line"],
+                    "resource": f"{btype}.{bname}",
+                })
+            continue
         body = blk["body"]
-        pm = re.search(r'(?m)^\s*policy\s*=\s*jsonencode\(', body)
+        arg_re = "|".join(re.escape(a) for a in args)
+        pm = re.search(rf'(?m)^\s*(?:{arg_re})\s*=\s*jsonencode\(', body)
         if not pm:
             continue
         end_after = brace_walk(body, pm.end() - 1, opens="(", closes=")")
@@ -235,62 +286,13 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
         parsed = _hcl_object_to_json(raw)
         if parsed is None:
             continue
-        statements = parsed.get("Statement") or []
-        if isinstance(statements, dict):
-            statements = [statements]
-        for stmt in statements:
-            if not isinstance(stmt, dict):
-                continue
-            eff = str(stmt.get("Effect", "Allow")).lower()
-            if eff == "deny":
-                continue
-            actions = stmt.get("Action") or []
-            resources_l = stmt.get("Resource") or []
-            not_actions = stmt.get("NotAction") or []
-            not_resources = stmt.get("NotResource") or []
-            if isinstance(actions, str):
-                actions = [actions]
-            if isinstance(resources_l, str):
-                resources_l = [resources_l]
-            principal = stmt.get("Principal") or {}
-            has_public_principal = False
-            if principal == "*":
-                has_public_principal = True
-            elif isinstance(principal, dict):
-                for v in principal.values():
-                    if v == "*" or (isinstance(v, list) and "*" in v):
-                        has_public_principal = True
-                        break
-            has_wild_action = "*" in actions
-            has_wild_resource = "*" in resources_l
-            has_iam_wild = any(
-                isinstance(a, str) and a.startswith("iam:") and "*" in a
-                for a in actions
-            )
-            triggered = False
-            if check == "wildcard_action" and has_wild_action:
-                triggered = True
-            elif check == "wildcard_resource" and has_wild_resource:
-                triggered = True
-            elif check == "public_principal" and has_public_principal:
-                triggered = True
-            elif check == "wildcard_action_iam" and has_iam_wild:
-                triggered = True
-            elif (check == "wildcard_action_and_resource"
-                  and has_wild_action and has_wild_resource):
-                triggered = True
-            elif check == "not_action_or_not_resource" and (
-                not_actions or not_resources
-            ):
-                triggered = True
-            if triggered:
-                out.append({
-                    "id": c.eid,
-                    "file": str(c.file_path),
-                    "line": blk["start_line"],
-                    "resource": f"{btype}.{bname}",
-                })
-                break  # one finding per resource is enough
+        if any(st.matches(check) for st in json_statements(parsed)):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+            })
     return out
 
 

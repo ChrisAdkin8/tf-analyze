@@ -1178,23 +1178,35 @@ def block_has_arg(body: str, arg: str) -> bool:
 
 def _hcl_object_to_json(text: str) -> dict | None:
     """Best-effort convert an HCL object literal (used inside ``jsonencode(...)``)
-    to a Python dict.
+    to a Python dict — the regex fallback for a file the parser could not
+    read (the tree path is `_iam_policy.decode_policy`).
 
-    HCL accepts JSON-like object literals but with `=` instead of `:` and
-    bareword keys. We do a small, conservative rewrite to canonical JSON,
-    then ``json.loads`` it. Returns None on any parse failure — callers
-    fall back gracefully rather than raising.
+    HCL accepts JSON-like object literals but with `=` instead of `:`,
+    bareword keys, newline-separated members and bare references. We do a
+    small, conservative rewrite to canonical JSON, then ``json.loads`` it:
+    comments are blanked, keys quoted, a comma added between members on
+    separate lines, and a bare reference (``aws_s3_bucket.b.arn``) becomes
+    a ``"${...}"`` string, as the parse tree renders it. Returns None on
+    any parse failure — callers fall back gracefully rather than raising.
     """
     if not text or not text.strip().startswith("{"):
         return None
-    s = text
-    # `key = value` → `"key": value` (only when key is a bareword)
-    s = re.sub(r'(?m)([{,]\s*)([A-Za-z_][\w]*)\s*=\s*', r'\1"\2": ', s)
-    # Top-level (no leading delimiter) bareword `key = `
-    s = re.sub(r'^\s*([A-Za-z_][\w]*)\s*=\s*', r'"\1": ', s)
+    s = strip_hcl_context(text)
+    # `key = value` / `"key" = value` → `"key": value`
+    s = re.sub(r'(?m)(^|[{,\n]\s*)([A-Za-z_][\w-]*)\s*=\s*', r'\1"\2": ', s)
+    s = re.sub(r'(?m)(^|[{,\n]\s*)("[^"\n]*")\s*=\s*', r'\1\2: ', s)
+    # A bare reference value → `"${ref}"` (true/false/null stay literals).
+    s = re.sub(
+        r'([:\[,]\s*)(?!(?:true|false|null)\b)([A-Za-z_][\w-]*(?:\.[\w*-]+|\[\d+\])+)'
+        r'(?=\s*[,\]}\n])',
+        r'\1"${\2}"', s,
+    )
+    # Members on separate lines: a value end then a newline then the next
+    # member or element needs a comma.
+    s = re.sub(r'(["\d\]}]|\btrue|\bfalse|\bnull)([ \t]*\n\s*)(?=["{\[\d-]|true|false|null)',
+               r'\1,\2', s)
     # Strip trailing commas before `}` or `]` (HCL allows them, JSON doesn't).
     s = re.sub(r',(\s*[}\]])', r'\1', s)
-    # HCL list trailing commas after multi-line items
     try:
         return json.loads(s)
     except (json.JSONDecodeError, ValueError):
