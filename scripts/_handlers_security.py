@@ -25,6 +25,7 @@ from _hcl import (
     find_blocks,
     block_arg_value,
     brace_walk,
+    mask_comments_and_heredocs,
     parse_tf,
     strip_hcl_context,
     _hcl_object_to_json,
@@ -209,24 +210,56 @@ def _detect_helm_set_value(c: InFileCtx) -> list[dict]:
         btype, bname = blk["groups"]
         if btype != "helm_release":
             continue
-        body = blk["body"]
-        for sm in re.finditer(r'(?m)^\s*set\s*\{', body):
-            end_after = brace_walk(body, sm.end() - 1)
-            if end_after is None:
-                continue
-            end = end_after - 1
-            sbody = body[sm.end():end]
-            n = block_arg_value(sbody, "name") or ""
-            v = block_arg_value(sbody, "value") or ""
-            if n.strip() == target_name and vrx.search(str(v)):
-                out.append({
-                    "id": c.eid,
-                    "file": str(c.file_path),
-                    "line": blk["start_line"],
-                    "resource": f"helm_release.{bname}",
-                })
-                break
+        if any(
+            n.strip() == target_name and vrx.search(v)
+            for n, v in _helm_set_pairs(blk)
+        ):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"helm_release.{bname}",
+            })
     return out
+
+
+def _helm_set_pairs(blk: dict) -> list[tuple[str, str]]:
+    """``(name, value)`` of every override on a `helm_release`: the helm
+    provider v2 `set { ... }` blocks and the v3 `set = [{ ... }, ...]`
+    list (v3 was missed entirely). From the parse tree when the file
+    parsed — both forms are a list of `{name, value}` there — else from
+    the text."""
+    attrs = blk.get("attrs")
+    if attrs is not None:
+        sets = attrs.get("set") or []
+        if isinstance(sets, dict):
+            sets = [sets]
+        return [
+            (str(item.get("name", "")), str(item.get("value", "")))
+            for item in sets if isinstance(item, dict)
+        ]
+    body = blk["body"]
+    code = mask_comments_and_heredocs(body)
+    spans: list[tuple[int, int]] = []
+    for sm in re.finditer(r'(?m)^\s*set\s*\{', code):
+        end_after = brace_walk(body, sm.end() - 1)
+        if end_after is not None:
+            spans.append((sm.end(), end_after - 1))
+    for lm in re.finditer(r'(?m)^\s*set\s*=\s*\[', code):
+        list_end = brace_walk(body, lm.end() - 1, opens="[", closes="]")
+        if list_end is None:
+            continue
+        i = lm.end()
+        while (j := code.find("{", i, list_end)) != -1:
+            item_end = brace_walk(body, j)
+            if item_end is None:
+                break
+            spans.append((j + 1, item_end - 1))
+            i = item_end
+    return [
+        (block_arg_value(body[a:b], "name") or "", block_arg_value(body[a:b], "value") or "")
+        for a, b in spans
+    ]
 
 
 @_register_infile("iam_json_policy_analysis")

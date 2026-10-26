@@ -104,6 +104,24 @@ _REQUIRED_FIELDS = (
 # ---- Minimal YAML loader -----------------------------------------------
 # Avoid PyYAML dependency. Catalogue YAML is shallow and well-formed.
 
+def _strip_yaml_comment(line: str) -> str:
+    """`line` without a trailing YAML comment: a `#` outside quotes that
+    starts the line or follows whitespace. List items used to keep theirs
+    (`- kind: grep  # note` gave the unknown kind `grep  # note`, so a
+    custom rule silently never ran), and other lines cut at any `#`, even
+    one inside a quoted regex (`'(?m)^\\s*#'`)."""
+    quote = ""
+    for i, ch in enumerate(line):
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "'\"" and (i == 0 or line[i - 1] in " \t:-[{,"):
+            quote = ch
+        elif ch == "#" and (i == 0 or line[i - 1] in " \t"):
+            return line[:i].rstrip()
+    return line
+
+
 def load_yaml(text: str) -> dict:
     """Tiny YAML parser for the catalogue subset we control."""
     root: dict = {}
@@ -112,8 +130,7 @@ def load_yaml(text: str) -> dict:
     i = 0
     while i < len(lines):
         raw = lines[i]
-        # Strip comments outside of strings (catalogue values don't contain `#`)
-        line = raw.split("#", 1)[0] if not raw.lstrip().startswith("- ") else raw
+        line = _strip_yaml_comment(raw)
         if not line.strip():
             i += 1
             continue

@@ -30,7 +30,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from _hcl import normalise_attrs, parse_tf, single_interpolation
+from _hcl import brace_walk, normalise_attrs, parse_tf, single_interpolation
 
 _JSONENCODE_RE = re.compile(r"\s*jsonencode\s*\((.*)\)\s*", re.DOTALL)
 
@@ -114,8 +114,47 @@ def decode_policy(value) -> dict | None:
     try:  # heredoc or quoted JSON string
         doc = json.loads(value)
     except ValueError:
-        return None
+        # A heredoc may hold a bare interpolation as a value
+        # (`"Resource": ${jsonencode(var.arns)}`): not JSON, so the whole
+        # policy was dropped and a wildcard Action beside it missed. Quote
+        # each one (it stays an opaque "${...}" value, as quoted ones are)
+        # and try again.
+        try:
+            doc = json.loads(_quote_bare_interpolations(value))
+        except ValueError:
+            return None
     return doc if isinstance(doc, dict) else None
+
+
+def _quote_bare_interpolations(text: str) -> str:
+    """`text` with every `${...}` outside a JSON string replaced by that
+    interpolation as a JSON string. Nested braces and quotes inside the
+    interpolation are matched with `brace_walk`."""
+    out: list[str] = []
+    i, n, in_str = 0, len(text), False
+    while i < n:
+        ch = text[i]
+        if in_str:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_str = False
+            i += 1
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "$" and text.startswith("${", i):
+            end = brace_walk(text, i + 1)
+            if end is not None:
+                out.append(json.dumps(text[i:end]))
+                i = end
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def json_statements(doc: dict) -> list[Statement]:

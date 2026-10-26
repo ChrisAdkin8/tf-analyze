@@ -403,7 +403,9 @@ def evaluate_policy(pat: dict, eid: str, index: dict) -> list[dict]:
     is_require = require_src is not None
     description = pat.get("description", "")
 
-    views = [_ResourceView(addr, e) for addr, e in index.items()]
+    # `e["addr"]`, not the key: a name repeated across modules is keyed
+    # `<addr>@<dir>` (`_cross_resource._build_resource_index`).
+    views = [_ResourceView(e.get("addr", addr), e) for addr, e in index.items()]
     out: list[dict] = []
     for view in views:
         env = {"resource": view, "_resources": views, "that": None}
