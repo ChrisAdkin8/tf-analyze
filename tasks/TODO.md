@@ -124,8 +124,9 @@ guards a stale/shrunk buffer; attack-graph + rule-explainer panels get the 120s 
 - The two never-fired greps (`SEC-LOG-CROSS-ACCOUNT-001`, `STK-K8S-IMAGE-SIGNED-001`) —
   *intentionally* deferred by their own catalog comments ("until kubernetes_manifest walker").
 - The ~79 remaining clean fixtures (negative coverage) — ongoing fixture authoring, not a discrete bug.
-- Full commit-SHA pinning of all ~28 Actions — Dependabot added now; hand-pinning risks
-  mis-resolving a SHA and breaking the (now-required) CI gate.
+- ~~Full commit-SHA pinning of all ~28 Actions~~ — done 2026-10-26 (Round 62): all 33
+  `uses:` pinned to the commit each tag pointed at, resolved via the GitHub API and
+  matched to an exact `vX.Y.Z` tag (kept as the `# vX.Y.Z` comment Dependabot updates).
 - `appendIgnoreRule` async + YAML-lib rewrite, and a goreleaser release pipeline for the provider.
 
 ---
@@ -333,9 +334,8 @@ All three original P0s are **fixed and verified this session** — see DONE abov
   → comment posted on wrong line. Skip lines starting with `\`.
 - [ ] `[~]` **Mutable-in-place enrichers** (`_output.py`, `_threat_intel.py`, `_baseline.py`) make
   multi-format output order-dependent. Deep-copy per format or return new dicts.
-- [ ] `[~]` **GitHub Actions unpinned** (28 floating major tags incl. third-party
-  `softprops/action-gh-release@v2` with `contents: write`); Dockerfile base by tag not digest.
-  Pin to SHAs + Dependabot; pin base by digest.
+- [ ] `[~]` ~~**GitHub Actions unpinned**~~ (done Round 62: all `uses:` SHA-pinned, Dependabot
+  updates them). Still open: Dockerfile base by tag not digest — pin base by digest.
 - [ ] `[~]` **`terraform-provider/` has no CI or goreleaser** — can't reach the Terraform Registry
   and isn't built/tested. Add a Go CI job + goreleaser if Registry distribution is intended.
 - [ ] `[~]` **install.sh `--copy` uses `cp -R`** (drags gitignored artifacts) and curl|bash has no

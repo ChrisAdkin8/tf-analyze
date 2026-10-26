@@ -1966,13 +1966,16 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
     """
     from _lsp import run_lsp_server as _lsp_run
 
-    def _scanner(path: Path, entries: list[dict]) -> list[dict]:
-        text = path.read_text()
+    def _scanner(path: Path, entries: list[dict], text: str | None) -> list[dict]:
+        # `text`: the editor's unsaved buffer, when the client sent one.
+        if text is None:
+            text = path.read_text()
         target_dir = path.parent
         all_files = {
             str(p): p.read_text()
             for p in target_dir.glob("*.tf") if p.exists()
         }
+        all_files[str(path)] = text
         var_defaults = _extract_var_defaults_by_dir(all_files)
         findings = detect_in_file(
             path, text, entries, var_defaults.get(str(target_dir), {}),

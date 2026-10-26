@@ -133,7 +133,20 @@ def findings_to_diagnostics(
 
 
 def _uri_to_path(uri: str) -> Path:
-    return Path(uri.removeprefix("file://"))
+    """The local path of a `file:` URI: percent-decoded (`my%20dir` →
+    `my dir`) and in the platform's form (`file:///C:/x` → `C:\\x` on
+    Windows). Stripping `file://` alone left encoded characters in, so a
+    path with a space — and every Windows path — matched no file and got
+    no diagnostics."""
+    from urllib.parse import unquote, urlparse
+    from urllib.request import url2pathname
+    parsed = urlparse(uri)
+    if parsed.scheme != "file":
+        return Path(unquote(uri))
+    path = url2pathname(parsed.path)
+    if parsed.netloc and parsed.netloc != "localhost":  # UNC: file://server/share
+        path = f"//{parsed.netloc}{path}"
+    return Path(path)
 
 
 def run_lsp_server(
@@ -145,7 +158,8 @@ def run_lsp_server(
 ) -> None:
     """JSON-RPC 2.0 LSP server on stdin/stdout.
 
-    `scanner(path, entries)` returns findings for a single .tf file.
+    `scanner(path, entries, text)` returns findings for a single .tf file;
+    `text` is the editor's current buffer (None: read the file).
     `load_catalog(catalog_dir)` returns the parsed catalogue entries.
     Both are injected so this module does not import from `detect.py`.
 
@@ -193,17 +207,23 @@ def run_lsp_server(
                 f"(requires {required}, accepts up to {len(positional)})."
             )
 
-    _check_arity(scanner, 2, "scanner")
+    _check_arity(scanner, 3, "scanner")
     _check_arity(load_catalog, 1, "load_catalog")
     entries = load_catalog(catalog_dir)
     id_map = {e["id"]: e for e in entries}
     _diagnostics: dict[str, list] = {}
+    # The editor's text of each open document (full sync): diagnostics
+    # follow what is on screen, not the last save.
+    _texts: dict[str, str] = {}
 
     def _scan_uri(uri: str) -> list[dict]:
         path = _uri_to_path(uri)
-        if not path.exists() or path.suffix != ".tf":
+        if path.suffix != ".tf":
             return []
-        return scanner(path, entries)
+        text = _texts.get(uri)
+        if text is None and not path.exists():
+            return []
+        return scanner(path, entries, text)
 
     def _read_message() -> dict | None:
         header = b""
@@ -268,7 +288,13 @@ def run_lsp_server(
                 pass
 
             elif method in ("textDocument/didOpen", "textDocument/didSave", "textDocument/didChange"):
-                uri = msg["params"]["textDocument"]["uri"]
+                params = msg["params"]
+                uri = params["textDocument"]["uri"]
+                if method == "textDocument/didOpen" and "text" in params["textDocument"]:
+                    _texts[uri] = params["textDocument"]["text"]
+                elif method == "textDocument/didChange" and params.get("contentChanges"):
+                    # `change: 1` (Full): the last change is the whole text.
+                    _texts[uri] = params["contentChanges"][-1].get("text", _texts.get(uri, ""))
                 findings = _scan_uri(uri)
                 _diagnostics[uri] = findings
                 _notify("textDocument/publishDiagnostics", {
@@ -279,6 +305,7 @@ def run_lsp_server(
             elif method == "textDocument/didClose":
                 uri = msg["params"]["textDocument"]["uri"]
                 _diagnostics.pop(uri, None)
+                _texts.pop(uri, None)
                 _notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": []})
 
             elif method == "textDocument/codeAction":
