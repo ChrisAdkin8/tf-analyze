@@ -41,6 +41,25 @@ which gains two cases (`git_module_tag_pin`,
 
 ---
 
+## Round 53 — Score v2: honest points, no padding — 2026-10-26
+
+Fixes to the Round 50 size-aware score (`scoring_version` stays 2).
+
+- `--explain-score` printed each urgency's catalogue weight ("−3 pts"
+  for a MEDIUM) even where the size factor makes a fix worth 0.6. Rows
+  gain `points`, the real penalty a fix removes, and the text shows it;
+  `weight` is unchanged for JSON readers.
+- The size factor counted every `resource` block, so 500 empty
+  `terraform_data` blocks lifted a score from 50 to 61.
+  `resources_scanned` now counts only resources of a type at least one
+  rule checks (terragoat: 113 → 94).
+- Hygiene stays mess per assessed resource, so adding a real resource
+  cleaner than average (or deleting one dirtier than average) can still
+  move the score by about a point — documented in SKILL.md / README. A
+  property test pins that fixing a finding never lowers the score.
+
+---
+
 ## Round 52 — Guards that check answers, not just shapes — 2026-10-26
 
 The suite passed while a review found dozens of wrong answers, because
