@@ -15,8 +15,9 @@ attribute (`tags`, `labels`, …); `provisioner` / `dynamic` take a label.
 
 A string that is exactly one interpolation (``"${aws_s3_bucket.b.arn}"``)
 means that expression in Terraform, so it is emitted bare — the form the
-rules are written against — provided its brackets balance on their own;
-every other string is emitted as an HCL string literal. Keys that are not valid
+rules are written against — provided it is one line with no comment or
+heredoc marker and its brackets balance on their own; every other string
+is emitted as an HCL string literal. Keys that are not valid
 identifiers are dropped rather than spliced into the output, and the
 ``"//"`` comment property is ignored.
 """
@@ -138,6 +139,7 @@ def _read(text: str):
 # ---- HCL rendering ------------------------------------------------------------
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][\w-]*$")
+_UNSAFE_BARE_RE = re.compile(r"[\n\r]|#|//|/\*|<<")
 _LABEL_RE = re.compile(r"^[\w-]+$")
 # A variable's `type` is an expression; emit it bare only when it is a
 # plain type constraint, never arbitrary text.
@@ -186,10 +188,14 @@ _ATTR_ONLY = frozenset({"module", "locals", "output", "required_providers"})
 
 def _bare_expression(s: str) -> str | None:
     """The expression of a single-interpolation string, when it is safe
-    to emit unquoted: every bracket in it closes inside it, so it cannot
+    to emit unquoted: one line, no comment or heredoc marker (each of
+    those can read differently to the regex fallback, the block lexer and
+    the parser), and every bracket in it closes inside it, so it cannot
     end the enclosing block or open a new one."""
     expr = single_interpolation(s)
     if expr is None or not expr.strip():
+        return None
+    if _UNSAFE_BARE_RE.search(expr):
         return None
     for opens, closes in ("{}", "()", "[]"):
         wrapped = opens + expr + closes

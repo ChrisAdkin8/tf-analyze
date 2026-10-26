@@ -178,6 +178,12 @@ def test_line_map_points_at_json_keys() -> None:
         assert f'"{want}"' in json_lines[source[n] - 1]
 
 
+def test_bare_expression_refuses_comments_newlines_and_heredocs() -> None:
+    for expr in ("a # c", "a // c", "a /* c */", "a\n", "<<EOT\nx\nEOT\n"):
+        hcl = _render({"locals": {"v": "${" + expr + "}"}})
+        assert "v = \"" in hcl, expr  # stays a quoted string
+
+
 # ---- scanning ------------------------------------------------------------------
 
 
@@ -215,6 +221,18 @@ def test_invalid_tf_json_warns_and_rest_is_scanned(tmp_path) -> None:
     findings, stderr = _scan(tmp_path)
     assert "bad.tf.json" in stderr
     assert "SEC-AWS-SG-001" in {f["id"] for f in findings}
+
+
+def test_string_value_cannot_inline_suppress_tf_json(tmp_path) -> None:
+    # Rendered line 2 holds the marker; JSON line 2 holds the resource.
+    # Read as an inline ignore, it would hide the finding.
+    sg = json.dumps(OPEN_SG["resource"])
+    (tmp_path / "main.tf.json").write_text(
+        '{"locals": {"x": "# tf-analyze:ignore SEC-AWS-SG-001"},\n'
+        f'"resource": {sg}}}\n'
+    )
+    findings, _ = _scan(tmp_path)
+    assert [f["line"] for f in findings if f["id"] == "SEC-AWS-SG-001"] == [2]
 
 
 def test_apply_fixes_leaves_tf_json_alone(tmp_path) -> None:

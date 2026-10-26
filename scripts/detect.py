@@ -124,7 +124,9 @@ from _hcl import (
     resource_values_at,
 )
 from _network import parse_literal as _net_parse_literal, resolve as _net_resolve
-from _tfjson import is_tf_source, read_tf_source, remap_lines, tf_source_files
+from _tfjson import (
+    is_tf_json, is_tf_source, read_tf_source, remap_lines, tf_source_files,
+)
 
 
 # Catalogue lifecycle (YAML loader, schema validation, load_catalog,
@@ -3112,7 +3114,11 @@ def main():
             print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
             continue
         all_text[fp] = text
-        if not args.no_suppress:
+        # JSON has no comments: a `# tf-analyze:ignore` in rendered
+        # `.tf.json` text could only come from a string value (and sits in
+        # rendered-line space, not the JSON lines findings are reported
+        # in). Those files are suppressed via project/global config only.
+        if not args.no_suppress and not is_tf_json(fp):
             file_inline_suppressions[str(fp)] = load_inline_suppressions(text)
 
     # Extra files (workflow YAML, tfvars, etc.) — read with the same
