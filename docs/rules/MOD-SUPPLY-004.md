@@ -41,7 +41,7 @@ keywords: "module, medium, terraform, iac, mitre-T1195.002, cwe-1357, cwe-1104, 
 
 ## What this checks
 
-1. **`grep`** matching `/^\s*version\s*=\s*"\s*>=\s*[0-9]+\.[0-9]+/` — _a textual regex matched somewhere in the file._
+1. **`grep`** matching `/^[ \t]*version\s*=\s*"\s*>=\s*[0-9]+\.[0-9]+/` — _a textual regex matched somewhere in the file._
   A version constraint of the shape `version = ">= 5.40"` (or
 `version = ">= 5.40.0"`) has no upper bound — `terraform init`
 pulls in any future major (6.x, 7.x). When a provider or module

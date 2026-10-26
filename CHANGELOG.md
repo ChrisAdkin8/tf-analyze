@@ -5,6 +5,50 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 38 — Parser migration complete: top-level lookups, text-scan hygiene, literal-only `count = 0` — 2026-10-26
+
+Step 5a of `tasks/hcl-parser-migration.md`.
+
+- **`block_arg_value` reads only a block's own (top-level) argument**,
+  never one inside a nested block, map, string, heredoc or comment. This
+  gives every remaining text-based lookup the same semantics as the parse
+  tree in one place. An instrumented run over all 637 fixture / example
+  directories found one call site whose answer changed — a bug: a Cloud
+  Armor `rate_limit_threshold { count = 100 }` was read as the resource's
+  `count`, so a nested `count = 0` would have skipped the resource for
+  every rule.
+- **Lists in bodies containing a heredoc are read whole.** The heredoc
+  path returned only a list's first element, so e.g. an IAM statement's
+  `actions = ["s3:GetObject", "*"]` lost its wildcard whenever the same
+  body held a heredoc.
+- Structural text-scan rules (module sources, version constraints,
+  `data` / `provisioner` blocks, …) no longer match commented-out code.
+  Removes a `SEC-PROVISIONER-001` false positive on a comment line in
+  terragoat.
+- `SEC-DATASOURCE-003`, `ROB-DRIFT-001/002`, `MOD-SUPPLY-004`: the
+  pattern no longer reaches back across blank lines, so findings report
+  the `data` / `lifecycle` line itself (not the blank line above) —
+  baseline keys for `SEC-DATASOURCE-003` move by one line.
+- README: the MITRE / CWE / D3FEND coverage badge was stale (69/53/40%);
+  it now reads 80/68/47% and is checked by `tests/test_readme_drift.py`.
+  The hand-written test-count badge (1,153 — wrong) is removed; the CI
+  badge reports test status.
+- **A resource is skipped only for a literal `count = 0`.** A count that
+  reaches 0 only through a variable default (e.g.
+  `count = var.enabled ? 1 : 0`, `default = false`) is now checked by
+  every rule, because tfvars / `-var` can enable it at apply time.
+  Expect new findings on optional, disabled-by-default resources in
+  modules (bundled corpora: 8 on the `unguarded_count_ref` fixture).
+- Structural text scans now use the HCL-aware comment / heredoc lexer
+  (`code_only: true`) instead of the older comment stripper, so text
+  inside heredocs no longer matches them either.
+
+**Upgrade note — baselines:** besides the `SEC-DATASOURCE-003` line
+move above, resources whose count depends on a variable now produce
+findings that baselines won't contain.
+
+---
+
 ## Round 37 — Structured network exposure rules; engine-evaluated escalation — 2026-10-25
 
 Step 4 of `tasks/hcl-parser-migration.md`.

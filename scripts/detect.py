@@ -460,16 +460,21 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
 
 
 def _resource_is_count_zero(body: str, var_defaults: dict) -> bool:
-    """Return True if the resource block has `count = 0` (definitely not created).
+    """Return True if the resource block has a literal `count = 0` (definitely
+    not created), so rules can skip it.
 
-    Resolves `var.X` and `local.X` references against known defaults.  When
-    count is a non-resolvable expression the function returns False (safe default
-    — don't skip a resource we can't prove is absent).
+    Only literals count — including a ternary on a literal condition
+    (`false ? 1 : 0`). A count that depends on `var.X` / `local.X` is NOT
+    resolved against defaults: tfvars / -var can override the default at
+    apply time, so `count = var.enabled ? 1 : 0` with `default = false` is
+    still checked (decided in tasks/hcl-parser-migration.md §14 item 25).
+    `var_defaults` is accepted for call-site compatibility and ignored.
     """
+    del var_defaults  # deliberately unused — see docstring
     val = block_arg_value(body, "count")
     if val is None:
         return False
-    val = _resolve_var_ref(val, var_defaults)
+    val = _resolve_var_ref(val, {})
     try:
         return int(val) == 0
     except (ValueError, TypeError):

@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, mitre-T1059, mitre-T1071.001, cwe-829
 
 ## What this checks
 
-1. **`grep`** matching `/^\s*data\s+"(?:external|http)"\s+/` — _a textual regex matched somewhere in the file._
+1. **`grep`** matching `/^[ \t]*data\s+"(?:external|http)"\s+/` — _a textual regex matched somewhere in the file._
   `data "external"` runs an external program at plan AND apply
 time; `data "http"` fetches a URL whose body shapes downstream
 resources. Both lift remote, mutable input into the plan

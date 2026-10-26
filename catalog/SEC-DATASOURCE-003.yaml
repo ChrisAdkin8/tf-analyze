@@ -24,8 +24,9 @@ slsa:
 patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
-    regex: '^\s*data\s+"(?:external|http)"\s+'
+    regex: '^[ \t]*data\s+"(?:external|http)"\s+'
     description: |
       `data "external"` runs an external program at plan AND apply
       time; `data "http"` fetches a URL whose body shapes downstream

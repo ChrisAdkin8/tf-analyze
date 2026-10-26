@@ -7,10 +7,12 @@ status: active
 patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/versions.tf"
     regex: 'required_version\s*=\s*"[~>=\s]*0\.'
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/versions.tf"
     regex: 'required_version\s*=\s*"[~>=\s]*1\.[0-5]'
 owasp_iac:

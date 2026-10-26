@@ -19,11 +19,13 @@ slsa:
 patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
     regex: 'provisioner\s+"local-exec"'
     description: local-exec provisioner runs arbitrary shell commands
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
     regex: 'provisioner\s+"remote-exec"'
     description: remote-exec provisioner runs commands on remote hosts
