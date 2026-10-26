@@ -68,6 +68,7 @@ Pattern kinds supported:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
 import hashlib
 import io
@@ -76,8 +77,11 @@ import fnmatch
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 # ---- python-hcl2 ----------------------------------------------------------
@@ -618,6 +622,12 @@ class InFileCtx:
 # Unix main thread only; elsewhere the budget is not enforced.
 PATTERN_TIME_BUDGET_S = float(os.environ.get("TF_ANALYZE_PATTERN_TIMEOUT", "5"))
 RULE_TIMEOUTS: list[dict] = []
+# The running pattern: armed while its handler runs, and when it started.
+# One kernel timer serves the whole scan loop (`_pattern_budget_scope`);
+# per call only these are set — re-arming the timer around each of the
+# ~400k pattern calls in a large scan doubled its cost (+50 %).
+_BUDGET_ARMED = False
+_PATTERN_STARTED = 0.0
 
 
 class _PatternTimeout(BaseException):
@@ -626,37 +636,60 @@ class _PatternTimeout(BaseException):
     swallow it and keep running past the budget."""
 
 
-def _raise_pattern_timeout(signum, frame):
-    raise _PatternTimeout()
+def _on_budget_alarm(signum, frame):
+    """SIGALRM: stop the running pattern if it has used its whole budget;
+    otherwise re-arm the timer for the time it has left (or a full budget
+    between patterns), so each pattern still gets exactly its budget."""
+    if _BUDGET_ARMED:
+        remaining = _PATTERN_STARTED + PATTERN_TIME_BUDGET_S - time.monotonic()
+        if remaining <= 0:
+            raise _PatternTimeout()
+    else:
+        remaining = PATTERN_TIME_BUDGET_S
+    signal.setitimer(signal.ITIMER_REAL, max(remaining, 0.001))
 
 
-def _call_with_budget(handler, ctx, eid: str, where: str) -> list[dict]:
-    """``handler(ctx)`` under `PATTERN_TIME_BUDGET_S`; [] on timeout, which
-    is recorded in `RULE_TIMEOUTS`."""
-    import signal
-    import threading
+@contextlib.contextmanager
+def _pattern_budget_scope():
+    """Install the handler and start the timer around a scan loop; yields
+    whether budgets are enforced: Unix main thread, budget > 0."""
     if (
         PATTERN_TIME_BUDGET_S <= 0
         or not hasattr(signal, "setitimer")
         or threading.current_thread() is not threading.main_thread()
     ):
-        return handler(ctx)
-    import time
-    previous = signal.signal(signal.SIGALRM, _raise_pattern_timeout)
-    started = time.monotonic()
+        yield False
+        return
+    previous = signal.signal(signal.SIGALRM, _on_budget_alarm)
     signal.setitimer(signal.ITIMER_REAL, PATTERN_TIME_BUDGET_S)
+    try:
+        yield True
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _call_with_budget(handler, ctx, eid: str, where: str, enforced: bool) -> list[dict]:
+    """``handler(ctx)`` under `PATTERN_TIME_BUDGET_S` when `enforced` (inside
+    `_pattern_budget_scope`); [] on timeout, recorded in `RULE_TIMEOUTS`."""
+    global _BUDGET_ARMED, _PATTERN_STARTED
+    if not enforced:
+        return handler(ctx)
+    _PATTERN_STARTED = time.monotonic()
+    _BUDGET_ARMED = True
     try:
         found = handler(ctx)
         # Belt and braces: should anything still swallow the timeout, an
         # overrun is recorded and its (possibly partial) findings dropped.
-        timed_out = time.monotonic() - started >= PATTERN_TIME_BUDGET_S
+        timed_out = time.monotonic() - _PATTERN_STARTED >= PATTERN_TIME_BUDGET_S
     except _PatternTimeout:
         timed_out = True
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
+        _BUDGET_ARMED = False
     if not timed_out:
         return found
+    # The alarm that stopped it is spent: re-arm for the patterns after it.
+    signal.setitimer(signal.ITIMER_REAL, PATTERN_TIME_BUDGET_S)
     RULE_TIMEOUTS.append({"rule": eid, "file": where})
     print(
         f"WARN: {eid} exceeded its {PATTERN_TIME_BUDGET_S:g}s budget on {where}; "
@@ -792,34 +825,35 @@ def detect_in_file(
     modules = find_blocks(text, MODULE_START)
     variables = find_blocks(text, VARIABLE_START)
 
-    for entry in entries:
-        eid = entry["id"]
-        for pat in entry.get("patterns", []) or []:
-            kind = pat.get("kind", "")
-            # Round 30.14 — registry dispatch. Every in-file detector
-            # kind is now a registered handler in `_INFILE_HANDLERS`.
-            # Unknown kinds (catalogue-only / corpus-only) fall through
-            # silently — `detect_corpus` handles its own kinds; truly
-            # malformed catalogue entries are caught at load time by
-            # `_catalog.validate_catalog_entry`.
-            _handler = _INFILE_HANDLERS.get(kind)
-            if _handler is None:
-                continue
-            _ctx = InFileCtx(
-                file_path=file_path,
-                text=text,
-                var_defaults=_vd,
-                resources=resources,
-                modules=modules,
-                variables=variables,
-                entry=entry,
-                eid=eid,
-                pat=pat,
-                module_resources=module_resources,
-            )
-            _found = _call_with_budget(_handler, _ctx, eid, str(file_path))
-            _apply_structured_escalation(_found, entry, resources, _vd)
-            findings.extend(_found)
+    with _pattern_budget_scope() as _budgeted:
+        for entry in entries:
+            eid = entry["id"]
+            for pat in entry.get("patterns", []) or []:
+                kind = pat.get("kind", "")
+                # Round 30.14 — registry dispatch. Every in-file detector
+                # kind is now a registered handler in `_INFILE_HANDLERS`.
+                # Unknown kinds (catalogue-only / corpus-only) fall through
+                # silently — `detect_corpus` handles its own kinds; truly
+                # malformed catalogue entries are caught at load time by
+                # `_catalog.validate_catalog_entry`.
+                _handler = _INFILE_HANDLERS.get(kind)
+                if _handler is None:
+                    continue
+                _ctx = InFileCtx(
+                    file_path=file_path,
+                    text=text,
+                    var_defaults=_vd,
+                    resources=resources,
+                    modules=modules,
+                    variables=variables,
+                    entry=entry,
+                    eid=eid,
+                    pat=pat,
+                    module_resources=module_resources,
+                )
+                _found = _call_with_budget(_handler, _ctx, eid, str(file_path), _budgeted)
+                _apply_structured_escalation(_found, entry, resources, _vd)
+                findings.extend(_found)
     return findings
 
 
@@ -957,33 +991,34 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
     _resource_index_cache: dict = _build_resource_index(all_files_text)
     _module_clusters_cache: dict = _build_module_clusters(all_files_text)
 
-    for entry in entries:
-        eid = entry["id"]
-        for pat in entry.get("patterns", []) or []:
-            kind = pat.get("kind", "")
-            # Round 30.14 — registry dispatch. Every corpus kind is
-            # now registered in `_CORPUS_HANDLERS`. Unknown kinds
-            # (in-file kinds or malformed catalogue entries) fall
-            # through; catalogue typos are caught at load time by
-            # `_catalog.validate_catalog_entry`.
-            _handler = _CORPUS_HANDLERS.get(kind)
-            if _handler is not None:
-                _ctx = CorpusCtx(
-                    target=target,
-                    all_files_text=all_files_text,
-                    sensitive_vars=sensitive_vars,
-                    module_dirs=module_dirs,
-                    var_refs_by_dir=var_refs_by_dir,
-                    output_refs=output_refs,
-                    module_sources=module_sources,
-                    resource_index_cache=_resource_index_cache,
-                    module_clusters_cache=_module_clusters_cache,
-                    entry=entry,
-                    eid=eid,
-                    pat=pat,
-                )
-                findings.extend(_call_with_budget(_handler, _ctx, eid, str(target)))
-                continue
+    with _pattern_budget_scope() as _budgeted:
+        for entry in entries:
+            eid = entry["id"]
+            for pat in entry.get("patterns", []) or []:
+                kind = pat.get("kind", "")
+                # Round 30.14 — registry dispatch. Every corpus kind is
+                # now registered in `_CORPUS_HANDLERS`. Unknown kinds
+                # (in-file kinds or malformed catalogue entries) fall
+                # through; catalogue typos are caught at load time by
+                # `_catalog.validate_catalog_entry`.
+                _handler = _CORPUS_HANDLERS.get(kind)
+                if _handler is not None:
+                    _ctx = CorpusCtx(
+                        target=target,
+                        all_files_text=all_files_text,
+                        sensitive_vars=sensitive_vars,
+                        module_dirs=module_dirs,
+                        var_refs_by_dir=var_refs_by_dir,
+                        output_refs=output_refs,
+                        module_sources=module_sources,
+                        resource_index_cache=_resource_index_cache,
+                        module_clusters_cache=_module_clusters_cache,
+                        entry=entry,
+                        eid=eid,
+                        pat=pat,
+                    )
+                    findings.extend(_call_with_budget(_handler, _ctx, eid, str(target), _budgeted))
+                    continue
     return findings
 
 

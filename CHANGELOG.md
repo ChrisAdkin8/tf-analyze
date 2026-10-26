@@ -25,7 +25,10 @@ repo's `rules_dir` are never reviewed at all.
   that file are dropped with a warning, listed in
   `summary.rule_timeouts`, and the `--fail-on` gate fails (a check that
   did not finish has not passed). A timed-out scan is not cached. Unix
-  main thread only; elsewhere unchanged. Overhead on terragoat: ~0.03 s.
+  main thread only; elsewhere unchanged. One kernel timer serves each
+  scan loop and per call only a start time is recorded — re-arming the
+  timer around each of ~400k pattern calls cost +50 % and pushed
+  `test_perf` over its budget on CI; the overhead is now ~3–9 %.
   The timeout is a `BaseException` (like `KeyboardInterrupt`) and the
   deadline is re-checked after each call: as an `Exception`, a handler's
   `except Exception: continue` (policy DSL, IAM decoding) swallowed it,

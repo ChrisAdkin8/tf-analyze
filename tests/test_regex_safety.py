@@ -213,6 +213,8 @@ def test_a_handler_swallowing_exceptions_cannot_outrun_the_budget(monkeypatch) -
         return out
 
     start = time.monotonic()
-    assert detect._call_with_budget(handler, None, "CUSTOM-X", "main.tf") == []
+    with detect._pattern_budget_scope() as enforced:
+        assert enforced
+        assert detect._call_with_budget(handler, None, "CUSTOM-X", "main.tf", enforced) == []
     assert time.monotonic() - start < 5
     assert detect.RULE_TIMEOUTS == [{"rule": "CUSTOM-X", "file": "main.tf"}]
