@@ -42,7 +42,7 @@ keywords: "robustness, medium, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca
 ## What this checks
 
 1. **`grep`** matching `/required_version\s*=\s*"[~>=\s]*0\./` — _a textual regex matched somewhere in the file._
-2. **`grep`** matching `/required_version\s*=\s*"[~>=\s]*1\.[0-5]/` — _a textual regex matched somewhere in the file._
+2. **`grep`** matching `/required_version\s*=\s*"[~>=\s]*1\.[0-5](?![0-9])/` — _a textual regex matched somewhere in the file._
 
 ## Why it likely fired
 

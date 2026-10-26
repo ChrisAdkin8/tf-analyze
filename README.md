@@ -13,7 +13,7 @@
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/tfanalyze.tf-analyze?label=vs%20code%20marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/ChrisAdkin8/tf-analyze/pkgs/container/tf-analyze)
 [![tf-analyze score](https://tfanalyze.com/badge/ChrisAdkin8/tf-analyze.svg)](https://tfanalyze.com/scan/ChrisAdkin8/tf-analyze)
-![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue)
+![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 <!-- Content row — what does it cover? -->
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
@@ -378,15 +378,15 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (239 positive + 146 clea
 ├── README.md                   # This file
 ├── CHANGELOG.md                # Per-round release notes
 ├── CONTRIBUTING.md
-├── LICENSE                     # MPL-2.0
+├── LICENSE                     # Apache-2.0
 ├── Dockerfile                  # ghcr.io/chrisadkin8/tf-analyze
 ├── pyproject.toml
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration
 ├── .github/workflows/          # CI (ci.yml, docker.yml)
-├── catalog/                    # 343 rule definitions (one YAML per rule)
+├── catalog/                    # 354 rule definitions (one YAML per rule)
 │   └── README.md               # Schema reference
-├── fixtures/                   # 239 positive + 146 clean (negative) fixtures
+├── fixtures/                   # 360 positive + 264 clean (negative) fixtures
 ├── examples/                   # Showcase corpora
 │   ├── terragoat/              #   • Multi-cloud deliberately-vulnerable corpus
 │   ├── module-reuse-demo/      #   • Module Reuse Advisor showcase (3 clouds)
@@ -451,4 +451,4 @@ Built and exercised inside an HCP Vault + Consul + GKE platform engineering proj
 
 ## License
 
-[Mozilla Public License 2.0](LICENSE). Catalogue rules and fixtures are released under the same licence to permit upstream contributions and downstream forks.
+[Apache License 2.0](LICENSE). Catalogue rules and fixtures are released under the same licence to permit upstream contributions and downstream forks.

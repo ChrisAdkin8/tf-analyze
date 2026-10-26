@@ -4,14 +4,14 @@ version = "0.2.6"
 description = "Terraform static analysis and security scanner"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MPL-2.0" }
+license = { text = "Apache-2.0" }
 keywords = ["terraform", "security", "static-analysis", "iac"]
 
 [project.scripts]
 tf-analyze = "detect:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-xdist>=3.5", "hypothesis>=6.0"]
+dev = ["pytest>=8.0", "pytest-xdist>=3.5", "pytest-timeout>=2.3", "hypothesis>=6.0", "pyyaml>=6.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -26,7 +26,8 @@ A new rule is a ~6-file PR (catalog YAML + fixture + terragoat trigger +
 - HCL has **no single-quoted strings**. Never treat `'` as a string delimiter.
 - Any brace/paren walker over *raw* HCL must be comment-aware (`#`, `//`, `/* */`).
 - Catalogue YAML: **block-style lists only** (`- a`), never inline `[a, b]`.
-- stdlib-only. The only optional dep is `python-hcl2`, gated by `--use-hcl2`.
+- stdlib-only at runtime. `python-hcl2` + `lark` are vendored under `scripts/_vendor/`
+  (refresh with `scripts/vendor_deps.py`) and always used — never a pip dependency.
 - If a module runs as `__main__` and siblings do `from detect import ...`,
   alias `sys.modules.setdefault("detect", sys.modules[__name__])` first.
 
