@@ -71,9 +71,9 @@ def test_resources_get_attrs_from_the_tree(tmp_path) -> None:
     assert resources[0]["start_line"] == 1
 
 
-def test_ambiguous_resource_key_falls_back(tmp_path) -> None:
-    # `resource` text inside a heredoc: the regex scanner sees two
-    # aws_thing.a blocks, the tree sees one -> ambiguous -> regex fallback.
+def test_heredoc_resource_text_is_not_a_block(tmp_path) -> None:
+    # `resource` text inside a heredoc is not a block: the scanner and the
+    # tree agree on one aws_thing.a, so the tree path is used.
     text = (
         'resource "aws_thing" "a" {\n'
         '  doc = <<EOT\n'
@@ -84,6 +84,18 @@ def test_ambiguous_resource_key_falls_back(tmp_path) -> None:
     )
     tree, _ = _hcl.parse_tf(text)
     assert len(_hcl.resource_subtrees(tree)[("aws_thing", "a")]) == 1
+    blocks = detect.find_blocks(text, detect.RESOURCE_START)
+    assert len(blocks) == 1 and blocks[0]["block_text"] == text.rstrip("\n")
+    assert _fires(text, _entry("name"), tmp_path)
+
+
+def test_ambiguous_resource_key_falls_back(tmp_path) -> None:
+    # Two blocks with one address (invalid Terraform): the key is
+    # ambiguous, so both are scanned through the regex fallback.
+    text = (
+        'resource "aws_thing" "a" {\n}\n'
+        'resource "aws_thing" "a" {\n}\n'
+    )
     assert len(detect.find_blocks(text, detect.RESOURCE_START)) == 2
     assert _fires(text, _entry("name"), tmp_path)  # still scanned
 
