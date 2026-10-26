@@ -1233,13 +1233,14 @@ Include the delta in the report header after the executive summary.
 
 The score and letter grade are **emitted by `detect.py` directly** as part of every `--format json`, `--format text`, and `--format html` output. The agent should quote the engine's number, never recompute it.
 
-Single source of truth: `_RISK_WEIGHTS` and `_GRADE_TIERS` in `scripts/detect.py`. The current weights are:
+Single source of truth: `_RISK_WEIGHTS`, `_GRADE_TIERS` and `_size_factor` in `scripts/_scoring.py` (scoring version 2). The formula:
 
 ```text
-score = max(0, 100 - (15 * CRITICAL + 7 * HIGH + 3 * MEDIUM + 1 * LOW))
+size_factor = max(1, sqrt(resources_scanned / 20))
+score = max(0, floor(100 - (15 * CRITICAL + 7 * HIGH + (3 * MEDIUM + 1 * LOW) / size_factor)))
 ```
 
-INFO findings do not affect the score (weight 0). Suppressed findings (both `# tf-analyze:ignore` / `.tf-analyze-ignore.yaml` and `--baseline` matches) count at half weight — they have been acknowledged but the underlying risk still exists. The grade tiers:
+CRITICAL and HIGH cost the same in any repository (each is a concrete exposure); MEDIUM and LOW are hygiene, judged relative to size — up to 20 resources the factor is 1 (identical to version 1), so the worked examples below hold for small modules. The summary block reports `resources_scanned`, `size_factor` and `penalty`. INFO findings do not affect the score (weight 0). Suppressed findings (both `# tf-analyze:ignore` / `.tf-analyze-ignore.yaml` and `--baseline` matches) count at half weight — they have been acknowledged but the underlying risk still exists. The grade tiers:
 
 | Grade | Score range |
 |-------|-------------|

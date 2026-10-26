@@ -129,6 +129,7 @@ from _hcl import (
     resource_values_at,
 )
 from _network import parse_literal as _net_parse_literal, resolve as _net_resolve
+from _meta import __version__
 from _tfjson import (
     is_tf_json, is_tf_source, read_tf_source, remap_lines, tf_source_files,
 )
@@ -2367,6 +2368,7 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
               f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
         if args.format == "json":
             output = {
+                "tool_version": __version__,
                 "target": str(_report_target(args) or ""),
                 "summary": summary,
                 "findings": findings,
@@ -2451,6 +2453,7 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
         # Standard output
         if args.format == "json":
             output_data: dict = {
+                "tool_version": __version__,
                 "target": str(_report_target(args) or ""),
                 "summary": summary,
                 "findings": findings,
@@ -3153,6 +3156,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser-spec snapshot guards against drift).
     """
     ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--version", action="version", version=f"tf-analyze {__version__}",
+        help="Print the tf-analyze version and exit",
+    )
     _add_target_args(ap)
     _add_catalog_args(ap)
     _add_output_args(ap)
@@ -3672,7 +3679,12 @@ def main():
     # SKILL.md describes the same formula; the constants in detect.py are
     # the single source of truth and the LLM-driven markdown report should
     # cite this same number.
-    summary = _compute_summary(findings, suppressed_findings, suppressed_by_baseline)
+    summary = _compute_summary(
+        findings, suppressed_findings, suppressed_by_baseline,
+        resources_scanned=sum(
+            len(find_blocks(t, RESOURCE_START)) for t in all_text.values()
+        ),
+    )
     # Tool diagnostic, not a finding: no score impact. Present only when
     # non-empty so the summary is unchanged for files that all parse.
     if parse_fallback_files:

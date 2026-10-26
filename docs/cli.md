@@ -128,6 +128,10 @@ Scaffold a new catalogue entry and fixture skeleton for the given ID (must match
 
 show this help message and exit
 
+### `--version`
+
+Print the tf-analyze version and exit
+
 ### `--targets-file`
 
 File containing one target directory path per line (for --mode fleet).

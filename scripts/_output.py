@@ -106,6 +106,8 @@ import re
 import sys
 from pathlib import Path
 
+from _meta import __version__
+
 # ---- cross-seam imports -------------------------------------------------
 
 from _attack_graph import (
@@ -642,7 +644,7 @@ def to_sarif(
         "tool": {
             "driver": {
                 "name": "tf-analyze",
-                "version": "1.2.0",
+                "version": __version__,
                 "informationUri": "https://github.com/ChrisAdkin8/tf-analyze",
                 "rules": rules,
             }
