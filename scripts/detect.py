@@ -1333,6 +1333,7 @@ from _scoring import (
     _URGENCY_TIERS,
     _grade_for_score,
     _compute_summary,
+    _scored_resource_count,
     explain_score,
     render_score_explanation,
 )
@@ -3681,8 +3682,10 @@ def main():
     # cite this same number.
     summary = _compute_summary(
         findings, suppressed_findings, suppressed_by_baseline,
-        resources_scanned=sum(
-            len(find_blocks(t, RESOURCE_START)) for t in all_text.values()
+        resources_scanned=_scored_resource_count(
+            [b["groups"][0] for t in all_text.values()
+             for b in find_blocks(t, RESOURCE_START)],
+            entries,
         ),
     )
     # Tool diagnostic, not a finding: no score impact. Present only when

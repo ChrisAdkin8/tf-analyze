@@ -23,12 +23,19 @@ Score formula (scoring version 2):
     penalty = 15*CRITICAL + 7*HIGH + (3*MEDIUM + 1*LOW) / size_factor
     score   = max(0, floor(100 - penalty))
     size_factor = max(1, sqrt(resources_scanned / 20))
+`resources_scanned` counts only resources of a type at least one rule
+checks (`_scored_resource_count`): `terraform_data`, `null_resource` or
+`random_*` blocks are never assessed, so they cannot inflate the size
+factor (500 empty `terraform_data` blocks took a score from 50 to 61).
 CRITICAL and HIGH findings are each a concrete exposure, so they cost
 the same in any repository. MEDIUM and LOW are hygiene, judged relative
 to size: a repository of up to 20 resources scores exactly as in version
 1, while 80 resources halve the hygiene penalty and 2,000 divide it by
 ten — a large estate is not graded F for the sheer number of resources
-it has. Suppressed findings count at half weight (acknowledged but the
+it has. Hygiene is scored as mess per assessed resource, so adding a real
+resource cleaner than the average, or deleting one dirtier than it, can
+move the score by a point the "wrong" way; fixing a finding always helps.
+Suppressed findings count at half weight (acknowledged but the
 underlying risk still exists).
 
 Names are kept underscore-prefixed (`_RISK_WEIGHTS`, `_compute_summary`)
@@ -56,6 +63,24 @@ def _size_factor(resources_scanned: int | None) -> float:
     if not resources_scanned:
         return 1.0
     return max(1.0, math.sqrt(resources_scanned / _SIZE_BASELINE))
+
+
+def _scored_resource_types(entries: list[dict]) -> frozenset[str]:
+    """Resource types at least one catalogue pattern checks (its
+    ``resource:``) — the resources that count towards the size factor."""
+    return frozenset(
+        p["resource"]
+        for e in entries
+        for p in e.get("patterns") or []
+        if isinstance(p, dict) and isinstance(p.get("resource"), str)
+    )
+
+
+def _scored_resource_count(resource_types: list[str], entries: list[dict]) -> int:
+    """How many of `resource_types` (one per resource block) count towards
+    the size factor."""
+    scored = _scored_resource_types(entries)
+    return sum(1 for t in resource_types if t in scored)
 
 
 def _effective_weight(urgency: str, size_factor: float) -> float:
@@ -104,8 +129,11 @@ def explain_score(
     """Rank findings by score impact and project the score if each is fixed.
 
     Returns a JSON-safe dict carrying:
-      * ``top`` — list of `{rank, id, urgency, weight, file, line, resource,
-        title, projected_score, projected_grade}` entries, sorted by score
+      * ``top`` — list of `{rank, id, urgency, weight, points, file, line,
+        resource, title, projected_score, projected_grade}` entries
+        (`weight` is the urgency's catalogue weight; `points` what fixing
+        the finding actually removes from the penalty once MEDIUM / LOW
+        are divided by the size factor), sorted by score
         contribution descending (highest-impact first), with deterministic
         secondary sort on (id, file, line) so two runs against the same
         corpus agree.
@@ -153,13 +181,15 @@ def explain_score(
     for i, f in enumerate(top, start=1):
         u = f.get("urgency", "MEDIUM")
         w = _RISK_WEIGHTS.get(u, 0)
-        cumulative += _effective_weight(u, factor)
+        points = _effective_weight(u, factor)
+        cumulative += points
         projected = project(cumulative)
         rows.append({
             "rank": i,
             "id": f.get("id"),
             "urgency": f.get("urgency"),
             "weight": w,
+            "points": round(points, 2),
             "file": f.get("file"),
             "line": f.get("line"),
             "resource": f.get("resource", ""),
@@ -200,8 +230,9 @@ def render_score_explanation(payload: dict) -> str:
     for r in rows:
         loc = f"{r['file']}:{r['line']}" if r.get("file") else "<corpus>"
         title = f" {r['title']}" if r.get("title") else ""
+        points = r.get("points", r["weight"])
         lines.append(
-            f"  #{r['rank']} [{r['urgency']}] {r['id']} −{r['weight']} pts  "
+            f"  #{r['rank']} [{r['urgency']}] {r['id']} −{points:g} pts  "
             f"({loc}) → if fixed: {r['projected_score']} "
             f"({r['projected_grade']}){title}"
         )
@@ -261,7 +292,8 @@ def _compute_summary(
         "formula": (
             "max(0, floor(100 - (15*CRITICAL + 7*HIGH "
             "+ (3*MEDIUM + 1*LOW) / size_factor))); "
-            "size_factor = max(1, sqrt(resources_scanned / 20)); "
+            "size_factor = max(1, sqrt(resources_scanned / 20)), "
+            "counting resources of a type a rule checks; "
             "INFO=0; suppressed at half weight"
         ),
     }
