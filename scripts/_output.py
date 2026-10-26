@@ -188,6 +188,22 @@ def _md_cell(s: str) -> str:
     return str(s).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
 
 
+def _md_code(s: object) -> str:
+    """`s` as a Markdown inline-code span that is also safe in a table
+    cell. File paths and resource names come from the scanned repository,
+    so a value may itself contain backticks: wrapped in a single pair, a
+    path like ``a` | ![x](https://…) @someone `.tf`` closed the span and
+    injected an image and a mention into the PR comment. The fence is one
+    backtick longer than any run inside the value (CommonMark), padded
+    when the value starts or ends with one; ``|`` is escaped (GitHub
+    honours ``\\|`` inside code in tables) and newlines are folded."""
+    text = str(s).replace("\r", " ").replace("\n", " ").replace("|", "\\|")
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * (longest + 1)
+    pad = " " if text.startswith("`") or text.endswith("`") else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
+
+
 # ---- rule-docs canonical URL --------------------------------------------
 # Single source of truth for the per-rule docs URL — drives:
 #   - SARIF `helpUri` on every result + every rule definition
@@ -1390,7 +1406,7 @@ def _append_compliance_block(parts: list[str], compliance: dict) -> None:
                 rule_cells.append(f"**{link}**" if r in failed_rules else link)
             rule_str = ", ".join(rule_cells) or "—"
             parts.append(
-                f"| `{ctrl.get('control', '?')}` | {status_emoji} | {rule_str} |"
+                f"| {_md_code(ctrl.get('control', '?'))} | {status_emoji} | {rule_str} |"
             )
         parts.append("")
         parts.append("</details>")
@@ -1577,7 +1593,10 @@ def _render_pr_summary_impl(
         _legacy_cent = {}
 
     def _rank_key(f: dict) -> tuple:
-        urg = entry_map.get(f["id"], {}).get("default_urgency", "INFO")
+        # The finding's own (escalated / reachability-adjusted) urgency,
+        # as the banner counts use — the catalogue default listed an
+        # escalated CRITICAL as HIGH and could rank it out of the top 3.
+        urg = _effective_urgency(f, entry_map.get(f["id"], {}))
         # Higher centrality → smaller key value (sort ascending).
         if cent_impact:
             c = -cent_impact.get(f["id"], 0.0)
@@ -1595,9 +1614,9 @@ def _render_pr_summary_impl(
     parts.append("|---|---|---|")
     for f in ranked[:3]:
         rid = f["id"]
-        urg = entry_map.get(rid, {}).get("default_urgency", "?")
+        urg = _effective_urgency(f, entry_map.get(rid, {}))
         title = entry_map.get(rid, {}).get("title", "")
-        loc = f"`{f.get('file','?')}:{f.get('line','?')}`"
+        loc = _md_code(f"{f.get('file','?')}:{f.get('line','?')}")
         # 🔥 KEV badge (R30.2) when the rule's CWE intersects CISA's
         # Known Exploited Vulnerabilities. Prepended to the urgency
         # cell so the visual landmark lands at column 1.
@@ -1639,7 +1658,7 @@ def _render_pr_summary_impl(
             br = int(f.get("blast_radius") or 0)
             resource = f.get("resource") or f.get("file", "?")
             rule_link = f"[`{rid}`]({RULE_DOCS_URL_BASE.format(id=rid)})"
-            parts.append(f"| **{br}** | {rule_link} | `{resource}` |")
+            parts.append(f"| **{br}** | {rule_link} | {_md_code(resource)} |")
         if len(high_blast) > 5:
             parts.append("")
             parts.append(
