@@ -36,6 +36,43 @@ result or reach outside the target:
 
 ---
 
+## Round 40 — `*.tf.json` files are scanned — 2026-10-26
+
+Terraform's JSON syntax was skipped entirely (`rglob("*.tf")`). Each
+`.tf.json` is now rendered as the equivalent native HCL
+(`scripts/_tfjson.py`) and scanned by every existing rule; findings keep
+the `.tf.json` path and point at the JSON line of the key.
+
+- Rendering follows the JSON-syntax spec for block labels and repeated
+  blocks (lists of bodies); `provisioner` / `dynamic` / `backend` take a
+  label; `"//"` comment properties are ignored. Without provider schemas,
+  an object is a nested block unless its key is a well-known map
+  (`tags`, `labels`, …) or it has a non-identifier key; a list of objects
+  is always a block.
+- A string that is exactly one interpolation (`"${var.x}"`) is emitted as
+  the bare expression, as Terraform reads it — only when its brackets
+  balance on their own, so JSON content cannot open or close a block.
+  Invalid labels and attribute names are dropped, never spliced in.
+- Line numbers: every rendered line records its JSON line and findings
+  are remapped after detection (main scan, `--mode fleet`,
+  `--verify-fixed`).
+- Discovery covers `.tf.json` in the main scan, `--diff-base`, fleet and
+  verify-fixed; a `file_glob` aimed at a `.tf` file also matches its
+  `.tf.json` twin (`**/versions.tf` → `versions.tf.json`).
+- `--apply-fixes` reports but never patches `.tf.json` files (an HCL
+  snippet cannot be spliced into JSON). Invalid JSON is a `WARN: cannot
+  read` and the rest of the target is still scanned.
+- Parity check: every fixture rendered to Terraform JSON from its parse
+  tree scans identically to the `.tf` on 621 of 630 directories; the rest
+  are `jsonencode(...)` arguments the parser re-renders in a form no
+  hand-written `.tf.json` uses, plus two `.tf`-side bugs (a `var.X`
+  mentioned only in a comment counts as a use; a trailing comment after
+  `default = false` hides the value).
+
+Not covered: the LSP server and `--mode trend` still read `.tf` only.
+
+---
+
 ## Round 39 — Block discovery by lexer, not header regex — 2026-10-26
 
 `find_blocks` / `find_simple_blocks` now locate blocks with one lexer pass
@@ -63,7 +100,7 @@ negative or wrong location before:
 - **Unclosed blocks cost one pass, not one walk to EOF each.** 3,000
   unclosed `resource {` lines took ~450 s; now ~0.2 s.
 
-Not covered here: `*.tf.json` files are still not scanned.
+Not covered here: `*.tf.json` files (scanned from Round 40).
 
 ---
 

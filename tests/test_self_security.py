@@ -111,6 +111,19 @@ def test_symlink_out_of_the_target_is_not_read(tmp_path) -> None:
     assert "resolves outside the target" in stderr
 
 
+def test_tf_json_symlink_out_of_the_target_is_not_read(tmp_path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "main.tf.json").write_text(json.dumps({"resource": {
+        "aws_db_instance": {"d": {"publicly_accessible": True}}}}))
+    target = tmp_path / "repo"
+    target.mkdir()
+    (target / "leak.tf.json").symlink_to(outside / "main.tf.json")
+    findings, stderr = _scan(target)
+    assert not any(f["id"] == "SEC-AWS-RDS-001" for f in findings)
+    assert "resolves outside the target" in stderr
+
+
 def test_symlink_within_the_target_is_scanned(tmp_path) -> None:
     target = tmp_path / "repo"
     real = _copy_open_sg(target / "real")
