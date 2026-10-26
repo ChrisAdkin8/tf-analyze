@@ -150,8 +150,8 @@ Per-file kinds (run inside `detect_in_file`):
 
 | Kind | Meaning |
 |---|---|
-| `resource_arg` | A `resource` block whose argument matches a regex |
-| `resource_missing_arg` | A `resource` block of the named type that lacks the named argument. Supports an optional `suppress_if: { arg: X, equals: "val" }` field — the finding is suppressed when an alternative arg equals the specified value (e.g., SQS queue encrypted via `sqs_managed_sse_enabled = true` suppresses the `kms_master_key_id` missing check). |
+| `resource_arg` | A `resource` block whose argument matches a regex. Shares `suppress_if` with `resource_missing_arg`, plus `name_regex` / `name_not_regex` (also on `resource_missing_arg`): only resources whose label, `name` or `bucket` matches / does not match. |
+| `resource_missing_arg` | A `resource` block of the named type that lacks the named argument. Supports an optional `suppress_if: { arg: X, equals: "val" }` (or `regex: '...'` instead of `equals`; `arg` may be a dotted path such as `default_action.type`, read from the parse tree) field — the finding is suppressed when an alternative arg equals the value or matches the regex (e.g., SQS queue encrypted via `sqs_managed_sse_enabled = true` suppresses the `kms_master_key_id` missing check). |
 | `resource_present` | Any `resource` block of the named type triggers the finding |
 | `data_source_present` | Any `data` block of the named type triggers the finding (e.g. `vault_kv_secret_v2`) |
 | `grep` | A regex against the raw file body — last resort, use sparingly |
@@ -168,7 +168,7 @@ Corpus-level kinds (run inside `detect_corpus` once per scan):
 | Kind | Meaning |
 |---|---|
 | `resource_absent` | Fires when a resource type is **absent** from the scan target. Use `when_present: <type>` to guard against cross-cloud false positives (only fires when the prerequisite type exists). Use `scope: repo` for repo-wide absence checks. |
-| `backend_missing_arg` | Fires when a `terraform { backend "<type>" {} }` block is missing a required argument (e.g., S3 backend without `dynamodb_table`). Fields: `backend_type`, `arg`. |
+| `backend_missing_arg` | Fires when a `terraform { backend "<type>" {} }` block is missing a required argument (e.g., S3 backend without `dynamodb_table`). Fields: `backend_type`, `arg`, optional `alternatives` (regexes that also satisfy it, e.g. `use_lockfile = true`). Comments are ignored. |
 | `providers_version_missing` | Fires once per `required_providers` provider entry that has no `version` constraint. Used by `ROB-VERSION-003`. No extra fields needed — the kind scans all files. |
 | `output_sensitive_leak`, `cross_module`, `variable_unused`, `output_unused`, `module_missing_tests`, `backend_inconsistency`, `templatefile_sensitive_leak`, `remote_state_present`, `provider_alias_unused`, `provider_alias_module_mismatch`, `foreach_over_list`, `data_external_injection`, `tfstate_in_repo`, `submodule_version_missing`, `prod_no_deletion_protection`, `deprecated_datasource` | See in-source docstrings |
 | `foreach_keyset_unstable` | A `for_each` whose keyset is derived from another managed resource's attribute (splat `aws_subnet.x[*].id` or comprehension `[for s in aws_subnet.x : s.id]`). Re-keys on every upstream resource-set change → destroy/create on every existing instance. Leading identifier is checked against a deny-list of safe scopes (`var`, `local`, `data`, `module`, `each`, `count`) so input-driven keysets don't fire. |

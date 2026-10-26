@@ -1,6 +1,6 @@
 ---
-title: "ROB-AWS-BACKEND-001 — Terraform S3 backend missing DynamoDB state locking"
-description: "tf-analyze rule ROB-AWS-BACKEND-001 (HIGH · robustness): Terraform S3 backend missing DynamoDB state locking"
+title: "ROB-AWS-BACKEND-001 — Terraform S3 backend missing state locking"
+description: "tf-analyze rule ROB-AWS-BACKEND-001 (HIGH · robustness): Terraform S3 backend missing state locking"
 keywords: "robustness, high, terraform, iac, aws"
 ---
 
@@ -8,8 +8,8 @@ keywords: "robustness, high, terraform, iac, aws"
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "ROB-AWS-BACKEND-001 \u2014 Terraform S3 backend missing DynamoDB state locking",
-  "description": "Add `dynamodb_table` to the S3 backend configuration:",
+  "headline": "ROB-AWS-BACKEND-001 \u2014 Terraform S3 backend missing state locking",
+  "description": "Turn on state locking in the S3 backend. On Terraform >= 1.10 use S3\nnative locking (`use_lockfile = true`), which needs no extra resources\nand deprecates `dynamodb_table`:",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/ROB-AWS-BACKEND-001/",
   "mainEntityOfPage": {
     "@type": "WebPage",
@@ -31,13 +31,13 @@ keywords: "robustness, high, terraform, iac, aws"
 }
 </script>
 
-# ⚠️ ROB-AWS-BACKEND-001 — Terraform S3 backend missing DynamoDB state locking
+# ⚠️ ROB-AWS-BACKEND-001 — Terraform S3 backend missing state locking
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-AWS-BACKEND-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-AWS-BACKEND-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-AWS-BACKEND-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Terraform S3 backend missing DynamoDB state locking.** This rule has `default_urgency: HIGH` and operates on a infrastructure wide blast radius. 
+> **Terraform S3 backend missing state locking.** This rule has `default_urgency: HIGH` and operates on a infrastructure wide blast radius. 
 
 ## What this checks
 
@@ -55,22 +55,25 @@ Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/C
 
 ## Remediation
 
-Add `dynamodb_table` to the S3 backend configuration:
+Turn on state locking in the S3 backend. On Terraform >= 1.10 use S3
+native locking (`use_lockfile = true`), which needs no extra resources
+and deprecates `dynamodb_table`:
 
     terraform {
       backend "s3" {
-        bucket         = "my-terraform-state"
-        key            = "terraform.tfstate"
-        region         = "us-east-1"
-        dynamodb_table = "terraform-state-lock"
-        encrypt        = true
+        bucket       = "my-terraform-state"
+        key          = "terraform.tfstate"
+        region       = "us-east-1"
+        encrypt      = true
+        use_lockfile = true
       }
     }
 
+On older Terraform, set `dynamodb_table` to a table with a `LockID`
+string hash key (`terraform init` does not create it).
+
 Without state locking, concurrent `terraform apply` runs on the same
-workspace will race and can corrupt the state file. The DynamoDB table
-needs a `LockID` string hash key; `terraform init` does not create it
-automatically.
+workspace will race and can corrupt the state file.
 
 ## Suggested fix (`fix_hcl`)
 
@@ -83,7 +86,7 @@ terraform {
     key            = "env/prod/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
-    dynamodb_table = "terraform-state-lock"
+    use_lockfile   = true # Terraform >= 1.10; else dynamodb_table
     kms_key_id     = "alias/terraform-state"
   }
 }
@@ -92,8 +95,9 @@ terraform {
 ## Verification
 
 Run two simultaneous `terraform plan` invocations and confirm the
-second is blocked with "Error acquiring the state lock". Or check the
-DynamoDB table in the AWS console for an active lock entry.
+second is blocked with "Error acquiring the state lock". With
+`use_lockfile`, a `<key>.tflock` object appears next to the state
+while a run holds the lock.
 
 ## References
 

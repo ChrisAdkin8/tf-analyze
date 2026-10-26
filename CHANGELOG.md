@@ -5,6 +5,45 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 55 — AWS rules: precise IAM, locking, KMS, listeners, S3, SSM — 2026-10-26
+
+Second batch of false-positive fixes from the critical review: all 11
+AWS entries in `tests/realworld_secure/`'s known list are gone (13 → 5
+after Round 54).
+
+- **SEC-AWS-IAM-001** was a pair of greps that fired on Deny
+  statements (the standard TLS-only bucket policy) and repeated
+  SEC-AWS-IAM-POLICY-003. It is now the JSON-policy counterpart of
+  POLICY-003 (`iam_json_policy_analysis`, `wildcard_resource`), which
+  had no JSON rule — it newly catches e.g. terragoat's
+  `aws_iam_user_policy.human_admin`.
+- **SEC-AWS-IAM-002** drops its `principals { type = "*" }` grep, which
+  fired on Deny statements; SEC-AWS-IAM-POLICY-004 covers documents.
+- **Wildcard resource** (both forms) no longer counts when every action
+  is a read-only `Describe*` / `List*` call, many of which accept no
+  resource ARN.
+- **ROB-AWS-BACKEND-001** accepts `use_lockfile = true` (Terraform 1.10+
+  native S3 locking) via a new `alternatives:` field on
+  `backend_missing_arg`, which now ignores comments: a commented-out
+  `dynamodb_table` no longer passes.
+- **SEC-AWS-KMS-001** skips keys that cannot rotate (any
+  `customer_master_key_spec` other than `SYMMETRIC_DEFAULT`).
+  `suppress_if` gains `regex:` and dotted, parse-tree `arg:` paths, on
+  `resource_arg` too, and in plan / state mode.
+- **SEC-AWS-LB-LISTENER-001**'s redirect exemption was a text match on
+  `type = "redirect"`: fmt alignment broke it, and a comment satisfied
+  it. It now reads `default_action.type`.
+- **SEC-AWS-S3-001 / -PUBLIC-BLOCK-001**: a companion that iterates the
+  bucket (`for_each = aws_s3_bucket.x`, `bucket = each.value.id`) counts.
+- **SSM**: SEC-SECRETS-002 (HIGH) now covers only parameters named like
+  a secret (`name_regex`); SEC-AWS-SSM-001 is LOW hygiene for the rest
+  (`name_not_regex`, new, also on `resource_missing_arg`), so a
+  parameter is never reported twice and an AMI id is not a HIGH.
+
+New `tests/test_aws_rule_precision.py` pins each fix both ways.
+
+---
+
 ## Round 54 — Module and supply-chain rules stop firing on pinned code — 2026-10-26
 
 The noisiest false positives from the critical review: these fired HIGH

@@ -61,7 +61,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 
 | Rule | Urgency | Title |
 |------|---------|-------|
-| [`ROB-AWS-BACKEND-001`](./ROB-AWS-BACKEND-001.md) | HIGH | Terraform S3 backend missing DynamoDB state locking |
+| [`ROB-AWS-BACKEND-001`](./ROB-AWS-BACKEND-001.md) | HIGH | Terraform S3 backend missing state locking |
 | [`ROB-AWS-DDB-001`](./ROB-AWS-DDB-001.md) | HIGH | DynamoDB table missing deletion protection |
 | [`ROB-AWS-LIFECYCLE-001`](./ROB-AWS-LIFECYCLE-001.md) | HIGH | Stateful AWS resource missing lifecycle.prevent_destroy |
 | [`ROB-AWS-LIFECYCLE-002`](./ROB-AWS-LIFECYCLE-002.md) | HIGH | S3 bucket has force_destroy enabled |
@@ -158,7 +158,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-ES-002`](./SEC-AWS-ES-002.md) | HIGH | OpenSearch / Elasticsearch domain missing node-to-node encryption |
 | [`SEC-AWS-ES-003`](./SEC-AWS-ES-003.md) | HIGH | OpenSearch domain missing fine-grained access control |
 | [`SEC-AWS-GUARDDUTY-001`](./SEC-AWS-GUARDDUTY-001.md) | HIGH | GuardDuty detector not provisioned |
-| [`SEC-AWS-IAM-001`](./SEC-AWS-IAM-001.md) | HIGH | IAM policy with wildcard resource |
+| [`SEC-AWS-IAM-001`](./SEC-AWS-IAM-001.md) | HIGH | Inline IAM policy JSON grants wildcard `Resource: \"*\"` |
 | [`SEC-AWS-IAM-JSON-001`](./SEC-AWS-IAM-JSON-001.md) | HIGH | Inline IAM policy JSON grants wildcard `Action: \"*\"` |
 | [`SEC-AWS-IAM-POLICY-001`](./SEC-AWS-IAM-POLICY-001.md) | HIGH | IAM policy document grants wildcard `actions = [\"*\"]` |
 | [`SEC-AWS-IAM-POLICY-003`](./SEC-AWS-IAM-POLICY-003.md) | HIGH | IAM policy document grants wildcard `resources = [\"*\"]` |
@@ -176,7 +176,6 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-SG-001`](./SEC-AWS-SG-001.md) | HIGH | Security group allows ingress from 0.0.0.0/0 |
 | [`SEC-AWS-SNS-001`](./SEC-AWS-SNS-001.md) | HIGH | SNS topic missing KMS encryption |
 | [`SEC-AWS-SQS-001`](./SEC-AWS-SQS-001.md) | HIGH | SQS queue missing server-side encryption |
-| [`SEC-AWS-SSM-001`](./SEC-AWS-SSM-001.md) | HIGH | SSM Parameter Store parameter not encrypted as SecureString |
 | [`SEC-AWS-SSRF-001`](./SEC-AWS-SSRF-001.md) | HIGH | EC2 instance metadata service v1 enabled (IMDSv2 not enforced) |
 | [`SEC-AWS-VPC-FLOWLOGS-001`](./SEC-AWS-VPC-FLOWLOGS-001.md) | HIGH | AWS VPC missing flow log resource |
 | [`SEC-AZURE-ACR-001`](./SEC-AZURE-ACR-001.md) | HIGH | Azure Container Registry admin account enabled |
@@ -307,6 +306,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-LOG-CROSS-ACCOUNT-001`](./SEC-LOG-CROSS-ACCOUNT-001.md) | MEDIUM | Audit log destination is in the same AWS account (no cross-account isolation) |
 | [`SEC-PROVIDER-001`](./SEC-PROVIDER-001.md) | MEDIUM | Provider version constraint missing upper bound |
 | [`SEC-USERDATA-002`](./SEC-USERDATA-002.md) | MEDIUM | user_data passes a sensitive var unencoded (base64encode missing) |
+| [`SEC-AWS-SSM-001`](./SEC-AWS-SSM-001.md) | LOW | SSM parameter not stored as SecureString |
 | [`SEC-AZURE-BASTION-001`](./SEC-AZURE-BASTION-001.md) | LOW | Azure Bastion host using Basic SKU (no shareable links, no RBAC) |
 | [`SEC-AZURE-PRIVATE-DNS-001`](./SEC-AZURE-PRIVATE-DNS-001.md) | LOW | Azure Private DNS zone missing virtual network link |
 | [`SEC-AZURE-VNET-ENC-001`](./SEC-AZURE-VNET-ENC-001.md) | LOW | Azure Virtual Network missing VNet encryption |

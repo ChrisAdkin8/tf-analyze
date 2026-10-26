@@ -1,5 +1,5 @@
 id: SEC-AWS-IAM-001
-title: "IAM policy with wildcard resource"
+title: "Inline IAM policy JSON grants wildcard `Resource: \"*\"`"
 section: security
 default_urgency: HIGH
 blast_radius: infrastructure-wide
@@ -7,16 +7,15 @@ cis:
   - "1.16"
 status: active
 patterns:
-  - kind: grep
-    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
-    file_glob: "**/*.tf"
-    regex: '"Resource"\s*:\s*"\*"'
-    description: IAM policy document with Resource = "*"
-  - kind: grep
-    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
-    file_glob: "**/*.tf"
-    regex: 'resources\s*=\s*\["\*"\]'
-    description: aws_iam_policy_document statement with resources = ["*"]
+  - kind: iam_json_policy_analysis
+    check: wildcard_resource
+    description: |
+      An Allow statement in a `policy` (`jsonencode`, heredoc or JSON
+      string) on aws_iam_policy / aws_iam_role_policy / aws_iam_user_policy
+      / aws_iam_group_policy or an aws_iam_role `inline_policy` has
+      `Resource: "*"`. Deny statements and read-only Describe* / List*
+      actions (often not resource-scopable) do not count. The
+      `aws_iam_policy_document` form is SEC-AWS-IAM-POLICY-003.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |
@@ -29,13 +28,12 @@ verification: |
   Run `terraform plan` and verify the policy document in the plan output
   has no `"Resource": "*"` statements.
 fixtures:
-  - attack_graph_demo
   - aws_iam_wildcard
 test_template: |
   run "iam_no_wildcard_resource_{rule_id}" {
     command = plan
     assert {
-      condition     = !can(regex("\\*", data.aws_iam_policy_document.{resource}.json))
+      condition     = !strcontains({resource}.policy, "\"Resource\":\"*\"")
       error_message = "{resource} IAM policy must not use wildcard Resource (SEC-AWS-IAM-001)."
     }
   }
@@ -60,9 +58,16 @@ nist_800_53:
 csa_ccm:
   - "IAM-09"
 fix_hcl: |
-  statement {
-    actions   = ["s3:GetObject", "s3:PutObject"]
-    resources = ["arn:aws:s3:::my-bucket/*"]
+  resource "aws_iam_policy" "app" {
+    name = "app"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::my-bucket/*"
+      }]
+    })
   }
 fix_disruption: plan_required
 fix_disruption_note: "Narrowing the resource ARN is an in-place policy update; no replacement is required but IAM propagation may take up to 60 seconds."

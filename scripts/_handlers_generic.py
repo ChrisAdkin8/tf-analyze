@@ -96,6 +96,44 @@ def _detect_data_source_present(c: InFileCtx) -> list[dict]:
     return out
 
 
+def _name_selected(pat: dict, blk: dict) -> bool:
+    """``name_regex`` / ``name_not_regex``: whether the resource's label,
+    ``name`` or ``bucket`` matches (resp. none of them matches)."""
+    names = (
+        blk["groups"][1],
+        block_arg_value(blk["body"], "name") or "",
+        block_arg_value(blk["body"], "bucket") or "",
+    )
+    if pat.get("name_regex") and not any(
+        re.search(pat["name_regex"], n) for n in names
+    ):
+        return False
+    if pat.get("name_not_regex") and any(
+        re.search(pat["name_not_regex"], n) for n in names
+    ):
+        return False
+    return True
+
+
+def _suppressed_by(spec: dict | None, blk: dict, var_defaults: dict) -> bool:
+    """Whether ``suppress_if: {arg, equals | regex}`` holds for a resource:
+    a value of `arg` (variables resolved; may be a dotted path such as
+    ``default_action.type``, where any instance counts) equals the
+    literal, case-insensitively, or matches the regex. Read from the
+    parse tree, so `terraform fmt` alignment does not matter."""
+    if not spec or not spec.get("arg"):
+        return False
+    want = str(spec.get("equals", "")).lower().strip("\"'")
+    for value in resource_values_at(blk, spec["arg"]):
+        actual = str(_resolve_var_ref(value, var_defaults)).strip("\"'")
+        if "regex" in spec:
+            if re.search(spec["regex"], actual):
+                return True
+        elif want and actual.lower() == want:
+            return True
+    return False
+
+
 @_register_infile("resource_arg")
 def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     """``resource_arg`` — match a regex (or its negation) against the
@@ -103,8 +141,9 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
 
     Supports ``regex`` (positive match), ``not_regex`` (negative match),
     ``fire_if_absent`` (fire when the arg is missing entirely), and the
-    ``suppress_if_body_contains`` and ``count = 0`` (resource definitely
-    not created) escape hatches. Variable references in the value are
+    ``suppress_if`` (see `_suppressed_by`), ``suppress_if_body_contains``
+    and ``count = 0`` (resource definitely not created) escape hatches,
+    and ``name_regex`` / ``name_not_regex`` (see `_name_selected`). Variable references in the value are
     resolved via the directory-scoped var_defaults.
 
     The value is looked up at ``nested_path`` if set, else at ``arg``;
@@ -136,6 +175,10 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
             continue
         if suppress_body_contains and suppress_body_contains in blk["body"]:
             continue
+        if _suppressed_by(pat.get("suppress_if"), blk, c.var_defaults):
+            continue
+        if not _name_selected(pat, blk):
+            continue
         values = resource_values_at(blk, path)
         if fire_if_absent and (not values or not resource_has_path(blk, path)):
             hit = True
@@ -163,9 +206,10 @@ def _has_companion(blk: dict, spec: dict, candidates: list[dict]) -> bool:
     """Whether a resource of type ``spec["resource"]`` among `candidates`
     points at `blk` through its ``spec["via"]`` argument (default
     ``bucket``; a list means any of them): by reference
-    (``aws_s3_bucket.x.id``, ``.bucket``, ``[0].id`` …) or by the same
+    (``aws_s3_bucket.x.id``, ``.bucket``, ``[0].id`` …), by the same
     literal value `blk` has for that argument (``bucket = "my-bucket"`` on
-    both)."""
+    both), or by iterating it (``for_each = aws_s3_bucket.x`` with
+    ``bucket = each.value.id``)."""
     ctype = spec.get("resource")
     via = spec.get("via", "bucket")
     vias = via if isinstance(via, list) else [via]
@@ -181,9 +225,15 @@ def _has_companion(blk: dict, spec: dict, candidates: list[dict]) -> bool:
     for cand in candidates:
         if cand["groups"][0] != ctype:
             continue
+        # `for_each = aws_s3_bucket.many` + `bucket = each.value.id`: the
+        # companion iterates over this resource's instances.
+        for_each = block_arg_value(cand["body"], "for_each") or ""
+        iterates_blk = bool(ref.search(for_each))
         for arg in vias:
             value = block_arg_value(cand["body"], arg)
             if value and (ref.search(value) or literals.get(arg) == value):
+                return True
+            if value and iterates_blk and re.match(r"\$?\{?\s*each\.", value):
                 return True
     return False
 
@@ -201,14 +251,14 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
     §4.4). Uses the parse tree when the file parsed, else the regex
     fallback with the same rules.
 
-    Honours ``suppress_if`` (don't fire when a sibling arg has a
-    specific value), ``suppress_if_body_contains``, the ``count = 0``
+    Honours ``suppress_if`` (don't fire when a sibling arg equals a value
+    or matches a regex; `_suppressed_by`), ``suppress_if_body_contains``, the ``count = 0``
     escape hatch, and the AWS ``default_tags`` propagation (R30.0.12 —
     when the dir's AWS provider declares default_tags, ``tags`` /
     ``tags.*`` paths on aws_* resources are silently provided).
 
     ``name_regex`` limits the rule to resources whose label, ``name`` or
-    ``bucket`` matches. ``unless_companion: {resource: T, via: A}`` skips
+    ``bucket`` matches; ``name_not_regex`` excludes them. ``unless_companion: {resource: T, via: A}`` skips
     a resource that a ``T`` in the same module points at through its
     ``A`` argument — the split-resource form of a setting, e.g. AWS
     provider v4+'s ``aws_s3_bucket_versioning { bucket =
@@ -229,7 +279,6 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
         return []
     suppress_if = pat.get("suppress_if")
     suppress_body_contains = pat.get("suppress_if_body_contains")
-    name_re = re.compile(pat["name_regex"]) if pat.get("name_regex") else None
     companion = pat.get("unless_companion")
     out: list[dict] = []
     for blk in c.resources:
@@ -240,13 +289,7 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
             continue
         if suppress_body_contains and suppress_body_contains in blk["body"]:
             continue
-        if name_re is not None and not any(
-            name_re.search(n) for n in (
-                bname,
-                block_arg_value(blk["body"], "name") or "",
-                block_arg_value(blk["body"], "bucket") or "",
-            )
-        ):
+        if not _name_selected(pat, blk):
             continue
         if companion and _has_companion(
             blk, companion,
@@ -259,15 +302,8 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
             blk, arg_path, every=pat.get("instances", "all") != "any",
         )
         if not present:
-            if suppress_if:
-                s_arg = suppress_if.get("arg", "")
-                s_val = str(suppress_if.get("equals", "")).lower().strip("\"'")
-                if s_arg and s_val:
-                    actual = block_arg_value(blk["body"], s_arg)
-                    if actual:
-                        actual = _resolve_var_ref(actual, c.var_defaults)
-                    if actual and str(actual).lower().strip("\"'") == s_val:
-                        continue
+            if _suppressed_by(suppress_if, blk, c.var_defaults):
+                continue
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),

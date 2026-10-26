@@ -1,8 +1,9 @@
 # Expected findings:
-#  - SEC-AWS-SSM-001 HIGH — SSM parameter type is String, not SecureString
+#  - SEC-AWS-SSM-001 LOW — SSM parameter type is String, not SecureString
+# (a parameter named like a secret is SEC-SECRETS-002, HIGH)
 
-resource "aws_ssm_parameter" "db_password" {
-  name  = "/app/db/password"
+resource "aws_ssm_parameter" "feature_flags" {
+  name  = "/app/config/feature-flags"
   type  = "String"
-  value = "supersecret123"
+  value = "checkout_v2=on"
 }
