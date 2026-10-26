@@ -719,38 +719,54 @@ _LEX_RE = re.compile(
     re.DOTALL,
 )
 _STRING_STOP_RE = re.compile(r'["\\\n$%]')
-_TEMPLATE_STOP_RE = re.compile(r'["{}]')
 _BLOCK_LABEL_RE = re.compile(r'^[\w-]+$')
 _IDENT_LABEL_RE = re.compile(r'^[A-Za-z_][\w-]*$')
 
 
+# Recovery rule: a heredoc, block comment or template that never closes
+# is invalid HCL. Rather than let it swallow the rest of the file (and so
+# hide every block after it), the lexer gives up on that construct and
+# resumes on the next line — a broken construct costs at most its line.
+
+
 def _heredoc_end(text: str, pos: int, ident: str) -> int:
     """Index just past the line that closes a heredoc whose body starts at
-    `pos`, or `len(text)` when the terminator is missing."""
+    `pos`; `pos` itself when the terminator is missing, so the body is
+    lexed as code."""
     m = re.compile(
         r'^[ \t]*' + re.escape(ident) + r'[ \t]*\r?$', re.MULTILINE
     ).search(text, pos)
-    return len(text) if m is None else m.end()
+    return pos if m is None else m.end()
 
 
-def _template_end(text: str, i: int) -> int:
-    """`i` is just past a `${` / `%{`. Return the index past its `}`."""
+def _next_line(text: str, i: int) -> int:
+    nl = text.find("\n", i)
+    return len(text) if nl < 0 else nl
+
+
+def _template_end(text: str, i: int) -> int | None:
+    """`i` is just past a `${` / `%{`. Return the index past its `}`, or
+    None when it never closes. The interpolation is an expression, so it
+    is lexed like code: comments, strings and heredocs inside it cannot
+    move the depth."""
     depth, n = 1, len(text)
     while i < n:
-        m = _TEMPLATE_STOP_RE.search(text, i)
-        if m is None:
-            return n
+        m = _LEX_RE.match(text, i)
+        kind = m.lastgroup
         i = m.end()
-        ch = m.group()
-        if ch == '"':
-            i = _lex_string_end(text, i - 1)[0]
-        elif ch == "{":
+        if kind == "bc" and not m.group().endswith("*/"):
+            return None
+        if kind == "hd":
+            i = _heredoc_end(text, i, m.group("hid"))
+        elif kind == "dq":
+            i = _lex_string_end(text, m.start())[0]
+        elif kind == "lb":
             depth += 1
-        else:
+        elif kind == "rb":
             depth -= 1
             if depth == 0:
                 return i
-    return n
+    return None
 
 
 def _lex_string_end(text: str, i: int) -> tuple[int, bool]:
@@ -778,7 +794,10 @@ def _lex_string_end(text: str, i: int) -> tuple[int, bool]:
             i += 3
         elif text.startswith("{", i + 1):
             plain = False
-            i = _template_end(text, i + 2)
+            end = _template_end(text, i + 2)
+            if end is None:
+                return _next_line(text, i), False
+            i = end
         else:
             i += 1
     return n, False
@@ -807,6 +826,9 @@ def _block_index(text: str) -> tuple[tuple, ...]:
         i = m.end()
         if kind == "nl":
             pending, line_start = [], True
+        elif kind == "bc" and not m.group().endswith("*/"):
+            i = _next_line(text, m.start())
+            pending = None
         elif kind in ("ws", "lc", "bc"):
             pass
         elif kind == "hd":

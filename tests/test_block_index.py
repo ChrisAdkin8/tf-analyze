@@ -154,6 +154,29 @@ def test_brace_walk_skips_heredoc_body() -> None:
     assert body[: _hcl.brace_walk(body)].endswith("y = 1\n}")
 
 
+def test_comment_inside_template_does_not_move_depth() -> None:
+    text = (
+        "locals {\n"
+        '  x = "${ 1 /* {{{ */ }"\n'
+        '  y = "${ 2 # { \n }"\n'
+        "}\n"
+        'resource "aws_thing" "a" {\n'
+        "}\n"
+    )
+    assert _resources(text) == [(("aws_thing", "a"), 6)]
+
+
+def test_runaway_constructs_cost_at_most_their_line() -> None:
+    later = 'resource "aws_thing" "a" {\n}\n'
+    for broken in (
+        'x = "${ {{ \n',        # template that never closes
+        "/* never closed\n",    # block comment that never closes
+        "x = <<EOT\nbody\n",   # heredoc with no terminator
+    ):
+        text = broken + later
+        assert [g for g, _ in _resources(text)] == [("aws_thing", "a")], broken
+
+
 # ---- end to end, on the real catalogue -----------------------------------------
 
 
