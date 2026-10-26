@@ -617,14 +617,8 @@ def brace_walk(
 
     Notes:
 
-    * Heredoc bodies (``<<-EOF ... EOF``) are NOT specially handled here.
-      Callers that need heredoc-aware extraction should use
-      ``block_arg_value`` (which delegates to the hcl2 parser for
-      heredoc bodies) instead of building on this walker. In practice the
-      detector branches don't encounter raw heredoc text — the regex
-      pattern that triggers each branch matches HCL keywords
-      (``statement``, ``set``, etc.) that don't appear inside heredoc
-      content.
+    * Heredoc bodies (``<<-EOF ... EOF``) are skipped whole, so a
+      ``#``, quote or bracket inside a script does not affect depth.
     * The walker is linear in the length of the text walked; no
       look-ahead.
 
@@ -646,6 +640,7 @@ def brace_walk(
     in_block_comment = False  # after /* until */
     seen_open = False
     prev = ""
+    misses = _Misses()
     i = start_pos
     n = len(text)
     while i < n:
@@ -667,6 +662,12 @@ def brace_walk(
                 in_dq = False
         elif ch == '"':
             in_dq = True
+        elif ch == "<" and nxt == "<" and (hd := _HEREDOC_START_RE.match(text, i)):
+            # A heredoc body is opaque: a `#`, quote or bracket in a
+            # script must not start a comment or move the depth.
+            i = _heredoc_end(text, hd.end(), hd.group(1), misses)
+            prev = ""
+            continue
         elif ch == "#":
             in_line_comment = True
         elif ch == "/" and nxt == "/":
@@ -686,30 +687,273 @@ def brace_walk(
 
 
 # ---- Block extraction ---------------------------------------------------
+#
+# Block discovery is one lexer pass per file (memoised on the text), not a
+# header regex per block type. The old `^\s*resource\s+"…"` scan matched
+# headers inside `/* */` comments and heredocs, missed valid headers with
+# unquoted labels or a comment before the labels, swallowed preceding
+# blank lines into `start_line`, and re-walked to EOF for every unclosed
+# header (quadratic on hostile input). The lexer knows strings (with
+# `${…}` / `%{…}` templates), comments and heredocs, so none of those can
+# fake or hide a block boundary.
+#
+# `find_blocks(text, regex)` keeps its signature: each discovered header is
+# rendered in canonical form (`resource "a" "b" {`) and the caller's regex
+# decides whether it is wanted and supplies `groups`.
+
+_TOP_LEVEL_KEYWORDS = frozenset({
+    "resource", "data", "module", "variable", "locals", "output",
+    "provider", "terraform", "moved", "import", "removed", "check",
+})
+
+_LEX_RE = re.compile(
+    r'(?P<nl>\n)'
+    r'|(?P<ws>[ \t\r\f\v\ufeff]+)'
+    r'|(?P<lc>(?:#|//)[^\n]*)'
+    r'|(?P<bc>/\*)'
+    r'|(?P<hd><<-?[ \t]*(?P<hid>[A-Za-z_][\w-]*)[ \t]*\r?\n)'
+    r'|(?P<dq>")'
+    r'|(?P<lb>\{)'
+    r'|(?P<rb>\})'
+    r'|(?P<id>[A-Za-z_][\w-]*)'
+    r'|(?P<other>.)',
+    re.DOTALL,
+)
+_STRING_STOP_RE = re.compile(r'["\\$%]')
+_BLOCK_LABEL_RE = re.compile(r'^[\w-]+$')
+_IDENT_LABEL_RE = re.compile(r'^[A-Za-z_][\w-]*$')
+
+
+# Recovery rule: a heredoc, block comment or template that never closes
+# is invalid HCL. Rather than let it swallow the rest of the file (and so
+# hide every block after it), the lexer gives up on that construct and
+# resumes on the next line — a broken construct costs at most its line.
+#
+# Cost rule: every helper is linear. A quoted string (with any `${…}` in
+# it) never crosses its line — the vendored parser rejects a newline or
+# comment there too — and nesting is capped. Searches to EOF that fail are
+# remembered in `_Misses`, so a run of unclosed heredocs or comments costs
+# one scan, not one each.
+
+_MAX_TEMPLATE_DEPTH = 32
+
+
+class _Misses:
+    """Searches that already failed. A search that found no terminator
+    from offset p finds none from any later offset either."""
+
+    __slots__ = ("heredoc", "comment")
+
+    def __init__(self) -> None:
+        self.heredoc: dict[str, int] = {}
+        self.comment: int | None = None
+
+
+def _heredoc_end(text: str, pos: int, ident: str, misses: _Misses) -> int:
+    """Index just past the line that closes a heredoc whose body starts at
+    `pos`; `pos` itself when the terminator is missing, so the body is
+    lexed as code."""
+    failed = misses.heredoc.get(ident)
+    if failed is not None and pos >= failed:
+        return pos
+    m = re.compile(
+        r'^[ \t]*' + re.escape(ident) + r'[ \t]*\r?$', re.MULTILINE
+    ).search(text, pos)
+    if m is None:
+        misses.heredoc[ident] = pos
+        return pos
+    return m.end()
+
+
+def _comment_end(text: str, i: int, misses: _Misses) -> int | None:
+    """`i` is just past `/*`. Index past the closing `*/`, or None."""
+    if misses.comment is not None and i >= misses.comment:
+        return None
+    j = text.find("*/", i)
+    if j < 0:
+        misses.comment = i
+        return None
+    return j + 2
+
+
+def _next_line(text: str, i: int) -> int:
+    nl = text.find("\n", i)
+    return len(text) if nl < 0 else nl
+
+
+def _template_end(text: str, i: int, limit: int, depth: int) -> int | None:
+    """`i` is just past a `${` / `%{` in a quoted string whose line ends at
+    `limit`. Return the index past its `}`, or None when it does not close
+    on that line. The interpolation is an expression, so it is lexed like
+    code: comments and strings inside it cannot move the depth."""
+    braces = 1
+    while i < limit:
+        m = _LEX_RE.match(text, i, limit)
+        kind = m.lastgroup
+        i = m.end()
+        if kind == "bc":
+            j = text.find("*/", i, limit)
+            if j < 0:
+                return None
+            i = j + 2
+        elif kind in ("lc", "hd"):
+            return None  # runs past the line, so the template cannot close
+        elif kind == "dq":
+            end, _plain, ok = _lex_string_end(text, m.start(), limit, depth + 1)
+            if not ok:
+                return None
+            i = end
+        elif kind == "lb":
+            braces += 1
+        elif kind == "rb":
+            braces -= 1
+            if braces == 0:
+                return i
+    return None
+
+
+def _lex_string_end(
+    text: str, i: int, limit: int, depth: int = 0,
+) -> tuple[int, bool, bool]:
+    """`text[i]` is an opening `"` on a line that ends at `limit`. Return
+    ``(end, plain, closed)``: the index past the closing quote, whether
+    the literal had no escapes or templates, and whether it closed at
+    all. An unclosed string ends at `limit` instead of eating the file."""
+    if depth > _MAX_TEMPLATE_DEPTH:
+        return limit, False, False
+    plain = True
+    i += 1
+    while True:
+        m = _STRING_STOP_RE.search(text, i, limit)
+        if m is None:
+            return limit, False, False
+        i = m.start()
+        ch = m.group()
+        if ch == '"':
+            return i + 1, plain, True
+        if ch == "\\":
+            plain = False
+            i += 2
+        elif text.startswith(ch + ch + "{", i):  # `$${` / `%%{` escapes
+            plain = False
+            i += 3
+        elif text.startswith("{", i + 1):
+            plain = False
+            end = _template_end(text, i + 2, limit, depth)
+            if end is None:
+                return limit, False, False
+            i = end
+        else:
+            i += 1
+
+
+@functools.lru_cache(maxsize=1024)
+def _block_index(text: str) -> tuple[tuple, ...]:
+    """Every block that is structurally top-level in ``text``, in source
+    order, as ``(keyword, labels, start_pos, open_pos, end_pos)`` — the
+    keyword, the header's `{`, and one past the closing `}`.
+
+    A header at depth 0 is always a candidate. A top-level keyword that
+    starts a line *inside* a block that never closes is one too, so one
+    unbalanced block does not hide every block after it. A block that
+    never closes is dropped.
+    """
+    n = len(text)
+    braces: list[list] = []   # [parent_index, closed, header]
+    stack: list[int] = []
+    pending: list | None = []  # tokens of the statement being read
+    line_start = True          # `pending` began at the start of a line
+    line_end = -1              # end of the line holding `i`, computed lazily
+    misses = _Misses()
+    i = 0
+    while i < n:
+        m = _LEX_RE.match(text, i)
+        kind = m.lastgroup
+        i = m.end()
+        if kind == "nl":
+            pending, line_start = [], True
+        elif kind == "bc":
+            end = _comment_end(text, i, misses)
+            if end is None:
+                i, pending = _next_line(text, m.start()), None
+            else:
+                i = end
+        elif kind in ("ws", "lc"):
+            pass
+        elif kind == "hd":
+            end = _heredoc_end(text, i, m.group("hid"), misses)
+            # No terminator: resume on the line after `<<EOT`, which the
+            # token already consumed the newline of.
+            pending, line_start = ([], True) if end == i else (None, False)
+            i = end
+        elif kind == "dq":
+            if m.start() > line_end:
+                line_end = _next_line(text, m.start())
+            end, plain, _closed = _lex_string_end(text, m.start(), line_end)
+            label = text[m.start() + 1 : end - 1]
+            if pending and plain and _BLOCK_LABEL_RE.match(label):
+                pending.append((label, m.start()))
+            else:
+                pending = None
+            i = end
+        elif kind == "id":
+            if pending is not None:
+                pending.append((m.group(), m.start()))
+        elif kind == "lb":
+            header = None
+            if pending and _IDENT_LABEL_RE.match(pending[0][0]):
+                kw = pending[0][0]
+                if not stack or (line_start and kw in _TOP_LEVEL_KEYWORDS):
+                    header = (
+                        kw, tuple(t for t, _ in pending[1:]),
+                        pending[0][1], m.start(),
+                    )
+            braces.append([stack[-1] if stack else -1, False, header])
+            stack.append(len(braces) - 1)
+            pending, line_start = [], False
+        elif kind == "rb":
+            if stack:
+                braces[stack.pop()][1] = i
+            pending, line_start = [], False
+        else:
+            pending = None
+    out = []
+    eligible: list[bool] = []
+    for parent, closed, header in braces:
+        ok = parent < 0 or (not braces[parent][1] and eligible[parent])
+        eligible.append(ok)
+        if ok and closed and header is not None:
+            kw, labels, start, open_pos = header
+            out.append((kw, labels, start, open_pos, closed))
+    return tuple(out)
+
+
+
+def _matching_blocks(text: str, regex: re.Pattern):
+    for kw, labels, start, open_pos, end in _block_index(text):
+        canon = kw + "".join(f' "{lbl}"' for lbl in labels) + " {"
+        m = regex.match(canon)
+        if m is None or m.end() != len(canon):
+            continue
+        yield m, start, open_pos, end
+
 
 def find_blocks(text: str, regex: re.Pattern) -> list[dict]:
-    """Find top-level blocks. Returns list of {start_line,end_line,body,header}."""
+    """Find top-level blocks. Returns list of {start_line,end_line,body,header}.
+
+    `regex` is matched against the canonical header
+    (``resource "type" "name" {``), so it selects block kinds and
+    supplies `groups`; where the block sits comes from `_block_index`.
+    """
     blocks = []
-    for m in regex.finditer(text):
-        start_pos = m.start()
-        # `m.end() - 1` is the opening `{` (every header regex ends in
-        # `\{`). Walk to its match with the quote-aware `brace_walk` so a
-        # `}` inside a string literal — e.g. an IAM ARN
-        # `pattern = "arn:aws:s3:::bucket-{*}"` or a heredoc — no longer
-        # truncates the block and silently drops the attributes after it.
-        end_pos = brace_walk(text, m.end() - 1)
-        if end_pos is None:
-            continue
-        block_text = text[start_pos:end_pos]
-        body = text[m.end() : end_pos - 1]
-        start_line = text.count("\n", 0, start_pos) + 1
+    for m, start_pos, open_pos, end_pos in _matching_blocks(text, regex):
         blocks.append(
             {
                 "groups": m.groups(),
-                "start_line": start_line,
+                "start_line": text.count("\n", 0, start_pos) + 1,
                 "header_match": m,
-                "body": body,
-                "block_text": block_text,
+                "body": text[open_pos + 1 : end_pos - 1],
+                "block_text": text[start_pos:end_pos],
                 "start_pos": start_pos,
                 "end_pos": end_pos,
             }
@@ -719,18 +963,13 @@ def find_blocks(text: str, regex: re.Pattern) -> list[dict]:
 
 def find_simple_blocks(text: str, regex: re.Pattern) -> list[dict]:
     """Find top-level blocks for patterns without named groups (moved, import)."""
-    blocks = []
-    for m in regex.finditer(text):
-        start_pos = m.start()
-        # Quote-aware walk — see find_blocks. Keeps `moved`/`import`
-        # block boundaries correct when a string value contains `}`.
-        end_pos = brace_walk(text, m.end() - 1)
-        if end_pos is None:
-            continue
-        body = text[m.end() : end_pos - 1]
-        start_line = text.count("\n", 0, start_pos) + 1
-        blocks.append({"start_line": start_line, "body": body})
-    return blocks
+    return [
+        {
+            "start_line": text.count("\n", 0, start_pos) + 1,
+            "body": text[open_pos + 1 : end_pos - 1],
+        }
+        for _m, start_pos, open_pos, end_pos in _matching_blocks(text, regex)
+    ]
 
 
 # ---- Top-level masking (regex fallback) ---------------------------------

@@ -264,10 +264,9 @@ def handle_apply_fixes(
 
             kind = pattern.get("kind", "")
             arg = pattern.get("arg", "")
-            # find_blocks' RESOURCE_START allows a leading blank line
-            # before the resource keyword, so start_line may be 1 too
-            # low. Advance to the line that actually contains the
-            # opening `{`.
+            # `line` is the resource keyword's line; the opening `{` can
+            # sit on a later line (e.g. after a comment), so advance to
+            # the line that actually contains it.
             start_idx = finding.get("line", 1) - 1
             while start_idx < len(modified) - 1 and '{' not in modified[start_idx]:
                 start_idx += 1

@@ -5,6 +5,37 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 39 — Block discovery by lexer, not header regex — 2026-10-26
+
+`find_blocks` / `find_simple_blocks` now locate blocks with one lexer pass
+per file (`_hcl._block_index`, memoised) that understands strings,
+`${…}` / `%{…}` templates, comments and heredocs. Callers keep the same
+API: their header regex is matched against the canonical header to pick
+the block kind and supply `groups`. Each of these was a silent false
+negative or wrong location before:
+
+- **A `#` or `//` inside a heredoc** (e.g. `$${HOSTNAME#ip-}` in
+  `user_data`) no longer swallows the block's closing `}` and drops the
+  whole resource. `brace_walk` now skips heredoc bodies too.
+- **A commented-out copy of a resource** (`/* resource … */`) is no
+  longer a block. It used to make the real resource's key ambiguous,
+  turning the parse tree off for it (`SEC-AWS-SG-001` was missed), and
+  produced false positives of its own.
+- **Unquoted labels** (`resource aws_security_group sg {`) and a
+  **comment between the keyword and its labels** are recognised.
+- **`start_line` is the keyword's line.** The old `^\s*` swallowed
+  preceding blank lines, so ~1,760 of ~4,300 findings across
+  `fixtures/`, `examples/` and `demo/` pointed at a blank or comment line
+  above the block, and a `# tf-analyze:ignore` on the header line after
+  a blank line was not applied. The set of findings is otherwise
+  unchanged.
+- **Unclosed blocks cost one pass, not one walk to EOF each.** 3,000
+  unclosed `resource {` lines took ~450 s; now ~0.2 s.
+
+Not covered here: `*.tf.json` files are still not scanned.
+
+---
+
 ## Round 38 — Parser migration complete: top-level lookups, text-scan hygiene, literal-only `count = 0` — 2026-10-26
 
 Step 5a of `tasks/hcl-parser-migration.md`.
