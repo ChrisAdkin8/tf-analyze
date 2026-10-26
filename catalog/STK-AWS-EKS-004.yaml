@@ -5,10 +5,10 @@ default_urgency: MEDIUM
 blast_radius: environment
 status: active
 patterns:
-  - kind: resource_absent
-    resource: aws_iam_openid_connect_provider
-    when_present: aws_eks_cluster
-    scope: repo
+  - kind: resource_missing_companion
+    resource: aws_eks_cluster
+    companion: aws_iam_openid_connect_provider
+    via: url
     description: |
       `aws_eks_cluster` present but no `aws_iam_openid_connect_provider`
       in the repository. Without an OIDC provider, pods cannot use IAM

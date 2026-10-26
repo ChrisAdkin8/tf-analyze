@@ -17,9 +17,10 @@ nist_800_53:
 csa_ccm:
   - "TVM-02"
 patterns:
-  - kind: resource_absent
-    resource: aws_wafv2_logging_configuration
-    when_present: aws_wafv2_web_acl
+  - kind: resource_missing_companion
+    resource: aws_wafv2_web_acl
+    companion: aws_wafv2_logging_configuration
+    via: resource_arn
     description: |
       `aws_wafv2_web_acl` exists but no `aws_wafv2_logging_configuration`
       is defined. Without logging, blocked and allowed requests are invisible:

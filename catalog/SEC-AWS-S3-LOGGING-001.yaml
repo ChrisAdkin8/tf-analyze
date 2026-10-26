@@ -9,13 +9,17 @@ cis:
 mitre:
   - "T1562.008"
 patterns:
-  - kind: resource_absent
-    resource: aws_s3_bucket_logging
-    when_present: aws_s3_bucket
-    scope: repo
+  - kind: resource_missing_companion
+    resource: aws_s3_bucket
+    companion: aws_s3_bucket_logging
+    via: bucket
+    exempt_if_companion:
+      resource: aws_s3_bucket_logging
+      via: target_bucket
     description: |
-      Repository contains `aws_s3_bucket` resources but no
-      `aws_s3_bucket_logging` resource. S3 server access logs record every
+      An `aws_s3_bucket` that no `aws_s3_bucket_logging` in the same module
+      points at (a bucket that is another bucket's log `target_bucket` is
+      exempt). S3 server access logs record every
       request made to a bucket — GETs, PUTs, DELETEs — and are the primary
       evidence source for post-incident investigation and compliance auditing.
       CIS AWS Foundations Benchmark §3.6 requires server access logging

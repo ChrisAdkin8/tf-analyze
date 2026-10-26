@@ -11,9 +11,10 @@ nist_csf:
 nist_800_53:
   - "SC-7"
 patterns:
-  - kind: resource_absent
-    resource: azurerm_private_dns_zone_virtual_network_link
-    when_present: azurerm_private_dns_zone
+  - kind: resource_missing_companion
+    resource: azurerm_private_dns_zone
+    companion: azurerm_private_dns_zone_virtual_network_link
+    via: private_dns_zone_name
     description: |
       `azurerm_private_dns_zone` exists but no
       `azurerm_private_dns_zone_virtual_network_link` is bound. The

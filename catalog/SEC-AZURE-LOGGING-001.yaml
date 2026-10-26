@@ -7,9 +7,10 @@ cis:
   - "8.7"
 status: active
 patterns:
-  - kind: resource_absent
-    resource: azurerm_monitor_diagnostic_setting
-    when_present: azurerm_key_vault
+  - kind: resource_missing_companion
+    resource: azurerm_key_vault
+    companion: azurerm_monitor_diagnostic_setting
+    via: target_resource_id
 owasp_iac:
   - "Runtime / Comprehensive Logging Enablement"
 recommendation: |

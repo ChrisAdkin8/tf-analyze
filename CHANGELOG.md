@@ -30,6 +30,45 @@ directory matched nothing.
 
 ---
 
+## Round 48 — Per-resource companion rules (`resource_missing_companion`) — 2026-10-26
+
+`resource_absent` fires only when a resource type is missing from the
+whole repository, so rules that need one companion *per* resource were
+satisfied by any single one: one `aws_s3_bucket_public_access_block`
+anywhere passed every bucket, one `aws_flow_log` every VPC, one
+diagnostic setting every Key Vault / load balancer / NAT gateway.
+
+New kind `resource_missing_companion` fires on each `resource` that no
+`companion` in the same module points at through `via` (by reference or
+the same literal; `via` may be a list). `exempt_if_companion` exempts a
+resource another one points at — a bucket that is some
+`aws_s3_bucket_logging`'s `target_bucket` is a log destination and need
+not log its own access. 21 rules are converted:
+
+- AWS: SEC-AWS-S3-PUBLIC-BLOCK-001, SEC-AWS-S3-LOGGING-001,
+  SEC-AWS-VPC-FLOWLOGS-001, SEC-AWS-ECR-002, SEC-AWS-WAF-001,
+  ROB-AWS-SECRETSMANAGER-001, STK-AWS-EKS-004, STK-AWS-ROUTE53-001.
+- Azure: SEC-AZURE-SQL-AUDIT-001, SEC-AZURE-SQL-ATP-001,
+  SEC-AZURE-LOGGING-001, SEC-AZURE-APIM-001, SEC-AZURE-APIM-002,
+  SEC-AZURE-PRIVATE-DNS-001, STK-AZURE-NSG-FLOWLOG-001 (`via` both
+  `network_security_group_id` and azurerm v4's `target_resource_id`),
+  STK-AZURE-SQL-TDE-001, STK-AZURE-LB-001, STK-AZURE-NAT-001,
+  STK-AZURE-LOGIC-APP-001.
+- GCP: ROB-GCP-FILESTORE-001, STK-GCP-MIG-002.
+
+Account- / project-level singletons stay `resource_absent` (GuardDuty,
+Security Hub, password policy, Defender, audit config, …), as do
+SEC-AZURE-SQL-VULN-001 (it links through the alert policy, not the
+server) and SEC-AZURE-SQL-001 (its companion resource is configured
+inline in current azurerm).
+
+Findings now name the resource and its line instead of
+`<absent: TYPE>` at the target: across `fixtures/`, `examples/` and
+`demo/`, 12 repo-level findings become 155 per-resource ones; terragoat
+371 → 373.
+
+---
+
 ## Round 47 — S3 rules accept AWS provider v4+ split resources — 2026-10-26
 
 AWS provider v4 split S3 bucket settings into sibling resources

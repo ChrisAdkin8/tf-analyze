@@ -41,7 +41,7 @@ keywords: "robustness, medium, terraform, iac, gcp, mitre-T1485, mitre-T1490, cw
 
 ## What this checks
 
-1. **`resource_absent`** on `google_filestore_backup` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `google_filestore_instance` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `google_filestore_instance` is declared but no
 `google_filestore_backup` resource exists. Filestore has no
 automated snapshot/backup policy resource yet — operators must

@@ -9,9 +9,10 @@ mitre:
 nist_csf:
   - "PR.PT-1"
 patterns:
-  - kind: resource_absent
-    resource: google_compute_autoscaler
-    when_present: google_compute_instance_group_manager
+  - kind: resource_missing_companion
+    resource: google_compute_instance_group_manager
+    companion: google_compute_autoscaler
+    via: target
     description: |
       `google_compute_instance_group_manager` exists but no
       `google_compute_autoscaler` is bound to it. Capacity is fixed —

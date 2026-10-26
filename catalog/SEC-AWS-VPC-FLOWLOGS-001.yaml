@@ -9,10 +9,10 @@ mitre:
   - "T1562.008"
 status: active
 patterns:
-  - kind: resource_absent
-    resource: aws_flow_log
-    when_present: aws_vpc
-    scope: repo
+  - kind: resource_missing_companion
+    resource: aws_vpc
+    companion: aws_flow_log
+    via: vpc_id
 owasp_iac:
   - "Runtime / Comprehensive Logging Enablement"
 cwe:

@@ -21,10 +21,10 @@ csa_ccm:
   - "IVS-04"
 status: active
 patterns:
-  - kind: resource_absent
-    resource: aws_s3_bucket_public_access_block
-    when_present: aws_s3_bucket
-    scope: repo
+  - kind: resource_missing_companion
+    resource: aws_s3_bucket
+    companion: aws_s3_bucket_public_access_block
+    via: bucket
 recommendation: |
   Add an `aws_s3_bucket_public_access_block` resource for every bucket:
 

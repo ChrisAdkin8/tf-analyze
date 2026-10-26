@@ -20,9 +20,10 @@ nist_800_53:
 csa_ccm:
   - "BCR-08"
 patterns:
-  - kind: resource_absent
-    resource: google_filestore_backup
-    when_present: google_filestore_instance
+  - kind: resource_missing_companion
+    resource: google_filestore_instance
+    companion: google_filestore_backup
+    via: source_instance
     description: |
       `google_filestore_instance` is declared but no
       `google_filestore_backup` resource exists. Filestore has no

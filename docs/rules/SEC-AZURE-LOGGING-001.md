@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, azure, cis-8.7, mitre-T1562.008, cwe-
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_monitor_diagnostic_setting` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_key_vault` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
 
 ## Why it likely fired
 

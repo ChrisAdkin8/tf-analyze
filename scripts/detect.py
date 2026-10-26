@@ -32,6 +32,8 @@ Pattern kinds supported:
     resource_missing_arg+     same, but arg may be a nested.dotted.path
     resource_present          any resource of type T (urgency comes from default)
     resource_absent           NO resource of type T anywhere in scope (file=*)
+    resource_missing_companion  resource of type T that no companion C in its
+                              module points at (per-resource resource_absent)
     hcl_attr                  resource type T whose attr A is a literal value
     module_block_missing_arg  module block whose source matches regex lacks arg
     variable_type             variable block with `type = <regex>`

@@ -21,9 +21,10 @@ nist_800_53:
 csa_ccm:
   - "TVM-04"
 patterns:
-  - kind: resource_absent
-    resource: azurerm_mssql_server_security_alert_policy
-    when_present: azurerm_mssql_server
+  - kind: resource_missing_companion
+    resource: azurerm_mssql_server
+    companion: azurerm_mssql_server_security_alert_policy
+    via: server_name
     description: |
       `azurerm_mssql_server` is declared but no
       `azurerm_mssql_server_security_alert_policy` is bound. SQL

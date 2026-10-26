@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530, cwe-73
 
 ## What this checks
 
-1. **`resource_absent`** on `aws_s3_bucket_public_access_block` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `aws_s3_bucket` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
 
 ## Why it likely fired
 

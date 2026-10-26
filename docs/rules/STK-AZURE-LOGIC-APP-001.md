@@ -41,7 +41,7 @@ keywords: "stack, medium, terraform, iac, azure, mitre-T1562.008, cwe-778, nist-
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_monitor_diagnostic_setting` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `azurerm_logic_app_workflow` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `azurerm_logic_app_workflow` exists but no
 `azurerm_monitor_diagnostic_setting` is bound to it. Workflow
 runs, failed actions, and trigger fires are not shipped to

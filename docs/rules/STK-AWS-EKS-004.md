@@ -41,7 +41,7 @@ keywords: "stack, medium, terraform, iac, aws"
 
 ## What this checks
 
-1. **`resource_absent`** on `aws_iam_openid_connect_provider` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `aws_eks_cluster` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `aws_eks_cluster` present but no `aws_iam_openid_connect_provider`
 in the repository. Without an OIDC provider, pods cannot use IAM
 Roles for Service Accounts (IRSA). Instead, every pod on a node

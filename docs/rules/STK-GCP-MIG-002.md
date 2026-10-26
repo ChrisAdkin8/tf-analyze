@@ -41,7 +41,7 @@ keywords: "stack, low, terraform, iac, gcp, mitre-T1496, nist-csf-pr.pt-1"
 
 ## What this checks
 
-1. **`resource_absent`** on `google_compute_autoscaler` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_companion`** on `google_compute_instance_group_manager` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
   `google_compute_instance_group_manager` exists but no
 `google_compute_autoscaler` is bound to it. Capacity is fixed —
 idle hours waste compute, busy hours fail under load.
