@@ -14,7 +14,8 @@ patterns:
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     code_only: true  # ignore comments and heredoc text
     file_glob: "**/versions.tf"
-    regex: 'required_version\s*=\s*"[~>=\s]*1\.[0-5]'
+    # (?![0-9]): "1.1" must not match the start of "1.10"+
+    regex: 'required_version\s*=\s*"[~>=\s]*1\.[0-5](?![0-9])'
 owasp_iac:
   - "Develop and Distribute / Version Control Discipline"
 mitre:

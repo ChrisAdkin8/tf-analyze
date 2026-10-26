@@ -43,7 +43,7 @@ jobs:
             npm version "${{ steps.ver.outputs.version-bare }}" --no-git-tag-version --allow-same-version
             npm run bundle-engine
             npm run compile
-            npx vsce package --skip-license --out "../tf-analyze-${{ steps.ver.outputs.version-bare }}.vsix"
+            npx vsce package --out "../tf-analyze-${{ steps.ver.outputs.version-bare }}.vsix"
             echo "vsix=tf-analyze-${{ steps.ver.outputs.version-bare }}.vsix" >> "$GITHUB_OUTPUT"
           fi
 

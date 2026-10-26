@@ -117,9 +117,9 @@ AWS, GCP, and Azure are at **rule-count parity (91 rules each)** — IAM, storag
 | **GCP** | 91 | IAM, KMS, GKE, CloudSQL, BigQuery, Cloud Run, Pub/Sub, GCS, networking (SSH/RDP/database port world-open), Shielded VM, Audit Logs, service-account key creation, Cloud Memorystore Redis auth/TLS, Artifact Registry CMEK, Module Reuse Advisor (`MOD-REUSE-GCP-NETWORK-001`). Full CIS GCP Foundations Benchmark v4.0 coverage for documented controls. |
 | **Azure** | 91 | RBAC, storage (versioning/HTTPS), Key Vault (network ACL/key rotation), AKS (Workload Identity / private / authorized IPs / network policy), SQL (firewall/TDE/deprecated single-server/SSL), App Service HTTPS, NSG flow logs, UAMI, ACR admin, subscription activity log, Linux VM password authentication, Module Reuse Advisor (`MOD-REUSE-AZURE-AKS-001`). |
 | **Kubernetes / Helm** | 18 | Helm release `set { }` overrides (`SEC-K8S-HELM-001`, `-002`); `kubernetes_*` resource hardening (PSA, network policy, cluster-admin RoleBindings). |
-| **Cross-cloud / engine** | 62 | Secrets in HCL/tfvars, provisioner usage, module pinning / supply-chain refs / staleness, `required_providers` version pinning, lifecycle controls (`ROB-DRIFT-001`, `-002`), `count`/`for_each` anti-patterns including `ROB-FOREACH-002` keyset stability, orphan modules (`MOD-UNUSED-001`), variable validation, sensitive outputs, provider aliases, backends, Vault data sources, `applies_when` provider-version gating. |
+| **Cross-cloud / engine** | 63 | Secrets in HCL/tfvars, provisioner usage, module pinning / supply-chain refs / staleness, `required_providers` version pinning, lifecycle controls (`ROB-DRIFT-001`, `-002`), `count`/`for_each` anti-patterns including `ROB-FOREACH-002` keyset stability, orphan modules (`MOD-UNUSED-001`), variable validation, sensitive outputs, provider aliases, backends, Vault data sources, `applies_when` provider-version gating. |
 
-AWS / GCP / Azure are at numerical parity (91 rules each). **Total: 353 catalogue rules** (351 active + 2 stubs; `--list-rules` reports the 351 active). Re-run `python3 scripts/detect.py --list-rules` for the full live enumeration. README.md's "Rules at a glance" table is the maintained per-cloud breakdown.
+AWS / GCP / Azure are at numerical parity (91 rules each). **Total: 354 catalogue rules** (352 active + 2 stubs; `--list-rules` reports the 352 active). Re-run `python3 scripts/detect.py --list-rules` for the full live enumeration. README.md's "Rules at a glance" table is the maintained per-cloud breakdown.
 
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.
 
@@ -212,7 +212,7 @@ Every finding MUST also be tagged with blast radius:
 
 ## Suppression
 
-Suppressions are applied at **both** the detection pass (via `detect.py --suppress`) and the judgement pass. The detection pass handles two suppression sources:
+Suppressions are applied at **both** the detection pass (`detect.py` applies them by default; `--no-suppress` turns them off) and the judgement pass. The detection pass handles two suppression sources:
 
 **Inline comments:** `# tf-analyze:ignore <CATALOGUE-ID>` on the same line or the line above a finding suppresses it for that specific location.
 
