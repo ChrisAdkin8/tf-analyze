@@ -26,6 +26,17 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version-bare=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Tag matches the engine version
+        # scripts/_meta.py is the single source of the version (package
+        # metadata, --version, SARIF, LSP). A tag that disagrees would ship
+        # artefacts labelled with two different versions.
+        run: |
+          ENGINE=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _meta import __version__; print(__version__)")
+          if [ "$ENGINE" != "${{ steps.ver.outputs.version-bare }}" ]; then
+            echo "::error::tag ${{ steps.ver.outputs.version }} does not match scripts/_meta.py __version__ = $ENGINE"
+            exit 1
+          fi
+
       - name: Verify per-rule docs are in sync with catalogue
         # Tag-time gate: if the catalogue and docs/rules/ have drifted,
         # fail the release rather than publish a half-broken docs site.

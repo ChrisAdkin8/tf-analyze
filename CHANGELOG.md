@@ -5,6 +5,37 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 50 — Size-aware score; one source for the version — 2026-10-26
+
+### Score (scoring version 2)
+The score was `100 - Σ weights`, so a large estate was graded F for the
+sheer number of hygiene findings it had, and `--explain-score` promised
+ceilings it could not reach.
+
+- `penalty = 15·CRITICAL + 7·HIGH + (3·MEDIUM + 1·LOW) / size_factor`,
+  `size_factor = max(1, √(resources_scanned / 20))`. CRITICAL and HIGH
+  are each a concrete exposure and cost the same in any repository;
+  MEDIUM and LOW are judged relative to size. Up to 20 resources the
+  score is unchanged; 20 MEDIUM findings across 400 resources score
+  86 (B) instead of 40 (D).
+- The summary gains `resources_scanned`, `size_factor` and `penalty`;
+  `scoring_version` is 2.
+- `--explain-score` projects from the unclamped penalty. It added a
+  fixed finding's weight back onto a score already clamped at 0, so 60
+  CRITICALs reported "ceiling if you fix the top 5: 35 (D)"; it is 0.
+
+### Version
+The version lived in four places with four values (`pyproject` 0.2.6,
+SARIF `tool.driver.version` 1.2.0, LSP `serverInfo` 0.1.0, release tag).
+
+- `scripts/_meta.py` holds `__version__`; the package build reads it
+  (`[tool.setuptools.dynamic]`), as do SARIF, the LSP server and the
+  JSON report (new `tool_version`).
+- New `--version` flag.
+- The release workflow refuses a tag that does not match `_meta.py`.
+
+---
+
 ## Round 49 — Baselines survive code moving and a new checkout — 2026-10-26
 
 `--baseline` matched findings on `(id, file, line, resource)` with

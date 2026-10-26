@@ -240,16 +240,19 @@ Every text, JSON, and HTML scan emits a deterministic 0–100 health score and l
 
 ```json
 "summary": {
-  "scoring_version": 1,
+  "scoring_version": 2,
   "score": 82,
   "grade": "B",
   "counts": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 4, "LOW": 6, "INFO": 0},
   "suppressed_count": 0,
-  "formula": "max(0, floor(100 - sum(weight * count))); weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; suppressed at half weight"
+  "resources_scanned": 12,
+  "size_factor": 1.0,
+  "penalty": 18.0,
+  "formula": "max(0, floor(100 - (15*CRITICAL + 7*HIGH + (3*MEDIUM + 1*LOW) / size_factor))); size_factor = max(1, sqrt(resources_scanned / 20)); INFO=0; suppressed at half weight"
 }
 ```
 
-Suppressed and baseline-suppressed findings count at half weight (acknowledged, but the underlying risk still exists). INFO findings carry weight 0. The `scoring_version` field pins the formula — weight changes bump it so downstream gates can detect breakage. CI gates use `--fail-on LEVEL` (the urgency tier) rather than gating on the grade, intentionally — the grade is for trend visibility, not pass/fail.
+CRITICAL and HIGH findings cost the same in any repository — each is a concrete exposure. MEDIUM and LOW are hygiene and are judged relative to size: up to 20 resources the size factor is 1, at 80 resources it halves their penalty, at 2,000 it divides it by ten, so a large estate isn't graded F just for being large. Suppressed and baseline-suppressed findings count at half weight (acknowledged, but the underlying risk still exists). INFO findings carry weight 0. The `scoring_version` field pins the formula — weight changes bump it so downstream gates can detect breakage. CI gates use `--fail-on LEVEL` (the urgency tier) rather than gating on the grade, intentionally — the grade is for trend visibility, not pass/fail.
 
 ### Useful modifiers
 
