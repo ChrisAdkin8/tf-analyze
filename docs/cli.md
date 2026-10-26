@@ -46,7 +46,7 @@ Markdown report to verify (for --mode verify-fixed). If omitted, picks the most 
 
 ### `--diff-base DIFF_BASE`
 
-Git ref to diff against (e.g., main). Only scan changed .tf files.
+Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files.
 
 ### `--plan-json PATH`
 

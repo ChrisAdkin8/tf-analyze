@@ -29,12 +29,14 @@ import re
 from pathlib import Path
 from typing import Callable
 
+from _tfjson import remap_lines
+
 
 _FINDING_ROW_RE = re.compile(
     r'^\|\s*(?P<id>[A-Z]{2,4}(?:-[A-Z]+)+-\d{3})'
     r'(?:#\d+)?\s*\|'         # optional instance number
     r'(?P<middle>.*?)\|'       # skip urgency column(s)
-    r'\s*`?(?P<file>[\w./-]+\.tf)`?'
+    r'\s*`?(?P<file>[\w./-]+\.tf(?:\.json)?)`?'
     r'[:\s]*(?P<line>\d+)?'
     r'.*\|',
     re.MULTILINE,
@@ -99,6 +101,7 @@ def reprobe_finding(
     for fp, text in all_files_text.items():
         hits.extend(detect_in_file(fp, text, [entry]))
     hits.extend(detect_corpus(Path("."), all_files_text, [entry]))
+    remap_lines(hits)
 
     same_file = [h for h in hits if str(h.get("file", "")) == str(target_file)]
     if same_file:

@@ -26,6 +26,8 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from _tfjson import remap_lines, tf_source_files
+
 
 def resolve_fleet_targets(args) -> list[Path]:
     """Collect target directories from ``--target`` and ``--targets-file``."""
@@ -61,7 +63,7 @@ def fleet_scan(
     """
     by_target: dict[str, list[dict]] = {}
     for target in targets:
-        tf_files = [p for p in target.rglob("*.tf") if ".terraform" not in p.parts]
+        tf_files = [p for p in tf_source_files(target) if ".terraform" not in p.parts]
         all_text: dict = {}
         for fp in tf_files:
             try:
@@ -71,7 +73,7 @@ def fleet_scan(
         target_findings = detect_corpus(target, all_text, entries)
         for fp, text in all_text.items():
             target_findings.extend(detect_in_file(fp, text, entries))
-        by_target[str(target)] = target_findings
+        by_target[str(target)] = remap_lines(target_findings)
 
     # Same (rule_id, resource_name, file_base) tuple across >1 target.
     # Use sets so the same finding repeated in one repo only counts
