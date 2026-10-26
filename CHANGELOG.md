@@ -5,6 +5,36 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 47 — S3 rules accept AWS provider v4+ split resources — 2026-10-26
+
+AWS provider v4 split S3 bucket settings into sibling resources
+(`aws_s3_bucket_versioning`, `aws_s3_bucket_server_side_encryption_configuration`,
+…). Three rules false-positived on modern code:
+
+- **SEC-AWS-S3-001** (HIGH) and **ROB-AWS-S3-001**: their legacy pattern
+  demanded the pre-v4 inline block on `aws_s3_bucket`, so a bucket
+  configured the modern way was still reported. New `resource_missing_arg`
+  option `unless_companion: {resource, via}` skips a bucket that a
+  companion in the same module points at — by reference
+  (`bucket = aws_s3_bucket.x.id`, `.bucket`, `[0].id`) or by the same
+  literal bucket name — across files (new `InFileCtx.module_resources`).
+  A bucket with neither form still fires.
+- **SEC-AWS-LOG-RETENTION-001** (HIGH) fired on every bucket:
+  `resource_missing_arg` ignored the pattern's `name_regex`. It now limits
+  the rule to resources whose label, `name` or `bucket` matches (here:
+  audit / log / cloudtrail buckets).
+- Plan and state mode (`--plan-json`, `--state-json`) honour both
+  options; companions are linked through the plan's `configuration`
+  references (planned values lose them) or, in state, by value.
+- `SEC-AWS-S3-001_clean` / `ROB-AWS-S3-001_clean` now declare the bucket
+  (in a separate file) — before, they had no `aws_s3_bucket`, so this
+  false positive could not be caught.
+
+Corpus: 26 log-retention findings on non-log buckets (4 in terragoat)
+and one duplicate versioning finding are gone; nothing new fires.
+
+---
+
 ## Round 46 — Variable lookups: comments, nested keys, .tfvars, several callers — 2026-10-26
 
 `var.X` / `local.X` resolution had four false-negative gaps, each a case

@@ -24,7 +24,13 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_s3_bucket
     arg: versioning
-    description: S3 bucket missing versioning block (pre-v4 provider inline block)
+    unless_companion:
+      resource: aws_s3_bucket_versioning
+      via: bucket
+    description: |
+      S3 bucket with neither the legacy inline `versioning` block (pre-v4
+      provider) nor an `aws_s3_bucket_versioning` in the same module
+      pointing at it (v4+).
 recommendation: |
   Set `versioning_configuration { status = "Enabled" }` on the
   `aws_s3_bucket_versioning` resource associated with every S3 bucket

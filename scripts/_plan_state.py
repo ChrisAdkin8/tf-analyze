@@ -117,12 +117,73 @@ def plan_values_at(values: dict, path: str) -> list[str]:
     return [render_hcl(v) for v in attrs_values_at(values, path) if not _plan_empty(v)]
 
 
+_INDEX_RE = re.compile(r'\[[^\]]*\]')
+
+
+def _module_prefix(address: str) -> str:
+    """``module.a.module.b.`` for ``module.a[0].module.b.aws_x.y[1]`` —
+    the (index-free) module path an address lives in."""
+    parts = _INDEX_RE.sub("", address).split(".")
+    return "".join(f"module.{parts[i + 1]}." for i in range(0, len(parts) - 2, 2)
+                   if parts[i] == "module")
+
+
+def config_references(plan: dict) -> dict[str, dict[str, list[str]]]:
+    """``{address: {arg: [referenced addresses]}}`` from a plan's
+    ``configuration`` section, addresses index-free and module-prefixed.
+    Planned values lose references (``bucket = aws_s3_bucket.x.id`` is
+    unknown until apply); the configuration keeps them."""
+    out: dict[str, dict[str, list[str]]] = {}
+
+    def walk(module: dict | None, prefix: str) -> None:
+        for r in (module or {}).get("resources") or []:
+            refs = {
+                arg: [prefix + ref for ref in (expr or {}).get("references") or []]
+                for arg, expr in (r.get("expressions") or {}).items()
+                if isinstance(expr, dict)
+            }
+            out[prefix + r.get("address", "")] = refs
+        for name, call in ((module or {}).get("module_calls") or {}).items():
+            walk((call or {}).get("module"), f"{prefix}module.{name}.")
+
+    walk((plan.get("configuration") or {}).get("root_module"), "")
+    return out
+
+
+def _has_companion(
+    r: dict, spec: dict, resources: list[dict],
+    references: dict[str, dict[str, list[str]]],
+) -> bool:
+    """Plan/state counterpart of `_handlers_generic._has_companion`: a
+    resource of type ``spec["resource"]`` in the same module points at `r`
+    through its ``spec["via"]`` argument — by equal value (always known in
+    state), or by reference in the plan configuration."""
+    ctype, via = spec.get("resource"), spec.get("via", "bucket")
+    own_addr = _INDEX_RE.sub("", r.get("address", ""))
+    own_value = (r.get("values") or {}).get(via)
+    module = _module_prefix(own_addr)
+    for cand in resources:
+        if cand.get("type") != ctype:
+            continue
+        cand_addr = _INDEX_RE.sub("", cand.get("address", ""))
+        if _module_prefix(cand_addr) != module:
+            continue
+        value = (cand.get("values") or {}).get(via)
+        if own_value is not None and value == own_value:
+            return True
+        if any(ref == own_addr or ref.startswith(own_addr + ".")
+               for ref in references.get(cand_addr, {}).get(via, [])):
+            return True
+    return False
+
+
 def evaluate_against_resources(
     resources: list[dict],
     entries: list[dict],
     *,
     finding_mode: str,
     file_marker: str,
+    references: dict[str, dict[str, list[str]]] | None = None,
 ) -> list[dict]:
     """Re-evaluate plan-supported rule kinds against a flat resource list.
 
@@ -184,10 +245,23 @@ def evaluate_against_resources(
                     continue
                 suppress_if = pat.get("suppress_if")
                 every = pat.get("instances", "all") != "any"
+                name_re = re.compile(pat["name_regex"]) if pat.get("name_regex") else None
+                companion = pat.get("unless_companion")
                 for r in resources:
                     if r.get("type") != rt:
                         continue
-                    if not plan_has_path(r.get("values") or {}, arg_path, every=every):
+                    rvals = r.get("values") or {}
+                    if name_re is not None and not any(
+                        isinstance(n, str) and name_re.search(n)
+                        for n in (r.get("name") or r.get("address", "").split(".")[-1],
+                                  rvals.get("name"), rvals.get("bucket"))
+                    ):
+                        continue
+                    if companion and _has_companion(
+                        r, companion, resources, references or {},
+                    ):
+                        continue
+                    if not plan_has_path(rvals, arg_path, every=every):
                         if suppress_if:
                             s_arg = suppress_if.get("arg", "")
                             s_val = suppress_if.get("equals")
@@ -297,6 +371,7 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
         resources, entries,
         finding_mode="plan",
         file_marker="<plan>",
+        references=config_references(plan),
     )
 
 

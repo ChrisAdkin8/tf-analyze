@@ -44,13 +44,17 @@ keywords: "security, high, terraform, iac, aws, cis-2.1.1, mitre-T1530, cwe-311,
 1. **`resource_missing_arg`** on `aws_s3_bucket_server_side_encryption_configuration` (`rule`) — _the resource is missing a required attribute (or nested attribute path)._
   S3 bucket without encryption configuration resource
 2. **`resource_missing_arg`** on `aws_s3_bucket` (`server_side_encryption_configuration.rule`) — _the resource is missing a required attribute (or nested attribute path)._
-  S3 bucket with legacy inline encryption block missing (pre-v4 provider)
+  S3 bucket with neither the legacy inline encryption block (pre-v4
+provider) nor an `aws_s3_bucket_server_side_encryption_configuration`
+in the same module pointing at it (v4+).
 
 ## Why it likely fired
 
 S3 bucket without encryption configuration resource
 
-S3 bucket with legacy inline encryption block missing (pre-v4 provider)
+S3 bucket with neither the legacy inline encryption block (pre-v4
+provider) nor an `aws_s3_bucket_server_side_encryption_configuration`
+in the same module pointing at it (v4+).
 
 ## Adversarial scenario
 
