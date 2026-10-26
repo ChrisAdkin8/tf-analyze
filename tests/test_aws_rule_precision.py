@@ -199,3 +199,15 @@ resource "aws_ssm_parameter" "token" {
 """
     assert _fired(tmp_path, hcl, "SEC-SECRETS-002") == {"aws_ssm_parameter.db_password"}
     assert _fired(tmp_path, hcl, "SEC-AWS-SSM-001") == {"aws_ssm_parameter.ami"}
+
+
+def test_kms_unresolved_key_spec_still_fires(tmp_path) -> None:
+    hcl = """
+variable "key_spec" {
+  type = string
+}
+resource "aws_kms_key" "unresolved" {
+  customer_master_key_spec = var.key_spec
+}
+"""
+    assert _fired(tmp_path, hcl, "SEC-AWS-KMS-001") == {"aws_kms_key.unresolved"}

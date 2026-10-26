@@ -245,3 +245,43 @@ resource "google_kms_crypto_key" "signing" {
     assert _fired(tmp_path, hcl, "STK-GCP-KMS-001") == {
         "google_kms_crypto_key.symmetric"
     }
+
+
+def test_kubernetes_secret_quoted_keys_do_not_hide_literals(tmp_path) -> None:
+    hcl = """
+resource "kubernetes_secret" "quoted_key" {
+  metadata { name = "a" }
+  data = {
+    "password" = "hunter2"
+  }
+}
+resource "kubernetes_secret_v1" "dockercfg" {
+  metadata { name = "b" }
+  data = {
+    ".dockerconfigjson" = "{}"
+  }
+}
+resource "kubernetes_secret_v1" "quoted_key_var" {
+  metadata { name = "c" }
+  data = {
+    "password" = var.db_password
+    "dsn"      = format("%s:5432", var.host)
+  }
+}
+"""
+    assert _fired(tmp_path, hcl, "SEC-K8S-SECRET-001") == {
+        "kubernetes_secret.quoted_key", "kubernetes_secret_v1.dockercfg",
+    }
+
+
+def test_gcp_kms_unresolved_purpose_still_fires(tmp_path) -> None:
+    hcl = """
+variable "key_purpose" {
+  type = string
+}
+resource "google_kms_crypto_key" "unresolved" {
+  name    = "a"
+  purpose = var.key_purpose
+}
+"""
+    assert _fired(tmp_path, hcl, "STK-GCP-KMS-001") == {"google_kms_crypto_key.unresolved"}

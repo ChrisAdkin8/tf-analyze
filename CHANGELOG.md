@@ -30,15 +30,20 @@ view binding). Facts checked against the registry docs for azurerm
   fires on `evaluation_mode = "DISABLED"` / `enabled = false`; network
   policy on `enabled = false`, and skips Dataplane V2 clusters
   (`datapath_provider = "ADVANCED_DATAPATH"`).
-- **STK-GCP-KMS-001** skips keys whose `purpose` is not
-  `ENCRYPT_DECRYPT` (asymmetric / MAC keys cannot auto-rotate).
+- **STK-GCP-KMS-001** skips keys whose `purpose` is a known
+  non-rotating one (`ASYMMETRIC_SIGN`, `ASYMMETRIC_DECRYPT`, `MAC`,
+  `RAW_ENCRYPT_DECRYPT`). The list is explicit so an unresolved
+  `purpose = var.x` still fires; SEC-AWS-KMS-001's Round 55 exemption
+  (`^(?!SYMMETRIC_DEFAULT$)`) failed open the same way and now lists
+  `RSA_` / `ECC_` / `HMAC_` / `SM2` / `ML_DSA_` specs.
 - **Kubernetes**: rules now cover `kubernetes_X_v1` resources too — the
   loader aliases `kubernetes_X` patterns, `resource_absent` accepts either
   version (a `kubernetes_cluster_role_binding_v1` to `cluster-admin` was
   missed). SEC-K8S-RBAC-001 reads `cluster-admin` from `role_ref` (a
   binding merely *named* cluster-admin fired); SEC-K8S-RBAC-002 matches
   `subject` attributes in any order. SEC-K8S-SECRET-001 fires only on
-  literal `data` values, not `var.*` references, matching its title.
+  literal `data` values, not `var.*` references, matching its title;
+  quoted keys (`".dockerconfigjson" = "..."`) do not hide a literal.
 - Engine: `resource_arg` with `nested_path` and no `arg` silently never
   fired; it now works (no shipped rule relied on it).
 

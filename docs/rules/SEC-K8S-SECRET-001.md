@@ -41,15 +41,17 @@ keywords: "security, high, terraform, iac, cis-5.4.1, mitre-T1552.001, mitre-T10
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_secret` matching `/(?ms)^\s*data\s*=\s*\{(?:[^}"]|"\$\{[^"]*")*?=\s*"(?!\$\{)/` — _the resource body matches a regex inside the block._
+1. **`resource_body_contains`** on `kubernetes_secret` matching `/(?ms)^\s*data\s*=\s*\{(?:[^}"]|"\$\{[^"]*"|"[^"]*"(?=\s*[=,)]))*?=\s*"(?!\$\{)/` — _the resource body matches a regex inside the block._
   `kubernetes_secret` / `kubernetes_secret_v1` has a `data = { ... }`
 map with a literal string value. The value is base64-encoded but
 not encrypted — it sits verbatim in the .tf source and the
 Terraform state file. A value taken from a variable or data source
 (`var.db_password`) is not reported here: the source tree no longer
 holds it (it is still in state).
-2. **`resource_body_contains`** on `kubernetes_secret` matching `/(?ms)^\s*data\s*\{(?:[^}"]|"\$\{[^"]*")*?=\s*"(?!\$\{)/` — _the resource body matches a regex inside the block._
-  Same as above for the block form (`data { foo = "..." }`).
+2. **`resource_body_contains`** on `kubernetes_secret` matching `/(?ms)^\s*data\s*\{(?:[^}"]|"\$\{[^"]*"|"[^"]*"(?=\s*[=,)]))*?=\s*"(?!\$\{)/` — _the resource body matches a regex inside the block._
+  Same as above for the block form (`data { foo = "..." }`). Quoted
+keys (`".dockerconfigjson" = "..."`) and quoted function
+arguments are stepped over, so they do not hide a literal value.
 
 ## Why it likely fired
 
@@ -60,7 +62,9 @@ Terraform state file. A value taken from a variable or data source
 (`var.db_password`) is not reported here: the source tree no longer
 holds it (it is still in state).
 
-Same as above for the block form (`data { foo = "..." }`).
+Same as above for the block form (`data { foo = "..." }`). Quoted
+keys (`".dockerconfigjson" = "..."`) and quoted function
+arguments are stepped over, so they do not hide a literal value.
 
 ## Adversarial scenario
 
