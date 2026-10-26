@@ -478,7 +478,9 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
     # suppressed (the provider injects the tags downstream).
     for fp, text in all_files_text.items():
         for pblk in find_blocks(text, PROVIDER_START):
-            if pblk["groups"][0] == "aws" and "default_tags" in pblk["body"]:
+            # A real `default_tags` block, not the word in a comment or
+            # string (`# TODO: add default_tags` silenced every AWS tag rule).
+            if pblk["groups"][0] == "aws" and block_has_arg(pblk["body"], "default_tags"):
                 base.setdefault(str(Path(fp).parent), {})["__aws_default_tags__"] = "true"
 
     # Module calls, in a stable order: (caller dir, child dir, inputs).

@@ -231,7 +231,12 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
         nodes[addr] = {
             "id": addr,
             "type": _NODE_TYPE_MAP.get(rtype, "compute"),
-            "label": addr,
+            # A name repeated across modules is keyed `<addr>@<dir>`; show
+            # the address and just the module folder.
+            "label": (
+                f"{res['addr']} ({addr.rsplit('/', 1)[-1]})"
+                if "@" in addr and "addr" in res else addr
+            ),
             "file": res["file"],
             "line": res["line"],
             "findings": finding_by_resource.get(addr, []),

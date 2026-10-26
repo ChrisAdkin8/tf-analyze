@@ -54,6 +54,7 @@ need no migration.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from _hcl import (
     find_blocks,
@@ -90,8 +91,33 @@ _RESOURCE_START = re.compile(
 _INDEX_CACHE: tuple[tuple, dict] | None = None
 
 
+def _addr(key: str) -> str:
+    """The Terraform address for an index key (drops the ``@<dir>`` that
+    `_build_resource_index` adds to a name repeated across modules)."""
+    return key.split("@", 1)[0]
+
+
+def resolve_ref(index: dict, addr: str, near: dict) -> dict | None:
+    """The resource a reference to `addr` means, seen from the resource
+    `near`: a reference is module-scoped, so the same-directory one wins,
+    then the plain-keyed one."""
+    folder = str(Path(near["file"]).parent)
+    for key, entry in index.items():
+        if entry["addr"] == addr and str(Path(entry["file"]).parent) == folder:
+            return entry
+    return index.get(addr)
+
+
 def _build_resource_index(all_files_text: dict) -> dict:
-    """Index every resource block by `<type>.<name>` → {file, line, body}.
+    """Index every resource block by `<type>.<name>` → {file, line, body,
+    type, name, addr}.
+
+    Terraform addresses are unique only within a module: the same
+    `aws_dynamodb_table.this` in two module directories used to overwrite
+    each other, so every graph check, the policy DSL and the attack graph
+    saw only one. The first keeps the plain key; each later one in another
+    file is keyed `<type>.<name>@<dir>` (`_addr` strips it for findings,
+    `resolve_ref` resolves references module-first).
 
     Memoised on the last corpus seen (by file path and text), so repeated
     calls for the same scan return the same, read-only dict.
@@ -104,12 +130,17 @@ def _build_resource_index(all_files_text: dict) -> dict:
     for fp, text in all_files_text.items():
         for blk in find_blocks(text, _RESOURCE_START):
             btype, bname = blk["groups"]
-            idx[f"{btype}.{bname}"] = {
+            addr = f"{btype}.{bname}"
+            slot = addr
+            if slot in idx and idx[slot]["file"] != str(fp):
+                slot = f"{addr}@{Path(fp).parent}"
+            idx[slot] = {
                 "file": str(fp),
                 "line": blk["start_line"],
                 "body": blk["body"],
                 "type": btype,
                 "name": bname,
+                "addr": addr,
             }
     _INDEX_CACHE = (key, idx)
     return idx
@@ -133,7 +164,7 @@ def _graph_logging_target_public(index: dict, all_files_text: dict) -> list[dict
         if not m:
             continue
         target_addr = f"google_storage_bucket.{m.group(1)}"
-        target = index.get(target_addr)
+        target = resolve_ref(index, target_addr, src)
         if not target:
             continue
         pap = block_arg_value(target["body"], "public_access_prevention")
@@ -181,7 +212,7 @@ def _graph_gke_nodepool_secure_boot(index: dict, all_files_text: dict) -> list[d
             out.append({
                 "file": np["file"],
                 "line": np["line"],
-                "resource": addr,
+                "resource": _addr(addr),
                 "context": (
                     f"node pool attached to google_container_cluster.{m.group(1)} "
                     f"is missing: {', '.join(missing)}"
@@ -215,7 +246,7 @@ def _graph_kms_location_parity(index: dict, all_files_text: dict) -> list[dict]:
         if not m:
             continue
         ring_addr = f"google_kms_key_ring.{m.group(1)}"
-        ring = index.get(ring_addr)
+        ring = resolve_ref(index, ring_addr, blk)
         if not ring:
             continue
         key_ring_loc[addr] = block_arg_value(ring["body"], "location")
@@ -240,7 +271,7 @@ def _graph_kms_location_parity(index: dict, all_files_text: dict) -> list[dict]:
             out.append({
                 "file": consumer["file"],
                 "line": consumer["line"],
-                "resource": addr,
+                "resource": _addr(addr),
                 "context": (
                     f"location {consumer_loc!r} does not match KMS key ring "
                     f"location {ring_loc!r} (via {key_addr})"
@@ -301,7 +332,7 @@ def _graph_iam_member_breadth(index: dict, all_files_text: dict) -> list[dict]:
             out.append({
                 "file": pg["blk"]["file"],
                 "line": pg["blk"]["line"],
-                "resource": pg["addr"],
+                "resource": _addr(pg["addr"]),
                 "context": (
                     f"member {mem} also has resource-level IAM at "
                     f"{', '.join(g['addr'] for g in resource_list)} — "
@@ -339,7 +370,7 @@ def _graph_azure_uami_orphan(index: dict, all_files_text: dict) -> list[dict]:
                 {
                     "file": res["file"],
                     "line": res["line"],
-                    "resource": addr,
+                    "resource": _addr(addr),
                     "context": (
                         "UAMI has no azurerm_role_assignment binding — "
                         "orphan identity widens blast radius without granting intent"
@@ -364,7 +395,7 @@ def _graph_dynamodb_pitr(index: dict, all_files_text: dict) -> list[dict]:
         body = res["body"]
         pitr_m = re.search(r'(?m)^\s*point_in_time_recovery\s*\{', body)
         if not pitr_m:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            out.append({"file": res["file"], "line": res["line"], "resource": _addr(addr)})
             continue
         # Round-30.13 follow-up — the R30.13 inventory missed two
         # walkers in this module (they live outside `detect.py` and
@@ -373,13 +404,13 @@ def _graph_dynamodb_pitr(index: dict, all_files_text: dict) -> list[dict]:
         # PITR block boundary.
         end_after = brace_walk(body, pitr_m.end() - 1)
         if end_after is None:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            out.append({"file": res["file"], "line": res["line"], "resource": _addr(addr)})
             continue
         end = end_after - 1
         pitr_body = body[pitr_m.end():end]
         enabled = block_arg_value(pitr_body, "enabled")
         if not enabled or enabled.lower() != "true":
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            out.append({"file": res["file"], "line": res["line"], "resource": _addr(addr)})
     return out
 
 
@@ -398,17 +429,17 @@ def _graph_dynamodb_sse(index: dict, all_files_text: dict) -> list[dict]:
         body = res["body"]
         sse_m = re.search(r'(?m)^\s*server_side_encryption\s*\{', body)
         if not sse_m:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            out.append({"file": res["file"], "line": res["line"], "resource": _addr(addr)})
             continue
         # Round-30.13 follow-up — see PITR walker above; same migration.
         end_after = brace_walk(body, sse_m.end() - 1)
         if end_after is None:
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            out.append({"file": res["file"], "line": res["line"], "resource": _addr(addr)})
             continue
         end = end_after - 1
         sse_body = body[sse_m.end():end]
         if not block_has_arg(sse_body, "kms_key_arn"):
-            out.append({"file": res["file"], "line": res["line"], "resource": addr})
+            out.append({"file": res["file"], "line": res["line"], "resource": _addr(addr)})
     return out
 
 

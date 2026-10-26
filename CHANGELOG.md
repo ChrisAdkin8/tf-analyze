@@ -30,6 +30,52 @@ From the critical review's delivery-surface findings.
 
 ---
 
+## Round 61 — Engine bugs that missed real problems — 2026-10-26
+
+From the critical review's engine findings; each reproduced on `main`
+first, and `tests/test_engine_correctness.py` (16 tests, 15 failing on
+the previous code) pins them. No finding changes on terragoat, the
+example corpora or the demo.
+
+- **Same address in two modules**: the cross-resource index was keyed
+  `<type>.<name>`, so `aws_dynamodb_table.this` in `orders/` and `users/`
+  overwrote each other and every graph check, policy rule and the attack
+  graph saw one. A repeated name in another file is now keyed
+  `<addr>@<dir>`; `_cross_resource.resolve_ref` resolves references
+  module-first, findings keep the plain address, graph nodes show the
+  module folder.
+- **Escaped backslash**: `brace_walk` and `strip_hcl_context` checked
+  only the previous character, so `"C:\\"` never closed — a commented
+  `# password = …` after it was reported, and a precondition after it
+  was missed. Both now skip the escaped character.
+- **Heredocs in the comment stripper**: one `"` in a `user_data` script
+  flipped SEC-SECRETS-001's string state for the rest of the file;
+  heredoc text is now skipped whole (and still scanned).
+- **Precondition in a comment**: ROB-PRECONDITION-001 searched raw text,
+  so `precondition {` inside `/* */` fired; it now matches code only.
+- **`ignore_changes` counting** (ROB-DRIFT-003): lazy regexes stopped at
+  the first `}` (a `precondition {}` before it) or `]` (`tags["Owner"]`);
+  the block and list are now bracket-matched.
+- **`default_tags` in a comment** (`# TODO: add default_tags`) counted as
+  the provider block and silenced every AWS tag rule in the directory.
+- **IAM heredoc policies** with a bare `${jsonencode(var.x)}` value were
+  not JSON and were dropped whole; bare interpolations are now quoted and
+  the rest of the policy analysed.
+- **Helm provider v3** `set = [{ name, value }]` was never read
+  (SEC-K8S-HELM-001/-002 missed it); both forms now come from the parse
+  tree, with a text fallback for each.
+- **Catalogue YAML comments**: `- kind: grep  # note` kept the comment
+  as part of the kind, so a custom rule silently never ran; and a `#`
+  inside a quoted regex cut the regex. Comments now follow YAML's rule
+  (unquoted, after whitespace). All 354 shipped files load identically.
+- **Multi-line conditional in parentheses** (`? …` / `: …` on their own
+  lines) is valid HCL that python-hcl2 rejects, sending the whole file to
+  the regex fallback (a SEC-AWS-SG-001 elsewhere in it was lost). A failed
+  parse is retried once with those continuations joined, line numbers
+  kept.
+
+---
+
 ## Round 60 — Rule regexes can't hang a scan — 2026-10-26
 
 The last item from the critical review. This session shipped one regex
