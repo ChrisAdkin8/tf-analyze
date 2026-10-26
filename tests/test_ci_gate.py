@@ -128,9 +128,9 @@ def test_fail_on_info_end_to_end_without_show_info(tmp_path, monkeypatch) -> Non
     seen: dict = {}
     real = detect._gate_exit_code
 
-    def spy(args, findings, entries, parse_fallback_files):
+    def spy(args, findings, entries, parse_fallback_files, *rest):
         seen["ids"] = {f["id"] for f in findings}
-        return real(args, findings, entries, parse_fallback_files)
+        return real(args, findings, entries, parse_fallback_files, *rest)
 
     monkeypatch.setattr(detect, "_gate_exit_code", spy)
     monkeypatch.setattr(
