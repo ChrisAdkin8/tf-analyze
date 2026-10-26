@@ -575,7 +575,15 @@ def graph_to_mermaid(graph: dict) -> str:
 def _render_graph_html(graph: dict) -> str:
     """Return self-contained HTML+JS for an interactive force-directed attack graph."""
     import json as _json
-    graph_json = _json.dumps(graph)
+    # Embedded in a <script> block: node names come from scanned file
+    # paths and resource names, so `</script>` (or `<!--`) in one must not
+    # end the block. Escaping `<`, `>`, `&` and the JS line separators
+    # keeps the JSON identical once parsed.
+    graph_json = (
+        _json.dumps(graph)
+        .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    )
 
     return f"""<div style="margin-bottom:.5em">
   <span style="font-size:12px;color:#666">

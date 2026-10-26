@@ -929,6 +929,46 @@ def _block_index(text: str) -> tuple[tuple, ...]:
 
 
 
+def comments_only(text: str) -> str:
+    """``text`` with everything but comments blanked to spaces; newlines
+    are kept, so line numbers hold. Lexed like `_block_index`: a ``#``
+    inside a string, template or heredoc body is not a comment, and an
+    unterminated ``/*`` is not one either."""
+    out: list[str] = []
+    last = 0  # text[last:] not yet copied to `out`
+    n = len(text)
+    i, line_end = 0, -1
+    misses = _Misses()
+
+    def keep(a: int, b: int) -> None:
+        nonlocal last
+        out.append(re.sub(r"[^\n]", " ", text[last:a]))
+        out.append(text[a:b])
+        last = b
+
+    while i < n:
+        m = _LEX_RE.match(text, i)
+        kind = m.lastgroup
+        i = m.end()
+        if kind == "lc":
+            keep(m.start(), i)
+        elif kind == "bc":
+            end = _comment_end(text, i, misses)
+            if end is None:
+                i = _next_line(text, m.start())
+            else:
+                keep(m.start(), end)
+                i = end
+        elif kind == "hd":
+            i = _heredoc_end(text, i, m.group("hid"), misses)
+        elif kind == "dq":
+            if m.start() > line_end:
+                line_end = _next_line(text, m.start())
+            i = _lex_string_end(text, m.start(), line_end)[0]
+    out.append(re.sub(r"[^\n]", " ", text[last:]))
+    return "".join(out)
+
+
 def _matching_blocks(text: str, regex: re.Pattern):
     for kw, labels, start, open_pos, end in _block_index(text):
         canon = kw + "".join(f' "{lbl}"' for lbl in labels) + " {"

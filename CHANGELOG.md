@@ -5,6 +5,37 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 42 — Scanned content can no longer hide findings or escape the target — 2026-10-26
+
+The scanner runs on untrusted Terraform (a pull request from a fork, a
+repo opened in VS Code). Each of these let scanned content change the
+result or reach outside the target:
+
+- **Scan cache moved out of the target.** `--cache` defaulted to
+  `<target>/.tf-analyze-cache.json` and trusted it whenever its corpus
+  hash matched — a hash anyone can compute from public inputs. A pull
+  request could commit that file with `"findings": []` and score the repo
+  clean. The default is now a per-target file under the user cache dir
+  (`--cache-file` still overrides). Cache writes go through a temp file
+  and a rename, so a symlink at the cache path is replaced, not written
+  through.
+- **HTML report: attack-graph JSON can't close its `<script>`.** Node
+  names come from file paths and resource names; a file named
+  `</script><img onerror=…>.tf` injected script into the report (and the
+  VS Code webview). `<`, `>`, `&` and U+2028/2029 are now escaped.
+- **Symlinks that resolve outside the target are skipped** (with a
+  warning) in the main scan, `--verify-fixed`, extra files and fleet
+  mode. They were read — leaking content through parse errors and the
+  JSON/SARIF output (e.g. `x.tf -> ../.git/config` in CI) — and
+  `--apply-fixes` wrote through them. Symlinks within the target are
+  still scanned.
+- **Inline `# tf-analyze:ignore` only counts in a real comment.** The
+  marker inside a string value (e.g. a `description`) or a heredoc script
+  silenced findings without looking like a suppression in review. New
+  `_hcl.comments_only` lexes like the block finder.
+
+---
+
 ## Round 39 — Block discovery by lexer, not header regex — 2026-10-26
 
 `find_blocks` / `find_simple_blocks` now locate blocks with one lexer pass

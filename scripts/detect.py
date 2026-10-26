@@ -119,6 +119,7 @@ from _hcl import (
     _expand_dynamic_blocks,
     _hcl2_block_arg_value,
     parse_tf,
+    comments_only,
     normalise_attrs,
     resource_subtrees,
     resource_values_at,
@@ -187,7 +188,8 @@ COUNT_GUARD_RE = re.compile(r'\?|try\s*\(|length\s*\(|one\s*\(')
 
 
 def _path_is_ignored(path: Path, target: Path, ignore_paths: list) -> bool:
-    """Return True when ``path`` should be skipped per ``ignore_paths``.
+    """Return True when ``path`` should be skipped per ``ignore_paths`` —
+    or, always, when it resolves outside ``target`` (a symlink out).
 
     Each entry is matched against the file's path *relative to the scan
     target* (so users write paths the way they'd type them at the repo
@@ -202,11 +204,20 @@ def _path_is_ignored(path: Path, target: Path, ignore_paths: list) -> bool:
     can scan only its production code instead of self-scoring against
     the fixtures.
     """
-    if not ignore_paths:
-        return False
     try:
         rel = path.resolve().relative_to(target.resolve())
     except ValueError:
+        # A symlink that resolves outside the target: scanning it would
+        # read (and print excerpts of) files the target does not contain
+        # — e.g. `x.tf -> ../.git/config` in CI — and `--apply-fixes`
+        # would write through it. Always skipped.
+        print(
+            f"WARN: skipping {path}: it resolves outside the target "
+            f"({path.resolve()})",
+            file=sys.stderr,
+        )
+        return True
+    if not ignore_paths:
         return False
     rel_parts = rel.parts
     for raw in ignore_paths:
@@ -1216,8 +1227,14 @@ def load_suppressions(target: Path) -> tuple[dict, dict]:
 
 
 def load_inline_suppressions(text: str) -> dict[int, set[str]]:
-    """Public shim — passes detect.py's INLINE_IGNORE_RE to _baseline."""
-    return _baseline_load_inline_suppressions(text, inline_ignore_re=INLINE_IGNORE_RE)
+    """Public shim — passes detect.py's INLINE_IGNORE_RE to _baseline.
+
+    Only real comments count: the marker inside a string value (say a
+    ``description``) or a heredoc script would otherwise silence a
+    finding without looking like a suppression in review."""
+    return _baseline_load_inline_suppressions(
+        comments_only(text), inline_ignore_re=INLINE_IGNORE_RE,
+    )
 
 
 # ---- Catalog loading ----------------------------------------------------
@@ -1686,6 +1703,7 @@ def _check_module_registry_staleness(all_files_text: dict) -> list[dict]:
 # new module).
 from _cache import (
     corpus_hash as _corpus_hash,
+    default_cache_path as _default_cache_path,
     load_scan_cache as _load_scan_cache,
     save_scan_cache as _save_scan_cache,
 )
@@ -2071,7 +2089,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         _cache_path = (
             Path(args.cache_file).resolve()
             if getattr(args, "cache_file", None)
-            else target / ".tf-analyze-cache.json"
+            else _default_cache_path(target)
         )
         _cached = _load_scan_cache(_cache_path)
         if _cached and _cached.get("corpus_hash") == _corpus_hash_val:
@@ -2815,7 +2833,8 @@ def _add_cache_args(ap: argparse.ArgumentParser) -> None:
         help=(
             "Enable incremental scan caching. Stores findings keyed on a "
             "hash of all .tf file contents + catalogue entries in "
-            ".tf-analyze-cache.json inside the target directory. "
+            "a per-target file under the user cache dir (never inside the "
+            "target, so a committed cache file cannot replay findings). "
             "Subsequent runs on unchanged code return the cached findings "
             "instantly. Cache is invalidated automatically when any .tf file "
             "or catalogue rule changes. Use --cache-file to override the path."
@@ -2825,7 +2844,7 @@ def _add_cache_args(ap: argparse.ArgumentParser) -> None:
         "--cache-file",
         default=None,
         metavar="PATH",
-        help="Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).",
+        help="Override the cache file path used by --cache (default: a per-target file under the user cache dir).",
     )
 
 

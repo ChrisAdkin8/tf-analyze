@@ -61,7 +61,13 @@ def fleet_scan(
     """
     by_target: dict[str, list[dict]] = {}
     for target in targets:
-        tf_files = [p for p in target.rglob("*.tf") if ".terraform" not in p.parts]
+        root = target.resolve()
+        tf_files = [
+            p for p in target.rglob("*.tf")
+            if ".terraform" not in p.parts
+            # never a symlink that resolves outside the target
+            and p.resolve().is_relative_to(root)
+        ]
         all_text: dict = {}
         for fp in tf_files:
             try:
