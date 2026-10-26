@@ -43,7 +43,10 @@ view binding). Facts checked against the registry docs for azurerm
   binding merely *named* cluster-admin fired); SEC-K8S-RBAC-002 matches
   `subject` attributes in any order. SEC-K8S-SECRET-001 fires only on
   literal `data` values, not `var.*` references, matching its title;
-  quoted keys (`".dockerconfigjson" = "..."`) do not hide a literal.
+  quoted keys (`".dockerconfigjson" = "..."`) do not hide a literal. Its
+  regex alternatives are mutually exclusive: overlapping ones backtracked
+  exponentially on a crafted file (22 `"${a}"` items: 0.5 s; each one
+  more doubles it), a CI denial of service.
 - Engine: `resource_arg` with `nested_path` and no `arg` silently never
   fired; it now works (no shipped rule relied on it).
 

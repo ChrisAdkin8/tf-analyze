@@ -285,3 +285,18 @@ resource "google_kms_crypto_key" "unresolved" {
 }
 """
     assert _fired(tmp_path, hcl, "STK-GCP-KMS-001") == {"google_kms_crypto_key.unresolved"}
+
+
+def test_kubernetes_secret_regex_does_not_backtrack_exponentially() -> None:
+    import re
+    import time
+
+    entry = next(
+        e for e in _catalog.load_catalog(REPO / "catalog") if e["id"] == "SEC-K8S-SECRET-001"
+    )
+    # Many interpolated strings and no literal: the regex must fail fast.
+    body = "  data = {\n    k = [" + ", ".join(['"${a}"'] * 60) + "]\n"
+    for pattern in entry["patterns"]:
+        start = time.perf_counter()
+        re.search(pattern["regex"], body)
+        assert time.perf_counter() - start < 0.5, pattern["regex"]
