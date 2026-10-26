@@ -41,24 +41,34 @@ keywords: "security, high, terraform, iac, azure, mitre-T1040, mitre-T1071.001, 
 
 ## What this checks
 
-1. **`resource_arg`** on `azurerm_redis_cache` (`enable_non_ssl_port`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+1. **`resource_arg`** on `azurerm_redis_cache` (`non_ssl_port_enabled`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `azurerm_redis_cache` has `non_ssl_port_enabled = true` (the
+azurerm 4+ name of `enable_non_ssl_port`), opening port 6379 to
+unencrypted connections.
+2. **`resource_arg`** on `azurerm_redis_cache` (`enable_non_ssl_port`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `azurerm_redis_cache` has `enable_non_ssl_port = true`. This opens
 port 6379 for unencrypted Redis connections. Cache data — which often
 includes session tokens, application state, and materialised query
 results — is transmitted in cleartext over the network.
-2. **`resource_arg`** on `azurerm_redis_cache` (`minimum_tls_version`) — _the resource declares the named attribute, but its value matches the rule's pattern._
-  `azurerm_redis_cache` has `minimum_tls_version` below 1.2 or absent.
+3. **`resource_arg`** on `azurerm_redis_cache` (`minimum_tls_version`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `azurerm_redis_cache` sets `minimum_tls_version` below 1.2 (absent
+is fine: it defaults to 1.2, the only value azurerm 5 accepts).
 TLS 1.0 and 1.1 are vulnerable to POODLE, BEAST, and related attacks.
 Require TLS 1.2 as the minimum.
 
 ## Why it likely fired
+
+`azurerm_redis_cache` has `non_ssl_port_enabled = true` (the
+azurerm 4+ name of `enable_non_ssl_port`), opening port 6379 to
+unencrypted connections.
 
 `azurerm_redis_cache` has `enable_non_ssl_port = true`. This opens
 port 6379 for unencrypted Redis connections. Cache data — which often
 includes session tokens, application state, and materialised query
 results — is transmitted in cleartext over the network.
 
-`azurerm_redis_cache` has `minimum_tls_version` below 1.2 or absent.
+`azurerm_redis_cache` sets `minimum_tls_version` below 1.2 (absent
+is fine: it defaults to 1.2, the only value azurerm 5 accepts).
 TLS 1.0 and 1.1 are vulnerable to POODLE, BEAST, and related attacks.
 Require TLS 1.2 as the minimum.
 

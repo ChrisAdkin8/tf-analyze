@@ -41,28 +41,22 @@ keywords: "security, high, terraform, iac, azure, cis-7.3, mitre-T1110.001, cwe-
 
 ## What this checks
 
-1. **`resource_missing_arg`** on `azurerm_linux_virtual_machine` (`disable_password_authentication`) — _the resource is missing a required attribute (or nested attribute path)._
-  `azurerm_linux_virtual_machine` has no `disable_password_authentication`
-argument. The default is `false` — SSH password logins are permitted.
-Brute-force and credential-stuffing attacks against port 22 are
-constant on Azure public IPs.
-2. **`resource_arg`** on `azurerm_linux_virtual_machine` (`disable_password_authentication`) matching `/false/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  `azurerm_linux_virtual_machine` explicitly sets
-`disable_password_authentication = false`. Password-based SSH
-authentication is confirmed; the attack surface for brute-force
-and leaked credential reuse is fully open.
+1. **`resource_arg`** on `azurerm_linux_virtual_machine` (`disable_password_authentication`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `azurerm_linux_virtual_machine` sets
+`disable_password_authentication = false`, turning on password SSH
+logins: brute-force and leaked-credential reuse against port 22 are
+constant on Azure public IPs. The argument defaults to `true`, so a
+VM that omits it (and authenticates with `admin_ssh_key`) is fine;
+the rule used to fire on every such VM.
 
 ## Why it likely fired
 
-`azurerm_linux_virtual_machine` has no `disable_password_authentication`
-argument. The default is `false` — SSH password logins are permitted.
-Brute-force and credential-stuffing attacks against port 22 are
-constant on Azure public IPs.
-
-`azurerm_linux_virtual_machine` explicitly sets
-`disable_password_authentication = false`. Password-based SSH
-authentication is confirmed; the attack surface for brute-force
-and leaked credential reuse is fully open.
+`azurerm_linux_virtual_machine` sets
+`disable_password_authentication = false`, turning on password SSH
+logins: brute-force and leaked-credential reuse against port 22 are
+constant on Azure public IPs. The argument defaults to `true`, so a
+VM that omits it (and authenticates with `admin_ssh_key`) is fine;
+the rule used to fire on every such VM.
 
 ## Adversarial scenario
 

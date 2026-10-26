@@ -25,6 +25,14 @@ csa_ccm:
 patterns:
   - kind: resource_arg
     resource: azurerm_redis_cache
+    arg: non_ssl_port_enabled
+    regex: '^true$'
+    description: |
+      `azurerm_redis_cache` has `non_ssl_port_enabled = true` (the
+      azurerm 4+ name of `enable_non_ssl_port`), opening port 6379 to
+      unencrypted connections.
+  - kind: resource_arg
+    resource: azurerm_redis_cache
     arg: enable_non_ssl_port
     regex: '^true$'
     description: |
@@ -36,9 +44,9 @@ patterns:
     resource: azurerm_redis_cache
     arg: minimum_tls_version
     not_regex: '^1\.2$'
-    fire_if_absent: true
     description: |
-      `azurerm_redis_cache` has `minimum_tls_version` below 1.2 or absent.
+      `azurerm_redis_cache` sets `minimum_tls_version` below 1.2 (absent
+      is fine: it defaults to 1.2, the only value azurerm 5 accepts).
       TLS 1.0 and 1.1 are vulnerable to POODLE, BEAST, and related attacks.
       Require TLS 1.2 as the minimum.
 recommendation: |

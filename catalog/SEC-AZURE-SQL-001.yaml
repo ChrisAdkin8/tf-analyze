@@ -20,21 +20,19 @@ csa_ccm:
   - "CEK-03"
 status: active
 patterns:
-  - kind: resource_absent
-    resource: azurerm_mssql_server_azure_ad_administrator
-    when_present: azurerm_mssql_server
+  - kind: resource_missing_arg
+    resource: azurerm_mssql_server
+    arg: azuread_administrator
+    description: |
+      `azurerm_mssql_server` has no `azuread_administrator` block, so the
+      server has only SQL authentication (login + password). (azurerm
+      has no separate AD-administrator resource for `azurerm_mssql_server`;
+      the rule used to ask for one that does not exist.)
 recommendation: |
-  Add an `azurerm_mssql_server_azure_ad_administrator` resource. Without Azure
-  AD auth, the server relies on SQL authentication (username/password) which is
-  harder to audit and enforce MFA on.
-
-      resource "azurerm_mssql_server_azure_ad_administrator" "example" {
-        server_id           = azurerm_mssql_server.example.id
-        login               = "sqladmin"
-        object_id           = var.aad_admin_object_id
-        tenant_id           = data.azurerm_client_config.current.tenant_id
-        azuread_authentication_only = true
-      }
+  Add an `azuread_administrator` block to the server. Without Entra ID
+  (Azure AD) authentication the server relies on SQL logins, which are
+  harder to audit and cannot enforce MFA. Set
+  `azuread_authentication_only = true` to turn SQL logins off entirely.
 verification: |
   After applying, confirm with:
 
@@ -42,12 +40,17 @@ verification: |
 
   The command should return a non-empty list.
 fix_hcl: |
-  resource "azurerm_mssql_server_azure_ad_administrator" "example" {
-    server_id                   = azurerm_mssql_server.example.id
-    login                       = "sqladmin"
-    object_id                   = var.aad_admin_object_id
-    tenant_id                   = data.azurerm_client_config.current.tenant_id
-    azuread_authentication_only = true
+  resource "azurerm_mssql_server" "example" {
+    name                = "example-sqlserver"
+    resource_group_name = "example-rg"
+    location            = "uksouth"
+    version             = "12.0"
+
+    azuread_administrator {
+      login_username              = "sql-admins"
+      object_id                   = var.aad_admin_object_id
+      azuread_authentication_only = true
+    }
   }
 fix_disruption: none
 fixtures:

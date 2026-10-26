@@ -41,7 +41,7 @@ keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.3, mitre-T1078
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/name\s*=\s*"cluster-admin"/` — _the resource body matches a regex inside the block._
+1. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/(?ms)role_ref\s*\{[^}]*\bname\s*=\s*"cluster-admin"/` — _the resource body matches a regex inside the block._
   `kubernetes_cluster_role_binding` references the built-in
 `cluster-admin` ClusterRole. Any subject bound to this binding
 (ServiceAccount, User, Group) has full unrestricted access to
@@ -57,7 +57,7 @@ OWASP K03.
 4. **`resource_body_contains`** on `kubernetes_role` matching `/verbs\s*=\s*\[[^\]]*"(?:bind|escalate|impersonate)"/` — _the resource body matches a regex inside the block._
   R30.5 extension — `bind` / `escalate` / `impersonate` verbs
 allow privilege escalation outside the role's normal scope.
-5. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/name\s*=\s*"system:authenticated"/` — _the resource body matches a regex inside the block._
+5. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/(?ms)subject\s*\{[^}]*\bname\s*=\s*"system:authenticated"/` — _the resource body matches a regex inside the block._
   R30.5 extension — binding to `system:authenticated` includes
 every pod with a service-account token, which is effectively
 every pod in the cluster. Same effect as binding to "everyone".

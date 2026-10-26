@@ -1,12 +1,18 @@
 # Expected findings:
-#  - STK-GCP-GKE-003 HIGH — GKE cluster missing database_encryption.state
+#  - STK-GCP-GKE-003 HIGH — database_encryption present but DECRYPTED
+# (no database_encryption block at all is SEC-GCP-GKE-DBENC-001)
 
 resource "google_container_cluster" "no_secrets_encryption" {
   name     = "no-secrets-encryption"
   location = "us-central1"
 
-  # No database_encryption block — etcd secrets are not application-layer encrypted.
   initial_node_count = 1
+
+  # Present but turned off — etcd secrets are not application-layer encrypted.
+  database_encryption {
+    state    = "DECRYPTED"
+    key_name = ""
+  }
 
   workload_identity_config {
     workload_pool = "my-project.svc.id.goog"

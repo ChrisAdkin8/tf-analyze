@@ -1,5 +1,5 @@
 # Expected findings:
-#  - SEC-AZURE-SQL-001 HIGH — no azurerm_mssql_server_azure_ad_administrator present
+#  - SEC-AZURE-SQL-001 HIGH — azurerm_mssql_server without an azuread_administrator block
 
 resource "azurerm_mssql_server" "no_aad" {
   name                         = "no-aad-sql-server"

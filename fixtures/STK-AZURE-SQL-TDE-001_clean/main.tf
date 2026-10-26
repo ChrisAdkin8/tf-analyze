@@ -16,9 +16,6 @@ resource "azurerm_mssql_database" "example" {
   name      = "example-db"
   server_id = azurerm_mssql_server.example.id
   sku_name  = "Basic"
-}
 
-resource "azurerm_mssql_database_transparent_data_encryption" "example" {
-  database_id = azurerm_mssql_database.example.id
-  state       = "Enabled"
+  transparent_data_encryption_enabled = true
 }

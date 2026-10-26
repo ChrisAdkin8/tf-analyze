@@ -26,18 +26,7 @@ REPO = Path(__file__).resolve().parents[1]
 CORPUS = REPO / "tests" / "realworld_secure"
 CASES = sorted(p.name for p in CORPUS.iterdir() if p.is_dir())
 
-KNOWN_FALSE_POSITIVES: dict[str, dict[str, str]] = {
-    "azure_linux_vm_ssh_only": {
-        "SEC-AZURE-VM-001": "disable_password_authentication defaults to true",
-    },
-    "azure_mssql_entra_only": {
-        "SEC-AZURE-SQL-001": "wants a resource that does not exist; ignores azuread_administrator",
-        "STK-AZURE-SQL-TDE-001": "wants a resource that does not exist; TDE is on by default",
-    },
-    "kubernetes_secret_from_sensitive_var": {
-        "SEC-K8S-SECRET-001": "fires on any data, even from a sensitive variable",
-    },
-}
+KNOWN_FALSE_POSITIVES: dict[str, dict[str, str]] = {}
 
 
 def _high_or_critical(case: str) -> set[str]:

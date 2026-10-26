@@ -130,7 +130,7 @@ See also rules in the `STK-GCP-GKE-*` family:
 
 - [`STK-GCP-GKE-001`](./STK-GCP-GKE-001.md) — GKE cluster missing private nodes
 - [`STK-GCP-GKE-002`](./STK-GCP-GKE-002.md) — GKE cluster missing Workload Identity
-- [`STK-GCP-GKE-003`](./STK-GCP-GKE-003.md) — GKE cluster missing application-layer secrets encryption
+- [`STK-GCP-GKE-003`](./STK-GCP-GKE-003.md) — GKE cluster has application-layer secrets encryption turned off
 
 ---
 

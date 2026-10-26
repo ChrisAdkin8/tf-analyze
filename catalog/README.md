@@ -146,6 +146,12 @@ Common D3FEND IDs the catalogue uses today (full list in `apply_mitre.py`):
 
 ## Pattern kinds
 
+**Kubernetes API versions.** A pattern on a `kubernetes_X` resource also
+covers `kubernetes_X_v1` (and the reverse): the loader adds the alias to
+the per-resource kinds below, and `resource_absent` accepts either version
+for both `resource` and `when_present` (`_catalog.kubernetes_type_aliases`).
+Write rules against one name only.
+
 Per-file kinds (run inside `detect_in_file`):
 
 | Kind | Meaning |

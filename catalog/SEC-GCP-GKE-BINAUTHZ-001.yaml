@@ -33,6 +33,20 @@ patterns:
       it, unsigned or unvetted images can run as workloads — including
       pulled-from-public-registry images that bypass internal supply-
       chain controls.
+  - kind: resource_arg
+    resource: google_container_cluster
+    nested_path: binary_authorization.evaluation_mode
+    regex: '^DISABLED$'
+    description: |
+      `binary_authorization` is present but `evaluation_mode =
+      "DISABLED"` — the block exists and enforces nothing.
+  - kind: resource_arg
+    resource: google_container_cluster
+    nested_path: binary_authorization.enabled
+    regex: '^false$'
+    description: |
+      `binary_authorization { enabled = false }` (the deprecated form of
+      `evaluation_mode = "DISABLED"`).
 recommendation: |
   Require attestation-signed images via Binary Authorization in
   ENFORCE mode:
