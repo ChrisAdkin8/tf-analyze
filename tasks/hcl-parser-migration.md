@@ -513,6 +513,16 @@ already handles port ranges) rather than adding a new kind. For AWS cover:
 > lost its wildcard — live for every user since Step 1 made the parser
 > always on. A test checks `block_arg_value` against the tree for all
 > 2,963 literal top-level settings in the corpus. See §14 items 23–24.
+>
+> **Increment 5b:** the 19 structural `grep` patterns that still matched
+> commented-out code now set `hcl_context: true`, and four file-scope
+> patterns that began `^\s*` (`ROB-DRIFT-001/002`, `MOD-SUPPLY-004`,
+> `SEC-DATASOURCE-003`) now begin `^[ \t]*` — with comments blanked,
+> `\s*` could reach back across blank lines, which cost
+> `SEC-DATASOURCE-003` its resource attribution, and even before it
+> reported the blank line above the `data` block. README: the
+> MITRE / CWE / D3FEND badge was stale (69/53/40% vs 80/68/47%) and is
+> now drift-tested; the test-count badge (1,153, wrong) was removed.
 
 - About 54 handlers are registered; about 13 are the generic ones covered
   above, leaving about 40 specialised handlers in `_handlers_*.py`.

@@ -5,7 +5,7 @@ Self-test fixture counts are cumulative.
 
 ---
 
-## Round 38 — `block_arg_value` is top-level only — 2026-10-26
+## Round 38 — `block_arg_value` is top-level only; text-scan hygiene — 2026-10-26
 
 Step 5a of `tasks/hcl-parser-migration.md`.
 
@@ -21,7 +21,19 @@ Step 5a of `tasks/hcl-parser-migration.md`.
   path returned only a list's first element, so e.g. an IAM statement's
   `actions = ["s3:GetObject", "*"]` lost its wildcard whenever the same
   body held a heredoc.
-- No change on the bundled corpora.
+- Structural text-scan rules (module sources, version constraints,
+  `data` / `provisioner` blocks, …) no longer match commented-out code.
+  Removes a `SEC-PROVISIONER-001` false positive on a comment line in
+  terragoat.
+- `SEC-DATASOURCE-003`, `ROB-DRIFT-001/002`, `MOD-SUPPLY-004`: the
+  pattern no longer reaches back across blank lines, so findings report
+  the `data` / `lifecycle` line itself (not the blank line above) —
+  baseline keys for `SEC-DATASOURCE-003` move by one line.
+- README: the MITRE / CWE / D3FEND coverage badge was stale (69/53/40%);
+  it now reads 80/68/47% and is checked by `tests/test_readme_drift.py`.
+  The hand-written test-count badge (1,153 — wrong) is removed; the CI
+  badge reports test status.
+- Otherwise no change on the bundled corpora.
 
 ---
 

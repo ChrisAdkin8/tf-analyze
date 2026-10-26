@@ -41,11 +41,11 @@ keywords: "robustness, medium, terraform, iac, mitre-T1562.001, cwe-693, nist-cs
 
 ## What this checks
 
-1. **`grep`** matching `/(?m)^\s*ignore_changes\s*=\s*\[\s*"\*"\s*\]/` — _a textual regex matched somewhere in the file._
+1. **`grep`** matching `/(?m)^[ \t]*ignore_changes\s*=\s*\[\s*"\*"\s*\]/` — _a textual regex matched somewhere in the file._
   ignore_changes = ["*"] is the array form of the `all` wildcard.
 Functionally equivalent to ignore_changes = all but pattern-matches
 differently from ROB-DRIFT-001's `= all` form.
-2. **`grep`** matching `/(?m)^\s*ignore_changes\s*=\s*\[\s*tags\s*\]/` — _a textual regex matched somewhere in the file._
+2. **`grep`** matching `/(?m)^[ \t]*ignore_changes\s*=\s*\[\s*tags\s*\]/` — _a textual regex matched somewhere in the file._
   ignore_changes = [tags] silently drops every tag drift. On AWS this
 includes cost-allocation tags, compliance scope tags, and whatever
 `default_tags` propagates from the provider — masking exactly the

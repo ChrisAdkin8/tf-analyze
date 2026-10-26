@@ -17,7 +17,14 @@ Numbers gated here (kept narrow — only the ones we've burned on):
   * Rules: <N>          shields-badge — count of active catalog/*.yaml
   * fix_hcl: <N>%       shields-badge — % of active rules with fix_hcl
   * rule docs - <N> pages   shields-badge — count of docs/rules/*.md
+  * MITRE / CWE / D3FEND <a>% / <b>% / <c>%   shields-badge — % of active
+    rules tagged with each taxonomy (was stale at 69/53/40 until
+    2026-10-26, when the catalogue was at 80/68/47)
   * Comparison-table "**<N>** (with real per-rule data)" frameworks
+
+There is deliberately no test-count badge: the number of tests collected
+depends on which optional dependencies are installed, and the CI badge
+already reports pass / fail.
 """
 from __future__ import annotations
 
@@ -122,6 +129,10 @@ _BADGE_RE = {
     "rules":      re.compile(r"!\[Rules:\s*(\d+)\]\(https://img\.shields\.io/badge/rules-(\d+)-"),
     "fix_hcl":    re.compile(r"!\[fix_hcl:\s*(\d+)%\]\(https://img\.shields\.io/badge/fix__hcl-(\d+)%25-"),
     "rule_docs":  re.compile(r"!\[Rule docs\]\(https://img\.shields\.io/badge/rule%20docs-(\d+)%20pages-"),
+    "taxonomy":   re.compile(
+        r"!\[MITRE / CWE / D3FEND\]\(https://img\.shields\.io/badge/"
+        r"MITRE%20%2F%20CWE%20%2F%20D3FEND-(\d+)%25%20%2F%20(\d+)%25%20%2F%20(\d+)%25-"
+    ),
 }
 
 
@@ -170,6 +181,24 @@ def test_readme_rule_docs_badge_matches_docs_dir() -> None:
         f"README rule-docs badge says {badge_n} pages, docs/rules/ has {live} "
         f"(excluding index.md). Edit the badge near README.md line ~23 to match, "
         f"or re-run `python3 scripts/gen_rule_docs.py` if the docs are stale."
+    )
+
+
+def test_readme_taxonomy_badge_matches_catalog() -> None:
+    """The `MITRE / CWE / D3FEND a% / b% / c%` badge must match the share
+    of active rules carrying each taxonomy tag, rounded down."""
+    m = _BADGE_RE["taxonomy"].search(_readme_text())
+    assert m, "README.md is missing the 'MITRE / CWE / D3FEND' shield badge"
+    badge = tuple(int(g) for g in m.groups())
+    ents = _active_entries()
+    live = tuple(
+        sum(1 for d in ents if d.get(k)) * 100 // len(ents)
+        for k in ("mitre", "cwe", "d3fend")
+    )
+    assert badge == live, (
+        f"README MITRE/CWE/D3FEND badge says {badge[0]}% / {badge[1]}% / {badge[2]}%, "
+        f"catalogue is at {live[0]}% / {live[1]}% / {live[2]}%. Edit the badge near "
+        f"README.md line ~22 to match."
     )
 
 

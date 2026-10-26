@@ -41,7 +41,7 @@ keywords: "robustness, high, terraform, iac, mitre-T1562.001, cwe-693, nist-csf-
 
 ## What this checks
 
-1. **`grep`** matching `/(?m)^\s*ignore_changes\s*=\s*all\s*$/` — _a textual regex matched somewhere in the file._
+1. **`grep`** matching `/(?m)^[ \t]*ignore_changes\s*=\s*all\s*$/` — _a textual regex matched somewhere in the file._
   lifecycle block with ignore_changes = all masks all drift
 
 ## Why it likely fired

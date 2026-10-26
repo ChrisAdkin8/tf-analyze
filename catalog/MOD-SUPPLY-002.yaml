@@ -7,6 +7,7 @@ status: active
 patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
+    hcl_context: true  # ignore commented-out code
     file_glob: "**/*.tf"
     regex: 'source\s*=\s*"git::'
     description: Module sourced from raw git URL rather than Terraform Registry
