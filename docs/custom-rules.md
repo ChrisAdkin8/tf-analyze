@@ -220,6 +220,13 @@ pattern.
 - Rule IDs must be globally unique. If a custom rule shadows a
   built-in (same ID), the loader prints a warning and keeps the
   built-in.
+- Each pattern runs under a time budget (5 s per pattern per file;
+  `TF_ANALYZE_PATTERN_TIMEOUT` overrides it, `0` turns it off). A regex
+  that backtracks catastrophically — nested quantifiers such as `(a+)+`,
+  or alternatives that can match the same text — is stopped there,
+  reported under `summary.rule_timeouts`, and fails `--fail-on`, since a
+  check that did not finish has not passed. Enforced on Unix; not on
+  Windows.
 - Custom rules don't get auto-MITRE/CIS mappings. Add them by hand if
   you want them surfaced in `--format mitre` / `--format compliance`.
 - The Run Task server (`integrations/run-task/`) does NOT pick up

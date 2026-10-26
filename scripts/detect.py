@@ -607,6 +607,55 @@ class InFileCtx:
     module_resources: list[dict] | None = None
 
 
+# ---- Per-pattern time budget -------------------------------------------
+# A rule's regex can backtrack exponentially on crafted input (a ReDoS:
+# SEC-K8S-SECRET-001 once took hours on 40 list items), and custom rules
+# from a scanned repo's `rules_dir` are never reviewed. Each handler call
+# runs under a wall-clock budget; a timeout drops that pattern's findings
+# for that file, is warned about, and fails the `--fail-on` gate like an
+# unreadable file (a scan that skipped a check has not passed it).
+# Python's `re` honours signals mid-match, so SIGALRM interrupts it.
+# Unix main thread only; elsewhere the budget is not enforced.
+PATTERN_TIME_BUDGET_S = float(os.environ.get("TF_ANALYZE_PATTERN_TIMEOUT", "5"))
+RULE_TIMEOUTS: list[dict] = []
+
+
+class _PatternTimeout(Exception):
+    pass
+
+
+def _raise_pattern_timeout(signum, frame):
+    raise _PatternTimeout()
+
+
+def _call_with_budget(handler, ctx, eid: str, where: str) -> list[dict]:
+    """``handler(ctx)`` under `PATTERN_TIME_BUDGET_S`; [] on timeout, which
+    is recorded in `RULE_TIMEOUTS`."""
+    import signal
+    import threading
+    if (
+        PATTERN_TIME_BUDGET_S <= 0
+        or not hasattr(signal, "setitimer")
+        or threading.current_thread() is not threading.main_thread()
+    ):
+        return handler(ctx)
+    previous = signal.signal(signal.SIGALRM, _raise_pattern_timeout)
+    signal.setitimer(signal.ITIMER_REAL, PATTERN_TIME_BUDGET_S)
+    try:
+        return handler(ctx)
+    except _PatternTimeout:
+        RULE_TIMEOUTS.append({"rule": eid, "file": where})
+        print(
+            f"WARN: {eid} exceeded its {PATTERN_TIME_BUDGET_S:g}s budget on {where}; "
+            f"skipped (a pattern backtracking on this input?)",
+            file=sys.stderr,
+        )
+        return []
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 _INFILE_HANDLERS: dict[str, _Callable[["InFileCtx"], list[dict]]] = {}
 
 
@@ -758,7 +807,7 @@ def detect_in_file(
                 pat=pat,
                 module_resources=module_resources,
             )
-            _found = _handler(_ctx)
+            _found = _call_with_budget(_handler, _ctx, eid, str(file_path))
             _apply_structured_escalation(_found, entry, resources, _vd)
             findings.extend(_found)
     return findings
@@ -923,7 +972,7 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                     eid=eid,
                     pat=pat,
                 )
-                findings.extend(_handler(_ctx))
+                findings.extend(_call_with_budget(_handler, _ctx, eid, str(target)))
                 continue
     return findings
 
@@ -1604,6 +1653,7 @@ def _gate_exit_code(
     args: object, findings: list[dict], entries: list[dict],
     parse_fallback_files: list[dict],
     unreadable_files: list[str] = (),
+    rule_timeouts: list[dict] = (),
 ) -> int:
     """CI gate: 1 when a finding is at or above ``--fail-on``, when
     ``--fail-on`` is set and an input file could not be read at all (a
@@ -1627,6 +1677,13 @@ def _gate_exit_code(
             print(
                 f"ERROR: {len(unreadable_files)} file(s) could not be read "
                 f"and were not scanned (--fail-on)",
+                file=sys.stderr,
+            )
+            return 1
+        if rule_timeouts:
+            print(
+                f"ERROR: {len(rule_timeouts)} rule check(s) ran out of time "
+                f"and were skipped (--fail-on)",
                 file=sys.stderr,
             )
             return 1
@@ -2002,7 +2059,7 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
         out_file.close()
     all_findings = [f for fs in fleet_result["by_target"].values() for f in fs]
     return _gate_exit_code(args, all_findings, entries, [],
-                           fleet_result["unreadable_files"])
+                           fleet_result["unreadable_files"], RULE_TIMEOUTS)
 
 
 def _mode_trend(args: object, entries: list, emit, out_file) -> int:
@@ -2342,7 +2399,8 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         # Persist the per-file + corpus findings only: plan / state
         # findings depend on external inputs, and a later run without them
         # would otherwise replay them from the cache.
-        if _cache_path and _corpus_hash_val:
+        # Not when a rule check timed out: the result is incomplete.
+        if _cache_path and _corpus_hash_val and not RULE_TIMEOUTS:
             _save_scan_cache(_cache_path, _corpus_hash_val,
                              [f for f in findings if id(f) not in external_ids],
                              parse_fallback_files=parse_fallback_files)
@@ -3612,7 +3670,7 @@ def main():
         if _out_file is not None:
             _out_file.close()
         sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files,
-                                 unreadable_files))
+                                 unreadable_files, RULE_TIMEOUTS))
 
     if getattr(args, "gen_tests", None):
         written = generate_tftest(findings, entries, Path(args.gen_tests))
@@ -3695,6 +3753,9 @@ def main():
     # non-empty so the summary is unchanged for files that all parse.
     if parse_fallback_files:
         summary["parse_fallback_files"] = parse_fallback_files
+    # Likewise only when a rule check ran out of time (`_call_with_budget`).
+    if RULE_TIMEOUTS:
+        summary["rule_timeouts"] = list(RULE_TIMEOUTS)
 
     _gate_findings = findings  # before INFO findings are hidden from output
 
@@ -3743,7 +3804,7 @@ def main():
 
     # Exit code for CI gating
     _rc = _gate_exit_code(args, _gate_findings, entries, parse_fallback_files,
-                          unreadable_files)
+                          unreadable_files, RULE_TIMEOUTS)
     if _rc:
         sys.exit(_rc)
 

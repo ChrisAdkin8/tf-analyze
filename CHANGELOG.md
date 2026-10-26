@@ -5,6 +5,30 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 60 — Rule regexes can't hang a scan — 2026-10-26
+
+The last item from the critical review. This session shipped one regex
+that backtracked exponentially (SEC-K8S-SECRET-001, Round 56: hours on a
+40-item list) and caught it only in review; custom rules from a scanned
+repo's `rules_dir` are never reviewed at all.
+
+- **Every shipped regex is probed in CI** (`tests/test_regex_safety.py`):
+  crafted HCL-like input (interpolated and quoted strings, brackets,
+  separators, behind the pattern's own leading words) repeated ~120
+  times, each probe under a 0.25 s alarm so a bad regex fails the test
+  rather than hanging it. 222 regexes in about a second; the old
+  SEC-K8S-SECRET-001 pattern and `(a+)+$` are caught.
+- **Every pattern runs under a time budget at scan time**
+  (`detect._call_with_budget`, 5 s per pattern per file,
+  `TF_ANALYZE_PATTERN_TIMEOUT` to override). Python's `re` honours SIGALRM
+  mid-match, so a runaway regex is stopped; the pattern's findings for
+  that file are dropped with a warning, listed in
+  `summary.rule_timeouts`, and the `--fail-on` gate fails (a check that
+  did not finish has not passed). A timed-out scan is not cached. Unix
+  main thread only; elsewhere unchanged. Overhead on terragoat: ~0.03 s.
+
+---
+
 ## Round 59 — Repo-controlled names stay inert in Markdown output — 2026-10-26
 
 From the critical review. File paths and resource names come from the
