@@ -68,6 +68,7 @@ Pattern kinds supported:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
 import hashlib
 import io
@@ -76,8 +77,11 @@ import fnmatch
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 # ---- python-hcl2 ----------------------------------------------------------
@@ -607,6 +611,94 @@ class InFileCtx:
     module_resources: list[dict] | None = None
 
 
+# ---- Per-pattern time budget -------------------------------------------
+# A rule's regex can backtrack exponentially on crafted input (a ReDoS:
+# SEC-K8S-SECRET-001 once took hours on 40 list items), and custom rules
+# from a scanned repo's `rules_dir` are never reviewed. Each handler call
+# runs under a wall-clock budget; a timeout drops that pattern's findings
+# for that file, is warned about, and fails the `--fail-on` gate like an
+# unreadable file (a scan that skipped a check has not passed it).
+# Python's `re` honours signals mid-match, so SIGALRM interrupts it.
+# Unix main thread only; elsewhere the budget is not enforced.
+PATTERN_TIME_BUDGET_S = float(os.environ.get("TF_ANALYZE_PATTERN_TIMEOUT", "5"))
+RULE_TIMEOUTS: list[dict] = []
+# The running pattern: armed while its handler runs, and when it started.
+# One kernel timer serves the whole scan loop (`_pattern_budget_scope`);
+# per call only these are set — re-arming the timer around each of the
+# ~400k pattern calls in a large scan doubled its cost (+50 %).
+_BUDGET_ARMED = False
+_PATTERN_STARTED = 0.0
+
+
+class _PatternTimeout(BaseException):
+    """A `BaseException`, like `KeyboardInterrupt`, so a handler's
+    `except Exception` (the policy DSL, IAM policy decoding) cannot
+    swallow it and keep running past the budget."""
+
+
+def _on_budget_alarm(signum, frame):
+    """SIGALRM: stop the running pattern if it has used its whole budget;
+    otherwise re-arm the timer for the time it has left (or a full budget
+    between patterns), so each pattern still gets exactly its budget."""
+    if _BUDGET_ARMED:
+        remaining = _PATTERN_STARTED + PATTERN_TIME_BUDGET_S - time.monotonic()
+        if remaining <= 0:
+            raise _PatternTimeout()
+    else:
+        remaining = PATTERN_TIME_BUDGET_S
+    signal.setitimer(signal.ITIMER_REAL, max(remaining, 0.001))
+
+
+@contextlib.contextmanager
+def _pattern_budget_scope():
+    """Install the handler and start the timer around a scan loop; yields
+    whether budgets are enforced: Unix main thread, budget > 0."""
+    if (
+        PATTERN_TIME_BUDGET_S <= 0
+        or not hasattr(signal, "setitimer")
+        or threading.current_thread() is not threading.main_thread()
+    ):
+        yield False
+        return
+    previous = signal.signal(signal.SIGALRM, _on_budget_alarm)
+    signal.setitimer(signal.ITIMER_REAL, PATTERN_TIME_BUDGET_S)
+    try:
+        yield True
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _call_with_budget(handler, ctx, eid: str, where: str, enforced: bool) -> list[dict]:
+    """``handler(ctx)`` under `PATTERN_TIME_BUDGET_S` when `enforced` (inside
+    `_pattern_budget_scope`); [] on timeout, recorded in `RULE_TIMEOUTS`."""
+    global _BUDGET_ARMED, _PATTERN_STARTED
+    if not enforced:
+        return handler(ctx)
+    _PATTERN_STARTED = time.monotonic()
+    _BUDGET_ARMED = True
+    try:
+        found = handler(ctx)
+        # Belt and braces: should anything still swallow the timeout, an
+        # overrun is recorded and its (possibly partial) findings dropped.
+        timed_out = time.monotonic() - _PATTERN_STARTED >= PATTERN_TIME_BUDGET_S
+    except _PatternTimeout:
+        timed_out = True
+    finally:
+        _BUDGET_ARMED = False
+    if not timed_out:
+        return found
+    # The alarm that stopped it is spent: re-arm for the patterns after it.
+    signal.setitimer(signal.ITIMER_REAL, PATTERN_TIME_BUDGET_S)
+    RULE_TIMEOUTS.append({"rule": eid, "file": where})
+    print(
+        f"WARN: {eid} exceeded its {PATTERN_TIME_BUDGET_S:g}s budget on {where}; "
+        f"skipped (a pattern backtracking on this input?)",
+        file=sys.stderr,
+    )
+    return []
+
+
 _INFILE_HANDLERS: dict[str, _Callable[["InFileCtx"], list[dict]]] = {}
 
 
@@ -733,34 +825,35 @@ def detect_in_file(
     modules = find_blocks(text, MODULE_START)
     variables = find_blocks(text, VARIABLE_START)
 
-    for entry in entries:
-        eid = entry["id"]
-        for pat in entry.get("patterns", []) or []:
-            kind = pat.get("kind", "")
-            # Round 30.14 — registry dispatch. Every in-file detector
-            # kind is now a registered handler in `_INFILE_HANDLERS`.
-            # Unknown kinds (catalogue-only / corpus-only) fall through
-            # silently — `detect_corpus` handles its own kinds; truly
-            # malformed catalogue entries are caught at load time by
-            # `_catalog.validate_catalog_entry`.
-            _handler = _INFILE_HANDLERS.get(kind)
-            if _handler is None:
-                continue
-            _ctx = InFileCtx(
-                file_path=file_path,
-                text=text,
-                var_defaults=_vd,
-                resources=resources,
-                modules=modules,
-                variables=variables,
-                entry=entry,
-                eid=eid,
-                pat=pat,
-                module_resources=module_resources,
-            )
-            _found = _handler(_ctx)
-            _apply_structured_escalation(_found, entry, resources, _vd)
-            findings.extend(_found)
+    with _pattern_budget_scope() as _budgeted:
+        for entry in entries:
+            eid = entry["id"]
+            for pat in entry.get("patterns", []) or []:
+                kind = pat.get("kind", "")
+                # Round 30.14 — registry dispatch. Every in-file detector
+                # kind is now a registered handler in `_INFILE_HANDLERS`.
+                # Unknown kinds (catalogue-only / corpus-only) fall through
+                # silently — `detect_corpus` handles its own kinds; truly
+                # malformed catalogue entries are caught at load time by
+                # `_catalog.validate_catalog_entry`.
+                _handler = _INFILE_HANDLERS.get(kind)
+                if _handler is None:
+                    continue
+                _ctx = InFileCtx(
+                    file_path=file_path,
+                    text=text,
+                    var_defaults=_vd,
+                    resources=resources,
+                    modules=modules,
+                    variables=variables,
+                    entry=entry,
+                    eid=eid,
+                    pat=pat,
+                    module_resources=module_resources,
+                )
+                _found = _call_with_budget(_handler, _ctx, eid, str(file_path), _budgeted)
+                _apply_structured_escalation(_found, entry, resources, _vd)
+                findings.extend(_found)
     return findings
 
 
@@ -898,33 +991,34 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
     _resource_index_cache: dict = _build_resource_index(all_files_text)
     _module_clusters_cache: dict = _build_module_clusters(all_files_text)
 
-    for entry in entries:
-        eid = entry["id"]
-        for pat in entry.get("patterns", []) or []:
-            kind = pat.get("kind", "")
-            # Round 30.14 — registry dispatch. Every corpus kind is
-            # now registered in `_CORPUS_HANDLERS`. Unknown kinds
-            # (in-file kinds or malformed catalogue entries) fall
-            # through; catalogue typos are caught at load time by
-            # `_catalog.validate_catalog_entry`.
-            _handler = _CORPUS_HANDLERS.get(kind)
-            if _handler is not None:
-                _ctx = CorpusCtx(
-                    target=target,
-                    all_files_text=all_files_text,
-                    sensitive_vars=sensitive_vars,
-                    module_dirs=module_dirs,
-                    var_refs_by_dir=var_refs_by_dir,
-                    output_refs=output_refs,
-                    module_sources=module_sources,
-                    resource_index_cache=_resource_index_cache,
-                    module_clusters_cache=_module_clusters_cache,
-                    entry=entry,
-                    eid=eid,
-                    pat=pat,
-                )
-                findings.extend(_handler(_ctx))
-                continue
+    with _pattern_budget_scope() as _budgeted:
+        for entry in entries:
+            eid = entry["id"]
+            for pat in entry.get("patterns", []) or []:
+                kind = pat.get("kind", "")
+                # Round 30.14 — registry dispatch. Every corpus kind is
+                # now registered in `_CORPUS_HANDLERS`. Unknown kinds
+                # (in-file kinds or malformed catalogue entries) fall
+                # through; catalogue typos are caught at load time by
+                # `_catalog.validate_catalog_entry`.
+                _handler = _CORPUS_HANDLERS.get(kind)
+                if _handler is not None:
+                    _ctx = CorpusCtx(
+                        target=target,
+                        all_files_text=all_files_text,
+                        sensitive_vars=sensitive_vars,
+                        module_dirs=module_dirs,
+                        var_refs_by_dir=var_refs_by_dir,
+                        output_refs=output_refs,
+                        module_sources=module_sources,
+                        resource_index_cache=_resource_index_cache,
+                        module_clusters_cache=_module_clusters_cache,
+                        entry=entry,
+                        eid=eid,
+                        pat=pat,
+                    )
+                    findings.extend(_call_with_budget(_handler, _ctx, eid, str(target), _budgeted))
+                    continue
     return findings
 
 
@@ -1604,6 +1698,7 @@ def _gate_exit_code(
     args: object, findings: list[dict], entries: list[dict],
     parse_fallback_files: list[dict],
     unreadable_files: list[str] = (),
+    rule_timeouts: list[dict] = (),
 ) -> int:
     """CI gate: 1 when a finding is at or above ``--fail-on``, when
     ``--fail-on`` is set and an input file could not be read at all (a
@@ -1627,6 +1722,13 @@ def _gate_exit_code(
             print(
                 f"ERROR: {len(unreadable_files)} file(s) could not be read "
                 f"and were not scanned (--fail-on)",
+                file=sys.stderr,
+            )
+            return 1
+        if rule_timeouts:
+            print(
+                f"ERROR: {len(rule_timeouts)} rule check(s) ran out of time "
+                f"and were skipped (--fail-on)",
                 file=sys.stderr,
             )
             return 1
@@ -2002,7 +2104,7 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
         out_file.close()
     all_findings = [f for fs in fleet_result["by_target"].values() for f in fs]
     return _gate_exit_code(args, all_findings, entries, [],
-                           fleet_result["unreadable_files"])
+                           fleet_result["unreadable_files"], RULE_TIMEOUTS)
 
 
 def _mode_trend(args: object, entries: list, emit, out_file) -> int:
@@ -2342,7 +2444,8 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         # Persist the per-file + corpus findings only: plan / state
         # findings depend on external inputs, and a later run without them
         # would otherwise replay them from the cache.
-        if _cache_path and _corpus_hash_val:
+        # Not when a rule check timed out: the result is incomplete.
+        if _cache_path and _corpus_hash_val and not RULE_TIMEOUTS:
             _save_scan_cache(_cache_path, _corpus_hash_val,
                              [f for f in findings if id(f) not in external_ids],
                              parse_fallback_files=parse_fallback_files)
@@ -3612,7 +3715,7 @@ def main():
         if _out_file is not None:
             _out_file.close()
         sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files,
-                                 unreadable_files))
+                                 unreadable_files, RULE_TIMEOUTS))
 
     if getattr(args, "gen_tests", None):
         written = generate_tftest(findings, entries, Path(args.gen_tests))
@@ -3695,6 +3798,9 @@ def main():
     # non-empty so the summary is unchanged for files that all parse.
     if parse_fallback_files:
         summary["parse_fallback_files"] = parse_fallback_files
+    # Likewise only when a rule check ran out of time (`_call_with_budget`).
+    if RULE_TIMEOUTS:
+        summary["rule_timeouts"] = list(RULE_TIMEOUTS)
 
     _gate_findings = findings  # before INFO findings are hidden from output
 
@@ -3743,7 +3849,7 @@ def main():
 
     # Exit code for CI gating
     _rc = _gate_exit_code(args, _gate_findings, entries, parse_fallback_files,
-                          unreadable_files)
+                          unreadable_files, RULE_TIMEOUTS)
     if _rc:
         sys.exit(_rc)
 
