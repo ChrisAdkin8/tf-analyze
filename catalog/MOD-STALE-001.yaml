@@ -7,7 +7,7 @@ status: active
 patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    hcl_context: true  # ignore commented-out code
+    code_only: true  # ignore comments and heredoc text
     regex: 'source\s*=\s*"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+"'
     description: Registry-style module source present (staleness checked via --check-registry)
 owasp_iac:

@@ -288,3 +288,44 @@ def test_every_grep_pattern_says_why_it_is_a_text_scan() -> None:
 def test_network_rules_no_longer_use_grep() -> None:
     for rid in ("SEC-AWS-SG-001", "STK-AZURE-NSG-001"):
         assert {p["kind"] for p in ENTRIES[rid]["patterns"]} == {"firewall_open_port"}
+
+
+# ---- structural text scans use the HCL-aware lexer (`code_only`) -----------
+
+def _prov(prefix: str) -> str:
+    return (f'resource "null_resource" "x" {{\n{prefix}'
+            '  provisioner "local-exec" {\n    command = "echo hi"\n  }\n}\n')
+
+
+@pytest.mark.parametrize("prefix", [
+    # A heredoc with an odd number of quotes: a quote-toggling stripper
+    # loses track of string state after it.
+    '  triggers = {\n    note = <<EOT\nshe said "hi\nEOT\n  }\n',
+    # A string ending in an escaped backslash (`\\` then the closing quote).
+    '  triggers = {\n    path = "C:\\\\"\n  }\n',
+    # `#` inside a string is not a comment.
+    '  triggers = {\n    tag = "a#b"\n  }\n',
+])
+def test_provisioner_after_tricky_text_is_still_found(prefix, tmp_path) -> None:
+    assert _scan(_prov(prefix), "SEC-PROVISIONER-001", tmp_path)
+
+
+def test_commented_and_heredoc_provisioner_text_is_ignored(tmp_path) -> None:
+    commented = 'resource "null_resource" "x" {\n  # provisioner "local-exec" {\n  #   command = "x"\n  # }\n}\n'
+    in_heredoc = ('resource "null_resource" "x" {\n  triggers = {\n    doc = <<EOT\n'
+                  'provisioner "local-exec" {\nEOT\n  }\n}\n')
+    assert _scan(commented, "SEC-PROVISIONER-001", tmp_path) == []
+    assert _scan(in_heredoc, "SEC-PROVISIONER-001", tmp_path) == []
+
+
+def test_structural_text_scans_use_code_only() -> None:
+    """Rules about Terraform structure use the HCL-aware lexer; the rules
+    that must see heredoc text (secrets, container definitions) keep the
+    comment-only `hcl_context`."""
+    for e in CATALOG:
+        for p in e.get("patterns") or []:
+            if p.get("kind") != "grep":
+                continue
+            reason = str(p.get("text_scan", ""))
+            if reason.startswith("Terraform structure"):
+                assert p.get("code_only") and not p.get("hcl_context"), e["id"]

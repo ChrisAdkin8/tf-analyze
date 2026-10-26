@@ -1,7 +1,9 @@
 # HCL parser migration — make python-hcl2 required and primary
 
-> **STATUS: IN PROGRESS (r2).** Steps 0–4 done (#36, #37, #38, #40, #41);
-> Step 5 in progress. Revision 2 follows an
+> **STATUS: COMPLETE once Step 5 merges (r2).** Steps 0–4 done (#36, #37,
+> #38, #40 — the re-land of #39 —, #41); Step 5 in review. The per-handler
+> tree migration originally listed for Step 5 is closed as not needed
+> (§14 item 27). Revision 2 follows an
 > independent review of r1; every factual claim in r2 was checked against the
 > code on 2026-10-25. Supersedes the "Scope B is a separate ~1–2 week
 > initiative" note in `tasks/policy-dsl-draft.md` §10 and builds on the
@@ -542,10 +544,11 @@ already handles port ranges) rather than adding a new kind. For AWS cover:
 
 - [x] §6 Step 0 — MCP / Run Task images (#36)
 - [x] §7 Step 1 — vendored parser (#37)
-- [ ] §8 Step 2 — one parse pass, fallback, `block_has_arg`
-- [ ] §9 Step 3 — values, main kinds, plan mode
-- [ ] §10 Step 4 — `grep` rewrites, `escalation:`
-- [ ] §11 Step 5 — remaining handlers and call sites
+- [x] §8 Step 2 — one parse pass, fallback, `block_has_arg` (#38)
+- [x] §9 Step 3 — values, main kinds, plan mode (#39, re-landed as #40)
+- [x] §10 Step 4 — `grep` rewrites, `escalation:` (#41)
+- [ ] §11 Step 5 — `block_arg_value` top-level, text-scan hygiene,
+  literal-only `count = 0` (in review)
 
 Estimated total: **7–9 weeks** of one person's time.
 
@@ -697,12 +700,33 @@ Added in Step 5:
     values today (golden and agreement tests pass); a rule that needs to
     should use the IAM / JSON analysers or a `policy` predicate.
 
-Open:
+25. **`count = 0` skips a resource only when literal** (decided
+    2026-10-26). `_resource_is_count_zero` no longer resolves `count`
+    through variable defaults: tfvars / `-var` can override a default at
+    apply time, so `count = var.enabled ? 1 : 0` with `default = false`
+    is now checked by every rule (a literal-condition ternary such as
+    `false ? 1 : 0` still skips). Corpus effect: the
+    `unguarded_count_ref` fixture's optional Cloud SQL instance gains 8
+    findings.
+26. **Structural text scans use the HCL-aware lexer** (`code_only: true`;
+    from an automated security review of 5b). `hcl_context: true` uses
+    the older comment stripper, which is not heredoc-aware and toggles
+    on every unescaped quote, so a crafted heredoc could in principle
+    confuse its string state and hide code. No practical bypass was
+    found (single-line blocks hold one argument), so this is hardening;
+    it also stops structure-like text inside heredocs matching. The
+    rules that must see heredoc text (`SEC-SECRETS-001`,
+    `SEC-AWS-ECS-001/002`) keep `hcl_context`.
+27. **Per-handler tree migration closed as not needed.** With
+    `block_arg_value`, `block_has_arg` and `block_has_nested_path`
+    sharing the tree's top-level, every-instance semantics, and
+    `find_blocks` only locating blocks (and supplying line numbers), the
+    ~40 specialised handlers already evaluate HCL under the migration's
+    rules; moving each onto `attrs` would change no result on the corpus.
+    New handlers should still prefer `resource_values_at` /
+    `resource_has_path` / `_network` views.
 
-- `_resource_is_count_zero` resolves `count` through variable defaults
-  for every resource kind, so a rule can be skipped for a resource that
-  tfvars would create. Decide whether to restrict it to literals
-  engine-wide.
+Open:
 
 - Whether and when to fix the `find_blocks` line off-by-one (needs a
   baseline-migration plan).

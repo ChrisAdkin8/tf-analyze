@@ -371,9 +371,11 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
       bodies, optionally filtered by resource type via ``resource``.
       Honours ``count = 0`` so resources definitely not created are
       skipped.
-    * default — search the full file (with comments stripped to
-      equal-length whitespace if ``hcl_context: true``). The match
-      offset is then attributed to a resource/data block by position.
+    * default — search the full file. ``code_only: true`` first blanks
+      comments and heredoc bodies (HCL-aware); ``hcl_context: true``
+      blanks comments only (older stripper, keeps heredoc text). Both
+      preserve offsets. The match offset is then attributed to a
+      resource/data block by position.
 
     The ``not_regex`` field (R30.6) suppresses the rule when the file
     matches a negative pattern — e.g. a workflow file that has both
@@ -424,7 +426,18 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
         return out
     # Full-file scope. `strip_hcl_context` preserves byte offsets so
     # `m.start()` is valid against `c.text` directly (R30.11 audit fix).
-    search_text = strip_hcl_context(c.text) if pat.get("hcl_context") else c.text
+    # `code_only: true` blanks comments and heredoc bodies with the
+    # HCL-aware lexer (escapes, `${}` nesting, heredocs) — for rules about
+    # Terraform structure, which never lives in a comment or heredoc.
+    # `hcl_context: true` is the older comment-only stripper; it keeps
+    # heredoc text (secret scanning relies on that) but is not
+    # heredoc-aware, so a crafted heredoc can confuse its string state.
+    if pat.get("code_only"):
+        search_text = mask_comments_and_heredocs(c.text)
+    elif pat.get("hcl_context"):
+        search_text = strip_hcl_context(c.text)
+    else:
+        search_text = c.text
     for m in regex.finditer(search_text):
         line = search_text.count("\n", 0, m.start()) + 1
         # Best-effort resource attribution by file position.

@@ -9,7 +9,7 @@ patterns:
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
     regex: '(?m)^[ \t]*ignore_changes\s*=\s*all\s*$'
-    hcl_context: true
+    code_only: true  # ignore comments and heredoc text
     description: lifecycle block with ignore_changes = all masks all drift
 owasp_iac:
   - "Runtime / Immutable Infrastructure Model"

@@ -13,12 +13,12 @@ csa_ccm:
 patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    hcl_context: true  # ignore commented-out code
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/versions.tf"
     regex: '(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]'
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    hcl_context: true  # ignore commented-out code
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
     regex: 'required_providers\s*\{[^}]*(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]'
 recommendation: |

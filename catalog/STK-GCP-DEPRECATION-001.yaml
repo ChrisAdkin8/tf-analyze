@@ -42,7 +42,7 @@ patterns:
     description: metadata_startup_script is deprecated; use metadata.startup-script instead
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    hcl_context: true  # ignore commented-out code
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
     regex: 'resource\s+"google_compute_address".*\n.*\baddress\b'
     description: google_compute_address.address argument renamed in v6

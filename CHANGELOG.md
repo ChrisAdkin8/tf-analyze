@@ -5,7 +5,7 @@ Self-test fixture counts are cumulative.
 
 ---
 
-## Round 38 — `block_arg_value` is top-level only; text-scan hygiene — 2026-10-26
+## Round 38 — Parser migration complete: top-level lookups, text-scan hygiene, literal-only `count = 0` — 2026-10-26
 
 Step 5a of `tasks/hcl-parser-migration.md`.
 
@@ -33,7 +33,19 @@ Step 5a of `tasks/hcl-parser-migration.md`.
   it now reads 80/68/47% and is checked by `tests/test_readme_drift.py`.
   The hand-written test-count badge (1,153 — wrong) is removed; the CI
   badge reports test status.
-- Otherwise no change on the bundled corpora.
+- **A resource is skipped only for a literal `count = 0`.** A count that
+  reaches 0 only through a variable default (e.g.
+  `count = var.enabled ? 1 : 0`, `default = false`) is now checked by
+  every rule, because tfvars / `-var` can enable it at apply time.
+  Expect new findings on optional, disabled-by-default resources in
+  modules (bundled corpora: 8 on the `unguarded_count_ref` fixture).
+- Structural text scans now use the HCL-aware comment / heredoc lexer
+  (`code_only: true`) instead of the older comment stripper, so text
+  inside heredocs no longer matches them either.
+
+**Upgrade note — baselines:** besides the `SEC-DATASOURCE-003` line
+move above, resources whose count depends on a variable now produce
+findings that baselines won't contain.
 
 ---
 

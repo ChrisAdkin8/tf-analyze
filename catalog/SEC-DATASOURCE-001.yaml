@@ -19,13 +19,13 @@ slsa:
 patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    hcl_context: true  # ignore commented-out code
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
     regex: 'data\s+"external"\s+"[\w-]+"\s*\{'
     description: data.external runs arbitrary shell scripts at plan time
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    hcl_context: true  # ignore commented-out code
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
     regex: 'data\s+"http"\s+"[\w-]+"\s*\{'
     description: data.http fetches from URLs at plan time

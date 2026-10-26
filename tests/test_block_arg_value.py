@@ -113,3 +113,20 @@ def test_block_arg_value_matches_the_tree_on_every_fixture() -> None:
                                f"{key}: text={old!r} tree={new!r}")
     assert checked > 2000
     assert not bad, "\n".join(bad[:20])
+
+
+# ---- count = 0 skips only literals (spec §14 item 25) ------------------------
+
+def test_literal_count_zero_skips() -> None:
+    assert detect._resource_is_count_zero('  count = 0\n', {})
+    assert detect._resource_is_count_zero('  count = false ? 1 : 0\n', {})
+
+
+def test_count_from_a_variable_default_is_still_checked() -> None:
+    """tfvars / -var can override a default at apply time, so a resource
+    whose count resolves to 0 only through a default is not skipped."""
+    vd = {"enabled": "false", "n": "0", "__local__n": "0"}
+    assert not detect._resource_is_count_zero('  count = var.enabled ? 1 : 0\n', vd)
+    assert not detect._resource_is_count_zero('  count = var.n\n', vd)
+    assert not detect._resource_is_count_zero('  count = local.n\n', vd)
+    assert not detect._resource_is_count_zero('  count = 1\n', vd)
