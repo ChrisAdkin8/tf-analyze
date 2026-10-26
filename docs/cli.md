@@ -226,11 +226,11 @@ Path to a baseline JSON report. Findings present in the baseline are suppressed 
 
 ### `--cache`
 
-Enable incremental scan caching. Stores findings keyed on a hash of all .tf file contents + catalogue entries in .tf-analyze-cache.json inside the target directory. Subsequent runs on unchanged code return the cached findings instantly. Cache is invalidated automatically when any .tf file or catalogue rule changes. Use --cache-file to override the path.
+Enable incremental scan caching. Stores findings keyed on a hash of all .tf file contents + catalogue entries in a per-target file under the user cache dir (never inside the target, so a committed cache file cannot replay findings). Subsequent runs on unchanged code return the cached findings instantly. Cache is invalidated automatically when any .tf file or catalogue rule changes. Use --cache-file to override the path.
 
 ### `--cache-file`
 
-Override the cache file path used by --cache (default: <target>/.tf-analyze-cache.json).
+Override the cache file path used by --cache (default: a per-target file under the user cache dir).
 
 ### `--apply-fixes`
 

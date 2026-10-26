@@ -2,7 +2,8 @@
 
 Three pure functions extracted from ``detect.py`` as the
 **tenth modularisation seam** (post-Session-G). All three are I/O-trivial
-wrappers over a versioned JSON file at ``<workspace>/.tf-analyze-cache.json``;
+wrappers over a versioned JSON file (default: per-target, under the user
+cache dir — see `default_cache_path`);
 the corpus hash determines whether a full re-scan is needed.
 
 * :func:`corpus_hash` — stable 16-hex-char hash over every .tf file's
@@ -18,7 +19,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 # Bump when the cache file layout or the hash inputs change, so caches
@@ -89,6 +92,22 @@ def corpus_hash(all_files_text: dict, entries: list) -> str:
     ).hexdigest()[:16]
 
 
+def default_cache_path(target: Path) -> Path:
+    """Where `--cache` keeps a target's findings unless `--cache-file` is
+    given: the user cache dir, keyed by the target's resolved path.
+
+    Never inside the target. The cache is trusted whenever its corpus
+    hash matches, and anyone can compute that hash from public inputs, so
+    a cache file committed to the scanned repo (say, by a pull request)
+    could replay ``"findings": []`` and score the repo clean; a symlink
+    committed in its place would redirect the cache write.
+    """
+    from _hcl import _user_cache_dir
+
+    key = hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:16]
+    return _user_cache_dir() / "tf-analyze" / "scan-cache" / f"{key}.json"
+
+
 def load_scan_cache(cache_path: Path) -> dict | None:
     """Load the cache file. Returns None on absence / unreadable / wrong version.
 
@@ -114,9 +133,20 @@ def save_scan_cache(
 ) -> None:
     """Persist findings (and the files scanned in parse-fallback mode, so a
     cache hit still reports them) to the cache file. Failure is silent —
-    non-fatal."""
+    non-fatal.
+
+    Written to a temporary file and renamed into place, so a symlink at
+    `cache_path` is replaced rather than followed (no write through it to
+    another file) and a crash never leaves a half-written cache.
+    """
+    tmp_name = None
     try:
-        with open(cache_path, "w") as f:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            "w", dir=cache_path.parent, prefix=".tf-analyze-cache-",
+            suffix=".tmp", delete=False,
+        ) as f:
+            tmp_name = f.name
             json.dump(
                 {
                     "version": CACHE_FORMAT_VERSION,
@@ -126,5 +156,13 @@ def save_scan_cache(
                 },
                 f,
             )
+        os.replace(tmp_name, cache_path)
+        tmp_name = None
     except Exception:
         pass
+    finally:
+        if tmp_name is not None:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
