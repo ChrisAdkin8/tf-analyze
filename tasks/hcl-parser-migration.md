@@ -1,7 +1,7 @@
 # HCL parser migration — make python-hcl2 required and primary
 
-> **STATUS: IN PROGRESS (r2, 2026-10-25).** Steps 0–1 done (#36, #37); Steps
-> 2–4 in review. Revision 2 follows an
+> **STATUS: IN PROGRESS (r2).** Steps 0–4 done (#36, #37, #38, #40, #41);
+> Step 5 in progress. Revision 2 follows an
 > independent review of r1; every factual claim in r2 was checked against the
 > code on 2026-10-25. Supersedes the "Scope B is a separate ~1–2 week
 > initiative" note in `tasks/policy-dsl-draft.md` §10 and builds on the
@@ -500,6 +500,20 @@ already handles port ranges) rather than adding a new kind. For AWS cover:
 
 ## 11. Step 5 — remaining handlers and call sites (est. 2–3 weeks, incremental)
 
+> **Increment 5a (as built):** instead of moving the 34 `block_arg_value`
+> call sites one by one, `block_arg_value` itself became top-level only —
+> after an instrumented run over all 637 fixture / example directories
+> (with and without `--attack-graph`) found exactly one call site whose
+> answer changed. That one was a bug: `_resource_is_count_zero` read a
+> Cloud Armor `rate_limit_threshold { count = 100 }` as the resource's
+> `count` (a nested `count = 0` would have skipped the whole resource for
+> every rule). Also fixed: the heredoc path returned only the first
+> element of a list value (`val[0]`, a leftover from old python-hcl2), so
+> in any body containing a heredoc e.g. `actions = ["s3:GetObject", "*"]`
+> lost its wildcard — live for every user since Step 1 made the parser
+> always on. A test checks `block_arg_value` against the tree for all
+> 2,963 literal top-level settings in the corpus. See §14 items 23–24.
+
 - About 54 handlers are registered; about 13 are the generic ones covered
   above, leaving about 40 specialised handlers in `_handlers_*.py`.
 - Regex-helper call sites outside the handlers (counts of `find_blocks`,
@@ -659,6 +673,19 @@ Added in Step 4:
     skipped on count. Other rule kinds still skip a resource whose count
     resolves to 0 through a variable default (`_resource_is_count_zero`,
     pre-existing); reviewing that engine-wide is left open below.
+
+Added in Step 5:
+
+23. **`block_arg_value` is top-level only** (5a, above). Every call site
+    — handlers, `_cross_resource`, `_policy`, `_registry`, `detect` — now
+    gets the same top-level semantics as the tree, without per-site edits.
+24. **Known limitation — hcl2 expression text.** python-hcl2 7.2.1
+    stringifies some expressions lossily: string quotes inside a
+    function call's list argument are dropped (`toset(["a"])` →
+    `toset([a])`), and the text path keeps only the first line of a
+    multi-line call (`jsonencode({`). No catalogue regex matches such
+    values today (golden and agreement tests pass); a rule that needs to
+    should use the IAM / JSON analysers or a `policy` predicate.
 
 Open:
 

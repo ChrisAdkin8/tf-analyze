@@ -175,7 +175,7 @@ def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
     try:
         # hcl2.load expects a top-level construct; wrap the bare body.
         wrapped = f'_arg_extract {{\n{body}\n}}'
-        parsed = _hcl2.load(io.StringIO(wrapped))
+        parsed = _hcl2.load(io.StringIO(wrapped), with_meta=True)
     except Exception:
         return None
     try:
@@ -188,14 +188,17 @@ def _hcl2_block_arg_value(body: str, arg: str) -> str | None:
         val = block.get(arg)
     except Exception:
         return None
-    if val is None:
+    if val is None or _is_block_list(val):
+        # Absent, or a nested block rather than a value (the regex path
+        # only ever matches `arg =`, so it agrees).
         return None
-    if isinstance(val, list) and val:
-        val = val[0]
-    if isinstance(val, str):
-        # hcl2 strips heredoc markers; return the literal content.
-        return val
-    return str(val)
+    # Render like the regex path: strings unquoted (heredoc markers are
+    # already stripped by hcl2), lists / maps as HCL text. This used to
+    # return `val[0]` for a list — a leftover from old python-hcl2, which
+    # wrapped every value in a list — so in any body containing a heredoc
+    # only the first element of e.g. `actions = ["s3:GetObject", "*"]`
+    # was seen.
+    return render_hcl(val)
 
 
 # ---- Parse tree (python-hcl2) -------------------------------------------
@@ -409,15 +412,9 @@ def _is_block_list(value) -> bool:
 
 
 def _top_level_arg_value(body: str, arg: str) -> str | None:
-    """`block_arg_value` restricted to a top-level ``arg = ...`` (not one
-    inside a nested block, string, heredoc or comment)."""
-    m = re.search(
-        rf'(?m)^[ \t]*{re.escape(arg)}[ \t]*=', _mask_to_top_level(body),
-    )
-    if not m:
-        return None
-    line_start = body.rfind("\n", 0, m.start()) + 1
-    return block_arg_value(body[line_start:], arg)
+    """Alias of `block_arg_value`, which is top-level only since parser
+    migration Step 5. Kept for `_network` and older imports."""
+    return block_arg_value(body, arg)
 
 
 def block_values_at(body: str, path: str) -> list[str]:
@@ -928,6 +925,12 @@ def _hcl_object_to_json(text: str) -> dict | None:
 def block_arg_value(body: str, arg: str) -> str | None:
     """Return the literal value of a top-level argument, stripped of quotes/comments.
 
+    Top-level only: an ``arg = ...`` inside a nested block, string, heredoc
+    or comment is not the block's own argument. (Before parser migration
+    Step 5 this took the *first* ``arg =`` at any depth — e.g. a Cloud
+    Armor ``rate_limit_threshold { count = 100 }`` was read as the
+    resource's ``count``.)
+
     Heredoc-bearing values (`arg = <<-EOF\\n...\\nEOF`) are not handled by the
     regex path — the trailing `<<-EOF` is returned verbatim, which is rarely
     useful — so heredoc-bearing bodies are first tried through python-hcl2,
@@ -941,6 +944,20 @@ def block_arg_value(body: str, arg: str) -> str | None:
         v = _hcl2_block_arg_value(body, arg)
         if v is not None:
             return v
+    m = re.search(
+        rf'(?m)^[ \t]*{re.escape(arg)}[ \t]*=', _mask_to_top_level(body),
+    )
+    if not m:
+        return None
+    line_start = body.rfind("\n", 0, m.start()) + 1
+    return _first_arg_value(body[line_start:], arg)
+
+
+def _first_arg_value(body: str, arg: str) -> str | None:
+    """Value text of the first ``arg = ...`` line in ``body`` (any depth),
+    with multi-line collections extended to their closer and trailing
+    comments / quotes stripped. Callers locate the right line first —
+    see `block_arg_value`."""
     m = re.search(rf'(?m)^\s*{re.escape(arg)}\s*=\s*(.+?)\s*$', body)
     if not m:
         return None

@@ -5,6 +5,26 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 38 — `block_arg_value` is top-level only — 2026-10-26
+
+Step 5a of `tasks/hcl-parser-migration.md`.
+
+- **`block_arg_value` reads only a block's own (top-level) argument**,
+  never one inside a nested block, map, string, heredoc or comment. This
+  gives every remaining text-based lookup the same semantics as the parse
+  tree in one place. An instrumented run over all 637 fixture / example
+  directories found one call site whose answer changed — a bug: a Cloud
+  Armor `rate_limit_threshold { count = 100 }` was read as the resource's
+  `count`, so a nested `count = 0` would have skipped the resource for
+  every rule.
+- **Lists in bodies containing a heredoc are read whole.** The heredoc
+  path returned only a list's first element, so e.g. an IAM statement's
+  `actions = ["s3:GetObject", "*"]` lost its wildcard whenever the same
+  body held a heredoc.
+- No change on the bundled corpora.
+
+---
+
 ## Round 37 — Structured network exposure rules; engine-evaluated escalation — 2026-10-25
 
 Step 4 of `tasks/hcl-parser-migration.md`.

@@ -99,11 +99,12 @@ def _value_patterns() -> dict[str, list[tuple[str, str, str]]]:
 def test_render_matches_block_arg_value_on_every_fixture() -> None:
     """Golden test (§4.6): for every `resource_arg` pattern and every
     matching resource in fixtures/ and examples/, the rendered tree value
-    equals what `block_arg_value` returned for the same `arg`, up to
-    whitespace. The only allowed difference is a dotted `arg`, which
-    `block_arg_value` could never match (those patterns were dead)."""
+    equals the text the regex fallback extracts at the same path, up to
+    whitespace. (In Step 3 the reference was `block_arg_value(body, arg)`;
+    Step 5 made that top-level only, so the comparison is now against
+    `block_values_at` on the same path.)"""
     pats = _value_patterns()
-    differ, dead_now_live, checked = [], 0, 0
+    differ, checked = [], 0
     for corpus in ("fixtures", "examples"):
         for tf in sorted((REPO_ROOT / corpus).rglob("*.tf")):
             text = _hcl._read_normalized(tf)
@@ -120,19 +121,16 @@ def test_render_matches_block_arg_value_on_every_fixture() -> None:
                 body = _hcl._expand_dynamic_blocks(blk["body"])
                 for rule, arg, path in pats.get(key[0], ()):
                     checked += 1
-                    old = _hcl.block_arg_value(body, arg)
+                    old_vals = _hcl.block_values_at(body, path)
+                    old = old_vals[0] if old_vals else None
                     vals = _hcl.attrs_values_at(attrs, path)
                     new = _hcl.render_hcl(vals[0]) if vals else None
                     if _norm(old) == _norm(new):
-                        continue
-                    if old is None and "." in arg:
-                        dead_now_live += 1
                         continue
                     differ.append(f"{tf.relative_to(REPO_ROOT)} {'.'.join(key)} {rule} {path}: "
                                   f"old={old!r} new={new!r}")
     assert checked > 500
     assert not differ, "\n".join(differ[:20])
-    assert dead_now_live > 0  # the dotted-arg patterns now see values
 
 
 # ---- resource_arg / hcl_attr value semantics, both paths ---------------------
