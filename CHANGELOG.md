@@ -5,6 +5,35 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 51 — Fail-open gates closed — 2026-10-26
+
+A critical review found ways a scan that should fail `--fail-on` exited 0,
+and one way scanning an untrusted repo could write outside it.
+
+- `--attack-graph` (on by default in the GitHub Action) rebuilt each
+  finding's urgency from the catalogue default, dropping structured
+  escalations: SSH open to the world fell from CRITICAL to HIGH and passed
+  `--fail-on CRITICAL`. Tiers now move from the current urgency, and an
+  escalated finding is never demoted.
+- `--baseline` hid a finding that got worse (port 443 → 22, HIGH →
+  CRITICAL). A paired finding whose urgency rose is now retained. Older
+  baselines without `urgency` still suppress as before.
+- `--mode fleet` always exited 0; it now applies `--fail-on` across every
+  target.
+- A `.tf` (or workflow / tfvars) file that could not be read was only a
+  warning; under `--fail-on` it now fails the gate. Fleet mode warns
+  instead of skipping silently.
+- `--cache` stored `--plan-json` / `--state-json` findings, so a later run
+  without them replayed stale findings. They are no longer cached.
+- `--apply-fixes apply` refuses a symlinked source file or `.bak`, or a
+  file resolving outside the scan target (a repo shipping
+  `main.tf.bak -> ~/.bashrc` could overwrite that file).
+- New `--no-project-config` ignores `.tf-analyze.yaml`, whose
+  `ignore_rules` a pull request controls. For untrusted PRs pass
+  `--no-project-config --no-suppress` (Action: `extra-args`).
+
+---
+
 ## Round 50 — Size-aware score; one source for the version — 2026-10-26
 
 ### Score (scoring version 2)
