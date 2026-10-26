@@ -248,11 +248,11 @@ Every text, JSON, and HTML scan emits a deterministic 0–100 health score and l
   "resources_scanned": 12,
   "size_factor": 1.0,
   "penalty": 18.0,
-  "formula": "max(0, floor(100 - (15*CRITICAL + 7*HIGH + (3*MEDIUM + 1*LOW) / size_factor))); size_factor = max(1, sqrt(resources_scanned / 20)); INFO=0; suppressed at half weight"
+  "formula": "max(0, floor(100 - (15*CRITICAL + 7*HIGH + (3*MEDIUM + 1*LOW) / size_factor))); size_factor = max(1, sqrt(resources_scanned / 20)), counting resources of a type a rule checks; INFO=0; suppressed at half weight"
 }
 ```
 
-CRITICAL and HIGH findings cost the same in any repository — each is a concrete exposure. MEDIUM and LOW are hygiene and are judged relative to size: up to 20 resources the size factor is 1, at 80 resources it halves their penalty, at 2,000 it divides it by ten, so a large estate isn't graded F just for being large. Suppressed and baseline-suppressed findings count at half weight (acknowledged, but the underlying risk still exists). INFO findings carry weight 0. The `scoring_version` field pins the formula — weight changes bump it so downstream gates can detect breakage. CI gates use `--fail-on LEVEL` (the urgency tier) rather than gating on the grade, intentionally — the grade is for trend visibility, not pass/fail.
+CRITICAL and HIGH findings cost the same in any repository — each is a concrete exposure. MEDIUM and LOW are hygiene and are judged relative to size: up to 20 resources the size factor is 1, at 80 resources it halves their penalty, at 2,000 it divides it by ten, so a large estate isn't graded F just for being large. Only resources of a type some rule checks count towards the size (`resources_scanned`), so padding a repo with `terraform_data` or `null_resource` blocks does not lift the score. Suppressed and baseline-suppressed findings count at half weight (acknowledged, but the underlying risk still exists). INFO findings carry weight 0. The `scoring_version` field pins the formula — weight changes bump it so downstream gates can detect breakage. CI gates use `--fail-on LEVEL` (the urgency tier) rather than gating on the grade, intentionally — the grade is for trend visibility, not pass/fail.
 
 ### Useful modifiers
 
@@ -268,7 +268,7 @@ CRITICAL and HIGH findings cost the same in any repository — each is a concret
 | `--diff-base REF` | Limit to `.tf` files changed since `REF` |
 | `--show-info` | Render INFO-tier findings (e.g. `MOD-REUSE-*` module-reuse advisories). Default off — INFO is counted in `summary.counts.INFO` but not displayed |
 | `--rank-by exploitability\|hybrid` | Promote findings whose rule touches a CISA KEV-listed CWE one urgency tier; surface 🔥 KEV badge in text/PR-summary/SARIF. Daily-cached at `~/.cache/tf-analyze/`. Pair with `--no-threat-intel` for air-gapped CI. |
-| `--explain-score` | Top-5 findings ranked by score impact, with projected score/grade if each is fixed. Tells you which fix is worth most. Surfaces as a header block in text output and a structured `score_explanation` field in JSON. |
+| `--explain-score` | Top-5 findings ranked by score impact, with the points each fix is worth (MEDIUM / LOW after the size factor) and the projected score/grade if each is fixed. Tells you which fix is worth most. Surfaces as a header block in text output and a structured `score_explanation` field in JSON. |
 | `--mode drift --state-json PATH` | Diff the static-HCL findings against `terraform show -json state.tfstate` output. Findings tagged `mode='state'` so oncalls can spot the gap between the HCL the team wrote and what's actually deployed. |
 | `--pdf-output PATH` | Render the compliance gap report to a CISO-targetable PDF via weasyprint (optional dep). Pair with `--compliance --compliance-framework <name>`. |
 | `--apply-fixes × --baseline` | When both are set, `--apply-fixes` skips findings already in baseline. Closes the "snapshot today, fix only new stuff" UX. |
