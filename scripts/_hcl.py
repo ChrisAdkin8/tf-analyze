@@ -1267,34 +1267,12 @@ def _first_arg_value(body: str, arg: str) -> str | None:
         coll_end = brace_walk(body, m.start(1), opens=open_ch, closes=_closer[open_ch])
         if coll_end is not None:
             return body[m.start(1):coll_end].strip()
-    val = m.group(1).strip()
-    if '"' in val or "'" in val:
-        # Audit follow-up #6 — the quote-state walker must skip an
-        # escaped quote (`\"`, `\'`) instead of toggling the in-quote
-        # flag on it. Without the `prev != "\\"` guard, a value like
-        # `key = "foo \"bar\""` flips out of DQ on the first `\"` and
-        # the comment-strip pass eats real bytes. Tracking the prior
-        # character is sufficient (HCL doesn't allow `\\\"` ambiguity
-        # in scalar string syntax — a literal backslash is `\\`).
-        in_dq = in_sq = False
-        cut = None
-        prev = ""
-        for idx, ch in enumerate(val):
-            escaped = prev == "\\"
-            if ch == '"' and not in_sq and not escaped:
-                in_dq = not in_dq
-            elif ch == "'" and not in_dq and not escaped:
-                in_sq = not in_sq
-            elif ch == "#" and not in_dq and not in_sq:
-                cut = idx
-                break
-            prev = ch
-        if cut is not None:
-            val = val[:cut].rstrip()
-    else:
-        cut = val.find("#")
-        if cut >= 0:
-            val = val[:cut].rstrip()
+    # Strip a trailing comment — `#`, `//` or `/* */` — outside any
+    # string. String-aware (`strip_hcl_context`), and HCL has no
+    # single-quoted strings, so an apostrophe never starts one. (The
+    # previous walker only ran when the value held a quote, so
+    # `default = true // note` kept its comment.)
+    val = strip_hcl_context(m.group(1)).strip()
     if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
         return val[1:-1]
     return val

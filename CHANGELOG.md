@@ -5,6 +5,34 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 46 — Variable lookups: comments, nested keys, .tfvars, several callers — 2026-10-26
+
+`var.X` / `local.X` resolution had four false-negative gaps, each a case
+where a rule saw the wrong value (or none):
+
+- **Trailing comments after a value**: `default = true // note` (and
+  `/* */`) kept the comment, so the value never matched. The comment strip
+  in `block_arg_value` only ran when the value held a quote; it is now
+  `strip_hcl_context` (string-aware, all three comment forms, and no
+  single-quote handling — HCL has none).
+- **Nested keys shadowing locals**: `locals { pub = true; defaults = { pub
+  = false } }` resolved `local.pub` to `false` — every `name =` line was
+  read, at any depth. Locals and module inputs are now read from
+  top-level assignments only.
+- **`.tfvars` files were ignored.** `terraform.tfvars`, `*.auto.tfvars`
+  and their `.json` forms are now layered over defaults in Terraform's
+  precedence order (later wins). A tfvars file symlinked from outside its
+  directory is not read.
+- **A child module with several callers took the last caller's inputs**,
+  so `public = true` from one caller could be hidden by `public = false`
+  from another. Each distinct set of caller inputs is now its own variable
+  table (up to 8), the child is scanned once per table, and duplicate
+  findings are dropped. Call cycles terminate.
+
+Corpus findings are unchanged.
+
+---
+
 ## Round 45 — Housekeeping: Apache-2.0 everywhere, dev deps, ROB-VERSION-001 — 2026-10-26
 
 - **Licence is Apache-2.0 everywhere.** `LICENSE` (and the VS Code

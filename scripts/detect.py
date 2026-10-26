@@ -107,6 +107,8 @@ from _hcl import (
     _BLOCK_COMMENT_RE,
     _DYNAMIC_BLOCK_START_RE,
     _read_normalized,
+    _mask_to_top_level,
+    render_hcl,
     _parse_scalar,
     strip_hcl_context,
     find_blocks,
@@ -353,85 +355,129 @@ def _resolve_var_ref(val: str, var_defaults: dict) -> str:
     return val
 
 
-def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
-    """Return {dir_path: {var_name: default_value}} for all declared variable
-    defaults AND locals values, then layer module-call inputs on top.
+_TOP_LEVEL_ASSIGN_RE = re.compile(r'(?m)^[ \t]*([\w-]+)[ \t]*=(?!=)')
+# Variable-definition files Terraform loads automatically, in precedence
+# order (later wins); see `_tfvars_values`.
+_TFVARS_FIXED = ("terraform.tfvars", "terraform.tfvars.json")
+_MODULE_META_ARGS = frozenset({
+    "source", "version", "providers", "count", "for_each", "depends_on",
+    "lifecycle",
+})
+# One child module called from many places is scanned once per distinct
+# set of caller inputs, up to this many.
+_MAX_VAR_CONTEXTS = 8
 
-    Variable scope in Terraform is per-directory.  Locals are stored under
-    the key ``__local__<name>`` in the same per-directory dict so that a
-    single lookup table can serve both namespaces.
 
-    Module-input flow-through: for every `module "x" { source = "./child"; foo
-    = bar }`, push `foo = bar` into the child directory's dict so child-module
-    rules see the *caller's* override rather than the child's default.
+def _top_level_assignments(body: str) -> dict[str, str]:
+    """``{name: value}`` for every top-level ``name = value`` of a block
+    body (or a `.tfvars` file) — never a key inside a nested object, block,
+    string or comment, so ``defaults = { pub = false }`` does not define
+    ``pub``. Values come from `block_arg_value` (comments stripped,
+    surrounding quotes removed, multi-line collections kept whole)."""
+    out: dict[str, str] = {}
+    for m in _TOP_LEVEL_ASSIGN_RE.finditer(_mask_to_top_level(body)):
+        name = m.group(1)
+        if name in out:
+            continue
+        value = block_arg_value(body, name)
+        if value is not None:
+            out[name] = value
+    return out
+
+
+def _tfvars_scalar(value) -> str:
+    """A `.tfvars.json` value in the text form `block_arg_value` gives."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return json.dumps(value)
+    return render_hcl(value)
+
+
+def _tfvars_values(directory: Path) -> dict[str, str]:
+    """Variable values from the definition files Terraform loads on its
+    own in `directory`: ``terraform.tfvars`` (and ``.json``), then every
+    ``*.auto.tfvars`` (and ``.json``) in lexical order, each overriding the
+    last. (``-var`` / ``-var-file`` are invocation-time and unknowable.)
+    A file that is a symlink out of `directory` is not read."""
+    out: dict[str, str] = {}
+    try:
+        autos = sorted(
+            p.name for p in directory.iterdir()
+            if p.name.endswith((".auto.tfvars", ".auto.tfvars.json"))
+        )
+    except OSError:
+        return out
+    root = directory.resolve()
+    for name in (*_TFVARS_FIXED, *autos):
+        path = directory / name
+        try:
+            if not path.is_file() or not path.resolve().is_relative_to(root):
+                continue
+            text = _read_normalized(path)
+        except OSError:
+            continue
+        if name.endswith(".json"):
+            try:
+                doc = json.loads(text)
+            except ValueError:
+                continue
+            if isinstance(doc, dict):
+                out.update({k: _tfvars_scalar(v) for k, v in doc.items()})
+        else:
+            out.update(_top_level_assignments(text))
+    return out
+
+
+def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
+    """Return ``{dir_path: [context, ...]}``: the values `var.X` /
+    `local.X` resolve to when a directory's files are scanned.
+
+    A context holds variable defaults, then values from the directory's
+    auto-loaded ``.tfvars`` files, then — for a child module — the inputs
+    its caller passes (``module "x" { source = "./child"; foo = bar }``
+    sets the child's ``foo``). Locals are stored under ``__local__<name>``
+    in the same dict, so one lookup table serves both namespaces.
+
+    Variable scope in Terraform is per-directory, so most directories have
+    one context. A child module called from several places with different
+    inputs has one context per distinct set, so a rule sees each caller's
+    values — with a single merged dict, whichever caller came last hid the
+    others (a `public = true` caller behind a `public = false` one).
     """
-    result: dict[str, dict[str, str]] = {}
+    base: dict[str, dict[str, str]] = {}
     for fp, text in all_files_text.items():
         dir_key = str(Path(fp).parent)
         for blk in find_blocks(text, VARIABLE_START):
-            var_name = blk["groups"][0]
             default = block_arg_value(blk["body"], "default")
             if default is not None:
-                result.setdefault(dir_key, {})[var_name] = default
-        # Locals blocks: `locals { name = value ... }`  (no groups — use find_blocks
-        # variant that returns body only via LOCALS_START which has no capture groups).
+                base.setdefault(dir_key, {})[blk["groups"][0]] = default
         for blk in find_blocks(text, LOCALS_START):
-            body = blk["body"]
-            # Each line of the body is a `name = value` assignment.
-            for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', body):
-                lname, raw = lm.group(1), lm.group(2)
-                # Audit fix #12 — the trailing-comment strip used to be
-                # `re.sub(r'\s*#.*$', '', raw)` which is quote-blind: a
-                # value like `"value # not a comment"` lost everything
-                # from `#` onward. Walk the raw value tracking quote
-                # state (matches `_hcl.block_arg_value`'s escape-aware
-                # quote walker) and only strip a `#` that lives outside
-                # a quoted region.
-                in_dq = in_sq = False
-                prev = ""
-                cut = None
-                for idx, ch in enumerate(raw):
-                    escaped = prev == "\\"
-                    if ch == '"' and not in_sq and not escaped:
-                        in_dq = not in_dq
-                    elif ch == "'" and not in_dq and not escaped:
-                        in_sq = not in_sq
-                    elif ch == "#" and not in_dq and not in_sq:
-                        cut = idx
-                        break
-                    prev = ch
-                cleaned = raw[:cut].rstrip() if cut is not None else raw.rstrip()
-                lval = cleaned.strip().strip('"').strip("'")
-                result.setdefault(dir_key, {})["__local__" + lname] = lval
+            for lname, lval in _top_level_assignments(blk["body"]).items():
+                base.setdefault(dir_key, {})["__local__" + lname] = lval
+    for dir_key in sorted({str(Path(fp).parent) for fp in all_files_text}):
+        tfvars = _tfvars_values(Path(dir_key))
+        if tfvars:
+            base.setdefault(dir_key, {}).update(tfvars)
 
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
     # provider declares default_tags is recorded under the synthetic key
     # __aws_default_tags__. Tag-related findings in that dir are then
     # suppressed (the provider injects the tags downstream).
-    PROVIDER_AWS = re.compile(r'^\s*provider\s+"aws"\s*\{', re.MULTILINE)
     for fp, text in all_files_text.items():
-        for pm in PROVIDER_AWS.finditer(text):
-            # Round-30.13 — shared brace walker. The provider block
-            # extraction was previously quote-blind; an aws provider
-            # config with a `default_tags { tags = { ... } }` map whose
-            # value contained `"k = "v}"`` (rare but possible) would
-            # have closed the block prematurely.
-            end_after = brace_walk(text, pm.end() - 1)
-            if end_after is None:
-                continue
-            end = end_after - 1  # position of the matching `}` itself
-            pbody = text[pm.end():end]
-            if "default_tags" in pbody:
-                dirk = str(Path(fp).parent)
-                result.setdefault(dirk, {})["__aws_default_tags__"] = "true"
+        for pblk in find_blocks(text, PROVIDER_START):
+            if pblk["groups"][0] == "aws" and "default_tags" in pblk["body"]:
+                base.setdefault(str(Path(fp).parent), {})["__aws_default_tags__"] = "true"
 
-    # Module-input flow-through: parent's `module "x" { source = "./c"; k = v }`
-    # overrides child dir's `var.k` default. Only literal values flow; var.Y
-    # references are resolved against the parent's already-built dict.
-    for fp, text in all_files_text.items():
+    # Module calls, in a stable order: (caller dir, child dir, inputs).
+    calls: list[tuple[str, str, dict[str, str]]] = []
+    for fp in sorted(all_files_text, key=str):
         parent_dir = str(Path(fp).parent)
-        parent_vd = result.get(parent_dir, {})
-        for mblk in find_blocks(text, MODULE_START):
+        for mblk in find_blocks(all_files_text[fp], MODULE_START):
             source = block_arg_value(mblk["body"], "source")
             if not source or not source.startswith((".", "/")):
                 continue
@@ -439,44 +485,54 @@ def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
                 child_dir = str((Path(parent_dir) / source).resolve())
             except (OSError, ValueError):
                 continue
-            for lm in re.finditer(r'(?m)^\s*([\w-]+)\s*=\s*(.+?)\s*$', mblk["body"]):
-                k, raw = lm.group(1), lm.group(2)
-                # Strip trailing `#` comments before resolution. Otherwise
-                # `encrypted = false   # caller note` flows as the literal
-                # string `false   # caller note` and downstream rules miss
-                # the value match.
-                #
-                # Round-4 audit fix #7 — the locals branch 60 lines
-                # above this site uses a quote-aware comment stripper
-                # (R30.10). This sibling path still used the bare
-                # `re.sub(r'\s*#.*$', '', raw)` which is quote-blind:
-                # `count = "value # not a comment"` lost everything
-                # from `#` onward. Mirror the locals walker.
-                in_dq = in_sq = False
-                prev = ""
-                cut = None
-                for idx, ch in enumerate(raw):
-                    escaped = prev == "\\"
-                    if ch == '"' and not in_sq and not escaped:
-                        in_dq = not in_dq
-                    elif ch == "'" and not in_dq and not escaped:
-                        in_sq = not in_sq
-                    elif ch == "#" and not in_dq and not in_sq:
-                        cut = idx
-                        break
-                    prev = ch
-                v = (raw[:cut] if cut is not None else raw).rstrip()
-                if k in ("source", "version", "providers", "count", "for_each",
-                         "depends_on", "lifecycle"):
-                    continue
-                resolved = _resolve_var_ref(v, parent_vd)
-                resolved = resolved.strip().strip('"').strip("'")
-                # Only flow values that look like literals after resolution;
-                # leave child default in place when caller passes an unresolved
-                # expression.
-                if resolved and not resolved.startswith(("var.", "local.", "data.")):
-                    result.setdefault(child_dir, {})[k] = resolved
-    return result
+            inputs = {
+                k: v for k, v in _top_level_assignments(mblk["body"]).items()
+                if k not in _MODULE_META_ARGS
+            }
+            calls.append((parent_dir, child_dir, inputs))
+
+    contexts: dict[str, list[dict]] = {}
+    in_progress: set[str] = set()
+
+    def contexts_of(d: str) -> list[dict]:
+        if d in contexts:
+            return contexts[d]
+        own = base.get(d, {})
+        incoming = [(p, inputs) for p, c, inputs in calls if c == d]
+        if d in in_progress:  # a call cycle: stop at this module's own values
+            return [dict(own)]
+        if not incoming:  # a root module
+            contexts[d] = [dict(own)]
+            return contexts[d]
+        in_progress.add(d)
+        found: list[dict] = []
+        for parent_dir, inputs in incoming:
+            for parent_ctx in contexts_of(parent_dir):
+                ctx = dict(own)
+                for k, raw in inputs.items():
+                    # Only literal values flow (after resolving the caller's
+                    # own var./local. references); an unresolved expression
+                    # leaves the child's default in place.
+                    resolved = _resolve_var_ref(raw, parent_ctx)
+                    resolved = resolved.strip().strip('"').strip("'")
+                    if resolved and not resolved.startswith(("var.", "local.", "data.")):
+                        ctx[k] = resolved
+                if ctx not in found and len(found) < _MAX_VAR_CONTEXTS:
+                    found.append(ctx)
+        in_progress.discard(d)
+        contexts[d] = found
+        return found
+
+    for d in sorted(set(base) | {c for _, c, _ in calls}):
+        contexts_of(d)
+    return contexts
+
+
+def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
+    """``{dir_path: context}`` — the first context of each directory from
+    `_extract_var_contexts_by_dir`, for callers that scan with one
+    variable table (the LSP server)."""
+    return {d: ctxs[0] for d, ctxs in _extract_var_contexts_by_dir(all_files_text).items()}
 
 
 def _resource_is_count_zero(body: str, var_defaults: dict) -> bool:
@@ -2113,10 +2169,11 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     list). stderr-only side effects; no report output.
     """
     # Pass 2 — run per-file detection with the filtered ruleset.
-    # Build per-directory variable-default map once; passed into each
-    # detect_in_file call so plain `var.X` attribute values are resolved
-    # to their declared defaults before pattern matching.
-    var_defaults_by_dir = _extract_var_defaults_by_dir(all_text)
+    # Build the per-directory variable tables once; each detect_in_file
+    # call gets one so plain `var.X` / `local.X` attribute values are
+    # resolved before pattern matching. A child module with several
+    # callers has one table per caller (see _extract_var_contexts_by_dir).
+    var_contexts_by_dir = _extract_var_contexts_by_dir(all_text)
 
     # Incremental cache: if --cache is set and the corpus hash matches the
     # stored cache, return the cached findings immediately (skipping the full
@@ -2149,10 +2206,13 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         for fp, text in all_text.items():
             if diff_files is not None and fp not in diff_files:
                 continue
-            findings.extend(
-                detect_in_file(fp, text, entries,
-                               var_defaults=var_defaults_by_dir.get(str(fp.parent), {}))
-            )
+            seen: set[tuple] = set()
+            for var_defaults in var_contexts_by_dir.get(str(fp.parent)) or [{}]:
+                for f in detect_in_file(fp, text, entries, var_defaults=var_defaults):
+                    key = (f.get("id"), f.get("line"), f.get("resource"))
+                    if key not in seen:
+                        seen.add(key)
+                        findings.append(f)
             # parse_tf is memoised, so this re-reads detect_in_file's result.
             _parse_error = parse_tf(text)[1]
             if _parse_error:
