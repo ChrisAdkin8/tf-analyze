@@ -152,6 +152,10 @@ When a catalogue entry carries a `fix_hcl` snippet, render it alongside each fin
 
 Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
 
+### `--fail-on-parse-error`
+
+Exit with code 1 if any .tf file could not be parsed and was scanned in the less precise regex fallback mode
+
 ### `--mitre-tactic`
 
 Restrict --format mitre output to one ATT&CK tactic (e.g. 'Initial Access', 'Defense Evasion'). Case-insensitive; hyphens and underscores accepted as separators ('initial-access' is equivalent).
