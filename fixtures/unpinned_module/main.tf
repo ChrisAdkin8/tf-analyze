@@ -1,13 +1,13 @@
 # Expected findings:
-#  - MOD-PIN-001 HIGH — registry module without `version` constraint
 #  - MOD-PIN-001 HIGH — git module source without `?ref=` pin
 #  - MOD-PIN-001 HIGH — github.com source without `?ref=` pin
+# (the unversioned registry module is MOD-SUPPLY-003)
 
 terraform {
   required_version = "~> 1.10"
 }
 
-# Registry module — no version pin (finding)
+# Registry module — no version pin (MOD-SUPPLY-003, not this rule)
 module "network" {
   source     = "terraform-google-modules/network/google"
   project_id = "test-project"

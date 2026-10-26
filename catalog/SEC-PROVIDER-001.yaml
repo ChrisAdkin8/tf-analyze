@@ -15,12 +15,14 @@ patterns:
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     code_only: true  # ignore comments and heredoc text
     file_glob: "**/versions.tf"
-    regex: '(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]'
+    # The whole constraint is a lower bound: no `<`, `<=` or `~>` part
+    # (">= 5.0, < 6.0" is bounded and must not fire).
+    regex: '(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9][^"<~]*"'
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
-    regex: 'required_providers\s*\{[^}]*(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9]'
+    regex: 'required_providers\s*\{[^}]*(?<![_a-zA-Z])version\s*=\s*">=\s*[0-9][^"<~]*"'
 recommendation: |
   Replace `>= X.Y` constraints with `~> X.Y` to bound the major version.
   For production stability, prefer `~> X.Y` (minor pin) over `~> X` (major

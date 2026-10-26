@@ -23,7 +23,7 @@
 #     receiving CVE fixes from Google.
 #
 # Expected tf-analyze findings:
-#   - MOD-PIN-001        MEDIUM   Registry module source missing version
+#   - MOD-SUPPLY-003     HIGH     Registry module source missing version
 #   - SEC-PROVIDER-001   MEDIUM   Provider constraint missing upper bound
 #   - ROB-VERSION-001    LOW      required_version older than recommended floor
 #   - STK-DEPRECATION-001 / 002   Deprecated provider attribute / data source

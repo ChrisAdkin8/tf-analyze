@@ -27,7 +27,7 @@
 #     compliance audits and lose Microsoft support.
 #
 # Expected tf-analyze findings:
-#   - MOD-PIN-001          MEDIUM  Registry module source missing version
+#   - MOD-SUPPLY-003       HIGH    Registry module source missing version
 #   - SEC-AZURE-AKS-002    HIGH    AKS cluster missing network policy
 #   - SEC-AZURE-WEBAPP-002 HIGH    Function App HTTPS not enforced
 #   - STK-AZURE-SQL-001    HIGH    Deprecated MySQL/PostgreSQL single-server resource

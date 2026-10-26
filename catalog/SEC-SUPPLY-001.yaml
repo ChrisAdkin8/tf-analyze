@@ -24,16 +24,20 @@ owasp:
   - "CICD-SEC-1"
   - "CICD-SEC-9"
 patterns:
-  - kind: module_block_missing_arg
+  - kind: grep
+    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
+    code_only: true  # ignore comments and heredoc text
     file_glob: "**/*.tf"
-    source_regex: '^(?:github\.com|git::ssh://|git::https://)'
-    arg: ref
+    # A ?ref= that is neither a 40-char commit SHA nor a version tag
+    # (v1.2.3 / 1.2 / 1.2.3-rc1) names a branch such as main. A missing
+    # ref is MOD-PIN-001.
+    regex: 'source\s*=\s*"(?:git::|github\.com/|bitbucket\.org/)[^"]*[?&]ref=(?![0-9a-f]{40}[&"]|v?[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z.]+)?[&"])'
     description: |
-      Git source without a ref= pin lands on the default branch (`HEAD`).
-      Without a commit SHA or signed tag the module body can change under
-      you between plans — supply-chain compromise of the upstream repo
-      reaches every consumer at the next `terraform init`. Pin to a
-      40-char commit SHA, a verified tag, or a content digest.
+      Git source pinned to a branch (`?ref=main`) rather than a commit SHA
+      or a version tag. The branch moves, so the module body can change
+      under you between plans — supply-chain compromise of the upstream
+      repo reaches every consumer at the next `terraform init`. Pin to a
+      40-char commit SHA or a release tag.
 recommendation: |
   Replace mutable refs with a content-addressed pin:
 

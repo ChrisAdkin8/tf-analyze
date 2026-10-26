@@ -36,6 +36,7 @@ Pattern kinds supported:
                               module points at (per-resource resource_absent)
     hcl_attr                  resource type T whose attr A is a literal value
     module_block_missing_arg  module block whose source matches regex lacks arg
+    registry_check            none offline; findings come from --check-registry
     variable_type             variable block with `type = <regex>`
     variable_missing_validation  variable block of name regex with no `validation`
     variable_unused           variable declared but never referenced as var.X

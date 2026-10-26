@@ -5,6 +5,42 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 54 — Module and supply-chain rules stop firing on pinned code — 2026-10-26
+
+The noisiest false positives from the critical review: these fired HIGH
+on almost any repository that used modules, pinned or not. Each module
+problem now has exactly one rule.
+
+- **MOD-SUPPLY-003** (registry module without `version`) is a
+  `module_block_missing_arg` check on the block instead of a grep on the
+  source line, which could not see `version` and fired on every registry
+  module. Covers private-registry hosts and `//subdir` sources.
+- **MOD-PIN-001** is git-hosted sources (`git::`, `github.com/`,
+  `bitbucket.org/`) without `?ref=`; its greps matched pinned sources
+  too. Its registry pattern duplicated MOD-SUPPLY-003 and is removed.
+- **SEC-SUPPLY-001** looked for a module *argument* `ref`, so it fired
+  on every git source including SHA pins and its own fix. It now fires
+  when `?ref=` names a branch (`main`, `develop`) rather than a 40-char
+  SHA or a version tag; a missing ref is MOD-PIN-001.
+- **MOD-STALE-001** had a static pattern that matched any registry
+  source. New pattern kind `registry_check` (documented in
+  `catalog/README.md`) reports nothing offline; findings come only from
+  `--check-registry`. The offline-unassertable `mod_stale_version`
+  fixture is removed.
+- **SEC-PROVIDER-001** matched any `">= X…"` constraint, including the
+  bounded `">= 5.0, < 6.0"` its fix recommends. It now fires only when
+  the constraint has no `<` / `~>` part.
+- **SEC-PROVISIONER-001**'s fix no longer contains a `local-exec`
+  provisioner.
+
+Both ratchet lists shrink: `KNOWN_SELF_TRIGGERS` is empty (5 → 0) and
+3 of the 16 known false positives in `tests/realworld_secure/` are gone,
+which gains two cases (`git_module_tag_pin`,
+`provider_bounded_constraint`). Terragoat snapshot recalibrated
+(371 → 367: one finding per unpinned module instead of three).
+
+---
+
 ## Round 53 — Score v2: honest points, no padding — 2026-10-26
 
 Fixes to the Round 50 size-aware score (`scoring_version` stays 2).

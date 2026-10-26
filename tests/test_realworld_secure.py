@@ -34,10 +34,6 @@ KNOWN_FALSE_POSITIVES: dict[str, dict[str, str]] = {
         "SEC-AZURE-SQL-001": "wants a resource that does not exist; ignores azuread_administrator",
         "STK-AZURE-SQL-TDE-001": "wants a resource that does not exist; TDE is on by default",
     },
-    "git_module_sha_pin": {
-        "MOD-PIN-001": "a 40-char SHA ?ref= is a pin",
-        "SEC-SUPPLY-001": "looks for a module argument `ref`; the ref lives in the source URL",
-    },
     "iam_deny_insecure_transport": {
         "SEC-AWS-IAM-001": "grep ignores effect = Deny",
         "SEC-AWS-IAM-002": "grep ignores effect = Deny",
@@ -50,9 +46,6 @@ KNOWN_FALSE_POSITIVES: dict[str, dict[str, str]] = {
     },
     "lb_http_redirect_listener": {
         "SEC-AWS-LB-LISTENER-001": 'redirect exemption matches `type = "redirect"` text, not fmt-aligned',
-    },
-    "pinned_registry_module": {
-        "MOD-SUPPLY-003": "grep on the source line ignores the version argument",
     },
     "s3_backend_native_locking": {
         "ROB-AWS-BACKEND-001": "use_lockfile (Terraform >= 1.10) replaces dynamodb_table",
