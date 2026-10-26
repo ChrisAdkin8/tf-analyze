@@ -470,7 +470,13 @@ def _apply_reachability_urgency(
     entry_map: dict[str, dict],
 ) -> None:
     """Promote findings on critical-path resources by one urgency tier;
-    demote findings on resources unreachable from INTERNET by one tier."""
+    demote findings on resources unreachable from INTERNET by one tier.
+
+    The tier moves from the finding's current urgency, not the
+    catalogue default, so a structured escalation (e.g. SSH open to the
+    world -> CRITICAL) is kept. An escalated finding is never demoted:
+    the escalation is direct evidence, the graph's reachability is an
+    inference, and demoting it would let ``--fail-on`` pass."""
     critical_path_set = set(graph.get("critical_path", []))
     internet_reachable_set = {
         n["id"] for n in graph.get("nodes", []) if n.get("internet_reachable")
@@ -478,12 +484,17 @@ def _apply_reachability_urgency(
     for f in findings:
         resource = f.get("resource", "")
         entry = entry_map.get(f["id"], {})
-        base = entry.get("default_urgency", "MEDIUM")
+        default = entry.get("default_urgency", "MEDIUM")
+        base = f.get("urgency") or default
         idx = _URGENCY_TIERS.index(base) if base in _URGENCY_TIERS else 1
+        escalated = (
+            default in _URGENCY_TIERS and base in _URGENCY_TIERS
+            and idx > _URGENCY_TIERS.index(default)
+        )
         if resource and resource in critical_path_set:
             f["urgency"] = _URGENCY_TIERS[min(idx + 1, len(_URGENCY_TIERS) - 1)]
             f["on_critical_path"] = True
-        elif resource and resource not in internet_reachable_set:
+        elif resource and resource not in internet_reachable_set and not escalated:
             f["urgency"] = _URGENCY_TIERS[max(idx - 1, 0)]
         else:
             f["urgency"] = base

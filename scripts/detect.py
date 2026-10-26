@@ -1600,8 +1600,11 @@ def _report_target(args: object) -> Path | None:
 def _gate_exit_code(
     args: object, findings: list[dict], entries: list[dict],
     parse_fallback_files: list[dict],
+    unreadable_files: list[str] = (),
 ) -> int:
-    """CI gate: 1 when a finding is at or above ``--fail-on``, or (with
+    """CI gate: 1 when a finding is at or above ``--fail-on``, when
+    ``--fail-on`` is set and an input file could not be read at all (a
+    scan that skipped a file has not passed it), or (with
     ``--fail-on-parse-error``) a file could only be scanned in fallback
     mode; else 0.
 
@@ -1617,6 +1620,13 @@ def _gate_exit_code(
             urgency = _effective_urgency(f, entry_map.get(f["id"], {}))
             if urgency_rank.get(urgency, 3) <= threshold:
                 return 1
+        if unreadable_files:
+            print(
+                f"ERROR: {len(unreadable_files)} file(s) could not be read "
+                f"and were not scanned (--fail-on)",
+                file=sys.stderr,
+            )
+            return 1
     if args.fail_on_parse_error and parse_fallback_files:
         print(
             f"ERROR: {len(parse_fallback_files)} file(s) could not be parsed "
@@ -1967,7 +1977,8 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     """Scan multiple repos and cross-correlate (`--mode fleet`).
 
     Extracted verbatim from main(). `emit`/`out_file` are main()'s report-output
-    sink and (optional) `--output` file handle. Returns an exit code.
+    sink and (optional) `--output` file handle. Returns an exit code: the
+    `--fail-on` gate over every target's findings, or 2 on bad input.
     """
     fleet_targets = _resolve_fleet_targets(args)
     if not fleet_targets:
@@ -1986,7 +1997,9 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     emit(_render_fleet_report(fleet_result, args.format))
     if out_file is not None:
         out_file.close()
-    return 0
+    all_findings = [f for fs in fleet_result["by_target"].values() for f in fs]
+    return _gate_exit_code(args, all_findings, entries, [],
+                           fleet_result["unreadable_files"])
 
 
 def _mode_trend(args: object, entries: list, emit, out_file) -> int:
@@ -2211,6 +2224,9 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     _corpus_hash_val: str | None = None
     _cache_hit = False
     findings: list[dict] = []
+    # ids of --plan-json / --state-json findings: they come from inputs
+    # the corpus hash does not cover, so they are never cached.
+    external_ids: set[int] = set()
     parse_fallback_files: list[dict] = []
     if getattr(args, "cache", False) and diff_files is None:
         # Hash the FULL scanned-file set (.tf + the extra workflow-YAML /
@@ -2275,6 +2291,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 file=sys.stderr,
             )
         findings.extend(plan_findings)
+        external_ids.update(id(f) for f in plan_findings)
 
     # Drift mode — re-evaluate rules against `terraform show -json
     # state.tfstate` output. R30.12 — closes the gap between HCL intent
@@ -2306,6 +2323,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 file=sys.stderr,
             )
         findings.extend(state_findings)
+        external_ids.update(id(f) for f in state_findings)
 
     # Corpus-level checks run against all files (even in diff mode)
     if not _cache_hit:
@@ -2318,10 +2336,12 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             ]
         findings.extend(corpus_findings)
 
-        # Persist to cache after all per-file + corpus findings are collected
-        # (before plan / registry findings which require external inputs).
+        # Persist the per-file + corpus findings only: plan / state
+        # findings depend on external inputs, and a later run without them
+        # would otherwise replay them from the cache.
         if _cache_path and _corpus_hash_val:
-            _save_scan_cache(_cache_path, _corpus_hash_val, findings,
+            _save_scan_cache(_cache_path, _corpus_hash_val,
+                             [f for f in findings if id(f) not in external_ids],
                              parse_fallback_files=parse_fallback_files)
 
     return findings, parse_fallback_files
@@ -2568,6 +2588,16 @@ def _add_target_args(ap: argparse.ArgumentParser) -> None:
         help=(
             "Path to .tf-analyze.yaml project config file. "
             "Default: auto-discover in target directory."
+        ),
+    )
+    ap.add_argument(
+        "--no-project-config",
+        action="store_true",
+        help=(
+            "Ignore .tf-analyze.yaml. In CI on untrusted pull requests the "
+            "scanned repo controls that file, and its ignore_rules / "
+            "ignore_paths / rules_dir can switch the gate off; pair with "
+            "--no-suppress for the ignore file and inline comments."
         ),
     )
 
@@ -3164,7 +3194,10 @@ def main():
         _project_config_target = Path(args.targets[0]).resolve()
     else:
         _project_config_target = Path.cwd()
-    project_config = _load_project_config(_project_config_target)
+    project_config = (
+        {} if args.no_project_config
+        else _load_project_config(_project_config_target)
+    )
 
     # Resolve extra_rules_dir from project config
     _extra_rules_dir: Path | None = None
@@ -3309,11 +3342,13 @@ def main():
     # collected here so we don't have to re-read text in pass 2.
     all_text = {}
     file_inline_suppressions: dict[str, dict[int, set[str]]] = {}
+    unreadable_files: list[str] = []
     for fp in tf_files:
         try:
             text = _read_tf_source(fp)
         except Exception as e:
             print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            unreadable_files.append(str(fp))
             continue
         all_text[fp] = text
         # JSON has no comments: a `# tf-analyze:ignore` in rendered
@@ -3331,6 +3366,7 @@ def main():
             extra_text[fp] = _read_normalized(fp)
         except Exception as e:
             print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            unreadable_files.append(str(fp))
 
     # Provider/Terraform-version-aware filter: entries with `applies_when`
     # are skipped when the target's required_providers / required_version
@@ -3564,7 +3600,8 @@ def main():
         _pr_review_mode(args, findings, entries)
         if _out_file is not None:
             _out_file.close()
-        sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files))
+        sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files,
+                                 unreadable_files))
 
     if getattr(args, "gen_tests", None):
         written = generate_tftest(findings, entries, Path(args.gen_tests))
@@ -3687,7 +3724,8 @@ def main():
         _out_file.close()
 
     # Exit code for CI gating
-    _rc = _gate_exit_code(args, _gate_findings, entries, parse_fallback_files)
+    _rc = _gate_exit_code(args, _gate_findings, entries, parse_fallback_files,
+                          unreadable_files)
     if _rc:
         sys.exit(_rc)
 

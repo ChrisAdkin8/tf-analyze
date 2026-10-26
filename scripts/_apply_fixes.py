@@ -192,6 +192,22 @@ def _line_opens_finding_resource(line: str, resource_addr: str) -> bool:
     return m.group(1) == rtype and m.group(2) == rname
 
 
+def _unsafe_write_reason(path: Path, roots: list[Path]) -> str | None:
+    """Why patching `path` (and writing its ``.bak``) is unsafe, or None.
+
+    A scanned repo is untrusted input: a symlinked ``main.tf`` or
+    ``main.tf.bak`` would make the patcher write through the link to any
+    file the user can write (e.g. ``main.tf.bak -> ~/.bashrc``)."""
+    bak = Path(str(path) + ".bak")
+    if path.is_symlink():
+        return "file is a symlink"
+    if bak.is_symlink() or (bak.exists() and not bak.is_file()):
+        return f"{bak.name} is a symlink or not a regular file"
+    if roots and not any(path.resolve().is_relative_to(r.resolve()) for r in roots):
+        return "file resolves outside the scan target"
+    return None
+
+
 def handle_apply_fixes(
     args: object,
     findings: list[dict],
@@ -211,6 +227,7 @@ def handle_apply_fixes(
     below more reliable on complex rules.
     """
     entry_map = {e["id"]: e for e in entries}
+    roots = [Path(t) for t in getattr(args, "targets", None) or []]
 
     by_file: dict[str, list[dict]] = {}
     for f in findings:
@@ -237,6 +254,10 @@ def handle_apply_fixes(
         # A `.tf.json` file is scanned as rendered HCL; an HCL fix snippet
         # cannot be spliced into JSON, so it is reported but not patched.
         if path.name.endswith(".tf.json"):
+            continue
+        unsafe = _unsafe_write_reason(path, roots)
+        if unsafe:
+            print(f"WARN: apply-fixes: skipping {file_path}: {unsafe}", file=sys.stderr)
             continue
 
         with open(path) as fh:

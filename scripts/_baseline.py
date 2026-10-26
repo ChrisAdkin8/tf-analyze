@@ -187,9 +187,9 @@ def _load_report(path: Path, what: str) -> tuple[list[dict], Path | None] | None
 def _pair_findings(
     prior: list[dict], current: list[dict],
     prior_target: Path | None, target: Path | None,
-) -> tuple[set[int], set[int]]:
+) -> tuple[dict[int, int], set[int]]:
     """Pair prior and current findings that are the same finding; return
-    ``(paired current indices, paired prior indices)``.
+    ``({current index: paired prior index}, paired prior indices)``.
 
     Same finding = same rule, same file (relative to each report's
     target) and same resource (see `_resource_key`). The line is *not* part of it — code
@@ -205,7 +205,7 @@ def _pair_findings(
                _resource_key(f.get("resource", "")))
         groups.setdefault(key, []).append((f.get("line") or 0, i))
     unrelativised = [k for k in groups if k[1].startswith("/")]
-    paired_cur: set[int] = set()
+    paired_cur: dict[int, int] = {}
     paired_prior: set[int] = set()
     order = sorted(range(len(current)), key=lambda i: current[i].get("line") or 0)
     for exact in (True, False):
@@ -233,7 +233,7 @@ def _pair_findings(
                 ])
             if candidates:
                 _, pi = min(candidates)
-                paired_cur.add(ci)
+                paired_cur[ci] = pi
                 paired_prior.add(pi)
     return paired_cur, paired_prior
 
@@ -255,6 +255,9 @@ def apply_baseline(
     scan `target` (the baseline's own recorded target for its side), and
     resource — not the line, so adding a line above a baselined finding
     or checking the repo out somewhere else does not make it "new".
+    A paired finding whose urgency is now higher than the baseline's
+    (e.g. a security group moving from port 443 to 22) is retained: the
+    baseline accepted the old risk, not the worse one.
 
     A missing or unreadable baseline returns ``(current, [])`` plus a
     stderr warning — better to surface noisily than silently pass.
@@ -264,9 +267,23 @@ def apply_baseline(
         return current, []
     prior, prior_target = loaded
     paired, _ = _pair_findings(prior, current, prior_target or target, target)
+    for ci, pi in list(paired.items()):
+        was, now = _urgency_rank(prior[pi]), _urgency_rank(current[ci])
+        if was >= 0 and now > was:
+            del paired[ci]
     retained = [f for i, f in enumerate(current) if i not in paired]
     suppressed = [f for i, f in enumerate(current) if i in paired]
     return retained, suppressed
+
+
+_URGENCY_RANK = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+
+
+def _urgency_rank(finding: dict) -> int:
+    """A finding's urgency as a number; -1 when it carries none (an old
+    report, or a finding not yet enriched). A baseline finding with no
+    urgency is never compared, so old baselines keep suppressing."""
+    return _URGENCY_RANK.get(str(finding.get("urgency") or "").upper(), -1)
 
 
 def compare_reports(

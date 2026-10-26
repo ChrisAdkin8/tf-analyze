@@ -136,6 +136,10 @@ File containing one target directory path per line (for --mode fleet).
 
 Path to .tf-analyze.yaml project config file. Default: auto-discover in target directory.
 
+### `--no-project-config`
+
+Ignore .tf-analyze.yaml. In CI on untrusted pull requests the scanned repo controls that file, and its ignore_rules / ignore_paths / rules_dir can switch the gate off; pair with --no-suppress for the ignore file and inline comments.
+
 ### `--init`
 
 Create .tf-analyze.yaml and .tf-analyze-rules/CUSTOM-EXAMPLE-001.yaml in the target directory, then exit.

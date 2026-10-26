@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -59,9 +60,11 @@ def fleet_scan(
           "by_target": {str(target): [findings]},
           "fleet_wide": [findings with fleet_count > 1],
           "summary": {str(target): int},
+          "unreadable_files": [str(path)],
         }
     """
     by_target: dict[str, list[dict]] = {}
+    unreadable_files: list[str] = []
     for target in targets:
         root = target.resolve()
         tf_files = [
@@ -74,8 +77,9 @@ def fleet_scan(
         for fp in tf_files:
             try:
                 all_text[fp] = read_normalized(fp)
-            except Exception:
-                continue
+            except Exception as e:
+                print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+                unreadable_files.append(str(fp))
         target_findings = detect_corpus(target, all_text, entries)
         for fp, text in all_text.items():
             target_findings.extend(detect_in_file(fp, text, entries))
@@ -108,6 +112,7 @@ def fleet_scan(
         "by_target": by_target,
         "fleet_wide": fleet_wide,
         "summary": {t: len(fs) for t, fs in by_target.items()},
+        "unreadable_files": unreadable_files,
     }
 
 
