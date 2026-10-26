@@ -64,7 +64,7 @@ def test_second_target_is_not_silently_ignored(tmp_path) -> None:
 def test_empty_target_warns(tmp_path) -> None:
     proc = _run("--target", str(tmp_path))
     assert proc.returncode == 0
-    assert "no .tf files found" in proc.stderr
+    assert "no .tf / .tf.json files found" in proc.stderr
 
 
 def test_fleet_missing_target_is_an_error(tmp_path) -> None:

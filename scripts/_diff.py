@@ -118,7 +118,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         # 30-second timeout. A None return means the call hung past
         # the cap — report the diff as failed (caller: full scan).
         result = _run_git(
-            ["git", "diff", "--name-only", f"{diff_base}...HEAD", "--", "*.tf"],
+            ["git", "diff", "--name-only", f"{diff_base}...HEAD", "--", "*.tf", "*.tf.json"],
             target, text=True,
         )
         if result is None:
@@ -126,7 +126,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         if result.returncode != 0:
             # Fall back to diff against working tree
             result = _run_git(
-                ["git", "diff", "--name-only", diff_base, "--", "*.tf"],
+                ["git", "diff", "--name-only", diff_base, "--", "*.tf", "*.tf.json"],
                 target, text=True,
             )
             if result is None:
@@ -145,7 +145,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
                 return None
         # Also include untracked .tf files
         untracked = _run_git(
-            ["git", "ls-files", "--others", "--exclude-standard", "--", "*.tf"],
+            ["git", "ls-files", "--others", "--exclude-standard", "--", "*.tf", "*.tf.json"],
             target, text=True,
         )
         if untracked is None:

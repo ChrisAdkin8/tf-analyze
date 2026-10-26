@@ -70,6 +70,7 @@ py-modules = [
     "_policy",
     "_registry",
     "_scoring",
+    "_tfjson",
     "_threat_intel",
     "_verify",
     "_versions",
