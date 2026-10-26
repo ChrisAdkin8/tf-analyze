@@ -41,20 +41,20 @@ keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, c
 
 ## What this checks
 
-1. **`grep`** matching `/"Principal"\s*:\s*"\*"/` — _a textual regex matched somewhere in the file._
-  IAM assume role policy with Principal = "*"
+1. **`iam_json_policy_analysis`** — check: `public_principal` — _an inline `policy = jsonencode({...})` Allow statement matches the listed check._
+  The role's trust policy (`assume_role_policy`, as `jsonencode`,
+heredoc or JSON string) has an Allow statement whose `Principal`
+is `"*"` or has a `"*"` value (`{ AWS = "*" }`).
 2. **`grep`** matching `/principals\s*\{[^}]*type\s*=\s*"\*"/` — _a textual regex matched somewhere in the file._
   aws_iam_role inline principals block with type = "*"
-3. **`grep`** matching `/Principal\s*=\s*"\*"/` — _a textual regex matched somewhere in the file._
-  IAM assume role policy Principal = "*" in jsonencode HCL object syntax
 
 ## Why it likely fired
 
-IAM assume role policy with Principal = "*"
+The role's trust policy (`assume_role_policy`, as `jsonencode`,
+heredoc or JSON string) has an Allow statement whose `Principal`
+is `"*"` or has a `"*"` value (`{ AWS = "*" }`).
 
 aws_iam_role inline principals block with type = "*"
-
-IAM assume role policy Principal = "*" in jsonencode HCL object syntax
 
 ## Adversarial scenario
 

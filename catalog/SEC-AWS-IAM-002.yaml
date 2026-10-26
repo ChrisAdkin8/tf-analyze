@@ -7,21 +7,21 @@ cis:
   - "1.16"
 status: active
 patterns:
-  - kind: grep
-    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
-    file_glob: "**/*.tf"
-    regex: '"Principal"\s*:\s*"\*"'
-    description: IAM assume role policy with Principal = "*"
+  - kind: iam_json_policy_analysis
+    check: public_principal
+    resources:
+      - aws_iam_role
+    args:
+      - assume_role_policy
+    description: |
+      The role's trust policy (`assume_role_policy`, as `jsonencode`,
+      heredoc or JSON string) has an Allow statement whose `Principal`
+      is `"*"` or has a `"*"` value (`{ AWS = "*" }`).
   - kind: grep
     text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     file_glob: "**/*.tf"
     regex: 'principals\s*\{[^}]*type\s*=\s*"\*"'
     description: aws_iam_role inline principals block with type = "*"
-  - kind: grep
-    text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
-    file_glob: "**/*.tf"
-    regex: 'Principal\s*=\s*"\*"'
-    description: IAM assume role policy Principal = "*" in jsonencode HCL object syntax
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |

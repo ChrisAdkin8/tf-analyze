@@ -15,6 +15,23 @@ mitre:
 patterns:
   - kind: iam_json_policy_analysis
     check: public_principal
+    resources:
+      - aws_s3_bucket_policy
+      - aws_sns_topic_policy
+      - aws_sqs_queue_policy
+      - aws_kms_key
+      - aws_secretsmanager_secret
+      - aws_secretsmanager_secret_policy
+      - aws_ecr_repository_policy
+      - aws_glacier_vault
+      - aws_elasticsearch_domain_policy
+      - aws_opensearch_domain_policy
+      - aws_iam_role_policy
+      - aws_iam_policy
+    args:
+      - policy
+      - access_policy
+      - access_policies
     description: |
       Inline JSON policy includes an Allow statement whose `Principal`
       is `"*"` (or any sub-key whose value contains `"*"`). This makes

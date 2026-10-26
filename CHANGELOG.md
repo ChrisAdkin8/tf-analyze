@@ -5,6 +5,38 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 43 — IAM policy rules read the parse tree — 2026-10-26
+
+The IAM rules missed the most common ways policies are written. Policies
+are now read from the parse tree (`scripts/_iam_policy.py`) into one
+statement model shared by both rule kinds:
+
+- **`jsonencode({...})` in `terraform fmt` style** (newline-separated
+  attributes, no commas — the registry's own examples) and **any policy
+  containing a reference** (`Resource = aws_s3_bucket.b.arn`) were
+  dropped silently by the regex HCL→JSON conversion. Terragoat's
+  `aws_iam_user_policy.human_admin` (`Action = "*"`, `Resource = "*"`)
+  now raises SEC-AWS-IAM-JSON-001/003.
+- **Heredoc and quoted-JSON policies** and **`inline_policy` blocks** on
+  `aws_iam_role` are analysed (`iam_json_policy_analysis`, new `args`
+  pattern field).
+- **`dynamic "statement"`** in `aws_iam_policy_document` is analysed;
+  policy-document findings point at the `statement` line (they were one
+  line early, on the `data` header).
+- **SEC-AWS-IAM-002** (CRITICAL) is a structured check of
+  `aws_iam_role.assume_role_policy` instead of two text patterns, so
+  `Principal = { AWS = "*" }` / `{ AWS = ["*"] }` are caught.
+- **SEC-AWS-IAM-JSON-004** now covers resource policies — S3 bucket, SNS,
+  SQS, KMS key, Secrets Manager, ECR, Glacier and OpenSearch policies —
+  where a public principal actually exposes a resource.
+- Expressions stay `"${...}"` and never match a literal `"*"`: a wildcard
+  behind a variable is not reported. Deny statements never fire.
+- The regex fallback (unparseable files) handles the same `fmt` style,
+  comments and references, and shares the statement checks with the tree
+  path.
+
+---
+
 ## Round 42 — Scanned content can no longer hide findings or escape the target — 2026-10-26
 
 The scanner runs on untrusted Terraform (a pull request from a fork, a
