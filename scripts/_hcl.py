@@ -221,7 +221,52 @@ def _parse_tf_cached(text: str) -> tuple[dict | None, str | None]:
         return _hcl2.loads(text.lstrip("﻿"), with_meta=True), None
     except Exception as e:  # lark raises a family of exception types
         first = str(e).strip().splitlines()[0] if str(e).strip() else ""
-        return None, f"{type(e).__name__}: {first}"[:200]
+        error = f"{type(e).__name__}: {first}"[:200]
+    # python-hcl2's grammar rejects a conditional whose `?` / `:` starts a
+    # new line inside parentheses — valid HCL, and one such local sent the
+    # whole file to the regex fallback (losing a SEC-AWS-SG-001 finding
+    # elsewhere in it). Retry once with those continuations joined.
+    joined = _join_conditional_continuations(text)
+    if joined != text:
+        try:
+            return _hcl2.loads(joined.lstrip("﻿"), with_meta=True), None
+        except Exception:
+            pass
+    return None, error
+
+
+def _join_conditional_continuations(text: str) -> str:
+    """`text` with each line break that precedes a `?` / `:` inside
+    parentheses replaced by a space. The removed breaks are re-added at
+    the end of the line holding the closing `)`, so every later line keeps
+    its number (block line metadata stays right)."""
+    stripped = mask_comments_and_heredocs(text)
+    code = list(stripped)
+    i = 0
+    while (i := stripped.find('"', i)) != -1:  # blank string contents
+        end = _string_end(text, i)
+        for k in range(i + 1, max(i + 1, end - 1)):
+            if code[k] != "\n":
+                code[k] = " "
+        i = max(end, i + 1)
+    masked = "".join(code)
+    out = list(text)
+    pos = 0
+    for m in re.finditer(r"\(", masked):
+        if m.start() < pos:
+            continue
+        close = brace_walk(text, m.start(), opens="(", closes=")")
+        if close is None:
+            continue
+        breaks = [b.start() for b in re.finditer(r"\n(?=[ \t]*[?:](?!:))", masked[m.start():close])]
+        if breaks:
+            for b in breaks:
+                out[m.start() + b] = " "
+            eol = text.find("\n", close)
+            eol = len(text) if eol < 0 else eol
+            out[eol - 1] = out[eol - 1] + "\n" * len(breaks) if eol > 0 else out[eol - 1]
+        pos = close
+    return "".join(out)
 
 
 def parse_tf(text: str) -> tuple[dict | None, str | None]:
@@ -513,52 +558,44 @@ def strip_hcl_context(text: str) -> str:
     ``#``/``//`` even inside a string (``x = "http://foo"`` lost everything
     after ``//``) and missed a comment that immediately followed a closing
     quote (``v = "x"# c``). HCL has only double-quoted strings, so quote
-    tracking is double-quote + backslash-escape only — shared lexing with
-    ``brace_walk``.
+    tracking is double-quote + backslash-escape only (`_string_end`), and
+    heredoc bodies are skipped whole — a quote inside a `user_data`
+    script used to flip the string state for the rest of the file.
     """
     out = list(text)
-    in_dq = in_line = in_block = False
-    prev = ""
-    i, n = 0, len(text)
+    n = len(text)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, min(b, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    i = 0
     while i < n:
         ch = text[i]
         nxt = text[i + 1] if i + 1 < n else ""
-        if in_line:
-            if ch == "\n":
-                in_line = False
-            else:
-                out[i] = " "
-            prev = ch
-            i += 1
-            continue
-        if in_block:
-            close = (prev == "*" and ch == "/")
-            if ch != "\n":
-                out[i] = " "
-            in_block = not close
-            prev = "" if close else ch  # consume so the closing `/` is inert
-            i += 1
-            continue
-        if in_dq:
-            if ch == '"' and prev != "\\":
-                in_dq = False
-            prev = ch
-            i += 1
-            continue
-        # outside any string/comment
-        if ch == '"':
-            in_dq = True
-        elif ch == "#":
-            in_line = True
-            out[i] = " "
-        elif ch == "/" and nxt == "/":
-            in_line = True
-            out[i] = " "
+        if ch == "#" or (ch == "/" and nxt == "/"):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            blank(i, j)
+            i = j
         elif ch == "/" and nxt == "*":
-            in_block = True
-            out[i] = " "
-        prev = ch
-        i += 1
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            blank(i, j)
+            i = j
+        elif ch == '"':
+            # Escape- and `${...}`-aware: `"C:\\\\"` closes where it should.
+            i = _string_end(text, i)
+        elif ch == "<" and nxt == "<" and (hd := _HEREDOC_START_RE.match(text, i)):
+            # Heredoc text is kept (secret scanning reads it) but skipped
+            # whole, so a `"` or `#` in a script cannot flip the string /
+            # comment state for the rest of the file.
+            term = re.compile(rf'(?m)^[ \t]*{re.escape(hd.group(1))}[ \t]*\r?$')
+            t = term.search(text, hd.end())
+            i = n if t is None else t.end()
+        else:
+            i += 1
     return "".join(out)
 
 
@@ -654,11 +691,15 @@ def brace_walk(
                 in_block_comment = False
                 ch = ""  # consume so this `/` can't re-open a token
         elif in_dq:
-            # `\\<char>` neutralises a quote's toggle. Tracking only the
-            # immediate prior byte is sufficient for HCL scalar strings:
-            # a literal backslash is `\\\\` and the run is consumed
-            # left-to-right by this same flag.
-            if ch == '"' and prev != "\\":
+            # A backslash escapes the next character, which is skipped
+            # whole: checking only the previous byte left `"C:\\\\"` (an
+            # escaped backslash, then the closing quote) open to the end
+            # of the text.
+            if ch == "\\":
+                prev = ""
+                i += 2
+                continue
+            if ch == '"':
                 in_dq = False
         elif ch == '"':
             in_dq = True

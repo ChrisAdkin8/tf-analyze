@@ -22,11 +22,13 @@ import re
 from pathlib import Path
 
 from _hcl import (
+    _string_end,
     find_blocks,
     block_arg_value,
     block_has_arg,
     brace_walk,
     block_has_nested_path,
+    mask_comments_and_heredocs,
 )
 from detect import (
     InFileCtx,
@@ -127,13 +129,16 @@ def _detect_precondition_missing_error_message(c: InFileCtx) -> list[dict]:
     a generic "condition failed" with no diagnostic — useless on call.
     """
     pre_re = re.compile(r'(?m)^\s*(precondition|postcondition)\s*\{')
+    # Match on the code only (comments and heredocs blanked, offsets kept):
+    # a `precondition {` inside `/* */` is not a block.
+    code = mask_comments_and_heredocs(c.text)
     out: list[dict] = []
-    for m in pre_re.finditer(c.text):
+    for m in pre_re.finditer(code):
         end_after = brace_walk(c.text, m.end() - 1)
         if end_after is None:
             continue
         end = end_after - 1
-        body = c.text[m.end():end]
+        body = code[m.end():end]
         if not re.search(r'(?m)^\s*error_message\s*=', body):
             line_no = c.text.count("\n", 0, m.start()) + 1
             out.append({
@@ -240,6 +245,47 @@ def _detect_count_bool_pattern(c: InFileCtx) -> list[dict]:
     return out
 
 
+def _ignore_changes_items(body: str) -> list[str] | None:
+    """The items of a resource's `lifecycle { ignore_changes = [...] }`, or
+    None. The block and the list are found with `brace_walk` (string-,
+    comment- and nesting-aware): lazy regexes stopped at the first `}`
+    (a `precondition {}` before `ignore_changes`) or `]` (an item such
+    as `tags["Owner"]`) and under-counted. Items split on commas outside
+    strings and brackets."""
+    code = mask_comments_and_heredocs(body)
+    lc = re.search(r"(?m)^\s*lifecycle\s*\{", code)
+    if not lc:
+        return None
+    lc_end = brace_walk(body, lc.end() - 1)
+    if lc_end is None:
+        return None
+    ic = re.search(r"(?m)^\s*ignore_changes\s*=\s*\[", code[lc.end():lc_end])
+    if not ic:
+        return None
+    open_at = lc.end() + ic.end() - 1
+    close_after = brace_walk(body, open_at, opens="[", closes="]")
+    if close_after is None:
+        return None
+    inner = body[open_at + 1:close_after - 1]
+    items: list[str] = []
+    depth, start, i = 0, 0, 0
+    while i < len(inner):
+        ch = inner[i]
+        if ch == '"':
+            i = _string_end(inner, i)
+            continue
+        if ch in "[({":
+            depth += 1
+        elif ch in "])}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            items.append(inner[start:i].strip())
+            start = i + 1
+        i += 1
+    items.append(inner[start:].strip())
+    return [it for it in items if it]
+
+
 @_register_infile("ignore_changes_overuse")
 def _detect_ignore_changes_overuse(c: InFileCtx) -> list[dict]:
     """``ignore_changes_overuse`` — resources whose
@@ -250,41 +296,19 @@ def _detect_ignore_changes_overuse(c: InFileCtx) -> list[dict]:
     mode at LOW so reviewers see the signal without gating CI.
 
     Round-30.9 audit fix #20 — the comma-split is quote-aware so a
-    value like ``["a,b", "c"]`` correctly counts as two items.
+    value like ``["a,b", "c"]`` correctly counts as two items
+    (`_ignore_changes_items`).
     """
     max_attrs = int(c.pat.get("max_attrs", 5))
     out: list[dict] = []
     for blk in find_blocks(c.text, RESOURCE_START):
         body = blk["body"]
-        lc = re.search(r"(?ms)lifecycle\s*\{(.*?)^\s*\}", body)
-        if not lc:
+        items = _ignore_changes_items(body)
+        if items is None:
             continue
-        ic = re.search(r"ignore_changes\s*=\s*\[(.*?)\]", lc.group(1), re.DOTALL)
-        if not ic:
-            continue
-        inner = ic.group(1)
         # ROB-DRIFT-002 owns the wildcard case.
-        if re.search(r"['\"]\*['\"]", inner) or "[*]" in inner:
+        if any(re.fullmatch(r'["\']?\*["\']?', it) or "[*]" in it for it in items):
             continue
-        items: list[str] = []
-        buf: list[str] = []
-        in_dq = False
-        prev = ""
-        for ch in inner:
-            if ch == '"' and prev != "\\":
-                in_dq = not in_dq
-                buf.append(ch)
-            elif ch == "," and not in_dq:
-                piece = "".join(buf).strip()
-                if piece:
-                    items.append(piece)
-                buf.clear()
-            else:
-                buf.append(ch)
-            prev = ch
-        tail = "".join(buf).strip()
-        if tail:
-            items.append(tail)
         if len(items) > max_attrs:
             btype, bname = blk["groups"]
             out.append({
