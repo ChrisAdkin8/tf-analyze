@@ -4,13 +4,16 @@
 # scanner at tfanalyze.com/scan/<owner>/<repo> doesn't count this repo's
 # deliberately-vulnerable test corpora as production findings.
 #
-# Three directories are excluded:
+# Four directories are excluded:
 #   * examples/   — showcase corpora (terragoat clone, attack-graph-demo,
 #                   module-reuse-demo) shipped to exercise the engine end
 #                   to end. Always intended to fire dozens of findings.
 #   * fixtures/   — single-rule positive (and `_clean` negative) fixtures
 #                   used by tests/test_fixtures.py.
 #   * tasks/      — local planning notes; never contain Terraform.
+#   * tests/realworld_secure/ — secure idioms the engine still flags
+#                   (tests/test_realworld_secure.py lists the known false
+#                   positives until each rule is fixed).
 #
 # Without these excludes, scanning the repo against itself produces ~2700
 # findings (mostly from terragoat) and an F grade — actively misleading
@@ -19,3 +22,4 @@ ignore_paths:
   - examples/
   - fixtures/
   - tasks/
+  - tests/realworld_secure/

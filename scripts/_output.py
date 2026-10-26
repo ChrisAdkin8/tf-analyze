@@ -420,13 +420,14 @@ def _sarif_taxonomies(entries: list[dict]) -> list[dict]:
 def _sarif_rule_relationships(entry: dict) -> list[dict]:
     """Per-rule taxonomy references. Each entry produces one
     `relationships` element pointing at the matching taxon defined in
-    the run's `taxonomies` block."""
+    the run's `taxonomies` block. A `reportingDescriptorReference` target
+    takes `id` + `toolComponent` only; the taxon's `name` lives in
+    `taxonomies` (a `name` here fails the SARIF 2.1.0 schema)."""
     rels: list[dict] = []
     for cid in (entry.get("cwe") or []):
         rels.append({
             "target": {
                 "id": str(cid).removeprefix("CWE-"),
-                "name": str(cid),
                 "toolComponent": {"name": "CWE", "guid": _SARIF_TAXONOMY_DEFS["CWE"]["guid"]},
             },
             "kinds": ["relevant"],
@@ -435,7 +436,6 @@ def _sarif_rule_relationships(entry: dict) -> list[dict]:
         rels.append({
             "target": {
                 "id": str(tid),
-                "name": str(tid),
                 "toolComponent": {"name": "MITRE-ATT&CK", "guid": _SARIF_TAXONOMY_DEFS["MITRE-ATT&CK"]["guid"]},
             },
             "kinds": ["relevant"],
@@ -444,7 +444,6 @@ def _sarif_rule_relationships(entry: dict) -> list[dict]:
         rels.append({
             "target": {
                 "id": str(did),
-                "name": str(did),
                 "toolComponent": {"name": "MITRE-D3FEND", "guid": _SARIF_TAXONOMY_DEFS["MITRE-D3FEND"]["guid"]},
             },
             # D3FEND is a defensive countermeasure — different relationship
@@ -457,7 +456,6 @@ def _sarif_rule_relationships(entry: dict) -> list[dict]:
         rels.append({
             "target": {
                 "id": str(cis),
-                "name": f"CIS {cis}",
                 "toolComponent": {"name": "CIS", "guid": _SARIF_TAXONOMY_DEFS["CIS"]["guid"]},
             },
             "kinds": ["relevant"],
