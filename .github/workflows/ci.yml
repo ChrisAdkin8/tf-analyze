@@ -35,7 +35,8 @@ jobs:
         # required by test_compliance_owasp_iac.py and
         # test_readme_drift.py (both `import yaml` directly, not via
         # `pytest.importorskip`, so a missing dep halts collection).
-        run: pip install pytest pytest-xdist pytest-timeout hypothesis pyyaml --quiet
+        # jsonschema validates SARIF output (test_sarif_schema.py).
+        run: pip install pytest pytest-xdist pytest-timeout hypothesis pyyaml jsonschema --quiet
       - name: Run full pytest suite
         # Audit item 31 — previously this step ran three named files,
         # leaving 43 test modules unexercised in CI. The full suite is
@@ -154,7 +155,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest pytest-xdist pytest-timeout hypothesis pyyaml --quiet
+      - run: pip install pytest pytest-xdist pytest-timeout hypothesis pyyaml jsonschema --quiet
       # Serial, like the unit-tests job: tests/test_perf.py times a corpus
       # scan against a wall-clock budget, and under `-n auto` it competes
       # with the rest of the suite on a 2-4 core runner (7.1s vs a 5s

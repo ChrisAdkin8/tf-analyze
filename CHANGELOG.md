@@ -5,6 +5,31 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 52 — Guards that check answers, not just shapes — 2026-10-26
+
+The suite passed while a review found dozens of wrong answers, because
+it mostly checked that output kept its shape. Three new guards:
+
+- **SARIF is validated against the official 2.1.0 schema**
+  (`tests/test_sarif_schema.py`, schema vendored at `tests/schemas/`).
+  It caught 964 errors per run: every `relationships[].target` carried a
+  `name`, which a `reportingDescriptorReference` does not allow. Removed;
+  the taxon's name is still in `taxonomies`. `jsonschema` joins the dev /
+  CI test dependencies.
+- **Every rule's `fix_hcl` must not trigger that rule**
+  (`tests/test_fix_hcl_self_check.py`), covering the grep / module /
+  corpus kinds the `_clean` fixtures skip. Five known self-triggers are
+  strict xfails, so the list can only shrink.
+- **Secure real-world idioms must not draw HIGH / CRITICAL findings**
+  (`tests/test_realworld_secure.py`, 12 cases under
+  `tests/realworld_secure/`: pinned modules, native S3 locking, Deny
+  statements, `for_each` companions, fmt-aligned arguments …). 16 known
+  false positives across 11 cases are listed with their cause; the list
+  is exact both ways. The directory is in `.tf-analyze.yaml`
+  `ignore_paths`.
+
+---
+
 ## Round 50 — Size-aware score; one source for the version — 2026-10-26
 
 ### Score (scoring version 2)
