@@ -2,8 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /** Subset of the engine's finding shape that's needed to identify a
- * record in the baseline. The engine matches by (id, file, line,
- * resource), so any extra fields the user might paste in are ignored. */
+ * record in the baseline. The engine matches by (id, file, resource) —
+ * not the line, so a suppression survives code moving — and ignores any
+ * extra fields the user might paste in. `line` is kept for readers. */
 export interface BaselineFinding {
   id: string;
   file: string;
@@ -52,12 +53,13 @@ function write(wsFolder: string, data: BaselineFile): void {
   fs.writeFileSync(baselinePath(wsFolder), JSON.stringify(data, null, 2) + '\n', 'utf8');
 }
 
-/** Match key compatible with the engine's (id, file, line, resource)
- * suppression criterion. Keep this in sync with detect.py — if the
- * engine ever loosens the criterion, remove fields from the key here
- * to mirror it. */
+/** Match key compatible with the engine's (id, file, resource)
+ * baseline criterion (`_baseline._pair_findings`). The line is not part
+ * of it: a finding that moved is the same finding, so re-suppressing it
+ * must not add a second record and unsuppressing it must remove the
+ * one written at its old line. Keep in sync with the engine. */
 function key(f: BaselineFinding): string {
-  return [f.id, f.file, f.line, f.resource ?? ''].join('|');
+  return [f.id, f.file, f.resource ?? ''].join('|');
 }
 
 /** Add a finding to the baseline. Idempotent — re-suppressing the same

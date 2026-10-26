@@ -1587,6 +1587,14 @@ def run_trend(target: Path, entries: list[dict], lookback_days: int) -> list[dic
 
 # ---- Feature 4: GitHub PR Review Mode ----------------------------------
 
+def _report_target(args: object) -> Path | None:
+    """The resolved scan target, recorded in JSON reports so a later
+    `--baseline` / `--compare` can pair findings by target-relative path
+    whatever directory the repo is checked out in."""
+    targets = getattr(args, "targets", None)
+    return Path(targets[0]).resolve() if targets else None
+
+
 def _gate_exit_code(
     args: object, findings: list[dict], entries: list[dict],
     parse_fallback_files: list[dict],
@@ -2061,7 +2069,9 @@ def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
     if args.baseline:
         _baseline_path = Path(args.baseline)
         if _baseline_path.exists():
-            _retained, _suppressed_b = apply_baseline(findings, _baseline_path)
+            _retained, _suppressed_b = apply_baseline(
+                findings, _baseline_path, _report_target(args),
+            )
             if _suppressed_b:
                 print(
                     f"# apply-fixes: skipping {len(_suppressed_b)} baselined finding(s) "
@@ -2330,11 +2340,12 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
     _emit = emit
     # Report comparison
     if compare_target:
-        delta = compare_reports(findings, Path(compare_target))
+        delta = compare_reports(findings, Path(compare_target), _report_target(args))
         print(f"# delta: {len(delta['new'])} new, {len(delta['resolved'])} resolved, "
               f"{len(delta['unchanged'])} unchanged", file=sys.stderr)
         if args.format == "json":
             output = {
+                "target": str(_report_target(args) or ""),
                 "summary": summary,
                 "findings": findings,
                 "suppressed": suppressed_findings,
@@ -2417,7 +2428,11 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
 
         # Standard output
         if args.format == "json":
-            output_data: dict = {"summary": summary, "findings": findings}
+            output_data: dict = {
+                "target": str(_report_target(args) or ""),
+                "summary": summary,
+                "findings": findings,
+            }
             if suppressed_findings:
                 output_data["suppressed"] = suppressed_findings
             if suppressed_by_baseline:
@@ -2947,7 +2962,9 @@ def _add_comparison_args(ap: argparse.ArgumentParser) -> None:
             "Path to a baseline JSON report. Findings present in the baseline "
             "are suppressed (counted under `suppressed_by_baseline` in JSON "
             "output) so only NEW findings affect the exit code. "
-            "Match key: (id, file, line, resource). Use to ratchet a legacy "
+            "Findings match by rule, file (relative to the target) and "
+            "resource — not the line, so code moving or a different checkout "
+            "folder doesn't make a known finding new. Use to ratchet a legacy "
             "repo: snapshot today's findings, then enforce no regressions "
             "going forward."
         ),
@@ -3563,7 +3580,7 @@ def main():
     suppressed_by_baseline: list[dict] = []
     if getattr(args, "baseline", None):
         retained, suppressed_by_baseline = apply_baseline(
-            findings, Path(args.baseline)
+            findings, Path(args.baseline), _report_target(args),
         )
         if suppressed_by_baseline:
             print(

@@ -74,12 +74,13 @@ function write(wsFolder, data) {
     data.meta = { ...(data.meta ?? {}), last_updated: new Date().toISOString(), created_by: 'tf-analyze (vscode-extension)' };
     fs.writeFileSync(baselinePath(wsFolder), JSON.stringify(data, null, 2) + '\n', 'utf8');
 }
-/** Match key compatible with the engine's (id, file, line, resource)
- * suppression criterion. Keep this in sync with detect.py — if the
- * engine ever loosens the criterion, remove fields from the key here
- * to mirror it. */
+/** Match key compatible with the engine's (id, file, resource)
+ * baseline criterion (`_baseline._pair_findings`). The line is not part
+ * of it: a finding that moved is the same finding, so re-suppressing it
+ * must not add a second record and unsuppressing it must remove the
+ * one written at its old line. Keep in sync with the engine. */
 function key(f) {
-    return [f.id, f.file, f.line, f.resource ?? ''].join('|');
+    return [f.id, f.file, f.resource ?? ''].join('|');
 }
 /** Add a finding to the baseline. Idempotent — re-suppressing the same
  * finding is a no-op. Returns true if the file changed. */
