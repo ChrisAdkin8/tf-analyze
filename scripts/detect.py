@@ -620,8 +620,10 @@ PATTERN_TIME_BUDGET_S = float(os.environ.get("TF_ANALYZE_PATTERN_TIMEOUT", "5"))
 RULE_TIMEOUTS: list[dict] = []
 
 
-class _PatternTimeout(Exception):
-    pass
+class _PatternTimeout(BaseException):
+    """A `BaseException`, like `KeyboardInterrupt`, so a handler's
+    `except Exception` (the policy DSL, IAM policy decoding) cannot
+    swallow it and keep running past the budget."""
 
 
 def _raise_pattern_timeout(signum, frame):
@@ -639,21 +641,29 @@ def _call_with_budget(handler, ctx, eid: str, where: str) -> list[dict]:
         or threading.current_thread() is not threading.main_thread()
     ):
         return handler(ctx)
+    import time
     previous = signal.signal(signal.SIGALRM, _raise_pattern_timeout)
+    started = time.monotonic()
     signal.setitimer(signal.ITIMER_REAL, PATTERN_TIME_BUDGET_S)
     try:
-        return handler(ctx)
+        found = handler(ctx)
+        # Belt and braces: should anything still swallow the timeout, an
+        # overrun is recorded and its (possibly partial) findings dropped.
+        timed_out = time.monotonic() - started >= PATTERN_TIME_BUDGET_S
     except _PatternTimeout:
-        RULE_TIMEOUTS.append({"rule": eid, "file": where})
-        print(
-            f"WARN: {eid} exceeded its {PATTERN_TIME_BUDGET_S:g}s budget on {where}; "
-            f"skipped (a pattern backtracking on this input?)",
-            file=sys.stderr,
-        )
-        return []
+        timed_out = True
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
+    if not timed_out:
+        return found
+    RULE_TIMEOUTS.append({"rule": eid, "file": where})
+    print(
+        f"WARN: {eid} exceeded its {PATTERN_TIME_BUDGET_S:g}s budget on {where}; "
+        f"skipped (a pattern backtracking on this input?)",
+        file=sys.stderr,
+    )
+    return []
 
 
 _INFILE_HANDLERS: dict[str, _Callable[["InFileCtx"], list[dict]]] = {}

@@ -192,3 +192,27 @@ def test_a_slow_custom_rule_is_stopped_and_fails_the_gate(tmp_path) -> None:
     assert proc.returncode == 1, proc.stderr
     summary = json.loads(proc.stdout)["summary"]
     assert summary["rule_timeouts"][0]["rule"] == "CUSTOM-SLOW-001"
+
+
+def test_a_handler_swallowing_exceptions_cannot_outrun_the_budget(monkeypatch) -> None:
+    # Policy / IAM handlers wrap work in `except Exception: continue`; the
+    # timeout must get through them, and the next slow call must still be
+    # bounded rather than run with the alarm already spent.
+    monkeypatch.setattr(detect, "PATTERN_TIME_BUDGET_S", 0.3)
+    monkeypatch.setattr(detect, "RULE_TIMEOUTS", [])
+    slow = re.compile(r"(a+)+$")
+
+    def handler(_ctx):
+        out = []
+        for _ in range(3):
+            try:
+                slow.search("a" * 40 + "!")
+            except Exception:  # noqa: BLE001 - the shape under test
+                continue
+            out.append({"id": "X"})
+        return out
+
+    start = time.monotonic()
+    assert detect._call_with_budget(handler, None, "CUSTOM-X", "main.tf") == []
+    assert time.monotonic() - start < 5
+    assert detect.RULE_TIMEOUTS == [{"rule": "CUSTOM-X", "file": "main.tf"}]
