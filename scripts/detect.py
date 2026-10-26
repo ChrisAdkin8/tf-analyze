@@ -1494,6 +1494,36 @@ def run_trend(target: Path, entries: list[dict], lookback_days: int) -> list[dic
 
 # ---- Feature 4: GitHub PR Review Mode ----------------------------------
 
+def _gate_exit_code(
+    args: object, findings: list[dict], entries: list[dict],
+    parse_fallback_files: list[dict],
+) -> int:
+    """CI gate: 1 when a finding is at or above ``--fail-on``, or (with
+    ``--fail-on-parse-error``) a file could only be scanned in fallback
+    mode; else 0.
+
+    `findings` must be taken before INFO findings are hidden from output,
+    so ``--fail-on INFO`` sees them. A finding with no catalogue entry
+    (e.g. from ``--plan-json``) is gated on its own `urgency`.
+    """
+    if args.fail_on:
+        urgency_rank = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4, "INFO": 5}
+        threshold = urgency_rank[args.fail_on]
+        entry_map = {e["id"]: e for e in entries}
+        for f in findings:
+            urgency = _effective_urgency(f, entry_map.get(f["id"], {}))
+            if urgency_rank.get(urgency, 3) <= threshold:
+                return 1
+    if args.fail_on_parse_error and parse_fallback_files:
+        print(
+            f"ERROR: {len(parse_fallback_files)} file(s) could not be parsed "
+            f"and were scanned in fallback mode (--fail-on-parse-error)",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> None:
     """Post findings as GitHub PR inline review comments.
 
@@ -1838,6 +1868,13 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     fleet_targets = _resolve_fleet_targets(args)
     if not fleet_targets:
         print("ERROR: --mode fleet requires at least one --target or --targets-file", file=sys.stderr)
+        return 2
+    missing = [str(t) for t in fleet_targets if not Path(t).is_dir()]
+    if missing:
+        print(
+            f"ERROR: fleet target(s) not a directory: {', '.join(missing)}",
+            file=sys.stderr,
+        )
         return 2
     fleet_result = _fleet_scan(fleet_targets, entries)
     total = sum(fleet_result["summary"].values())
@@ -2518,6 +2555,14 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
         choices=["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
         help="Exit with code 1 if any finding at this urgency or above exists",
     )
+    ap.add_argument(
+        "--fail-on-parse-error",
+        action="store_true",
+        help=(
+            "Exit with code 1 if any .tf file could not be parsed and was "
+            "scanned in the less precise regex fallback mode"
+        ),
+    )
     # Suppressions are on by default; --no-suppress is the opt-out toggle.
     # An earlier `--suppress` flag was a confusing no-op (it defaulted to
     # True so passing it changed nothing) and has been removed.
@@ -3039,7 +3084,24 @@ def main():
     if args.mode == "trend":
         sys.exit(_mode_trend(args, entries, _emit, _out_file))
 
+    if len(args.targets) > 1:
+        print(
+            "ERROR: more than one --target given; only --mode fleet scans "
+            "several targets",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     target = Path(args.targets[0]).resolve()
+    # A missing or mistyped target must not scan nothing and pass a CI
+    # gate with grade A.
+    if not target.is_dir():
+        problem = "does not exist" if not target.exists() else "is not a directory"
+        print(
+            f"ERROR: --target {args.targets[0]!r} {problem} "
+            f"(pass the directory that holds the .tf files)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     # Reports directory — used for auto-compare and verify-fixed discovery
     reports_dir = (
@@ -3057,7 +3119,14 @@ def main():
     if args.diff_base or args.mode == "diff":
         base = args.diff_base or _auto_detect_base_branch(target)
         diff_files = get_diff_files(target, base)
-        if not diff_files:
+        if diff_files is None:
+            # The diff itself failed: scanning "no changed files" would
+            # pass the gate having checked nothing. Scan everything.
+            print(
+                f"WARN: could not diff against {base!r}; scanning all files",
+                file=sys.stderr,
+            )
+        elif not diff_files:
             print("# no changed .tf files in diff", file=sys.stderr)
 
     # Load suppressions. expired_suppressions is shown in the report so
@@ -3080,6 +3149,8 @@ def main():
         if ".terraform" not in p.parts
         and not _path_is_ignored(p, target, _ignore_paths)
     ]
+    if not tf_files:
+        print(f"WARN: no .tf files found under {target}", file=sys.stderr)
     if _ignore_paths:
         print(
             f"# ignore_paths active: skipping {', '.join(map(str, _ignore_paths))}",
@@ -3348,7 +3419,7 @@ def main():
         _pr_review_mode(args, findings, entries)
         if _out_file is not None:
             _out_file.close()
-        return
+        sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files))
 
     if getattr(args, "gen_tests", None):
         written = generate_tftest(findings, entries, Path(args.gen_tests))
@@ -3425,6 +3496,8 @@ def main():
     if parse_fallback_files:
         summary["parse_fallback_files"] = parse_fallback_files
 
+    _gate_findings = findings  # before INFO findings are hidden from output
+
     # INFO-tier findings (e.g. module-reuse suggestions) are advisory and
     # noisy by default. They stay in `summary["counts"]["INFO"]` for
     # context but only appear in rendered output when --show-info is set.
@@ -3469,16 +3542,9 @@ def main():
         _out_file.close()
 
     # Exit code for CI gating
-    if args.fail_on:
-        urgency_rank = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4, "INFO": 5}
-        threshold = urgency_rank.get(args.fail_on, 3)
-        entry_map = {e["id"]: e for e in entries}
-        for f in findings:
-            entry = entry_map.get(f["id"])
-            if entry:
-                finding_rank = urgency_rank.get(_effective_urgency(f, entry), 3)
-                if finding_rank <= threshold:
-                    sys.exit(1)
+    _rc = _gate_exit_code(args, _gate_findings, entries, parse_fallback_files)
+    if _rc:
+        sys.exit(_rc)
 
 
 # ---- R30.15 topic-module registration -----------------------------------

@@ -96,7 +96,7 @@ def find_latest_prior(reports_dir: Path, suffix: str = ".md") -> Path | None:
     return candidates[0] if candidates else None
 
 
-def get_diff_files(target: Path, diff_base: str) -> set[Path]:
+def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     """Set of ``.tf`` files changed between ``diff_base`` and HEAD.
 
     Three sources are unioned:
@@ -107,20 +107,22 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path]:
     * Every result is resolved against the repo's git root so the
       caller gets absolute paths that survive any later ``chdir``.
 
-    Returns an empty set when git is not on ``PATH`` (operator probably
-    invoked the engine outside a git workspace; caller can decide
-    whether to fall back to a full scan or bail).
+    Returns ``None`` when the diff could not be computed — git missing,
+    a git call timed out, or the base ref is unknown (e.g. not fetched in
+    a shallow CI checkout). An empty set means the diff ran and nothing
+    changed; the two must not be confused, or a failed diff would scan
+    nothing and pass a CI gate. The caller falls back to a full scan.
     """
     try:
         # All git calls below go through `_run_git`, which applies the
         # 30-second timeout. A None return means the call hung past
-        # the cap — degrade gracefully (empty diff → full scan).
+        # the cap — report the diff as failed (caller: full scan).
         result = _run_git(
             ["git", "diff", "--name-only", f"{diff_base}...HEAD", "--", "*.tf"],
             target, text=True,
         )
         if result is None:
-            return set()
+            return None
         if result.returncode != 0:
             # Fall back to diff against working tree
             result = _run_git(
@@ -128,7 +130,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path]:
                 target, text=True,
             )
             if result is None:
-                return set()
+                return None
             if result.returncode != 0:
                 # Both the three-dot and two-dot diffs failed — almost always
                 # a bad/unknown --diff-base ref. Don't silently parse empty
@@ -136,11 +138,11 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path]:
                 # run pass green having scanned nothing). Warn loudly.
                 print(
                     f"WARN: git diff against base {diff_base!r} failed "
-                    f"(exit {result.returncode}); no changed files resolved. "
-                    f"Check the --diff-base ref.",
+                    f"(exit {result.returncode}). Check the --diff-base ref "
+                    f"(in CI, fetch it: actions/checkout `fetch-depth: 0`).",
                     file=sys.stderr,
                 )
-                return set()
+                return None
         # Also include untracked .tf files
         untracked = _run_git(
             ["git", "ls-files", "--others", "--exclude-standard", "--", "*.tf"],
@@ -173,5 +175,5 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path]:
                     files.add(fp)
         return files
     except FileNotFoundError:
-        print("WARN: git not found, falling back to full scan", file=sys.stderr)
-        return set()
+        print("WARN: git not found", file=sys.stderr)
+        return None

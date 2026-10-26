@@ -5,6 +5,33 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 41 — CI gating fails closed — 2026-10-26
+
+Each of these let a CI gate pass having checked nothing (or less than it
+was asked to):
+
+- **A missing or non-directory `--target`** scanned nothing and exited 0
+  with grade A, so a typo in a CI path switched the gate off. It is now
+  an error (exit 2). A second `--target` outside `--mode fleet` (only the
+  first was ever scanned) is an error too, as is a missing fleet target;
+  a directory with no `.tf` files warns.
+- **A failed `--diff-base` diff** (unknown ref — the default in a shallow
+  CI checkout — no git, or a git timeout) returned "no changed files",
+  so the run scanned nothing and passed. `get_diff_files` now returns
+  `None` for a failed diff, distinct from an empty diff, and the scan
+  falls back to all files with a warning.
+- **`--mode pr-review` ignored `--fail-on`**; it now gates like a normal
+  scan.
+- **`--fail-on INFO` never saw INFO findings**: they were dropped from
+  output (without `--show-info`) before the gate ran. The gate now runs
+  on the findings from before that filter. Findings with no catalogue
+  entry are gated on their own urgency instead of skipped.
+- **New `--fail-on-parse-error`**: exit 1 when any file could only be
+  scanned in the regex fallback mode. Opt-in; parse failures were, and
+  by default still are, a warning.
+
+---
+
 ## Round 39 — Block discovery by lexer, not header regex — 2026-10-26
 
 `find_blocks` / `find_simple_blocks` now locate blocks with one lexer pass
