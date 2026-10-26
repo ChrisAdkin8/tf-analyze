@@ -596,6 +596,11 @@ class InFileCtx:
     entry: dict
     eid: str
     pat: dict
+    # Every resource block in the file's directory (module), for checks
+    # that look at a sibling resource in another file — e.g.
+    # `unless_companion`. None when the caller scans a file on its own;
+    # handlers then fall back to `resources`.
+    module_resources: list[dict] | None = None
 
 
 _INFILE_HANDLERS: dict[str, _Callable[["InFileCtx"], list[dict]]] = {}
@@ -682,8 +687,12 @@ def detect_in_file(
     text: str,
     entries: list[dict],
     var_defaults: dict | None = None,
+    module_resources: list[dict] | None = None,
 ) -> list[dict]:
     """Run per-file detection patterns against a single .tf file.
+
+    module_resources: every resource block in the file's directory (see
+    `InFileCtx.module_resources`).
 
     var_defaults: directory-scoped {var_name: default_value} map built by
     _extract_var_defaults_by_dir(). When supplied, plain `var.X` attribute
@@ -743,6 +752,7 @@ def detect_in_file(
                 entry=entry,
                 eid=eid,
                 pat=pat,
+                module_resources=module_resources,
             )
             _found = _handler(_ctx)
             _apply_structured_escalation(_found, entry, resources, _vd)
@@ -2174,6 +2184,13 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     # resolved before pattern matching. A child module with several
     # callers has one table per caller (see _extract_var_contexts_by_dir).
     var_contexts_by_dir = _extract_var_contexts_by_dir(all_text)
+    # Every resource block per directory (module), for sibling-resource
+    # checks across files (`unless_companion`).
+    module_resources_by_dir: dict[str, list[dict]] = {}
+    for _fp, _text in all_text.items():
+        module_resources_by_dir.setdefault(str(_fp.parent), []).extend(
+            find_blocks(_text, RESOURCE_START)
+        )
 
     # Incremental cache: if --cache is set and the corpus hash matches the
     # stored cache, return the cached findings immediately (skipping the full
@@ -2208,7 +2225,10 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 continue
             seen: set[tuple] = set()
             for var_defaults in var_contexts_by_dir.get(str(fp.parent)) or [{}]:
-                for f in detect_in_file(fp, text, entries, var_defaults=var_defaults):
+                for f in detect_in_file(
+                    fp, text, entries, var_defaults=var_defaults,
+                    module_resources=module_resources_by_dir.get(str(fp.parent)),
+                ):
                     key = (f.get("id"), f.get("line"), f.get("resource"))
                     if key not in seen:
                         seen.add(key)

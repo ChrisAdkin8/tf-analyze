@@ -286,8 +286,12 @@ def test_static_and_plan_agree_on_every_fixture() -> None:
     by_type: dict[str, list[dict]] = collections.defaultdict(list)
     for e in CATALOG:
         for p in e.get("patterns") or []:
+            # Skipped: patterns that depend on other resources or raw text
+            # (one resource at a time cannot model them; plan-mode
+            # companions are tested in test_s3_split_resources.py).
             if (p.get("kind") in ("resource_arg", "resource_missing_arg", "hcl_attr")
-                    and p.get("resource") and not p.get("suppress_if_body_contains")):
+                    and p.get("resource") and not p.get("suppress_if_body_contains")
+                    and not p.get("unless_companion")):
                 by_type[p["resource"]].append({**e, "patterns": [p]})
     checked, disagreements = 0, []
     for corpus in ("fixtures", "examples"):

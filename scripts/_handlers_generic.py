@@ -159,6 +159,32 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     return out
 
 
+def _has_companion(blk: dict, spec: dict, candidates: list[dict]) -> bool:
+    """Whether a resource of type ``spec["resource"]`` among `candidates`
+    points at `blk` through its ``spec["via"]`` argument (default
+    ``bucket``): by reference (``aws_s3_bucket.x.id``, ``.bucket``,
+    ``[0].id`` …) or by the same literal value `blk` has for that
+    argument (``bucket = "my-bucket"`` on both)."""
+    ctype = spec.get("resource")
+    via = spec.get("via", "bucket")
+    if not ctype:
+        return False
+    btype, bname = blk["groups"]
+    ref = re.compile(rf'(?<![\w.]){re.escape(btype)}\.{re.escape(bname)}(?![\w-])')
+    literal = block_arg_value(blk["body"], via)
+    if literal and literal.startswith(("var.", "local.", "data.", "${")):
+        literal = None
+    for cand in candidates:
+        if cand["groups"][0] != ctype:
+            continue
+        value = block_arg_value(cand["body"], via)
+        if not value:
+            continue
+        if ref.search(value) or (literal is not None and value == literal):
+            return True
+    return False
+
+
 @_register_infile("resource_missing_arg")
 def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
     """``resource_missing_arg`` — fire when the named argument (or
@@ -177,6 +203,13 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
     escape hatch, and the AWS ``default_tags`` propagation (R30.0.12 —
     when the dir's AWS provider declares default_tags, ``tags`` /
     ``tags.*`` paths on aws_* resources are silently provided).
+
+    ``name_regex`` limits the rule to resources whose label, ``name`` or
+    ``bucket`` matches. ``unless_companion: {resource: T, via: A}`` skips
+    a resource that a ``T`` in the same module points at through its
+    ``A`` argument — the split-resource form of a setting, e.g. AWS
+    provider v4+'s ``aws_s3_bucket_versioning { bucket =
+    aws_s3_bucket.x.id }`` instead of an inline ``versioning`` block.
     """
     pat = c.pat
     if "resource" not in pat:
@@ -193,6 +226,8 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
         return []
     suppress_if = pat.get("suppress_if")
     suppress_body_contains = pat.get("suppress_if_body_contains")
+    name_re = re.compile(pat["name_regex"]) if pat.get("name_regex") else None
+    companion = pat.get("unless_companion")
     out: list[dict] = []
     for blk in c.resources:
         btype, bname = blk["groups"]
@@ -201,6 +236,19 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
         if _resource_is_count_zero(blk["body"], c.var_defaults):
             continue
         if suppress_body_contains and suppress_body_contains in blk["body"]:
+            continue
+        if name_re is not None and not any(
+            name_re.search(n) for n in (
+                bname,
+                block_arg_value(blk["body"], "name") or "",
+                block_arg_value(blk["body"], "bucket") or "",
+            )
+        ):
+            continue
+        if companion and _has_companion(
+            blk, companion,
+            c.resources if c.module_resources is None else c.module_resources,
+        ):
             continue
         # Parse tree when the file parsed, else the regex fallback with
         # the same top-level / every-instance rules (_hcl.resource_has_path).

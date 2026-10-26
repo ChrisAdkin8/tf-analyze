@@ -28,7 +28,13 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_s3_bucket
     nested_path: server_side_encryption_configuration.rule
-    description: S3 bucket with legacy inline encryption block missing (pre-v4 provider)
+    unless_companion:
+      resource: aws_s3_bucket_server_side_encryption_configuration
+      via: bucket
+    description: |
+      S3 bucket with neither the legacy inline encryption block (pre-v4
+      provider) nor an `aws_s3_bucket_server_side_encryption_configuration`
+      in the same module pointing at it (v4+).
 recommendation: |
   Create an `aws_s3_bucket_server_side_encryption_configuration` resource
   for every S3 bucket, or use the legacy inline block for provider < 4.0.
