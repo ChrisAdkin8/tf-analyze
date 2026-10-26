@@ -5,6 +5,31 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 62 — Action and CI hardening; the LSP sees spaces and unsaved edits — 2026-10-26
+
+From the critical review's delivery-surface findings.
+
+- **Every `uses:` is pinned to a commit SHA** (33 in `action.yml` and the
+  workflows, 14 actions including `softprops/action-gh-release`, which
+  holds `contents: write`, and the `docker/*` actions with
+  `packages: write`). A tag can be moved to other code; a SHA cannot.
+  Each SHA was resolved through the GitHub API and matched to an exact
+  `vX.Y.Z` tag, kept as the `# vX.Y.Z` comment Dependabot updates.
+- **`inputs.mode` goes through `env:`** like every other input (pasted
+  into `run:` it was parsed as shell), and an unknown mode fails.
+- **The release workflow rejects a tag that is not `vX.Y.Z[-pre]`**:
+  later steps paste the version into their scripts, and the `v*.*.*`
+  trigger would match `v1.2.3$(cmd)`.
+- **Language server URIs** are decoded (`urlparse` + `url2pathname`):
+  stripping `file://` alone left `%20` in, so a path with a space — and
+  every Windows path — got no diagnostics.
+- **The language server scans the editor's text**: `didOpen` /
+  `didChange` carry the full buffer (full sync), which is now what gets
+  scanned; it used to re-read the file on disk, so diagnostics lagged
+  until save. The injected scanner takes the text as a third argument.
+
+---
+
 ## Round 61 — Engine bugs that missed real problems — 2026-10-26
 
 From the critical review's engine findings; each reproduced on `main`
