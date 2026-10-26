@@ -207,24 +207,79 @@ RULE_DOCS_URL_BASE = "https://chrisadkin8.github.io/tf-analyze/rules/{id}/"
 SARIF_HELP_URI_BASE = RULE_DOCS_URL_BASE
 
 
-def _sarif_fingerprint(finding: dict) -> dict:
+def _sarif_fingerprint(
+    finding: dict, uri: str | None = None, ordinal: int = 0,
+    resource_ordinal: int = 0,
+) -> dict:
     """Return partial fingerprints for SARIF.
 
     Two complementary keys:
     - tfAnalyze/v1: id|file|resource — changes when file is renamed (new/resolved pair)
-    - tfAnalyze/v1-resource: id|resource — stable across file renames; GitHub Code
-      Scanning uses the highest-specificity key that matches, so renaming a file
-      no longer floods the "fixed" view with false positives when the resource
-      name is preserved.
+    - tfAnalyze/v1-resource: id|resource — stable across file renames; only
+      emitted when the finding names a resource (an empty resource would
+      make every file-level finding of a rule share one key).
+
+    `uri` is the result's repo-relative URI, so a fingerprint does not
+    depend on where the repo was checked out. The line is deliberately
+    not part of the key (alerts must survive code moving); instead, when
+    several findings share a key, `to_sarif` numbers them in line order
+    and the n-th (n > 0) gets ``|#n`` — so they no longer collide and
+    merge into one alert.
     """
     import hashlib
     fid = finding.get("id", "UNKNOWN")
-    full_key = f"{fid}|{finding.get('file','')}|{finding.get('resource','')}"
-    resource_key = f"{fid}|{finding.get('resource','')}"
-    return {
-        "tfAnalyze/v1": hashlib.sha256(full_key.encode()).hexdigest()[:16],
-        "tfAnalyze/v1-resource": hashlib.sha256(resource_key.encode()).hexdigest()[:16],
-    }
+    file_key = finding.get("file", "") if uri is None else uri
+    resource = finding.get("resource", "")
+    full_key = f"{fid}|{file_key}|{resource}" + (f"|#{ordinal}" if ordinal else "")
+    out = {"tfAnalyze/v1": hashlib.sha256(full_key.encode()).hexdigest()[:16]}
+    if resource:
+        resource_key = f"{fid}|{resource}" + (
+            f"|#{resource_ordinal}" if resource_ordinal else ""
+        )
+        out["tfAnalyze/v1-resource"] = hashlib.sha256(resource_key.encode()).hexdigest()[:16]
+    return out
+
+
+SARIF_SRCROOT = "%SRCROOT%"
+
+
+def sarif_source_root(target: Path) -> Path:
+    """The directory SARIF URIs are relative to: the repository root (the
+    nearest ancestor holding `.git`), which is what GitHub Code Scanning
+    resolves them against, or `target` itself outside a repository."""
+    t = target.resolve()
+    for d in (t, *t.parents):
+        if (d / ".git").exists():
+            return d
+    return t
+
+
+def _sarif_uri(file: str, root: Path | None) -> tuple[str, bool]:
+    """``(uri, relative)`` for a finding's file. Under `root` the URI is
+    relative (and pairs with ``uriBaseId``); anything else keeps an
+    absolute ``file://`` URI rather than a bare local path."""
+    from urllib.parse import quote
+
+    if not file:
+        return "", False
+    p = Path(file)
+    if root is not None and p.is_absolute():
+        for cand in (p, p.resolve()):
+            try:
+                rel = cand.relative_to(root)
+            except ValueError:
+                continue
+            return quote(rel.as_posix(), safe="/"), True
+    if p.is_absolute():
+        return p.as_uri(), False
+    return quote(file.replace("\\", "/"), safe="/"), False
+
+
+def _artifact_location(uri: str, relative: bool) -> dict:
+    loc = {"uri": uri}
+    if relative:
+        loc["uriBaseId"] = SARIF_SRCROOT
+    return loc
 
 
 def _effective_urgency(finding: dict, entry: dict) -> str:
@@ -428,8 +483,14 @@ def to_sarif(
     findings: list[dict],
     entries: list[dict],
     parse_fallback_files: list[dict] | None = None,
+    *,
+    source_root: Path | None = None,
 ) -> dict:
     """Convert findings to SARIF v2.1.0 format with proper taxonomies.
+
+    With `source_root` (see `sarif_source_root`), file URIs are relative to
+    it and the run declares it as ``%SRCROOT%`` in ``originalUriBaseIds``,
+    so code scanning can map results to files in the repository.
 
     Files the HCL parser could not read are tool diagnostics, not results:
     each becomes a ``toolExecutionNotifications`` entry on the run's
@@ -494,8 +555,29 @@ def to_sarif(
             rule_obj["relationships"] = rels
         rules.append(rule_obj)
 
+    # Number findings that would share a fingerprint key, in line order.
+    uris = [_sarif_uri(f.get("file") or "", source_root) for f in findings]
+    ordinals = [0] * len(findings)
+    resource_ordinals = [0] * len(findings)
+    groups: dict[tuple, list[int]] = {}
+    resource_groups: dict[tuple, list[int]] = {}
+    for i, f in enumerate(findings):
+        groups.setdefault(
+            (f.get("id"), uris[i][0], f.get("resource", "")), []
+        ).append(i)
+        if f.get("resource"):
+            resource_groups.setdefault((f.get("id"), f["resource"]), []).append(i)
+    for members, numbering in (
+        (groups, ordinals), (resource_groups, resource_ordinals),
+    ):
+        for idxs in members.values():
+            idxs.sort(key=lambda i: (uris[i][0], findings[i].get("line") or 0))
+            for n, i in enumerate(idxs):
+                numbering[i] = n
+    titles = {e["id"]: e.get("title") for e in entries}
+
     results = []
-    for f in findings:
+    for i, f in enumerate(findings):
         # Defensive `.get` throughout — a synthetic or externally-supplied
         # finding missing `resource`/`file`/`line` must not KeyError and
         # abort the ENTIRE SARIF emit (SARIF has no per-result safety net).
@@ -510,19 +592,24 @@ def to_sarif(
             # is handled automatically — but a literal newline in the
             # resource name would break some lax consumers. Strip
             # control characters defensively.
-            "message": {"text": _sarif_safe_text(f"Finding {fid} on {f.get('resource') or 'file'}")},
+            "message": {"text": _sarif_safe_text(
+                f"{titles[fid]} ({f.get('resource') or 'file'})" if titles.get(fid)
+                else f"Finding {fid} on {f.get('resource') or 'file'}"
+            )},
             "locations": [
                 {
                     "physicalLocation": {
                         # Audit fix #19 — URI normalization. Windows
                         # paths emit backslashes; SARIF expects URI
                         # form. Use forward slashes uniformly.
-                        "artifactLocation": {"uri": (f.get("file") or "").replace("\\", "/")},
+                        "artifactLocation": _artifact_location(*uris[i]),
                         "region": {"startLine": max(f.get("line") or 1, 1)},
                     }
                 }
             ],
-            "partialFingerprints": _sarif_fingerprint(f),
+            "partialFingerprints": _sarif_fingerprint(
+                f, uris[i][0], ordinals[i], resource_ordinals[i],
+            ),
         }
         if fid in rule_index:
             idx = rule_index[fid]
@@ -562,6 +649,10 @@ def to_sarif(
         },
         "results": results,
     }
+    if source_root is not None:
+        run["originalUriBaseIds"] = {
+            SARIF_SRCROOT: {"uri": source_root.as_uri().rstrip("/") + "/"},
+        }
     # Only declare supportedTaxonomies + the taxonomies block when at
     # least one rule references one — keeps SARIF lean on small repos.
     if taxonomies:
@@ -581,7 +672,9 @@ def to_sarif(
                     },
                     "locations": [{
                         "physicalLocation": {
-                            "artifactLocation": {"uri": str(pf["file"])},
+                            "artifactLocation": _artifact_location(
+                                *_sarif_uri(str(pf["file"]), source_root)
+                            ),
                         },
                     }],
                 }

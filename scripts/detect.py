@@ -1143,6 +1143,7 @@ from _output import (
     _sarif_taxonomies,
     _sarif_rule_relationships,
     to_sarif,
+    sarif_source_root,
     parse_fallback_notice,
     _narrative_for_finding,
     _render_executive_view,
@@ -2267,8 +2268,14 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 output["score_explanation"] = explain_score(findings, summary)
             _emit(json.dumps(output, indent=2))
         elif args.format == "sarif":
-            sarif = to_sarif(findings, entries,
-                             parse_fallback_files=summary.get("parse_fallback_files"))
+            sarif = to_sarif(
+                findings, entries,
+                parse_fallback_files=summary.get("parse_fallback_files"),
+                source_root=(
+                    sarif_source_root(Path(args.targets[0]))
+                    if args.targets else None
+                ),
+            )
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
@@ -2343,8 +2350,14 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 output_data["score_explanation"] = score_explanation
             _emit(json.dumps(output_data, indent=2))
         elif args.format == "sarif":
-            sarif = to_sarif(findings, entries,
-                             parse_fallback_files=summary.get("parse_fallback_files"))
+            sarif = to_sarif(
+                findings, entries,
+                parse_fallback_files=summary.get("parse_fallback_files"),
+                source_root=(
+                    sarif_source_root(Path(args.targets[0]))
+                    if args.targets else None
+                ),
+            )
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))

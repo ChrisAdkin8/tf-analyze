@@ -5,6 +5,32 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 44 — SARIF that code scanning can use — 2026-10-26
+
+- **Repo-relative URIs.** Every `artifactLocation.uri` was the absolute
+  local path (`/Users/…/main.tf`, `/workspace/…` in the Action), which
+  GitHub Code Scanning cannot map to a file in the repository. URIs are
+  now relative to the repository root (the nearest ancestor of the target
+  holding `.git`, else the target), percent-encoded, with
+  `uriBaseId: "%SRCROOT%"` declared in `originalUriBaseIds`. Parse-fallback
+  notifications use the same form.
+- **Fingerprints no longer collide.** `tfAnalyze/v1` (`id|file|resource`)
+  was identical for file-level findings of one rule in one file (e.g. two
+  `MOD-PIN-001`), so code scanning merged them into one alert. Findings
+  that share a key are now numbered in line order (`|#n`, the first one
+  unchanged); `tfAnalyze/v1-resource` is emitted only when there is a
+  resource. Fingerprints use the repo-relative path, so they no longer
+  depend on where the repo is checked out — and still not on the line, so
+  alerts survive code moving.
+- **Result messages** carry the rule title (`Security group allows … (aws_security_group.x)`)
+  instead of `Finding <ID> on <resource>`.
+
+Upgrade note: because fingerprints were built from absolute paths,
+existing code-scanning alerts are re-keyed once (closed and reopened)
+on the first upload after this change.
+
+---
+
 ## Round 43 — IAM policy rules read the parse tree — 2026-10-26
 
 The IAM rules missed the most common ways policies are written. Policies
