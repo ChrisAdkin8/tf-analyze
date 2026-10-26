@@ -510,6 +510,46 @@ def _load_project_config(target: Path) -> dict:
         return {}
 
 
+# Pattern kinds that test each resource of the named type, so a
+# `kubernetes_X` pattern also applies to `kubernetes_X_v1` (see
+# `kubernetes_type_aliases`). Absence kinds handle aliases themselves.
+_PER_RESOURCE_KINDS = frozenset({
+    "resource_arg", "resource_missing_arg", "resource_present",
+    "resource_body_contains", "hcl_attr",
+})
+
+
+def kubernetes_type_aliases(rtype: str) -> tuple[str, ...]:
+    """`rtype` plus its API-versioned alias: the kubernetes provider names
+    the current form of most resources `kubernetes_X_v1` and keeps
+    `kubernetes_X` as the older one, so a rule written for one must cover
+    both (`kubernetes_cluster_role_binding_v1` -> cluster-admin was missed)."""
+    if not rtype.startswith("kubernetes_"):
+        return (rtype,)
+    if rtype.endswith("_v1"):
+        return (rtype, rtype[: -len("_v1")])
+    if rtype.endswith("_v1beta1"):
+        return (rtype,)
+    return (rtype, rtype + "_v1")
+
+
+def _with_kubernetes_aliases(patterns: list) -> list:
+    """`patterns` plus a `_v1` copy of each per-resource pattern on a
+    `kubernetes_*` type that the entry does not already declare."""
+    out = list(patterns)
+    for p in patterns:
+        if not isinstance(p, dict) or p.get("kind") not in _PER_RESOURCE_KINDS:
+            continue
+        rtype = p.get("resource")
+        if not isinstance(rtype, str):
+            continue
+        for alias in kubernetes_type_aliases(rtype)[1:]:
+            copy = {**p, "resource": alias}
+            if copy not in out:
+                out.append(copy)
+    return out
+
+
 def load_catalog(
     catalog_dir: Path,
     include_stubs: bool = False,
@@ -552,6 +592,7 @@ def load_catalog(
             continue
         if status == "stub" and not include_stubs:
             continue
+        data["patterns"] = _with_kubernetes_aliases(data.get("patterns") or [])
         entries.append(data)
     if strict and error_count:
         print(
@@ -586,6 +627,7 @@ def load_catalog(
                 continue
             if status == "stub" and not include_stubs:
                 continue
+            data["patterns"] = _with_kubernetes_aliases(data.get("patterns") or [])
             entries.append(data)
 
     return entries

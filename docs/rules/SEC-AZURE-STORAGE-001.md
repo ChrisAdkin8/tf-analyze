@@ -42,7 +42,7 @@ keywords: "security, high, terraform, iac, azure, cis-3.1, mitre-T1071.001, cwe-
 ## What this checks
 
 1. **`resource_arg`** on `azurerm_storage_account` (`enable_https_traffic_only`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-2. **`resource_arg`** on `azurerm_storage_account` (`https_only`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+2. **`resource_arg`** on `azurerm_storage_account` (`https_traffic_only_enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 3. **`resource_arg`** on `azurerm_storage_account` (`min_tls_version`) matching `/^(TLS1_0|TLS1_1)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 
 ## Why it likely fired

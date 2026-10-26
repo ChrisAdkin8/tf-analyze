@@ -57,8 +57,6 @@ mental models.
 3. **`resource_body_contains`** on `kubernetes_network_policy` matching `/(?ms)^\s*ingress\s*\{\s*\}/` — _the resource body matches a regex inside the block._
   Same as above on the ingress side — `ingress { }` resolves to
 "allow all" inbound, defeating the purpose of a NetworkPolicy.
-4. **`resource_body_contains`** on `kubernetes_network_policy_v1` matching `/cidr\s*=\s*"0\.0\.0\.0/0"/` — _the resource body matches a regex inside the block._
-  API-versioned alias — same anti-pattern.
 
 ## Why it likely fired
 
@@ -77,8 +75,6 @@ mental models.
 
 Same as above on the ingress side — `ingress { }` resolves to
 "allow all" inbound, defeating the purpose of a NetworkPolicy.
-
-API-versioned alias — same anti-pattern.
 
 ## Adversarial scenario
 

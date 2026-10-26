@@ -5,6 +5,49 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 56 — Azure, GCP and Kubernetes rules match the current providers — 2026-10-26
+
+Third and last batch of false-positive fixes from the critical review.
+`tests/realworld_secure/`'s known list is now **empty** (16 → 0), with
+three more secure cases (GCP signing key, default Redis cache, a `_v1`
+view binding). Facts checked against the registry docs for azurerm
+5.11, google 8.8 and kubernetes 3.4.
+
+- **SEC-AZURE-SQL-001** asked for `azurerm_mssql_server_azure_ad_administrator`,
+  which does not exist; it now wants an `azuread_administrator` block on
+  each `azurerm_mssql_server` (per server, not one repo-wide finding).
+- **STK-AZURE-SQL-TDE-001** asked for a non-existent per-database TDE
+  resource and fired on every database; TDE is on by default, so it now
+  fires on `transparent_data_encryption_enabled = false`.
+- **SEC-AZURE-VM-001** fired when `disable_password_authentication` was
+  omitted; it defaults to `true`, so only an explicit `false` fires.
+- **SEC-AZURE-STORAGE-001** checked `https_only` (an App Service
+  argument); now `https_traffic_only_enabled`. **SEC-AZURE-REDIS-001**
+  adds `non_ssl_port_enabled` and no longer fires on an omitted
+  `minimum_tls_version` (defaults to 1.2).
+- **GKE**: STK-GCP-GKE-003 repeated SEC-GCP-GKE-DBENC-001; it now fires
+  on `database_encryption { state = "DECRYPTED" }`. Binary Authorization
+  fires on `evaluation_mode = "DISABLED"` / `enabled = false`; network
+  policy on `enabled = false`, and skips Dataplane V2 clusters
+  (`datapath_provider = "ADVANCED_DATAPATH"`).
+- **STK-GCP-KMS-001** skips keys whose `purpose` is not
+  `ENCRYPT_DECRYPT` (asymmetric / MAC keys cannot auto-rotate).
+- **Kubernetes**: rules now cover `kubernetes_X_v1` resources too — the
+  loader aliases `kubernetes_X` patterns, `resource_absent` accepts either
+  version (a `kubernetes_cluster_role_binding_v1` to `cluster-admin` was
+  missed). SEC-K8S-RBAC-001 reads `cluster-admin` from `role_ref` (a
+  binding merely *named* cluster-admin fired); SEC-K8S-RBAC-002 matches
+  `subject` attributes in any order. SEC-K8S-SECRET-001 fires only on
+  literal `data` values, not `var.*` references, matching its title.
+- Engine: `resource_arg` with `nested_path` and no `arg` silently never
+  fired; it now works (no shipped rule relied on it).
+
+New `tests/test_azure_gcp_k8s_rule_precision.py` pins each fix both
+ways. Terragoat snapshot 367 → 366 (the GKE duplicate; Azure SQL is now
+per server).
+
+---
+
 ## Round 55 — AWS rules: precise IAM, locking, KMS, listeners, S3, SSM — 2026-10-26
 
 Second batch of false-positive fixes from the critical review: all 11

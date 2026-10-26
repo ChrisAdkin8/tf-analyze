@@ -42,10 +42,14 @@ keywords: "security, high, terraform, iac, gcp, cis-6.6.7, mitre-T1611, nist-csf
 ## What this checks
 
 1. **`resource_missing_arg`** on `google_container_cluster` (`network_policy`) — _the resource is missing a required attribute (or nested attribute path)._
+2. **`resource_arg`** on `google_container_cluster` (`network_policy.enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `network_policy` is present but `enabled = false` — no NetworkPolicy
+is enforced.
 
 ## Why it likely fired
 
-Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
+`network_policy` is present but `enabled = false` — no NetworkPolicy
+is enforced.
 
 ## Adversarial scenario
 

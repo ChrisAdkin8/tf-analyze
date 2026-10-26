@@ -1,5 +1,5 @@
 # Expected findings:
-#   SEC-AZURE-VM-001  HIGH  disable_password_authentication missing (defaults to false)
+#   SEC-AZURE-VM-001  HIGH  disable_password_authentication = false
 
 resource "azurerm_linux_virtual_machine" "password_auth" {
   name                  = "demo-password-auth"
@@ -21,5 +21,11 @@ resource "azurerm_linux_virtual_machine" "password_auth" {
     version   = "latest"
   }
 
-  # disable_password_authentication intentionally omitted — defaults to false
+  admin_password                  = var.admin_password
+  disable_password_authentication = false
+}
+
+variable "admin_password" {
+  type      = string
+  sensitive = true
 }

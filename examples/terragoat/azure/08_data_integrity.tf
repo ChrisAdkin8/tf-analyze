@@ -19,7 +19,6 @@
 #     after the event.
 #
 # Expected tf-analyze findings:
-#   - STK-AZURE-SQL-TDE-001  HIGH  SQL DB missing transparent data encryption resource
 #   - ROB-AZURE-SQL-001      HIGH  SQL Database without lifecycle.prevent_destroy
 #
 # Fix summary: turn on `versioning_enabled = true` plus a

@@ -46,6 +46,12 @@ keywords: "security, high, terraform, iac, gcp, mitre-T1525, mitre-T1195.002, cw
 it, unsigned or unvetted images can run as workloads — including
 pulled-from-public-registry images that bypass internal supply-
 chain controls.
+2. **`resource_arg`** on `google_container_cluster` (`binary_authorization.evaluation_mode`) matching `/^DISABLED$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `binary_authorization` is present but `evaluation_mode =
+"DISABLED"` — the block exists and enforces nothing.
+3. **`resource_arg`** on `google_container_cluster` (`binary_authorization.enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `binary_authorization { enabled = false }` (the deprecated form of
+`evaluation_mode = "DISABLED"`).
 
 ## Why it likely fired
 
@@ -53,6 +59,12 @@ chain controls.
 it, unsigned or unvetted images can run as workloads — including
 pulled-from-public-registry images that bypass internal supply-
 chain controls.
+
+`binary_authorization` is present but `evaluation_mode =
+"DISABLED"` — the block exists and enforces nothing.
+
+`binary_authorization { enabled = false }` (the deprecated form of
+`evaluation_mode = "DISABLED"`).
 
 ## Adversarial scenario
 

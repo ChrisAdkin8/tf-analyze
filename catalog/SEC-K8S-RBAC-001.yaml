@@ -29,7 +29,7 @@ owasp:
 patterns:
   - kind: resource_body_contains
     resource: kubernetes_cluster_role_binding
-    regex: 'name\s*=\s*"cluster-admin"'
+    regex: '(?ms)role_ref\s*\{[^}]*\bname\s*=\s*"cluster-admin"'
     description: |
       `kubernetes_cluster_role_binding` references the built-in
       `cluster-admin` ClusterRole. Any subject bound to this binding
@@ -56,7 +56,7 @@ patterns:
       allow privilege escalation outside the role's normal scope.
   - kind: resource_body_contains
     resource: kubernetes_cluster_role_binding
-    regex: 'name\s*=\s*"system:authenticated"'
+    regex: '(?ms)subject\s*\{[^}]*\bname\s*=\s*"system:authenticated"'
     description: |
       R30.5 extension — binding to `system:authenticated` includes
       every pod with a service-account token, which is effectively

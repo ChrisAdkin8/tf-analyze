@@ -34,7 +34,7 @@ owasp:
 patterns:
   - kind: resource_body_contains
     resource: kubernetes_role_binding
-    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:masters"'
+    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:masters")'
     description: |
       `kubernetes_role_binding` has a subject `kind = "Group"` with
       `name = "system:masters"`. `system:masters` is a hard-coded
@@ -44,7 +44,7 @@ patterns:
       kubeconfig.
   - kind: resource_body_contains
     resource: kubernetes_cluster_role_binding
-    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:masters"'
+    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:masters")'
     description: |
       Same as above, but at cluster scope. `kubernetes_cluster_role_binding`
       with `system:masters` as a subject grants the referenced role
@@ -53,7 +53,7 @@ patterns:
       operator who copy-pasted that kubeconfig.
   - kind: resource_body_contains
     resource: kubernetes_role_binding
-    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:unauthenticated"'
+    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:unauthenticated")'
     description: |
       Subject `Group: system:unauthenticated` grants the role to every
       request without a valid token. Effectively makes the role
@@ -61,7 +61,7 @@ patterns:
       pods without service-account tokens mounted.
   - kind: resource_body_contains
     resource: kubernetes_cluster_role_binding
-    regex: '(?ms)subject\s*\{[^}]*kind\s*=\s*"Group"[^}]*name\s*=\s*"system:unauthenticated"'
+    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:unauthenticated")'
     description: |
       Same as above at cluster scope. The 2018 Tesla Kubernetes
       breach pivoted on an `system:unauthenticated`-readable dashboard

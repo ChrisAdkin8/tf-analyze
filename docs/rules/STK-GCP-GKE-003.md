@@ -1,6 +1,6 @@
 ---
-title: "STK-GCP-GKE-003 — GKE cluster missing application-layer secrets encryption"
-description: "tf-analyze rule STK-GCP-GKE-003 (HIGH · stack): GKE cluster missing application-layer secrets encryption"
+title: "STK-GCP-GKE-003 — GKE cluster has application-layer secrets encryption turned off"
+description: "tf-analyze rule STK-GCP-GKE-003 (HIGH · stack): GKE cluster has application-layer secrets encryption turned off"
 keywords: "stack, high, terraform, iac, gcp, cis-8.5.5, mitre-T1552.001, cwe-522, nist-csf-pr.ac-1"
 ---
 
@@ -8,7 +8,7 @@ keywords: "stack, high, terraform, iac, gcp, cis-8.5.5, mitre-T1552.001, cwe-522
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "STK-GCP-GKE-003 \u2014 GKE cluster missing application-layer secrets encryption",
+  "headline": "STK-GCP-GKE-003 \u2014 GKE cluster has application-layer secrets encryption turned off",
   "description": "Add a `database_encryption { state = \"ENCRYPTED\" key_name = <kms-key> }`\nblock. Without this, etcd-stored Kubernetes Secrets are encrypted only\nat the Google-managed disk level \u2014 not at the application layer.",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/STK-GCP-GKE-003/",
   "mainEntityOfPage": {
@@ -31,21 +31,28 @@ keywords: "stack, high, terraform, iac, gcp, cis-8.5.5, mitre-T1552.001, cwe-522
 }
 </script>
 
-# ⚠️ STK-GCP-GKE-003 — GKE cluster missing application-layer secrets encryption
+# ⚠️ STK-GCP-GKE-003 — GKE cluster has application-layer secrets encryption turned off
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-GKE-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-GKE-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-GKE-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **GKE cluster missing application-layer secrets encryption.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **GKE cluster has application-layer secrets encryption turned off.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
 
 ## What this checks
 
-1. **`resource_missing_arg`** on `google_container_cluster` (`database_encryption.state`) — _the resource is missing a required attribute (or nested attribute path)._
+1. **`resource_arg`** on `google_container_cluster` (`database_encryption.state`) matching `/^DECRYPTED$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `database_encryption` is present but `state = "DECRYPTED"`, so
+Secrets in etcd are not encrypted with the customer-managed key. A
+cluster with no `database_encryption` block at all is
+SEC-GCP-GKE-DBENC-001 (this rule used to repeat it).
 
 ## Why it likely fired
 
-Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
+`database_encryption` is present but `state = "DECRYPTED"`, so
+Secrets in etcd are not encrypted with the customer-managed key. A
+cluster with no `database_encryption` block at all is
+SEC-GCP-GKE-DBENC-001 (this rule used to repeat it).
 
 ## Adversarial scenario
 

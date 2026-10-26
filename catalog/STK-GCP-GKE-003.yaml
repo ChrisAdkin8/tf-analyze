@@ -1,5 +1,5 @@
 id: STK-GCP-GKE-003
-title: "GKE cluster missing application-layer secrets encryption"
+title: "GKE cluster has application-layer secrets encryption turned off"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
@@ -13,9 +13,15 @@ cwe:
 nist_csf:
   - "PR.AC-1"
 patterns:
-  - kind: resource_missing_arg
+  - kind: resource_arg
     resource: google_container_cluster
     nested_path: database_encryption.state
+    regex: '^DECRYPTED$'
+    description: |
+      `database_encryption` is present but `state = "DECRYPTED"`, so
+      Secrets in etcd are not encrypted with the customer-managed key. A
+      cluster with no `database_encryption` block at all is
+      SEC-GCP-GKE-DBENC-001 (this rule used to repeat it).
 recommendation: |
   Add a `database_encryption { state = "ENCRYPTED" key_name = <kms-key> }`
   block. Without this, etcd-stored Kubernetes Secrets are encrypted only

@@ -334,7 +334,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-AZURE-NSG-FLOWLOG-001`](./STK-AZURE-NSG-FLOWLOG-001.md) | HIGH | Azure NSG missing flow log resource |
 | [`STK-AZURE-RECOVERY-001`](./STK-AZURE-RECOVERY-001.md) | HIGH | Azure Recovery Services Vault missing soft-delete protection |
 | [`STK-AZURE-SQL-001`](./STK-AZURE-SQL-001.md) | HIGH | Azure MySQL/PostgreSQL single server is deprecated |
-| [`STK-AZURE-SQL-TDE-001`](./STK-AZURE-SQL-TDE-001.md) | HIGH | Azure SQL Database missing transparent data encryption resource |
+| [`STK-AZURE-SQL-TDE-001`](./STK-AZURE-SQL-TDE-001.md) | HIGH | Azure SQL Database has transparent data encryption turned off |
 | [`STK-AZURE-VM-IMG-EOL-001`](./STK-AZURE-VM-IMG-EOL-001.md) | HIGH | Azure virtual machine using end-of-life OS image |
 | [`STK-AZURE-WEBAPP-RUNTIME-001`](./STK-AZURE-WEBAPP-RUNTIME-001.md) | HIGH | Azure App Service Web App uses end-of-life runtime |
 | [`STK-GCP-BIGQUERY-001`](./STK-GCP-BIGQUERY-001.md) | HIGH | BigQuery dataset missing default CMEK |
@@ -349,7 +349,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-GCP-GCS-LOGGING-001`](./STK-GCP-GCS-LOGGING-001.md) | HIGH | GCS bucket logging target lacks public_access_prevention |
 | [`STK-GCP-GKE-001`](./STK-GCP-GKE-001.md) | HIGH | GKE cluster missing private nodes |
 | [`STK-GCP-GKE-002`](./STK-GCP-GKE-002.md) | HIGH | GKE cluster missing Workload Identity |
-| [`STK-GCP-GKE-003`](./STK-GCP-GKE-003.md) | HIGH | GKE cluster missing application-layer secrets encryption |
+| [`STK-GCP-GKE-003`](./STK-GCP-GKE-003.md) | HIGH | GKE cluster has application-layer secrets encryption turned off |
 | [`STK-GCP-GKE-004`](./STK-GCP-GKE-004.md) | HIGH | GKE cluster missing master authorized networks |
 | [`STK-GCP-GKE-NODEPOOL-001`](./STK-GCP-GKE-NODEPOOL-001.md) | HIGH | GKE node pool missing shielded-instance hardening |
 | [`STK-GCP-KMS-001`](./STK-GCP-KMS-001.md) | HIGH | KMS crypto key missing rotation period |

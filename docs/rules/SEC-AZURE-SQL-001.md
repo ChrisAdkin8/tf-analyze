@@ -9,7 +9,7 @@ keywords: "security, high, terraform, iac, azure, cis-4.1.2, mitre-T1530, cwe-31
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "SEC-AZURE-SQL-001 \u2014 Azure SQL Server has no Azure AD administrator configured",
-  "description": "Add an `azurerm_mssql_server_azure_ad_administrator` resource. Without Azure\nAD auth, the server relies on SQL authentication (username/password) which is\nharder to audit and enforce MFA on.",
+  "description": "Add an `azuread_administrator` block to the server. Without Entra ID\n(Azure AD) authentication the server relies on SQL logins, which are\nharder to audit and cannot enforce MFA. Set\n`azuread_authentication_only = true` to turn SQL logins of",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-AZURE-SQL-001/",
   "mainEntityOfPage": {
     "@type": "WebPage",
@@ -41,11 +41,18 @@ keywords: "security, high, terraform, iac, azure, cis-4.1.2, mitre-T1530, cwe-31
 
 ## What this checks
 
-1. **`resource_absent`** on `azurerm_mssql_server_azure_ad_administrator` — _the corpus is missing a resource type we expected to find given other resources present._
+1. **`resource_missing_arg`** on `azurerm_mssql_server` (`azuread_administrator`) — _the resource is missing a required attribute (or nested attribute path)._
+  `azurerm_mssql_server` has no `azuread_administrator` block, so the
+server has only SQL authentication (login + password). (azurerm
+has no separate AD-administrator resource for `azurerm_mssql_server`;
+the rule used to ask for one that does not exist.)
 
 ## Why it likely fired
 
-Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
+`azurerm_mssql_server` has no `azuread_administrator` block, so the
+server has only SQL authentication (login + password). (azurerm
+has no separate AD-administrator resource for `azurerm_mssql_server`;
+the rule used to ask for one that does not exist.)
 
 ## Adversarial scenario
 
@@ -55,29 +62,27 @@ Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/C
 
 ## Remediation
 
-Add an `azurerm_mssql_server_azure_ad_administrator` resource. Without Azure
-AD auth, the server relies on SQL authentication (username/password) which is
-harder to audit and enforce MFA on.
-
-    resource "azurerm_mssql_server_azure_ad_administrator" "example" {
-      server_id           = azurerm_mssql_server.example.id
-      login               = "sqladmin"
-      object_id           = var.aad_admin_object_id
-      tenant_id           = data.azurerm_client_config.current.tenant_id
-      azuread_authentication_only = true
-    }
+Add an `azuread_administrator` block to the server. Without Entra ID
+(Azure AD) authentication the server relies on SQL logins, which are
+harder to audit and cannot enforce MFA. Set
+`azuread_authentication_only = true` to turn SQL logins off entirely.
 
 ## Suggested fix (`fix_hcl`)
 
 ![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
 
 ```hcl
-resource "azurerm_mssql_server_azure_ad_administrator" "example" {
-  server_id                   = azurerm_mssql_server.example.id
-  login                       = "sqladmin"
-  object_id                   = var.aad_admin_object_id
-  tenant_id                   = data.azurerm_client_config.current.tenant_id
-  azuread_authentication_only = true
+resource "azurerm_mssql_server" "example" {
+  name                = "example-sqlserver"
+  resource_group_name = "example-rg"
+  location            = "uksouth"
+  version             = "12.0"
+
+  azuread_administrator {
+    login_username              = "sql-admins"
+    object_id                   = var.aad_admin_object_id
+    azuread_authentication_only = true
+  }
 }
 ```
 

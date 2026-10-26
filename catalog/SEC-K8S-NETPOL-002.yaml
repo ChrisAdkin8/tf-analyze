@@ -59,10 +59,6 @@ patterns:
     description: |
       Same as above on the ingress side — `ingress { }` resolves to
       "allow all" inbound, defeating the purpose of a NetworkPolicy.
-  - kind: resource_body_contains
-    resource: kubernetes_network_policy_v1
-    regex: 'cidr\s*=\s*"0\.0\.0\.0/0"'
-    description: API-versioned alias — same anti-pattern.
 recommendation: |
   Replace the wildcard cidr with the specific CIDR(s) the workload
   needs to reach. If the workload genuinely needs egress to the

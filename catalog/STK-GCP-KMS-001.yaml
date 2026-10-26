@@ -21,6 +21,12 @@ patterns:
   - kind: resource_missing_arg
     resource: google_kms_crypto_key
     arg: rotation_period
+    # Automatic rotation sets a new primary version, and only
+    # ENCRYPT_DECRYPT keys have a primary (google_kms_crypto_key docs):
+    # asymmetric and MAC keys cannot rotate.
+    suppress_if:
+      arg: purpose
+      regex: '^(?!ENCRYPT_DECRYPT$)'
 recommendation: |
   Set `rotation_period = "7776000s"` (90 days, the CIS maximum) or
   shorter on every symmetric encryption key:

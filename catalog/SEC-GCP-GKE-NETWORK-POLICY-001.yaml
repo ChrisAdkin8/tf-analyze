@@ -18,6 +18,21 @@ patterns:
   - kind: resource_missing_arg
     resource: google_container_cluster
     arg: network_policy
+    # GKE Dataplane V2 enforces NetworkPolicy without this block.
+    suppress_if:
+      arg: datapath_provider
+      equals: ADVANCED_DATAPATH
+  - kind: resource_arg
+    resource: google_container_cluster
+    nested_path: network_policy.enabled
+    regex: '^false$'
+    # GKE Dataplane V2 enforces NetworkPolicy without this block.
+    suppress_if:
+      arg: datapath_provider
+      equals: ADVANCED_DATAPATH
+    description: |
+      `network_policy` is present but `enabled = false` — no NetworkPolicy
+      is enforced.
 recommendation: |
   Without `network_policy` on the cluster, every pod can reach every
   other pod on every port — there is no namespace isolation, no

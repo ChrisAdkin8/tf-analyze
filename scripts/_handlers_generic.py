@@ -35,6 +35,7 @@ from _hcl import (
     brace_walk,
     strip_hcl_context,
 )
+from _catalog import kubernetes_type_aliases
 from detect import (
     InFileCtx,
     CorpusCtx,
@@ -157,7 +158,9 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     has_regex = "regex" in pat
     has_not_regex = "not_regex" in pat
     fire_if_absent = pat.get("fire_if_absent", False)
-    if "resource" not in pat or "arg" not in pat:
+    # `nested_path` alone is enough (it is preferred over `arg` below);
+    # requiring `arg` made such patterns silently never fire.
+    if "resource" not in pat or not (pat.get("arg") or pat.get("nested_path")):
         return []
     if not has_regex and not has_not_regex:
         return []
@@ -607,17 +610,21 @@ def _corpus_resource_absent(c: CorpusCtx) -> list[dict]:
     exists anywhere in the workspace. Used by rules that mandate a
     specific resource type be present (e.g. ``aws_cloudtrail.*``).
     ``when_present`` optionally gates the check on a prerequisite type.
+    A ``kubernetes_X`` type also matches ``kubernetes_X_v1`` and back
+    (`kubernetes_type_aliases`), for both the target and the prerequisite.
     """
     pat = c.pat
     if "resource" not in pat:
         return []
     rt = pat["resource"]
+    targets = kubernetes_type_aliases(rt)
     prerequisite = pat.get("when_present")
     if prerequisite:
+        prereqs = kubernetes_type_aliases(prerequisite)
         prereq_seen = False
         for _, text in c.all_files_text.items():
             for blk in find_blocks(text, RESOURCE_START):
-                if blk["groups"][0] == prerequisite:
+                if blk["groups"][0] in prereqs:
                     prereq_seen = True
                     break
             if prereq_seen:
@@ -627,7 +634,7 @@ def _corpus_resource_absent(c: CorpusCtx) -> list[dict]:
     seen = False
     for _, text in c.all_files_text.items():
         for blk in find_blocks(text, RESOURCE_START):
-            if blk["groups"][0] == rt:
+            if blk["groups"][0] in targets:
                 seen = True
                 break
         if seen:

@@ -12,10 +12,11 @@ resource "azurerm_mssql_server" "main" {
   administrator_login_password = "PlaceholderP@ss1"
 }
 
-# SQL DB without an azurerm_mssql_database_transparent_data_encryption
-# resource — TDE state is not explicitly managed.
+# Expected findings:
+#  - STK-AZURE-SQL-TDE-001 HIGH — TDE explicitly turned off
 resource "azurerm_mssql_database" "no_tde" {
-  name      = "db-no-tde"
-  server_id = azurerm_mssql_server.main.id
-  sku_name  = "Basic"
+  name                                = "db-no-tde"
+  server_id                           = azurerm_mssql_server.main.id
+  sku_name                            = "DW100c"
+  transparent_data_encryption_enabled = false
 }

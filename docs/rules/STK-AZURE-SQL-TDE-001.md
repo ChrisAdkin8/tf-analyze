@@ -1,6 +1,6 @@
 ---
-title: "STK-AZURE-SQL-TDE-001 — Azure SQL Database missing transparent data encryption resource"
-description: "tf-analyze rule STK-AZURE-SQL-TDE-001 (HIGH · stack): Azure SQL Database missing transparent data encryption resource"
+title: "STK-AZURE-SQL-TDE-001 — Azure SQL Database has transparent data encryption turned off"
+description: "tf-analyze rule STK-AZURE-SQL-TDE-001 (HIGH · stack): Azure SQL Database has transparent data encryption turned off"
 keywords: "stack, high, terraform, iac, azure, cis-4.1.1, mitre-T1530, cwe-311, d3-ear, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
 ---
 
@@ -8,8 +8,8 @@ keywords: "stack, high, terraform, iac, azure, cis-4.1.1, mitre-T1530, cwe-311, 
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "STK-AZURE-SQL-TDE-001 \u2014 Azure SQL Database missing transparent data encryption resource",
-  "description": "Add a TDE resource for every SQL database and pin it to `\"Enabled\"`:",
+  "headline": "STK-AZURE-SQL-TDE-001 \u2014 Azure SQL Database has transparent data encryption turned off",
+  "description": "Remove `transparent_data_encryption_enabled = false` (the default is\n`true`) or set it to `true`. For a customer-managed key, also set\n`transparent_data_encryption_key_vault_key_id`.",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/STK-AZURE-SQL-TDE-001/",
   "mainEntityOfPage": {
     "@type": "WebPage",
@@ -31,30 +31,32 @@ keywords: "stack, high, terraform, iac, azure, cis-4.1.1, mitre-T1530, cwe-311, 
 }
 </script>
 
-# ⚠️ STK-AZURE-SQL-TDE-001 — Azure SQL Database missing transparent data encryption resource
+# ⚠️ STK-AZURE-SQL-TDE-001 — Azure SQL Database has transparent data encryption turned off
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AZURE-SQL-TDE-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-AZURE-SQL-TDE-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-AZURE-SQL-TDE-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Azure SQL Database missing transparent data encryption resource.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. _Conditional: only applies when `azurerm ≥ 3.0`._
+> **Azure SQL Database has transparent data encryption turned off.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
 
 ## What this checks
 
-1. **`resource_missing_companion`** on `azurerm_mssql_database` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
-  `azurerm_mssql_database` present but no
-`azurerm_mssql_database_transparent_data_encryption` resource in
-the repository. TDE encrypts data files, log files, and backups at
-rest. Without an explicit TDE resource, encryption state depends on
-provider defaults and cannot be audited or enforced in code.
+1. **`resource_arg`** on `azurerm_mssql_database` (`transparent_data_encryption_enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `azurerm_mssql_database` sets `transparent_data_encryption_enabled
+= false`. TDE encrypts data files, logs and backups at rest and is
+on by default (azurerm only allows turning it off on DataWarehouse
+SKUs). The rule used to require an
+`azurerm_mssql_database_transparent_data_encryption` resource, which
+does not exist, so it fired on every database.
 
 ## Why it likely fired
 
-`azurerm_mssql_database` present but no
-`azurerm_mssql_database_transparent_data_encryption` resource in
-the repository. TDE encrypts data files, log files, and backups at
-rest. Without an explicit TDE resource, encryption state depends on
-provider defaults and cannot be audited or enforced in code.
+`azurerm_mssql_database` sets `transparent_data_encryption_enabled
+= false`. TDE encrypts data files, logs and backups at rest and is
+on by default (azurerm only allows turning it off on DataWarehouse
+SKUs). The rule used to require an
+`azurerm_mssql_database_transparent_data_encryption` resource, which
+does not exist, so it fired on every database.
 
 ## Adversarial scenario
 
@@ -64,25 +66,19 @@ Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/C
 
 ## Remediation
 
-Add a TDE resource for every SQL database and pin it to `"Enabled"`:
-
-    resource "azurerm_mssql_database_transparent_data_encryption" "app" {
-      database_id = azurerm_mssql_database.app.id
-      state       = "Enabled"
-    }
-
-For databases on SQL Managed Instance (not SQL Server), TDE is enabled
-by default and managed at the instance level — this rule applies only
-to `azurerm_mssql_database` on `azurerm_mssql_server`.
+Remove `transparent_data_encryption_enabled = false` (the default is
+`true`) or set it to `true`. For a customer-managed key, also set
+`transparent_data_encryption_key_vault_key_id`.
 
 ## Suggested fix (`fix_hcl`)
 
 ![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
 
 ```hcl
-resource "azurerm_mssql_database_transparent_data_encryption" "example" {
-  database_id = azurerm_mssql_database.example.id
-  state       = "Enabled"
+resource "azurerm_mssql_database" "example" {
+  name                                = "example-db"
+  server_id                           = azurerm_mssql_server.example.id
+  transparent_data_encryption_enabled = true
 }
 ```
 

@@ -7,23 +7,17 @@ status: active
 cis:
   - "7.3"
 patterns:
-  - kind: resource_missing_arg
-    resource: azurerm_linux_virtual_machine
-    arg: disable_password_authentication
-    description: |
-      `azurerm_linux_virtual_machine` has no `disable_password_authentication`
-      argument. The default is `false` — SSH password logins are permitted.
-      Brute-force and credential-stuffing attacks against port 22 are
-      constant on Azure public IPs.
   - kind: resource_arg
     resource: azurerm_linux_virtual_machine
     arg: disable_password_authentication
-    regex: 'false'
+    regex: '^false$'
     description: |
-      `azurerm_linux_virtual_machine` explicitly sets
-      `disable_password_authentication = false`. Password-based SSH
-      authentication is confirmed; the attack surface for brute-force
-      and leaked credential reuse is fully open.
+      `azurerm_linux_virtual_machine` sets
+      `disable_password_authentication = false`, turning on password SSH
+      logins: brute-force and leaked-credential reuse against port 22 are
+      constant on Azure public IPs. The argument defaults to `true`, so a
+      VM that omits it (and authenticates with `admin_ssh_key`) is fine;
+      the rule used to fire on every such VM.
 recommendation: |
   Disable password authentication and supply an SSH public key:
 
