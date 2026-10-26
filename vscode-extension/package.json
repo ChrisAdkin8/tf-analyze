@@ -132,12 +132,14 @@
         "tf-analyze.scriptPath": {
           "type": "string",
           "default": "",
-          "description": "Path to detect.py. Leave empty to auto-detect from workspace or PATH."
+          "scope": "machine",
+          "description": "Path to detect.py (engine development only; the extension bundles its own engine). User settings only: a workspace's .vscode/settings.json cannot set it, since it chooses the script that runs."
         },
         "tf-analyze.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Python interpreter used to run the engine. Leave empty to auto-detect ('python' on Windows, 'python3' elsewhere). Set to an absolute path or a name on PATH (e.g. 'py' or a venv's python) if auto-detection picks the wrong one."
+          "scope": "machine",
+          "description": "Python interpreter used to run the engine. Leave empty to auto-detect ('python' on Windows, 'python3' elsewhere). Set to an absolute path or a name on PATH (e.g. 'py' or a venv's python) if auto-detection picks the wrong one. User settings only: a workspace's .vscode/settings.json cannot set it, since it chooses the program that runs."
         },
         "tf-analyze.failOn": {
           "type": "string",
@@ -175,7 +177,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Additional CLI flags passed to detect.py (e.g. ['--compliance', '--compliance-framework', 'pci_dss'])."
+          "description": "Additional CLI flags passed to detect.py (e.g. ['--compliance', '--compliance-framework', 'pci_dss']). From workspace settings only report filters are honoured (--focus, --fail-on, --mitre-tactic, --compliance, --compliance-framework, --show-fixes, --show-info, --no-suppress, --fail-on-parse-error, --blast-radius, --explain-score, --include-stubs, --no-threat-intel, --no-project-config); set other flags in User settings."
         }
       }
     },

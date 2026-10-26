@@ -13,6 +13,7 @@ import { RuleExplainerPanel } from "./ruleExplainer";
 import { ruleDocsUrl, ruleAnchorHtml } from "./urls";
 import { resolveScriptPath as sharedResolve, resolvePython } from "./scriptResolver";
 import { startLspClient, isLspRunning } from "./lspClient";
+import { engineExtraArgs } from "./engineRunner";
 import { baselineExists, baselinePath, ensureBaselineFile, suppress, unsuppress } from "./baseline";
 import { dispatchUri } from "./uriHandler";
 import { BlastRadiusProvider } from "./blastRadiusView";
@@ -502,8 +503,7 @@ function buildArgs(target: string): string[] {
   if (baselineExists(target)) {
     args.push("--baseline", baselinePath(target));
   }
-  const extra: string[] = cfg.get("extraArgs") ?? [];
-  args.push(...extra);
+  args.push(...engineExtraArgs());
   return args;
 }
 

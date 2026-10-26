@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [Unreleased]
+
+### Security
+
+- **A repository's settings can no longer choose what runs.**
+  `tf-analyze.pythonPath` and `tf-analyze.scriptPath` are now
+  machine-scoped: only your User settings can set them, so a cloned
+  repo's `.vscode/settings.json` cannot point the extension at a program
+  or script of its own (which then ran on every save in a trusted
+  workspace). Values already in workspace settings are ignored.
+- **`tf-analyze.extraArgs` from workspace settings is filtered** to
+  report-only flags (`--focus`, `--fail-on`, `--compliance`, …). Flags
+  that write files (`--apply-fixes`, `--output`), load other rules or
+  config, or reach the network are dropped with a one-time warning; set
+  them in User settings to use them.
+
+---
+
 ## [0.1.58] — 2026-05-30
 
 ### Security

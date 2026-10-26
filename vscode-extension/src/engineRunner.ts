@@ -23,13 +23,29 @@
 
 import * as cp from 'child_process';
 import * as vscode from 'vscode';
-import { resolvePython } from './scriptResolver';
+import { resolvePython, resolveExtraArgs } from './scriptResolver';
 
 // 120 seconds matches the constant in `extension.ts` so a panel-spawned
 // engine has the same patience as the main scan.  A hung detect.py
 // (Windows FS stall, infinite loop in a new rule, multi-thousand-file
 // repo) terminates after this many ms; the caller renders the timeout
 // message just like any other engine failure.
+/** `tf-analyze.extraArgs` for an engine run, with flags a workspace's
+ * own settings may not add removed (see `resolveExtraArgs`). Warns once
+ * per session for each distinct set of dropped flags. */
+const warnedDropped = new Set<string>();
+export function engineExtraArgs(): string[] {
+  return resolveExtraArgs(vscode.workspace.getConfiguration('tf-analyze'), (dropped) => {
+    const key = dropped.join(' ');
+    if (warnedDropped.has(key)) return;
+    warnedDropped.add(key);
+    void vscode.window.showWarningMessage(
+      `tf-analyze ignored workspace extraArgs it does not allow from a repository's settings: ${key}. ` +
+      'Set them in your User settings to use them.',
+    );
+  });
+}
+
 export const ENGINE_TIMEOUT_MS = 120_000;
 
 // 50 MiB matches the buffer every panel previously declared individually.
