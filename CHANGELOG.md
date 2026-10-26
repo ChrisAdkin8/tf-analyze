@@ -5,6 +5,32 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 57 — VS Code settings can't choose what runs; the Action pins its engine — 2026-10-26
+
+From the critical review's delivery-surface findings.
+
+- **VS Code extension.** `tf-analyze.pythonPath` and `tf-analyze.scriptPath`
+  are machine-scoped (User settings only): a cloned repo's
+  `.vscode/settings.json` could point them at its own program, run on
+  every save once the workspace was trusted. `tf-analyze.extraArgs` from
+  workspace settings is filtered to report-only flags; flags that write
+  files (`--apply-fixes`, `--output`), load other rules / config or reach
+  the network are dropped with a one-time warning. Recorded under
+  `[Unreleased]` in `vscode-extension/CHANGELOG.md` (no version bump).
+- **GitHub Action.** The `image` input defaulted to `:latest`, so
+  `uses: ChrisAdkin8/tf-analyze@v1.2.3` still ran whatever `main` last
+  built. The engine image now follows the action ref: `@v1.2.3` →
+  `:1.2.3`, `@v1.2` → `:1.2`, `@v1` → `:1`, a commit SHA → `:sha-<sha>`;
+  a branch or `uses: ./` falls back to `:latest` with a warning, as does
+  a derived tag that was never published (older releases). An explicit
+  `image:` / `ref:` is unchanged and still fails if it cannot be pulled.
+  `docker.yml` publishes the new major and `sha-` tags.
+- **dogfood** builds the engine image from the checkout, so PR runs test
+  the PR's engine rather than `main`'s last image (the Round 51 fix
+  showed up one merge late because of it).
+
+---
+
 ## Round 56 — Azure, GCP and Kubernetes rules match the current providers — 2026-10-26
 
 Third and last batch of false-positive fixes from the critical review.

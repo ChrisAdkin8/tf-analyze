@@ -56,6 +56,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ENGINE_MAX_BUFFER = exports.ENGINE_TIMEOUT_MS = void 0;
+exports.engineExtraArgs = engineExtraArgs;
 exports.runEngine = runEngine;
 exports.classifyEngineResult = classifyEngineResult;
 const cp = __importStar(require("child_process"));
@@ -66,6 +67,20 @@ const scriptResolver_1 = require("./scriptResolver");
 // (Windows FS stall, infinite loop in a new rule, multi-thousand-file
 // repo) terminates after this many ms; the caller renders the timeout
 // message just like any other engine failure.
+/** `tf-analyze.extraArgs` for an engine run, with flags a workspace's
+ * own settings may not add removed (see `resolveExtraArgs`). Warns once
+ * per session for each distinct set of dropped flags. */
+const warnedDropped = new Set();
+function engineExtraArgs() {
+    return (0, scriptResolver_1.resolveExtraArgs)(vscode.workspace.getConfiguration('tf-analyze'), (dropped) => {
+        const key = dropped.join(' ');
+        if (warnedDropped.has(key))
+            return;
+        warnedDropped.add(key);
+        void vscode.window.showWarningMessage(`tf-analyze ignored workspace extraArgs it does not allow from a repository's settings: ${key}. ` +
+            'Set them in your User settings to use them.');
+    });
+}
 exports.ENGINE_TIMEOUT_MS = 120000;
 // 50 MiB matches the buffer every panel previously declared individually.
 // Big enough for compliance HTML on terragoat (~3 MiB), the full delta

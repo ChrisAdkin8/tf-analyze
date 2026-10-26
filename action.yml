@@ -47,8 +47,8 @@ inputs:
       https://github.com/ChrisAdkin8/tf-analyze/issues/19.
     default: 'false'
   image:
-    description: 'Docker image to run. Override to pin a specific engine version (e.g. ghcr.io/chrisadkin8/tf-analyze:v0.1.0).'
-    default: 'ghcr.io/chrisadkin8/tf-analyze:latest'
+    description: 'Docker image to run. Empty (the default) = the engine image matching the ref this action was called at: `uses: ChrisAdkin8/tf-analyze@v1.2.3` runs `ghcr.io/chrisadkin8/tf-analyze:1.2.3` (`@v1.2` -> `:1.2`, `@v1` -> `:1`, a commit SHA -> `:sha-<sha>`). A branch or a local `uses: ./` falls back to `:latest` with a warning. Set to override (e.g. ghcr.io/chrisadkin8/tf-analyze:0.2.3).'
+    default: ''
   extra-args:
     description: 'Additional CLI flags appended verbatim to detect.py (e.g. "--check-registry --compliance").'
     default: ''
@@ -203,6 +203,14 @@ runs:
     - name: Resolve image
       id: resolve_image
       shell: bash
+      # Order: explicit `image:`; explicit `ref:`; else the ref this action
+      # was called at (`github.action_ref`), so pinning
+      # `uses: ChrisAdkin8/tf-analyze@v1.2.3` pins the engine too — the old
+      # `:latest` default ran whatever `main` last built for everyone,
+      # pinned or not. A tag derived from the action ref may not exist
+      # (a release older than the sha-/major- image tags); the pull step
+      # then falls back to `:latest` with a warning (`derived=true`).
+      #
       # `ref` is a convenience alias for the image tag — `ref: v0.2.3`
       # is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:0.2.3`.
       # We fail loudly when both are set explicitly because they're two
@@ -219,35 +227,67 @@ runs:
       env:
         TFA_REF: ${{ inputs.ref }}
         TFA_IMAGE: ${{ inputs.image }}
+        TFA_ACTION_REF: ${{ github.action_ref }}
       run: |
-        DEFAULT_IMAGE="ghcr.io/chrisadkin8/tf-analyze:latest"
-        if [ -n "${TFA_REF}" ] && [ "${TFA_IMAGE}" != "${DEFAULT_IMAGE}" ]; then
+        REPO_IMAGE="ghcr.io/chrisadkin8/tf-analyze"
+        DERIVED=false
+        if [ -n "${TFA_REF}" ] && [ -n "${TFA_IMAGE}" ]; then
           echo "::error::tf-analyze: 'ref' and 'image' are mutually exclusive — set one, not both."
           exit 1
         fi
-        if [ -n "${TFA_REF}" ]; then
+        if [ -n "${TFA_IMAGE}" ]; then
+          RESOLVED="${TFA_IMAGE}"
+        elif [ -n "${TFA_REF}" ]; then
           if [[ "${TFA_REF}" =~ ^v[0-9] ]]; then
             TAG="${TFA_REF#v}"
           else
             TAG="${TFA_REF}"
           fi
-          RESOLVED="ghcr.io/chrisadkin8/tf-analyze:${TAG}"
+          RESOLVED="${REPO_IMAGE}:${TAG}"
+        elif [[ "${TFA_ACTION_REF}" =~ ^v?[0-9]+(\.[0-9]+){0,2}$ ]]; then
+          RESOLVED="${REPO_IMAGE}:${TFA_ACTION_REF#v}"
+          DERIVED=true
+        elif [[ "${TFA_ACTION_REF}" =~ ^[0-9a-f]{40}$ ]]; then
+          RESOLVED="${REPO_IMAGE}:sha-${TFA_ACTION_REF}"
+          DERIVED=true
         else
-          RESOLVED="${TFA_IMAGE}"
+          RESOLVED="${REPO_IMAGE}:latest"
+          echo "::warning::tf-analyze: action ref '${TFA_ACTION_REF:-local}' is not a release tag or commit SHA, so the engine is the unpinned ':latest' image. Pin the action (uses: ChrisAdkin8/tf-analyze@vX.Y.Z) or set 'ref:' / 'image:'."
         fi
         echo "image=${RESOLVED}" >> "$GITHUB_OUTPUT"
+        echo "derived=${DERIVED}" >> "$GITHUB_OUTPUT"
 
     - name: Pull tf-analyze image
+      id: pull_image
       shell: bash
+      # An image already present locally (e.g. built from the checkout by
+      # the dogfood workflow) is used as is. A tag derived from the action
+      # ref that was never published falls back to `:latest` with a
+      # warning instead of failing the job; an explicit `image:` / `ref:`
+      # that cannot be pulled still fails.
       env:
         TFA_IMAGE: ${{ steps.resolve_image.outputs.image }}
-      run: docker pull "${TFA_IMAGE}"
+        TFA_DERIVED: ${{ steps.resolve_image.outputs.derived }}
+      run: |
+        IMAGE="${TFA_IMAGE}"
+        if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
+          if ! docker pull "${IMAGE}"; then
+            if [ "${TFA_DERIVED}" != "true" ]; then
+              echo "::error::tf-analyze: cannot pull ${IMAGE}"
+              exit 1
+            fi
+            echo "::warning::tf-analyze: no published engine image ${IMAGE} for this action ref; falling back to ':latest'. Set 'ref:' or 'image:' to pin the engine."
+            IMAGE="ghcr.io/chrisadkin8/tf-analyze:latest"
+            docker pull "${IMAGE}"
+          fi
+        fi
+        echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
     - name: Run tf-analyze (JSON)
       id: scan
       shell: bash
       env:
-        TFA_IMAGE: ${{ steps.resolve_image.outputs.image }}
+        TFA_IMAGE: ${{ steps.pull_image.outputs.image }}
       run: |
         BASE_ARGS=()
         while IFS= read -r line; do BASE_ARGS+=("$line"); done < /tmp/tf-analyze-base-args

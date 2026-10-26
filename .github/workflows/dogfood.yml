@@ -23,6 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Test this checkout's engine, not the last image `main` published:
+      # the action uses a locally present image as is (no pull).
+      - name: Build the engine image from this checkout
+        run: docker build -t tf-analyze:dogfood .
       - name: Run tf-analyze on attack-graph-demo
         id: scan
         uses: ./
@@ -34,6 +38,7 @@ jobs:
         continue-on-error: true
         with:
           target: examples/attack-graph-demo
+          image: tf-analyze:dogfood
           fail-on: CRITICAL
           attack-graph: 'true'
           # Pin to static: mode=auto resolves to "diff" on PR events, but the

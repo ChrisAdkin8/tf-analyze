@@ -114,10 +114,12 @@ class TestRefInput:
         assert "mutually exclusive" in action_text
 
     def test_pull_and_run_use_resolved_image(self, action_text: str) -> None:
-        # Both docker pull and docker run must consume the resolved image
-        # output, not the raw `inputs.image`. Otherwise `ref:` is wired
-        # to nothing.
-        assert action_text.count("steps.resolve_image.outputs.image") >= 2
+        # docker pull consumes the resolved image, and docker run the image
+        # the pull step settled on (it may fall back to :latest), never the
+        # raw `inputs.image`. Otherwise `ref:` is wired to nothing.
+        assert "TFA_IMAGE: ${{ steps.resolve_image.outputs.image }}" in action_text
+        assert "TFA_IMAGE: ${{ steps.pull_image.outputs.image }}" in action_text
+        assert "${{ inputs.image }}\n" not in action_text.split("Pull tf-analyze image")[1]
 
 
 # ---------------------------------------------------------------------------
@@ -363,3 +365,119 @@ class TestDiffBaseHardening:
             "is non-empty, otherwise static-mode runs would pass an "
             "empty --diff-base and crash"
         )
+
+
+# ---------------------------------------------------------------------------
+# The engine image follows the ref the action was called at, not `:latest`.
+# ---------------------------------------------------------------------------
+
+
+def _step_script(action: dict, name: str) -> str:
+    step = next(s for s in action["runs"]["steps"] if s.get("name") == name)
+    return step["run"]
+
+
+def _resolve(action: dict, tmp_path: Path, *, ref: str = "", image: str = "",
+             action_ref: str = "") -> tuple[int, dict, str]:
+    import os
+    import subprocess
+
+    out = tmp_path / "out"
+    out.write_text("")
+    proc = subprocess.run(
+        ["bash", "-c", _step_script(action, "Resolve image")],
+        env={**os.environ, "TFA_REF": ref, "TFA_IMAGE": image,
+             "TFA_ACTION_REF": action_ref, "GITHUB_OUTPUT": str(out)},
+        capture_output=True, text=True, check=False,
+    )
+    outputs = dict(line.split("=", 1) for line in out.read_text().splitlines() if "=" in line)
+    return proc.returncode, outputs, proc.stdout
+
+
+REPO_IMAGE = "ghcr.io/chrisadkin8/tf-analyze"
+
+
+@pytest.mark.parametrize(
+    ("action_ref", "image", "derived"),
+    [
+        ("v1.2.3", f"{REPO_IMAGE}:1.2.3", "true"),
+        ("v1.2", f"{REPO_IMAGE}:1.2", "true"),
+        ("v1", f"{REPO_IMAGE}:1", "true"),
+        ("0.4.0", f"{REPO_IMAGE}:0.4.0", "true"),
+        ("4f3d8b6c9a2e1f70d8b4c6e2a1f93d7c0b5e8f44",
+         f"{REPO_IMAGE}:sha-4f3d8b6c9a2e1f70d8b4c6e2a1f93d7c0b5e8f44", "true"),
+        ("main", f"{REPO_IMAGE}:latest", "false"),
+        ("", f"{REPO_IMAGE}:latest", "false"),
+    ],
+)
+def test_image_follows_the_action_ref(action, tmp_path, action_ref, image, derived) -> None:
+    rc, outputs, stdout = _resolve(action, tmp_path, action_ref=action_ref)
+    assert rc == 0
+    assert outputs == {"image": image, "derived": derived}
+    if derived == "false":
+        assert "::warning::" in stdout
+
+
+def test_explicit_ref_and_image_win_over_the_action_ref(action, tmp_path) -> None:
+    _, outputs, _ = _resolve(action, tmp_path, ref="v0.2.3", action_ref="v9.9.9")
+    assert outputs["image"] == f"{REPO_IMAGE}:0.2.3"
+    _, outputs, _ = _resolve(action, tmp_path, image="example/engine:dev", action_ref="v9.9.9")
+    assert outputs == {"image": "example/engine:dev", "derived": "false"}
+    rc, _, stdout = _resolve(action, tmp_path, ref="v0.2.3", image="example/engine:dev")
+    assert rc == 1 and "mutually exclusive" in stdout
+
+
+def test_image_default_is_not_latest(action) -> None:
+    assert action["inputs"]["image"].get("default", "") == ""
+
+
+def test_docker_publishes_the_tags_the_action_derives() -> None:
+    docker = (REPO_ROOT / ".github" / "workflows" / "docker.yml").read_text()
+    for pattern in ("{{version}}", "{{major}}.{{minor}}", "{{major}}", "type=sha"):
+        assert pattern in docker, pattern
+
+
+
+def _pull(action: dict, tmp_path: Path, image: str, derived: str,
+          *, local: tuple[str, ...] = (), published: tuple[str, ...] = ()) -> tuple[int, dict, str]:
+    """Run the pull step against a fake `docker` that knows `local` images
+    and can pull only `published` ones."""
+    import os
+    import subprocess
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    fake = bin_dir / "docker"
+    fake.write_text(
+        "#!/bin/bash\n"
+        f'LOCAL="{" ".join(local)}"\nPUBLISHED="{" ".join(published)}"\n'
+        'case "$1 $2" in\n'
+        '  "image inspect") [[ " $LOCAL " == *" $3 "* ]] ;;\n'
+        '  pull*) [[ " $PUBLISHED " == *" $2 "* ]] ;;\n'
+        "  *) exit 2 ;;\n"
+        "esac\n"
+    )
+    fake.chmod(0o755)
+    out = tmp_path / "out"
+    out.write_text("")
+    proc = subprocess.run(
+        ["bash", "-c", _step_script(action, "Pull tf-analyze image")],
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
+             "TFA_IMAGE": image, "TFA_DERIVED": derived, "GITHUB_OUTPUT": str(out)},
+        capture_output=True, text=True, check=False,
+    )
+    outputs = dict(line.split("=", 1) for line in out.read_text().splitlines() if "=" in line)
+    return proc.returncode, outputs, proc.stdout
+
+
+def test_pull_falls_back_to_latest_only_for_a_derived_tag(action, tmp_path) -> None:
+    latest = f"{REPO_IMAGE}:latest"
+    rc, outputs, stdout = _pull(action, tmp_path, f"{REPO_IMAGE}:0.1.0", "true", published=(latest,))
+    assert rc == 0 and outputs["image"] == latest and "::warning::" in stdout
+    rc, _, stdout = _pull(action, tmp_path, f"{REPO_IMAGE}:0.1.0", "false", published=(latest,))
+    assert rc == 1 and "::error::" in stdout
+
+
+def test_pull_uses_a_local_image_as_is(action, tmp_path) -> None:
+    rc, outputs, _ = _pull(action, tmp_path, "tf-analyze:dogfood", "false", local=("tf-analyze:dogfood",))
+    assert rc == 0 and outputs["image"] == "tf-analyze:dogfood"

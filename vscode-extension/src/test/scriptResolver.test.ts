@@ -3,7 +3,10 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { resolveScriptPath, resolvePython, defaultSearchPaths, BUNDLED_ENGINE_PATH } from '../scriptResolver';
+import {
+  resolveScriptPath, resolvePython, defaultSearchPaths, BUNDLED_ENGINE_PATH,
+  filterWorkspaceExtraArgs, resolveExtraArgs,
+} from '../scriptResolver';
 
 function pyCfg(pythonPath: string): { get<T>(section: string, defaultValue: T): T } {
   return {
@@ -183,3 +186,45 @@ test('resolver falls back to workspace search when bundled engine is missing', (
     fs.rmSync(repo, { recursive: true, force: true });
   }
 });
+
+// ---- tf-analyze.extraArgs from a workspace ---------------------------------
+
+test('filterWorkspaceExtraArgs keeps report filters and drops everything else', () => {
+  const [kept, dropped] = filterWorkspaceExtraArgs([
+    '--focus', 'security', '--show-info', '--fail-on=CRITICAL',
+    '--apply-fixes', 'apply', '--output=/home/me/.bashrc', '--catalog', '/tmp/evil',
+    '--compliance', '--compliance-framework', 'pci_dss',
+  ]);
+  assert.deepEqual(kept, [
+    '--focus', 'security', '--show-info', '--fail-on=CRITICAL',
+    '--compliance', '--compliance-framework', 'pci_dss',
+  ]);
+  // A dropped flag's value is dropped too: it is not a flag, so not allowed.
+  assert.deepEqual(dropped, ['--apply-fixes', 'apply', '--output=/home/me/.bashrc', '--catalog', '/tmp/evil']);
+});
+
+type Inspect = { globalValue?: string[]; workspaceValue?: string[]; workspaceFolderValue?: string[] };
+
+function argsCfg(info: Inspect): { get<T>(k: string, d: T): T; inspect<T>(k: string): unknown } {
+  const effective = info.workspaceFolderValue ?? info.workspaceValue ?? info.globalValue ?? [];
+  return {
+    get<T>(_k: string, _d: T): T { return effective as unknown as T; },
+    inspect<T>(_k: string): unknown { return { key: 'tf-analyze.extraArgs', ...info } as T; },
+  };
+}
+
+test('resolveExtraArgs filters values that come from workspace settings', () => {
+  let warned: string[] = [];
+  const got = resolveExtraArgs(
+    argsCfg({ globalValue: ['--apply-fixes', 'apply'], workspaceValue: ['--show-info', '--apply-fixes', 'apply'] }) as never,
+    (d) => { warned = d; },
+  );
+  assert.deepEqual(got, ['--show-info']);
+  assert.deepEqual(warned, ['--apply-fixes', 'apply']);
+});
+
+test('resolveExtraArgs trusts values from user settings', () => {
+  const got = resolveExtraArgs(argsCfg({ globalValue: ['--rank-by', 'hybrid'] }) as never);
+  assert.deepEqual(got, ['--rank-by', 'hybrid']);
+});
+

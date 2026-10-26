@@ -208,4 +208,35 @@ function makeRepoLayout() {
         fs.rmSync(repo, { recursive: true, force: true });
     }
 });
+// ---- tf-analyze.extraArgs from a workspace ---------------------------------
+(0, node_test_1.test)('filterWorkspaceExtraArgs keeps report filters and drops everything else', () => {
+    const [kept, dropped] = (0, scriptResolver_1.filterWorkspaceExtraArgs)([
+        '--focus', 'security', '--show-info', '--fail-on=CRITICAL',
+        '--apply-fixes', 'apply', '--output=/home/me/.bashrc', '--catalog', '/tmp/evil',
+        '--compliance', '--compliance-framework', 'pci_dss',
+    ]);
+    assert.deepEqual(kept, [
+        '--focus', 'security', '--show-info', '--fail-on=CRITICAL',
+        '--compliance', '--compliance-framework', 'pci_dss',
+    ]);
+    // A dropped flag's value is dropped too: it is not a flag, so not allowed.
+    assert.deepEqual(dropped, ['--apply-fixes', 'apply', '--output=/home/me/.bashrc', '--catalog', '/tmp/evil']);
+});
+function argsCfg(info) {
+    const effective = info.workspaceFolderValue ?? info.workspaceValue ?? info.globalValue ?? [];
+    return {
+        get(_k, _d) { return effective; },
+        inspect(_k) { return { key: 'tf-analyze.extraArgs', ...info }; },
+    };
+}
+(0, node_test_1.test)('resolveExtraArgs filters values that come from workspace settings', () => {
+    let warned = [];
+    const got = (0, scriptResolver_1.resolveExtraArgs)(argsCfg({ globalValue: ['--apply-fixes', 'apply'], workspaceValue: ['--show-info', '--apply-fixes', 'apply'] }), (d) => { warned = d; });
+    assert.deepEqual(got, ['--show-info']);
+    assert.deepEqual(warned, ['--apply-fixes', 'apply']);
+});
+(0, node_test_1.test)('resolveExtraArgs trusts values from user settings', () => {
+    const got = (0, scriptResolver_1.resolveExtraArgs)(argsCfg({ globalValue: ['--rank-by', 'hybrid'] }));
+    assert.deepEqual(got, ['--rank-by', 'hybrid']);
+});
 //# sourceMappingURL=scriptResolver.test.js.map

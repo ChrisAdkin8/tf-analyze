@@ -50,6 +50,7 @@ const ruleExplainer_1 = require("./ruleExplainer");
 const urls_1 = require("./urls");
 const scriptResolver_1 = require("./scriptResolver");
 const lspClient_1 = require("./lspClient");
+const engineRunner_1 = require("./engineRunner");
 const baseline_1 = require("./baseline");
 const uriHandler_1 = require("./uriHandler");
 const blastRadiusView_1 = require("./blastRadiusView");
@@ -395,8 +396,7 @@ function buildArgs(target) {
     if ((0, baseline_1.baselineExists)(target)) {
         args.push("--baseline", (0, baseline_1.baselinePath)(target));
     }
-    const extra = cfg.get("extraArgs") ?? [];
-    args.push(...extra);
+    args.push(...(0, engineRunner_1.engineExtraArgs)());
     return args;
 }
 /**

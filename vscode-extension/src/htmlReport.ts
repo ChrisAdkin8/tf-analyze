@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
 import { injectLinkInterceptor, injectReportCsp, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
-import { runEngine } from './engineRunner';
+import { runEngine, engineExtraArgs } from './engineRunner';
 
 /** Webview panel that renders `detect.py --format html` output inline.
  *
@@ -86,7 +86,7 @@ export class HtmlReportPanel {
     // path respects, so the HTML report reflects whatever filter the
     // user has dialed in for the rest of the extension.
     const section = (cfg.get<string>('section') ?? '').trim();
-    const extraArgs = (cfg.get<string[]>('extraArgs') ?? []).filter(a => typeof a === 'string' && a.length > 0);
+    const extraArgs = engineExtraArgs();
     const argv = ['--target', wsFolder, '--format', 'html'];
     if (section) argv.push('--section', section);
     argv.push(...extraArgs);

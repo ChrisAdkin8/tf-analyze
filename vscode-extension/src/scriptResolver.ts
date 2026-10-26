@@ -127,6 +127,71 @@ export function resolvePython(cfg: vscode.WorkspaceConfiguration): string {
   return process.platform === 'win32' ? 'python' : 'python3';
 }
 
+/** Engine flags a workspace's own settings may add through
+ * `tf-analyze.extraArgs`: they only filter or annotate the report. Flags
+ * that write files (`--apply-fixes`, `--output`, `--gen-tests` …), load
+ * other rules or config (`--catalog`, `--config`), reach the network
+ * (`--check-registry`, `--rank-by`, `--mode pr-review`) or change the
+ * output format the extension parses are dropped, because a cloned
+ * repository controls its `.vscode/settings.json`. Values from the
+ * user's own settings are trusted and passed through unchanged. Maps
+ * each allowed flag to whether it takes a value. */
+const WORKSPACE_SAFE_FLAGS: ReadonlyMap<string, boolean> = new Map([
+  ['--focus', true],
+  ['--fail-on', true],
+  ['--mitre-tactic', true],
+  ['--compliance-framework', true],
+  ['--show-fixes', false],
+  ['--show-info', false],
+  ['--no-suppress', false],
+  ['--fail-on-parse-error', false],
+  ['--blast-radius', false],
+  ['--explain-score', false],
+  ['--compliance', false],
+  ['--include-stubs', false],
+  ['--no-threat-intel', false],
+  ['--no-project-config', false],
+]);
+
+/** Keep only `WORKSPACE_SAFE_FLAGS` (and their values) from `args`;
+ * returns `[kept, dropped]`. Accepts `--flag value` and `--flag=value`. */
+export function filterWorkspaceExtraArgs(args: string[]): [string[], string[]] {
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const [flag, inline] = arg.split(/=(.*)/s, 2);
+    const takesValue = WORKSPACE_SAFE_FLAGS.get(flag);
+    if (takesValue === undefined) {
+      dropped.push(arg);
+      continue;
+    }
+    if (!takesValue || inline !== undefined) {
+      kept.push(arg);
+    } else if (i + 1 < args.length) {
+      kept.push(arg, args[++i]);
+    }
+  }
+  return [kept, dropped];
+}
+
+/** `tf-analyze.extraArgs` for the engine command line. When the value
+ * comes from workspace or folder settings it is filtered through
+ * `filterWorkspaceExtraArgs`; `onDropped` receives anything removed. */
+export function resolveExtraArgs(
+  cfg: vscode.WorkspaceConfiguration,
+  onDropped?: (dropped: string[]) => void,
+): string[] {
+  const clean = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((a): a is string => typeof a === 'string' && a.length > 0) : [];
+  const info = cfg.inspect<string[]>('extraArgs');
+  const fromWorkspace = info?.workspaceFolderValue ?? info?.workspaceValue;
+  if (fromWorkspace === undefined) return clean(cfg.get<string[]>('extraArgs', []));
+  const [kept, dropped] = filterWorkspaceExtraArgs(clean(fromWorkspace));
+  if (dropped.length && onDropped) onDropped(dropped);
+  return kept;
+}
+
 /** A short list of representative paths checked, useful for surfacing
  * "we looked here" guidance in error panels. Not exhaustive — the
  * parent walk in resolveScriptPath checks more locations than this. */

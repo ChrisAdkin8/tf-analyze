@@ -105,7 +105,7 @@ class HtmlReportPanel {
         // path respects, so the HTML report reflects whatever filter the
         // user has dialed in for the rest of the extension.
         const section = (cfg.get('section') ?? '').trim();
-        const extraArgs = (cfg.get('extraArgs') ?? []).filter(a => typeof a === 'string' && a.length > 0);
+        const extraArgs = (0, engineRunner_1.engineExtraArgs)();
         const argv = ['--target', wsFolder, '--format', 'html'];
         if (section)
             argv.push('--section', section);

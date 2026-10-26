@@ -28,9 +28,14 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/chrisadkin8/tf-analyze
+          # action.yml picks the engine image from the ref the action was
+          # called at: @v1.2.3 -> :1.2.3, @v1.2 -> :1.2, @v1 -> :1, a commit
+          # SHA -> :sha-<sha>. (metadata-action skips {{major}} for 0.x.)
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=long
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - uses: docker/build-push-action@v7
