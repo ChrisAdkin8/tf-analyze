@@ -5,6 +5,30 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 59 — Repo-controlled names stay inert in Markdown output — 2026-10-26
+
+From the critical review. File paths and resource names come from the
+scanned repository, and several Markdown outputs wrapped them in a single
+pair of backticks: a file named ``a` | ![x](evil.png) @octocat `.tf``
+closed the code span and the table cell, injecting an image and a
+mention into the PR comment.
+
+- New `_output._md_code`: an inline-code span with a fence longer than
+  any backtick run in the value, `|` escaped for tables, newlines folded.
+  Used for the PR summary's location and blast-radius resource cells, the
+  compliance table, and the fleet / trend reports (`_modes`).
+- Attack-graph Mermaid labels escape `<` / `>` (Mermaid renders HTML in
+  labels) and fold newlines.
+- The PR summary's top-findings table ranked and labelled findings by the
+  catalogue's default urgency, so an escalated CRITICAL (SSH open to the
+  world) showed as HIGH and could miss the top 3 while the banner counted
+  it as CRITICAL; it now uses the finding's effective urgency.
+
+New `tests/test_markdown_escaping.py`; its end-to-end tests fail on the
+previous code.
+
+---
+
 ## Round 58 — `--apply-fixes` is safe on ordinary files — 2026-10-26
 
 From the critical review, plus one found while testing the fixes on

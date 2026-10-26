@@ -527,6 +527,17 @@ def _mermaid_id(addr: str) -> str:
     return f"{sanitized}_{digest}"
 
 
+def _mermaid_label(text: str) -> str:
+    """A node / edge label safe inside a quoted Mermaid label: labels come
+    from resource names in the scanned repo, and Mermaid renders HTML in
+    labels, so `"`, `<`, `>` become `'`, `#lt;`, `#gt;` and newlines are
+    folded (a newline could also end the ```mermaid fence early)."""
+    return (
+        str(text).replace('"', "'").replace("<", "#lt;").replace(">", "#gt;")
+        .replace("\r", " ").replace("\n", " ")
+    )
+
+
 def graph_to_mermaid(graph: dict) -> str:
     """Convert an attack graph to a Mermaid flowchart string."""
     crit_set = set(graph.get("critical_path", []))
@@ -546,7 +557,7 @@ def graph_to_mermaid(graph: dict) -> str:
 
     for node in graph["nodes"]:
         nid = _mermaid_id(node["id"])
-        lbl = node["label"].replace('"', "'")
+        lbl = _mermaid_label(node["label"])
         if node["is_crown_jewel"]:
             lbl = f"\U0001f451 {lbl}"
         if node["type"] == "internet":
@@ -570,7 +581,7 @@ def graph_to_mermaid(graph: dict) -> str:
     for edge in graph["edges"]:
         fid = _mermaid_id(edge["from"])
         tid = _mermaid_id(edge["to"])
-        lbl = edge.get("label", "")
+        lbl = _mermaid_label(edge.get("label", ""))
         f_crit = edge["from"] in crit_set
         t_crit = edge["to"] in crit_set
         arrow = "==>" if (f_crit and t_crit) else "-->"

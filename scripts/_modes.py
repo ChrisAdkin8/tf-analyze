@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+from _output import _md_code
 from _tfjson import remap_lines, tf_source_files
 
 
@@ -126,7 +127,7 @@ def render_fleet_report(fleet_result: dict, fmt: str) -> str:
     lines.append("| Repository | Findings |")
     lines.append("|---|---|")
     for tgt, count in fleet_result["summary"].items():
-        lines.append(f"| `{tgt}` | {count} |")
+        lines.append(f"| {_md_code(tgt)} | {count} |")
 
     fleet_wide = fleet_result.get("fleet_wide", [])
     lines.append(f"\n## Fleet-Wide Findings ({len(fleet_wide)} across multiple repos)\n")
@@ -136,7 +137,7 @@ def render_fleet_report(fleet_result: dict, fmt: str) -> str:
         for f in fleet_wide:
             repos_short = ", ".join(r.rsplit("/", 1)[-1] for r in f.get("fleet_repos", []))
             lines.append(
-                f"| {f['id']} | `{f.get('resource','')}` | "
+                f"| {f['id']} | {_md_code(f.get('resource',''))} | "
                 f"{f.get('fleet_count',0)} | {repos_short} |"
             )
     else:
@@ -144,12 +145,12 @@ def render_fleet_report(fleet_result: dict, fmt: str) -> str:
 
     lines.append("\n## Per-Repo Findings\n")
     for tgt, fs in fleet_result["by_target"].items():
-        lines.append(f"### `{tgt}` ({len(fs)} finding{'s' if len(fs) != 1 else ''})\n")
+        lines.append(f"### {_md_code(tgt)} ({len(fs)} finding{'s' if len(fs) != 1 else ''})\n")
         for f in fs[:50]:  # cap per-repo lines to keep the report skim-able
             lines.append(
                 f"- `{f['id']}` "
                 f"{f.get('file','').rsplit('/',2)[-1]}:{f.get('line','')} "
-                f"`{f.get('resource','')}`"
+                f"{_md_code(f.get('resource',''))}"
             )
         if len(fs) > 50:
             lines.append(f"- _...and {len(fs)-50} more_")
@@ -258,7 +259,7 @@ def render_trend_table(rows: list[dict], fmt: str) -> str:
     for r in rows:
         net_str = f"+{r['net']}" if r["net"] > 0 else str(r["net"])
         lines.append(
-            f"| {r['date']} | `{r['sha']}` | +{r['new']} | -{r['resolved']} | "
+            f"| {r['date']} | {_md_code(r['sha'])} | +{r['new']} | -{r['resolved']} | "
             f"{net_str} | {r['total']} |"
         )
     total_new = sum(r["new"] for r in rows)
