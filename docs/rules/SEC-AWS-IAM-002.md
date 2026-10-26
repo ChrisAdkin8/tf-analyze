@@ -45,16 +45,12 @@ keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, c
   The role's trust policy (`assume_role_policy`, as `jsonencode`,
 heredoc or JSON string) has an Allow statement whose `Principal`
 is `"*"` or has a `"*"` value (`{ AWS = "*" }`).
-2. **`grep`** matching `/principals\s*\{[^}]*type\s*=\s*"\*"/` — _a textual regex matched somewhere in the file._
-  aws_iam_role inline principals block with type = "*"
 
 ## Why it likely fired
 
 The role's trust policy (`assume_role_policy`, as `jsonencode`,
 heredoc or JSON string) has an Allow statement whose `Principal`
 is `"*"` or has a `"*"` value (`{ AWS = "*" }`).
-
-aws_iam_role inline principals block with type = "*"
 
 ## Adversarial scenario
 
@@ -141,7 +137,7 @@ wildcard principal.
 
 See also rules in the `SEC-AWS-IAM-*` family:
 
-- [`SEC-AWS-IAM-001`](./SEC-AWS-IAM-001.md) — IAM policy with wildcard resource
+- [`SEC-AWS-IAM-001`](./SEC-AWS-IAM-001.md) — Inline IAM policy JSON grants wildcard `Resource: \"*\"`
 - [`SEC-AWS-IAM-003`](./SEC-AWS-IAM-003.md) — IAM account password policy is not configured or too weak
 
 ---

@@ -36,6 +36,11 @@ _JSONENCODE_RE = re.compile(r"\s*jsonencode\s*\((.*)\)\s*", re.DOTALL)
 
 WILDCARD_ACTIONS = frozenset({"*", "*:*"})
 
+# Read-only Describe* / List* calls: many accept no resource ARN at all
+# (ec2:DescribeInstances, s3:ListAllMyBuckets), so `Resource = "*"` is the
+# only valid value and must not count as a wildcard grant.
+_READ_ONLY_LIST_ACTION = re.compile(r"^[a-z0-9-]+:(?:Describe|List)[A-Za-z0-9*]*$")
+
 
 @dataclass
 class Statement:
@@ -55,7 +60,10 @@ class Statement:
         if self.effect.lower() == "deny":
             return False
         wild_action = any(a in WILDCARD_ACTIONS for a in self.actions)
-        wild_resource = "*" in self.resources
+        wild_resource = "*" in self.resources and not (
+            self.actions
+            and all(_READ_ONLY_LIST_ACTION.match(a) for a in self.actions)
+        )
         if check == "wildcard_action":
             return wild_action
         if check == "wildcard_resource":

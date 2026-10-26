@@ -150,7 +150,7 @@ must return 14 or greater.
 
 See also rules in the `SEC-AWS-IAM-*` family:
 
-- [`SEC-AWS-IAM-001`](./SEC-AWS-IAM-001.md) — IAM policy with wildcard resource
+- [`SEC-AWS-IAM-001`](./SEC-AWS-IAM-001.md) — Inline IAM policy JSON grants wildcard `Resource: \"*\"`
 - [`SEC-AWS-IAM-002`](./SEC-AWS-IAM-002.md) — IAM assume role policy with wildcard Principal
 
 ---

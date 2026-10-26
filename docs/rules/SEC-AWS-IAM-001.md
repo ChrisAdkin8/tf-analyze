@@ -1,6 +1,6 @@
 ---
-title: "SEC-AWS-IAM-001 — IAM policy with wildcard resource"
-description: "tf-analyze rule SEC-AWS-IAM-001 (HIGH · security): IAM policy with wildcard resource"
+title: "SEC-AWS-IAM-001 — Inline IAM policy JSON grants wildcard `Resource: \\"*\\"`"
+description: "tf-analyze rule SEC-AWS-IAM-001 (HIGH · security): Inline IAM policy JSON grants wildcard `Resource: \'*\'`"
 keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-269, cwe-732, d3-pa, d3-mfa, nist-csf-pr.ac-1, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
@@ -8,7 +8,7 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-2
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "SEC-AWS-IAM-001 \u2014 IAM policy with wildcard resource",
+  "headline": "SEC-AWS-IAM-001 \u2014 Inline IAM policy JSON grants wildcard `Resource: \\\"*\\\"`",
   "description": "Narrow the `Resource` field to the specific ARN(s) the policy needs.\nWildcard resources grant the actions to every resource in the account,\nviolating least-privilege. Use `arn:aws:s3:::my-bucket/*` instead of\n`*` for S3 access, `arn:aws:dyn",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-IAM-001/",
   "mainEntityOfPage": {
@@ -31,26 +31,32 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-2
 }
 </script>
 
-# ⚠️ SEC-AWS-IAM-001 — IAM policy with wildcard resource
+# ⚠️ SEC-AWS-IAM-001 — Inline IAM policy JSON grants wildcard `Resource: \"*\"`
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-IAM-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-IAM-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-IAM-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **IAM policy with wildcard resource.** This rule has `default_urgency: HIGH` and operates on a infrastructure wide blast radius. 
+> **Inline IAM policy JSON grants wildcard `Resource: \"*\"`.** This rule has `default_urgency: HIGH` and operates on a infrastructure wide blast radius. 
 
 ## What this checks
 
-1. **`grep`** matching `/"Resource"\s*:\s*"\*"/` — _a textual regex matched somewhere in the file._
-  IAM policy document with Resource = "*"
-2. **`grep`** matching `/resources\s*=\s*\["\*"\]/` — _a textual regex matched somewhere in the file._
-  aws_iam_policy_document statement with resources = ["*"]
+1. **`iam_json_policy_analysis`** — check: `wildcard_resource` — _an inline `policy = jsonencode({...})` Allow statement matches the listed check._
+  An Allow statement in a `policy` (`jsonencode`, heredoc or JSON
+string) on aws_iam_policy / aws_iam_role_policy / aws_iam_user_policy
+/ aws_iam_group_policy or an aws_iam_role `inline_policy` has
+`Resource: "*"`. Deny statements and read-only Describe* / List*
+actions (often not resource-scopable) do not count. The
+`aws_iam_policy_document` form is SEC-AWS-IAM-POLICY-003.
 
 ## Why it likely fired
 
-IAM policy document with Resource = "*"
-
-aws_iam_policy_document statement with resources = ["*"]
+An Allow statement in a `policy` (`jsonencode`, heredoc or JSON
+string) on aws_iam_policy / aws_iam_role_policy / aws_iam_user_policy
+/ aws_iam_group_policy or an aws_iam_role `inline_policy` has
+`Resource: "*"`. Deny statements and read-only Describe* / List*
+actions (often not resource-scopable) do not count. The
+`aws_iam_policy_document` form is SEC-AWS-IAM-POLICY-003.
 
 ## Adversarial scenario
 
@@ -71,9 +77,16 @@ etc.
 ![Plan required](https://img.shields.io/badge/plan%20required-e67e22?style=flat-square)
 
 ```hcl
-statement {
-  actions   = ["s3:GetObject", "s3:PutObject"]
-  resources = ["arn:aws:s3:::my-bucket/*"]
+resource "aws_iam_policy" "app" {
+  name = "app"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject"]
+      Resource = "arn:aws:s3:::my-bucket/*"
+    }]
+  })
 }
 ```
 

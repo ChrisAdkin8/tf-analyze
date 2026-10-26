@@ -29,7 +29,12 @@ patterns:
     resource: aws_lb_listener
     arg: protocol
     regex: '^HTTP$'
-    suppress_if_body_contains: 'type = "redirect"'
+    # An HTTP listener whose default action redirects (to HTTPS) is the
+    # recommended shape. Read from the parse tree, so fmt-aligned
+    # `type             = "redirect"` counts too.
+    suppress_if:
+      arg: default_action.type
+      equals: redirect
     description: |
       `aws_lb_listener` has `protocol = "HTTP"`. Serving traffic over plain HTTP
       exposes session tokens, credentials, and application data to network eavesdroppers.

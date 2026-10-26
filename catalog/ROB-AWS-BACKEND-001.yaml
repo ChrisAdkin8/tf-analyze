@@ -1,5 +1,5 @@
 id: ROB-AWS-BACKEND-001
-title: "Terraform S3 backend missing DynamoDB state locking"
+title: "Terraform S3 backend missing state locking"
 section: robustness
 default_urgency: HIGH
 blast_radius: infrastructure-wide
@@ -8,27 +8,34 @@ patterns:
   - kind: backend_missing_arg
     backend_type: s3
     arg: dynamodb_table
+    # Terraform >= 1.10 native S3 locking; it deprecates dynamodb_table.
+    alternatives:
+      - '\buse_lockfile\s*=\s*true\b'
 recommendation: |
-  Add `dynamodb_table` to the S3 backend configuration:
+  Turn on state locking in the S3 backend. On Terraform >= 1.10 use S3
+  native locking (`use_lockfile = true`), which needs no extra resources
+  and deprecates `dynamodb_table`:
 
       terraform {
         backend "s3" {
-          bucket         = "my-terraform-state"
-          key            = "terraform.tfstate"
-          region         = "us-east-1"
-          dynamodb_table = "terraform-state-lock"
-          encrypt        = true
+          bucket       = "my-terraform-state"
+          key          = "terraform.tfstate"
+          region       = "us-east-1"
+          encrypt      = true
+          use_lockfile = true
         }
       }
 
+  On older Terraform, set `dynamodb_table` to a table with a `LockID`
+  string hash key (`terraform init` does not create it).
+
   Without state locking, concurrent `terraform apply` runs on the same
-  workspace will race and can corrupt the state file. The DynamoDB table
-  needs a `LockID` string hash key; `terraform init` does not create it
-  automatically.
+  workspace will race and can corrupt the state file.
 verification: |
   Run two simultaneous `terraform plan` invocations and confirm the
-  second is blocked with "Error acquiring the state lock". Or check the
-  DynamoDB table in the AWS console for an active lock entry.
+  second is blocked with "Error acquiring the state lock". With
+  `use_lockfile`, a `<key>.tflock` object appears next to the state
+  while a run holds the lock.
 fix_hcl: |
   terraform {
     backend "s3" {
@@ -36,7 +43,7 @@ fix_hcl: |
       key            = "env/prod/terraform.tfstate"
       region         = "us-east-1"
       encrypt        = true
-      dynamodb_table = "terraform-state-lock"
+      use_lockfile   = true # Terraform >= 1.10; else dynamodb_table
       kms_key_id     = "alias/terraform-state"
     }
   }

@@ -19,7 +19,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from _hcl import find_blocks, block_arg_value, brace_walk, strip_hcl_context
+from _hcl import (
+    find_blocks, block_arg_value, brace_walk, mask_comments_and_heredocs,
+    strip_hcl_context,
+)
 from _cross_resource import _GRAPH_CHECKS
 from detect import (
     CorpusCtx,
@@ -62,6 +65,11 @@ def _corpus_backend_missing_arg(c: CorpusCtx) -> list[dict]:
     """``backend_missing_arg`` — fire when a backend block of the
     specified type exists but lacks a required argument (e.g. S3
     backend without state locking via ``dynamodb_table``).
+
+    ``alternatives`` (optional) lists regexes that also satisfy the rule
+    when one matches the backend body (e.g. ``use_lockfile = true``, the
+    S3 native locking that replaces ``dynamodb_table``). Comments are
+    blanked first, so a commented-out argument does not count.
     """
     pat = c.pat
     backend_type = pat.get("backend_type")
@@ -72,16 +80,18 @@ def _corpus_backend_missing_arg(c: CorpusCtx) -> list[dict]:
         r'^\s*backend\s+"' + re.escape(backend_type) + r'"\s*\{',
         re.MULTILINE,
     )
-    arg_re = re.compile(r'\b' + re.escape(arg) + r'\s*=')
+    satisfied = [re.compile(r'\b' + re.escape(arg) + r'\s*=')]
+    satisfied += [re.compile(r) for r in pat.get("alternatives") or []]
     out: list[dict] = []
-    for fp, text in c.all_files_text.items():
+    for fp, raw in c.all_files_text.items():
+        text = mask_comments_and_heredocs(raw)
         for m in backend_re.finditer(text):
             end_after = brace_walk(text, m.end() - 1)
             if end_after is None:
                 continue
             end = end_after - 1
             body = text[m.end():end]
-            if not arg_re.search(body):
+            if not any(r.search(body) for r in satisfied):
                 line = text.count("\n", 0, m.start()) + 1
                 out.append({
                     "id": c.eid,

@@ -1,7 +1,7 @@
 id: SEC-AWS-SSM-001
-title: "SSM Parameter Store parameter not encrypted as SecureString"
+title: "SSM parameter not stored as SecureString"
 section: security
-default_urgency: HIGH
+default_urgency: LOW
 blast_radius: single-resource
 status: active
 cis:
@@ -23,6 +23,9 @@ patterns:
     resource: aws_ssm_parameter
     arg: type
     regex: '^(?:String|StringList)$'
+    # Parameters named like a secret are SEC-SECRETS-002 (HIGH); this is
+    # the defence-in-depth hygiene check for the rest.
+    name_not_regex: '(?i)(passw|secret|token|api[_-]?key|private[_-]?key|credential|auth)'
     description: |
       `aws_ssm_parameter` has `type = "String"` or `type = "StringList"`.
       Parameters of these types are stored and transmitted in plaintext.

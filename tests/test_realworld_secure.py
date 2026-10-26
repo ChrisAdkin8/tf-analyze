@@ -38,32 +38,11 @@ KNOWN_FALSE_POSITIVES: dict[str, dict[str, str]] = {
         "MOD-PIN-001": "a 40-char SHA ?ref= is a pin",
         "SEC-SUPPLY-001": "looks for a module argument `ref`; the ref lives in the source URL",
     },
-    "iam_deny_insecure_transport": {
-        "SEC-AWS-IAM-001": "grep ignores effect = Deny",
-        "SEC-AWS-IAM-002": "grep ignores effect = Deny",
-    },
-    "kms_asymmetric_signing_key": {
-        "SEC-AWS-KMS-001": "asymmetric SIGN_VERIFY keys cannot be rotated",
-    },
     "kubernetes_secret_from_sensitive_var": {
         "SEC-K8S-SECRET-001": "fires on any data, even from a sensitive variable",
     },
-    "lb_http_redirect_listener": {
-        "SEC-AWS-LB-LISTENER-001": 'redirect exemption matches `type = "redirect"` text, not fmt-aligned',
-    },
     "pinned_registry_module": {
         "MOD-SUPPLY-003": "grep on the source line ignores the version argument",
-    },
-    "s3_backend_native_locking": {
-        "ROB-AWS-BACKEND-001": "use_lockfile (Terraform >= 1.10) replaces dynamodb_table",
-    },
-    "s3_public_access_block_for_each": {
-        "SEC-AWS-S3-001": "companion via for_each / each.value.id not recognised",
-        "SEC-AWS-S3-PUBLIC-BLOCK-001": "companion via for_each / each.value.id not recognised",
-    },
-    "ssm_parameter_non_secret": {
-        "SEC-AWS-SSM-001": 'any type = "String" parameter, even a non-secret AMI id',
-        "SEC-SECRETS-002": 'any type = "String" parameter, even a non-secret AMI id',
     },
 }
 

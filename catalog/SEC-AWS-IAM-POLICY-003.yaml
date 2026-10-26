@@ -48,4 +48,5 @@ fix_hcl: |
   }
 fix_disruption: plan_required
 fixtures:
+  - attack_graph_demo
   - aws_iam_policy_wildcard_resource

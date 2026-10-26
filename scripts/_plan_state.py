@@ -85,6 +85,38 @@ def plan_value_at_path(values: dict, path: str):
     return cur
 
 
+def _plan_suppressed(spec: dict | None, values: dict) -> bool:
+    """Plan/state counterpart of `_handlers_generic._suppressed_by`:
+    ``suppress_if: {arg, equals | regex}`` holds when any value at the
+    (possibly dotted) `arg` equals the literal, case-insensitively, or
+    matches the regex."""
+    if not spec or not spec.get("arg"):
+        return False
+    want = spec.get("equals")
+    for actual in plan_values_at(values, spec["arg"]):
+        if "regex" in spec:
+            if re.search(spec["regex"], str(actual)):
+                return True
+        elif want is not None and str(actual).lower() == str(want).lower():
+            return True
+    return False
+
+
+def _plan_name_selected(pat: dict, r: dict) -> bool:
+    """Plan/state counterpart of `_handlers_generic._name_selected`."""
+    values = r.get("values") or {}
+    names = [
+        n for n in (r.get("name") or r.get("address", "").split(".")[-1],
+                    values.get("name"), values.get("bucket"))
+        if isinstance(n, str)
+    ]
+    if pat.get("name_regex") and not any(re.search(pat["name_regex"], n) for n in names):
+        return False
+    if pat.get("name_not_regex") and any(re.search(pat["name_not_regex"], n) for n in names):
+        return False
+    return True
+
+
 def _plan_empty(value) -> bool:
     """Plan / state JSON lists every unset attribute as ``null`` and every
     unset nested block as ``[]``, so "present" means present and non-empty
@@ -218,6 +250,10 @@ def evaluate_against_resources(
                     if r.get("type") != rt:
                         continue
                     rvalues = r.get("values") or {}
+                    if _plan_suppressed(pat.get("suppress_if"), rvalues):
+                        continue
+                    if not _plan_name_selected(pat, r):
+                        continue
                     vals = plan_values_at(rvalues, path)
                     if fire_if_absent and (not vals or not plan_has_path(rvalues, path)):
                         hit = True
@@ -245,30 +281,20 @@ def evaluate_against_resources(
                     continue
                 suppress_if = pat.get("suppress_if")
                 every = pat.get("instances", "all") != "any"
-                name_re = re.compile(pat["name_regex"]) if pat.get("name_regex") else None
                 companion = pat.get("unless_companion")
                 for r in resources:
                     if r.get("type") != rt:
                         continue
                     rvals = r.get("values") or {}
-                    if name_re is not None and not any(
-                        isinstance(n, str) and name_re.search(n)
-                        for n in (r.get("name") or r.get("address", "").split(".")[-1],
-                                  rvals.get("name"), rvals.get("bucket"))
-                    ):
+                    if not _plan_name_selected(pat, r):
                         continue
                     if companion and _has_companion(
                         r, companion, resources, references or {},
                     ):
                         continue
                     if not plan_has_path(rvals, arg_path, every=every):
-                        if suppress_if:
-                            s_arg = suppress_if.get("arg", "")
-                            s_val = suppress_if.get("equals")
-                            if s_arg and s_val is not None:
-                                actual = plan_value_at_path(r.get("values") or {}, s_arg)
-                                if actual is not None and str(actual).lower() == str(s_val).lower():
-                                    continue
+                        if _plan_suppressed(suppress_if, rvals):
+                            continue
                         findings.append({
                             "id": eid,
                             "file": file_marker,
