@@ -397,7 +397,13 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
     glob = pat.get("file_glob", "**/*.tf")
     if glob not in ("**/*.tf", "*.tf"):
         try:
-            matched = c.file_path.match(glob)
+            # A glob aimed at a `.tf` file also covers its `.tf.json` twin
+            # (`**/versions.tf` → `versions.tf.json`).
+            matched = c.file_path.match(glob) or (
+                glob.endswith(".tf")
+                and c.file_path.name.endswith(".tf.json")
+                and c.file_path.with_name(c.file_path.name[:-5]).match(glob)
+            )
         except ValueError as e:
             raise ValueError(
                 f"catalogue rule has malformed file_glob {glob!r}: {e}"

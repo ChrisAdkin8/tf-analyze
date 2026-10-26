@@ -234,6 +234,10 @@ def handle_apply_fixes(
         # to open(), which then raised IsADirectoryError.
         if not path.is_file():
             continue
+        # A `.tf.json` file is scanned as rendered HCL; an HCL fix snippet
+        # cannot be spliced into JSON, so it is reported but not patched.
+        if path.name.endswith(".tf.json"):
+            continue
 
         with open(path) as fh:
             original_lines = fh.readlines()

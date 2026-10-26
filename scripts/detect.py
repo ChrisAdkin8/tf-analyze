@@ -124,6 +124,7 @@ from _hcl import (
     resource_values_at,
 )
 from _network import parse_literal as _net_parse_literal, resolve as _net_resolve
+from _tfjson import is_tf_source, read_tf_source, remap_lines, tf_source_files
 
 
 # Catalogue lifecycle (YAML loader, schema validation, load_catalog,
@@ -144,6 +145,12 @@ from _catalog import (
     _load_project_config,
     load_catalog,
 )
+
+
+def _read_tf_source(path: Path) -> str:
+    """Text to scan for a `.tf` / `.tf.json` file (`.tf.json` is rendered
+    as the equivalent HCL; see `_tfjson`)."""
+    return read_tf_source(path, _read_normalized)
 
 
 # ---- Resource block extraction ------------------------------------------
@@ -628,7 +635,7 @@ def detect_in_file(
     # when the file did not parse, is not `.tf`, or the key is ambiguous
     # (seen twice by either side). Line numbers still come from
     # find_blocks (tasks/hcl-parser-migration.md §4.3, §4.5).
-    _tree = parse_tf(text)[0] if file_path.suffix == ".tf" else None
+    _tree = parse_tf(text)[0] if is_tf_source(file_path) else None
     _subtrees = resource_subtrees(_tree)
     _regex_keys: dict[tuple, int] = {}
     for _blk in resources:
@@ -1478,7 +1485,7 @@ def _fleet_scan(targets: list[Path], entries: list[dict]) -> dict:
     """detect.py-side adapter passing the heavyweight scan callables."""
     return _fleet_scan_raw(
         targets, entries,
-        read_normalized=_read_normalized,
+        read_normalized=_read_tf_source,
         detect_corpus=detect_corpus,
         detect_in_file=detect_in_file,
     )
@@ -1889,14 +1896,14 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     # Load corpus for re-probing
     _ignore_paths_vf = project_config.get("ignore_paths") or []
     tf_files = [
-        p for p in target.rglob("*.tf")
+        p for p in tf_source_files(target)
         if ".terraform" not in p.parts
         and not _path_is_ignored(p, target, _ignore_paths_vf)
     ]
     all_text = {}
     for fp in tf_files:
         try:
-            all_text[fp] = _read_normalized(fp)
+            all_text[fp] = _read_tf_source(fp)
         except Exception:
             continue
     verify = verify_fixed(prior, target, all_text, entries)
@@ -2559,7 +2566,7 @@ def _add_mode_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--diff-base",
         default=None,
-        help="Git ref to diff against (e.g., main). Only scan changed .tf files.",
+        help="Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files.",
     )
     ap.add_argument(
         "--state-json",
@@ -3076,7 +3083,7 @@ def main():
 
     _ignore_paths = project_config.get("ignore_paths") or []
     tf_files = [
-        p for p in target.rglob("*.tf")
+        p for p in tf_source_files(target)
         if ".terraform" not in p.parts
         and not _path_is_ignored(p, target, _ignore_paths)
     ]
@@ -3100,7 +3107,7 @@ def main():
     file_inline_suppressions: dict[str, dict[int, set[str]]] = {}
     for fp in tf_files:
         try:
-            text = _read_normalized(fp)
+            text = _read_tf_source(fp)
         except Exception as e:
             print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
             continue
@@ -3143,6 +3150,7 @@ def main():
     findings, parse_fallback_files = _run_detection(
         args, all_text, extra_text, entries, diff_files, target,
     )
+    remap_lines(findings)
     for _pf in parse_fallback_files:
         print(
             f"WARN: {_pf['file']}: parse failed, scanned in fallback mode: "
