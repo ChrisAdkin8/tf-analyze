@@ -5,9 +5,9 @@
     "tolerance_pct": 15
   },
   "counts": {
-    "gcp": 118,
-    "aws": 125,
-    "azure": 125,
-    "total": 371
+    "gcp": 114,
+    "aws": 127,
+    "azure": 123,
+    "total": 367
   }
 }

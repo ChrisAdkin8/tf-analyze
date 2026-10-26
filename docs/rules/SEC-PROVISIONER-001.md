@@ -85,13 +85,10 @@ resource "aws_instance" "app" {
   })
 }
 
-# Replace local-exec trigger with terraform_data
-resource "terraform_data" "init" {
-  triggers_replace = [aws_instance.app.id]
-  provisioner "local-exec" {
-    command = "echo 'only use as last resort — document why'"
-  }
-}
+# Move local-exec work out of Terraform: a CI step after `apply`, or a
+# native resource (aws_ssm_association, aws_lambda_invocation) for
+# post-create actions. Where a provisioner is truly unavoidable, keep
+# it and record why with `# tf-analyze:ignore SEC-PROVISIONER-001`.
 ```
 
 ## Verification

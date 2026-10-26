@@ -19,13 +19,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 ENTRIES = [e for e in detect.load_catalog(REPO / "catalog") if e.get("fix_hcl")]
 
-KNOWN_SELF_TRIGGERS = {
-    "MOD-STALE-001": "fires on any registry module source; staleness needs --check-registry",
-    "MOD-SUPPLY-003": "grep on the source line ignores the module's version argument",
-    "SEC-PROVIDER-001": 'regex `">=\\s*[0-9]` also matches a bounded ">= 5.0, < 6.0"',
-    "SEC-PROVISIONER-001": "the fix itself keeps a local-exec provisioner",
-    "SEC-SUPPLY-001": "looks for a module argument `ref`; the ref lives in the source URL",
-}
+KNOWN_SELF_TRIGGERS: dict[str, str] = {}
 
 # Fixes that are not a `.tf` file: rule id -> file name to write the
 # snippet to (alongside an empty main.tf so the directory is a module).

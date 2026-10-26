@@ -29,7 +29,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 
 | Rule | Urgency | Title |
 |------|---------|-------|
-| [`MOD-PIN-001`](./MOD-PIN-001.md) | HIGH | Module source not pinned |
+| [`MOD-PIN-001`](./MOD-PIN-001.md) | HIGH | Git module source not pinned to a ref |
 | [`MOD-SUPPLY-001`](./MOD-SUPPLY-001.md) | HIGH | Module pinned to mutable git ref (main or master) |
 | [`MOD-SUPPLY-003`](./MOD-SUPPLY-003.md) | HIGH | Registry module missing version constraint |
 | [`MOD-SUPPLY-004`](./MOD-SUPPLY-004.md) | MEDIUM | Module version constraint uses `>=` with no upper bound |

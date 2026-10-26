@@ -1,15 +1,15 @@
 """Module-lifecycle detector handlers extracted from detect.py (R30.15).
 
-Houses the 7 handlers concerned with module hygiene: missing
+Houses the 8 handlers concerned with module hygiene: missing
 descriptions, unused declarations, missing test files, orphaned
 module directories, and registry-fingerprint module-reuse detection.
 
 In-file handlers (2):
     variable_missing_description, output_missing_description
 
-Corpus handlers (5):
+Corpus handlers (6):
     variable_unused, output_unused, module_missing_tests,
-    module_unused, registry_fingerprint
+    module_unused, registry_fingerprint, registry_check
 """
 from __future__ import annotations
 
@@ -147,6 +147,18 @@ def _corpus_module_missing_tests(c: CorpusCtx) -> list[dict]:
                 "resource": f"<module:{dir_path.name}>",
             })
     return out
+
+
+@_register_corpus("registry_check")
+def _corpus_registry_check(c: CorpusCtx) -> list[dict]:
+    """``registry_check`` — no offline finding. The rule's findings come
+    from the opt-in registry pass (``--check-registry``,
+    ``_registry.check_module_registry_staleness``), which needs the
+    registry's latest version; a static pattern can only see that a
+    registry source exists, and fired on every module (MOD-STALE-001).
+    Registered so the kind is known, not silently skipped.
+    """
+    return []
 
 
 @_register_corpus("module_unused")

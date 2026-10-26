@@ -18,7 +18,7 @@
 #     running unmaintained code in production.
 #
 # Expected tf-analyze findings:
-#   - MOD-PIN-001                 MEDIUM  Registry module source missing version
+#   - MOD-SUPPLY-003              HIGH    Registry module source missing version
 #   - STK-AWS-EKS-001             HIGH    EKS endpoint_private_access not enabled
 #   - STK-AWS-EKS-002             HIGH    EKS control plane logging not enabled
 #   - STK-AWS-EKS-003             HIGH    EKS secrets encryption not configured

@@ -41,20 +41,20 @@ keywords: "security, high, terraform, iac, mitre-T1195.001, mitre-T1195.002, cwe
 
 ## What this checks
 
-1. **`module_block_missing_arg`** (`ref`) — _a `module_block_missing_arg` pattern._
-  Git source without a ref= pin lands on the default branch (`HEAD`).
-Without a commit SHA or signed tag the module body can change under
-you between plans — supply-chain compromise of the upstream repo
-reaches every consumer at the next `terraform init`. Pin to a
-40-char commit SHA, a verified tag, or a content digest.
+1. **`grep`** matching `/source\s*=\s*"(?:git::|github\.com/|bitbucket\.org/)[^"]*[?&]ref=(?![0-9a-f]{40}[&"]|v?[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z.]+)?[&"])/` — _a textual regex matched somewhere in the file._
+  Git source pinned to a branch (`?ref=main`) rather than a commit SHA
+or a version tag. The branch moves, so the module body can change
+under you between plans — supply-chain compromise of the upstream
+repo reaches every consumer at the next `terraform init`. Pin to a
+40-char commit SHA or a release tag.
 
 ## Why it likely fired
 
-Git source without a ref= pin lands on the default branch (`HEAD`).
-Without a commit SHA or signed tag the module body can change under
-you between plans — supply-chain compromise of the upstream repo
-reaches every consumer at the next `terraform init`. Pin to a
-40-char commit SHA, a verified tag, or a content digest.
+Git source pinned to a branch (`?ref=main`) rather than a commit SHA
+or a version tag. The branch moves, so the module body can change
+under you between plans — supply-chain compromise of the upstream
+repo reaches every consumer at the next `terraform init`. Pin to a
+40-char commit SHA or a release tag.
 
 ## Adversarial scenario
 

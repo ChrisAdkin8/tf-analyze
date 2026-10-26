@@ -5,11 +5,11 @@ default_urgency: LOW
 blast_radius: module
 status: active
 patterns:
-  - kind: grep
-    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    code_only: true  # ignore comments and heredoc text
-    regex: 'source\s*=\s*"[A-Za-z0-9_-]+/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+"'
-    description: Registry-style module source present (staleness checked via --check-registry)
+  - kind: registry_check
+    description: |
+      Pinned version is >= 1 major or >= 3 minor versions behind the
+      registry's latest. Needs --check-registry (network); offline
+      scans never report it.
 owasp_iac:
   - "Develop and Distribute / Open Source Dependency Scanning"
 mitre:
@@ -51,5 +51,3 @@ fix_hcl: |
     version = "~> 5.1"   # was ~> 3.0
   }
 fix_disruption: plan_required
-fixtures:
-  - mod_stale_version

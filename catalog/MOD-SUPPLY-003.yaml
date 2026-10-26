@@ -5,12 +5,14 @@ default_urgency: HIGH
 blast_radius: module
 status: active
 patterns:
-  - kind: grep
-    text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
-    code_only: true  # ignore comments and heredoc text
+  - kind: module_block_missing_arg
     file_glob: "**/*.tf"
-    regex: 'source\s*=\s*"[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*/[a-zA-Z][a-zA-Z0-9_-]*"'
-    description: Module block without a version = "..." argument
+    # Registry address: [HOST/]NAMESPACE/NAME/PROVIDER[//SUBDIR]. A grep on
+    # the source line could not see the block's `version`, so it fired on
+    # every registry module, pinned or not.
+    source_regex: '^(?:[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?::[0-9]+)?/)?[A-Za-z0-9][A-Za-z0-9_-]*/[A-Za-z0-9][A-Za-z0-9_-]*/[A-Za-z0-9][A-Za-z0-9_-]*(?://[^?]*)?$'
+    arg: version
+    description: Registry module block without a version = "..." argument
 owasp_iac:
   - "Develop and Distribute / Open Source Dependency Scanning"
 recommendation: |

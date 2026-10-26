@@ -1,6 +1,6 @@
 ---
-title: "MOD-PIN-001 — Module source not pinned"
-description: "tf-analyze rule MOD-PIN-001 (HIGH · module): Module source not pinned"
+title: "MOD-PIN-001 — Git module source not pinned to a ref"
+description: "tf-analyze rule MOD-PIN-001 (HIGH · module): Git module source not pinned to a ref"
 keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-sr-3, nist-800-53-cm-2, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l2, slsa-deps"
 ---
 
@@ -8,8 +8,8 @@ keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "MOD-PIN-001 \u2014 Module source not pinned",
-  "description": "Pin every external module:\n - Registry: add `version = \"~> X.Y\"`.\n - Git: add `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL.\n - Local (`./modules/foo`): no pin needed but verify the path is stable.",
+  "headline": "MOD-PIN-001 \u2014 Git module source not pinned to a ref",
+  "description": "Pin every git-hosted module (git::, github.com/, bitbucket.org/) by\nadding `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL. Registry\nmodules without `version` are MOD-SUPPLY-003; a ref naming a branch is\nSEC-SUPPLY-001. Local paths (",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/MOD-PIN-001/",
   "mainEntityOfPage": {
     "@type": "WebPage",
@@ -31,24 +31,22 @@ keywords: "module, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist
 }
 </script>
 
-# ⚠️ MOD-PIN-001 — Module source not pinned
+# ⚠️ MOD-PIN-001 — Git module source not pinned to a ref
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: module](https://img.shields.io/badge/section-module-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/MOD-PIN-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=MOD-PIN-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add MOD-PIN-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Module source not pinned.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+> **Git module source not pinned to a ref.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
 
 ## What this checks
 
-1. **`grep`** matching `/source\s*=\s*"git::[^"]*"\s*$/` — _a textual regex matched somewhere in the file._
+1. **`grep`** matching `/source\s*=\s*"git::(?![^"]*[?&]ref=)[^"]*"\s*$/` — _a textual regex matched somewhere in the file._
   git source without ?ref= pin
-2. **`grep`** matching `/source\s*=\s*"github\.com/[^"]*"\s*$/` — _a textual regex matched somewhere in the file._
+2. **`grep`** matching `/source\s*=\s*"github\.com/(?![^"]*[?&]ref=)[^"]*"\s*$/` — _a textual regex matched somewhere in the file._
   github.com source without ?ref= pin
-3. **`grep`** matching `/source\s*=\s*"bitbucket\.org/[^"]*"\s*$/` — _a textual regex matched somewhere in the file._
+3. **`grep`** matching `/source\s*=\s*"bitbucket\.org/(?![^"]*[?&]ref=)[^"]*"\s*$/` — _a textual regex matched somewhere in the file._
   bitbucket.org source without ?ref= pin
-4. **`module_block_missing_arg`** (`version`) — _a `module_block_missing_arg` pattern._
-  registry source without version constraint
 
 ## Why it likely fired
 
@@ -58,8 +56,6 @@ github.com source without ?ref= pin
 
 bitbucket.org source without ?ref= pin
 
-registry source without version constraint
-
 ## Adversarial scenario
 
 HIGH and CRITICAL findings carry a 3–4 sentence adversarial narrative grounded in real incidents (Capital One, Accenture, SolarWinds). Run `python3 scripts/detect.py --explain MOD-PIN-001` or hover the squiggle in the VS Code extension to see the rendered narrative for this rule.
@@ -68,10 +64,10 @@ Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/C
 
 ## Remediation
 
-Pin every external module:
- - Registry: add `version = "~> X.Y"`.
- - Git: add `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL.
- - Local (`./modules/foo`): no pin needed but verify the path is stable.
+Pin every git-hosted module (git::, github.com/, bitbucket.org/) by
+adding `?ref=v1.2.3` or `?ref=<commit-sha>` to the source URL. Registry
+modules without `version` are MOD-SUPPLY-003; a ref naming a branch is
+SEC-SUPPLY-001. Local paths (`./modules/foo`) need no pin.
 
 ## Suggested fix (`fix_hcl`)
 
@@ -79,8 +75,7 @@ Pin every external module:
 
 ```hcl
 module "example" {
-  source  = "hashicorp/consul/aws"
-  version = "= 0.11.0"
+  source = "git::https://github.com/hashicorp/example.git?ref=v1.2.3"
 }
 ```
 
