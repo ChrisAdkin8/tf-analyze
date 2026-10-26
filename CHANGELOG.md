@@ -5,6 +5,28 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 45 — Housekeeping: Apache-2.0 everywhere, dev deps, ROB-VERSION-001 — 2026-10-26
+
+- **Licence is Apache-2.0 everywhere.** `LICENSE` (and the VS Code
+  extension's copy) have always been Apache-2.0, but `pyproject.toml`, the
+  README badge / layout / License section and a launch doc said MPL-2.0.
+  The VSIX is now packaged with its `LICENSE` (`vsce package` without
+  `--skip-license`).
+- **ROB-VERSION-001 false positive fixed.** `1\.[0-5]` matched the `1.1`
+  prefix of `1.10`, so a current floor (`>= 1.10.0`, `~> 1.10`) was
+  reported as "too old" — including all three terragoat clouds. New clean
+  fixture `ROB-VERSION-001_clean`.
+- **Dev extra matches CI**: adds `pytest-timeout` and `pyyaml` (two test
+  modules import `yaml`; without it `pytest -n auto` reported a spurious
+  failure).
+- **Stale docs**: README catalogue/fixture counts (354 rules; 360 + 264
+  fixtures), SKILL.md totals (354 = 352 active + 2 stubs; cross-cloud 63)
+  and its removed `--suppress` flag, VS Code extension README rule counts
+  (352), and CLAUDE.md's `--use-hcl2` note (the parser is vendored and
+  always on).
+
+---
+
 ## Round 44 — SARIF that code scanning can use — 2026-10-26
 
 - **Repo-relative URIs.** Every `artifactLocation.uri` was the absolute

@@ -62,7 +62,7 @@ engine code.
    are catching things in real codebases I've tested but I'd love
    reports of false positives.
 
-Happy to answer questions. Repo is MPL-2.0.
+Happy to answer questions. Repo is Apache-2.0.
 ```
 
 ## Notes
