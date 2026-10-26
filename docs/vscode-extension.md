@@ -152,7 +152,7 @@ The `tf-analyze: Run Scan` command remains exec-based — it covers the whole wo
 
 ### Baseline / suppression
 
-Right-click any row in the **Findings** tree → **Suppress finding (add to baseline)** to write the (id, file, line, resource) tuple to `<workspace>/.tf-analyze-baseline.json`. Subsequent scans automatically pick up the baseline file and suppress matching findings. **Unsuppress finding** reverses it; **Open Baseline File** loads the JSON in the editor for bulk edits.
+Right-click any row in the **Findings** tree → **Suppress finding (add to baseline)** to write the finding to `<workspace>/.tf-analyze-baseline.json`. Subsequent scans automatically pick up the baseline file and suppress matching findings — matched by rule, file and resource, so the suppression survives the line moving. **Unsuppress finding** reverses it; **Open Baseline File** loads the JSON in the editor for bulk edits.
 
 ### MITRE ATT&CK view
 

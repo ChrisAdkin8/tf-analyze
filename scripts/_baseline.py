@@ -13,12 +13,13 @@ effect is the caller's responsibility.
 * :func:`apply_suppressions` — split findings into active / suppressed
   using both inline and global suppression dicts.
 * :func:`apply_baseline` — filter findings against a baseline JSON
-  report; the ``(id, file, line, resource)`` tuple is the match key
-  so the same finding moving lines counts as new.
+  report.
 * :func:`compare_reports` — pre-and-post diff of two findings lists;
-  returns ``{resolved, new, unchanged}``. Match key is
-  ``(id, file, resource)`` (line excluded) so refactors that preserve
-  semantics don't flip findings into resolved+new pairs.
+  returns ``{resolved, new, unchanged}``.
+
+Both pair findings by rule, target-relative file and resource — never
+the line — so code moving, or the repo being checked out elsewhere,
+does not turn a known finding into a new one (`_pair_findings`).
 
 The inline-suppression regex and the YAML loader are injected by the
 caller (``detect.py``) to avoid pulling in detect.py-internal grammar.
@@ -29,7 +30,6 @@ import datetime
 import json
 import re
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Callable
 
@@ -139,9 +139,109 @@ def apply_suppressions(
     return active, suppressed
 
 
+def _relative_file(file: str, target: Path | None) -> str:
+    """A finding's file relative to the scan `target` (POSIX form), so a
+    baseline made in one checkout matches a scan of another. A path
+    outside `target`, or with no target, is returned as-is."""
+    file = (file or "").replace("\\", "/")
+    if not file or target is None:
+        return file
+    p = Path(file)
+    if not p.is_absolute():
+        return file
+    for cand in (p, p.resolve()):
+        for root in (target, target.resolve()):
+            try:
+                return cand.relative_to(root).as_posix()
+            except ValueError:
+                continue
+    return file
+
+
+_MODULE_RESOURCE_RE = re.compile(r'^<module:[^>]*>$')
+
+
+def _resource_key(resource: str) -> str:
+    """A finding's resource for pairing. Module-level findings name the
+    module by its directory (``<module:repo>``), which changes with the
+    checkout folder; the target-relative file already identifies the
+    module, so the name is dropped."""
+    return _MODULE_RESOURCE_RE.sub("<module>", resource or "")
+
+
+def _load_report(path: Path, what: str) -> tuple[list[dict], Path | None] | None:
+    """``(findings, target)`` from a JSON report (or a bare findings
+    list); `target` is the scan target the report recorded, if any.
+    None — with a stderr warning — when the file cannot be read."""
+    try:
+        data = json.loads(path.read_text())
+    except Exception as e:
+        print(f"WARN: cannot load {what} {path}: {e}", file=sys.stderr)
+        return None
+    if isinstance(data, list):
+        return data, None
+    recorded = data.get("target")
+    return data.get("findings", []), Path(recorded) if recorded else None
+
+
+def _pair_findings(
+    prior: list[dict], current: list[dict],
+    prior_target: Path | None, target: Path | None,
+) -> tuple[set[int], set[int]]:
+    """Pair prior and current findings that are the same finding; return
+    ``(paired current indices, paired prior indices)``.
+
+    Same finding = same rule, same file (relative to each report's
+    target) and same resource (see `_resource_key`). The line is *not* part of it — code
+    moving must not turn a known finding into a new one. When one key
+    has several findings, an exact line match pairs first, then the
+    nearest remaining line. A prior path that could not be made relative
+    (an old report with no recorded target, from another checkout) still
+    pairs when it ends with the current relative path.
+    """
+    groups: dict[tuple, list[tuple[int, int]]] = {}
+    for i, f in enumerate(prior):
+        key = (f.get("id"), _relative_file(f.get("file", ""), prior_target),
+               _resource_key(f.get("resource", "")))
+        groups.setdefault(key, []).append((f.get("line") or 0, i))
+    unrelativised = [k for k in groups if k[1].startswith("/")]
+    paired_cur: set[int] = set()
+    paired_prior: set[int] = set()
+    order = sorted(range(len(current)), key=lambda i: current[i].get("line") or 0)
+    for exact in (True, False):
+        for ci in order:
+            if ci in paired_cur:
+                continue
+            f = current[ci]
+            rel = _relative_file(f.get("file", ""), target)
+            key = (f.get("id"), rel, _resource_key(f.get("resource", "")))
+            line = f.get("line") or 0
+
+            def free(keys: list[tuple]) -> list[tuple[int, int]]:
+                return [
+                    (abs(pl - line), pi)
+                    for k in keys for pl, pi in groups.get(k, [])
+                    if pi not in paired_prior and (not exact or pl == line)
+                ]
+
+            candidates = free([key])
+            if not candidates and not exact and rel and not rel.startswith("/"):
+                candidates = free([
+                    k for k in unrelativised
+                    if k[0] == key[0] and k[2] == key[2]
+                    and k[1].endswith("/" + rel)
+                ])
+            if candidates:
+                _, pi = min(candidates)
+                paired_cur.add(ci)
+                paired_prior.add(pi)
+    return paired_cur, paired_prior
+
+
 def apply_baseline(
     current: list[dict],
     baseline_path: Path,
+    target: Path | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Filter ``current`` findings against a baseline JSON report.
 
@@ -151,79 +251,43 @@ def apply_baseline(
       code under ``--fail-on``.
     * ``suppressed`` — findings that were in the baseline.
 
-    Match key is ``(id, file, line, resource)`` so the same rule
-    moving lines counts as new (the user can re-baseline if that
-    line change is intentional).
+    Findings pair as in `_pair_findings`: rule, file relative to the
+    scan `target` (the baseline's own recorded target for its side), and
+    resource — not the line, so adding a line above a baselined finding
+    or checking the repo out somewhere else does not make it "new".
 
     A missing or unreadable baseline returns ``(current, [])`` plus a
     stderr warning — better to surface noisily than silently pass.
     """
-    try:
-        data = json.loads(baseline_path.read_text())
-        prior = data if isinstance(data, list) else data.get("findings", [])
-    except Exception as e:
-        print(f"WARN: cannot load baseline {baseline_path}: {e}", file=sys.stderr)
+    loaded = _load_report(baseline_path, "baseline")
+    if loaded is None:
         return current, []
-    prior_keys = {
-        (f.get("id"), f.get("file", ""), f.get("line", 0), f.get("resource", ""))
-        for f in prior
-    }
-    retained: list[dict] = []
-    suppressed: list[dict] = []
-    for f in current:
-        key = (f.get("id"), f.get("file", ""), f.get("line", 0), f.get("resource", ""))
-        if key in prior_keys:
-            suppressed.append(f)
-        else:
-            retained.append(f)
+    prior, prior_target = loaded
+    paired, _ = _pair_findings(prior, current, prior_target or target, target)
+    retained = [f for i, f in enumerate(current) if i not in paired]
+    suppressed = [f for i, f in enumerate(current) if i in paired]
     return retained, suppressed
 
 
-def compare_reports(current: list[dict], prior_path: Path) -> dict:
+def compare_reports(
+    current: list[dict], prior_path: Path, target: Path | None = None,
+) -> dict:
     """Compare current findings against a prior JSON report.
 
-    Returns ``{resolved: [...], new: [...], unchanged: [...]}``.
-    Match key omits ``line`` so a finding that moved by a line
-    doesn't appear as both *resolved* and *new* — only genuinely
-    new/removed findings flip status.
+    Returns ``{resolved: [...], new: [...], unchanged: [...]}``, pairing
+    findings as `apply_baseline` does (line excluded; duplicates of one
+    key counted, so fixing one of two identical findings shows as
+    resolved).
     """
-    try:
-        data = json.loads(prior_path.read_text())
-        if isinstance(data, list):
-            prior_findings = data
-        else:
-            prior_findings = data.get("findings", [])
-    except Exception as e:
-        print(f"WARN: cannot load prior report {prior_path}: {e}", file=sys.stderr)
+    loaded = _load_report(prior_path, "prior report")
+    if loaded is None:
         return {"resolved": [], "new": list(current), "unchanged": []}
-
-    # Multiset (counted) semantics — a set collapsed N same-(id,file,resource)
-    # findings into one, so fixing one of two identical-key findings showed
-    # as "unchanged" and the resolution was never reported. Count keys and
-    # match min(prior,cur) as unchanged, the surplus on each side as
-    # resolved/new.
-    def _key(f: dict) -> tuple:
-        return (f["id"], f.get("file", ""), f.get("resource", ""))
-
-    prior_count = Counter(_key(f) for f in prior_findings)
-    cur_count = Counter(_key(f) for f in current)
-
-    resolved, new, unchanged = [], [], []
-    seen: Counter = Counter()
-    for f in prior_findings:
-        k = _key(f)
-        seen[k] += 1
-        # Surplus prior occurrences (beyond what current still has) resolved.
-        if seen[k] > cur_count[k]:
-            resolved.append(f)
-    seen = Counter()
-    for f in current:
-        k = _key(f)
-        seen[k] += 1
-        # First min(prior,cur) current occurrences are matched (unchanged);
-        # the surplus is genuinely new.
-        if seen[k] <= prior_count[k]:
-            unchanged.append(f)
-        else:
-            new.append(f)
-    return {"resolved": resolved, "new": new, "unchanged": unchanged}
+    prior, prior_target = loaded
+    paired_cur, paired_prior = _pair_findings(
+        prior, current, prior_target or target, target,
+    )
+    return {
+        "resolved": [f for i, f in enumerate(prior) if i not in paired_prior],
+        "new": [f for i, f in enumerate(current) if i not in paired_cur],
+        "unchanged": [f for i, f in enumerate(current) if i in paired_cur],
+    }

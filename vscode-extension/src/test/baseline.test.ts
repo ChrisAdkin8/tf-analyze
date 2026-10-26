@@ -87,13 +87,26 @@ test('suppress preserves multiple findings with distinct keys', () => {
   const ws = freshWs();
   try {
     suppress(ws, { id: 'A', file: 'x.tf', line: 1 });
-    suppress(ws, { id: 'A', file: 'x.tf', line: 2 });               // same id, different line
-    suppress(ws, { id: 'B', file: 'x.tf', line: 1 });               // same line, different id
-    suppress(ws, { id: 'A', file: 'y.tf', line: 1 });               // same id+line, different file
-    suppress(ws, { id: 'A', file: 'x.tf', line: 1, resource: 'r' }); // same id+file+line, different resource
+    suppress(ws, { id: 'A', file: 'x.tf', line: 2 });               // same finding, moved: no new record
+    suppress(ws, { id: 'B', file: 'x.tf', line: 1 });               // different id
+    suppress(ws, { id: 'A', file: 'y.tf', line: 1 });               // different file
+    suppress(ws, { id: 'A', file: 'x.tf', line: 1, resource: 'r' }); // different resource
 
     const parsed = read(ws);
-    assert.equal(parsed.findings.length, 5, 'each distinct (id, file, line, resource) should produce a record');
+    assert.equal(parsed.findings.length, 4, 'each distinct (id, file, resource) should produce a record');
+  } finally {
+    fs.rmSync(ws, { recursive: true, force: true });
+  }
+});
+
+test('unsuppress removes a finding recorded before it moved', () => {
+  const ws = freshWs();
+  try {
+    suppress(ws, { id: 'A', file: 'x.tf', line: 3, resource: 'r' });
+    // The finding is now on line 9 (code above it changed); the engine
+    // still treats it as baselined, so unsuppressing must remove it.
+    assert.equal(unsuppress(ws, { id: 'A', file: 'x.tf', line: 9, resource: 'r' }), true);
+    assert.equal(read(ws).findings.length, 0);
   } finally {
     fs.rmSync(ws, { recursive: true, force: true });
   }

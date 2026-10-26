@@ -222,7 +222,7 @@ Disable network fetches for CISA KEV / FIRST.org EPSS. Falls back to cache if pr
 
 ### `--baseline`
 
-Path to a baseline JSON report. Findings present in the baseline are suppressed (counted under `suppressed_by_baseline` in JSON output) so only NEW findings affect the exit code. Match key: (id, file, line, resource). Use to ratchet a legacy repo: snapshot today's findings, then enforce no regressions going forward.
+Path to a baseline JSON report. Findings present in the baseline are suppressed (counted under `suppressed_by_baseline` in JSON output) so only NEW findings affect the exit code. Findings match by rule, file (relative to the target) and resource — not the line, so code moving or a different checkout folder doesn't make a known finding new. Use to ratchet a legacy repo: snapshot today's findings, then enforce no regressions going forward.
 
 ### `--cache`
 

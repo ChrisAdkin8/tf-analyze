@@ -5,6 +5,31 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 49 — Baselines survive code moving and a new checkout — 2026-10-26
+
+`--baseline` matched findings on `(id, file, line, resource)` with
+absolute paths, so a ratchet broke on ordinary edits: adding one comment
+line at the top of a file turned every baselined finding below it into a
+"new" one (failing `--fail-on`), and running the same code from another
+directory matched nothing.
+
+- Findings now pair by rule, **file relative to the scan target** and
+  resource — not the line. Several findings with one key pair by exact
+  line first, then nearest line, so fixing one of two identical findings
+  still shows as resolved. `--compare` uses the same pairing
+  (`_baseline._pair_findings`).
+- JSON reports record their scan `target`, so a baseline written in one
+  checkout is read back relative to its own root. A report without one
+  (older reports, the VS Code baseline file) is read relative to the
+  current target, with a path-ending fallback for another checkout.
+- Module-level findings (`<module:repo>`) no longer depend on the folder
+  name.
+- VS Code extension: the baseline file's suppress / unsuppress key drops
+  the line to match, so unsuppressing a finding that moved removes the
+  record written at its old line.
+
+---
+
 ## Round 48 — Per-resource companion rules (`resource_missing_companion`) — 2026-10-26
 
 `resource_absent` fires only when a resource type is missing from the
