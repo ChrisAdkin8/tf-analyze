@@ -19,6 +19,7 @@ DETECT_PY = REPO_ROOT / "scripts" / "detect.py"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import _scoring  # noqa: E402
 import detect  # noqa: E402
 
 
@@ -34,7 +35,7 @@ class TestComputeSummary:
         assert s["grade"] == "A"
         assert s["counts"] == {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
         assert s["suppressed_count"] == 0
-        assert s["scoring_version"] == 1
+        assert s["scoring_version"] == 2
 
     def test_one_critical_lowers_to_b(self):
         # 100 - 15 = 85 (B)
@@ -137,15 +138,20 @@ class TestComputeSummary:
             "grade",
             "counts",
             "suppressed_count",
+            "resources_scanned",
+            "size_factor",
+            "penalty",
             "formula",
         }
 
-    def test_scoring_constants_pinned_to_v1(self):
+    def test_scoring_constants_pinned_to_v2(self):
         # Tripwire — any change to the formula constants is a breaking
         # change for downstream gates (CI thresholds, dashboards, the
         # `summary` block consumers in PR comments and run-task callbacks).
         # Bump _SCORING_VERSION and update this test in lockstep.
-        assert detect._SCORING_VERSION == 1
+        assert detect._SCORING_VERSION == 2
+        assert _scoring._SIZE_SCALED == {"MEDIUM", "LOW"}
+        assert _scoring._SIZE_BASELINE == 20
         assert detect._RISK_WEIGHTS == {
             "CRITICAL": 15,
             "HIGH":     7,
@@ -209,7 +215,7 @@ class TestCliSummary:
         data = json.loads(out)
         assert "summary" in data, "JSON output must always carry a summary block"
         s = data["summary"]
-        assert s["scoring_version"] == 1
+        assert s["scoring_version"] == 2
         assert isinstance(s["score"], int) and 0 <= s["score"] <= 100
         assert s["grade"] in {"A", "B", "B-", "C", "D", "F"}
 
@@ -230,8 +236,8 @@ class TestCliSummary:
         )
         out, _, _ = _run_cli("--target", str(tmp_path), "--format", "html")
         # Banner is identifiable by the score formula text we ship.
-        assert "scoring_version 1" in out
-        assert "max(0, floor(100 - sum(weight * count)))" in out
+        assert "scoring_version 2" in out
+        assert "size_factor = max(1, sqrt(resources_scanned / 20))" in out
 
     def test_clean_repo_scores_100(self, tmp_path: Path):
         # An empty workspace with no .tf files should score 100 (A).

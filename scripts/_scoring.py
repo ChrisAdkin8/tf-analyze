@@ -19,9 +19,16 @@ letter grade documented in SKILL.md (search for "Risk Score"). The
 CLI emits the same number the LLM-driven markdown report computes,
 so two runs against the same code always agree.
 
-Score formula:
-    score = max(0, 100 - sum(weight * count for each urgency))
-Suppressed findings count at half weight (acknowledged but the
+Score formula (scoring version 2):
+    penalty = 15*CRITICAL + 7*HIGH + (3*MEDIUM + 1*LOW) / size_factor
+    score   = max(0, floor(100 - penalty))
+    size_factor = max(1, sqrt(resources_scanned / 20))
+CRITICAL and HIGH findings are each a concrete exposure, so they cost
+the same in any repository. MEDIUM and LOW are hygiene, judged relative
+to size: a repository of up to 20 resources scores exactly as in version
+1, while 80 resources halve the hygiene penalty and 2,000 divide it by
+ten — a large estate is not graded F for the sheer number of resources
+it has. Suppressed findings count at half weight (acknowledged but the
 underlying risk still exists).
 
 Names are kept underscore-prefixed (`_RISK_WEIGHTS`, `_compute_summary`)
@@ -35,7 +42,25 @@ import math
 
 # Tagged with `_SCORING_VERSION` so downstream gates can pin to a
 # specific weighting; bump it whenever weights change.
-_SCORING_VERSION = 1
+_SCORING_VERSION = 2
+
+# Urgencies whose penalty is divided by the size factor (hygiene); the
+# others cost the same in a repository of any size.
+_SIZE_SCALED = frozenset({"MEDIUM", "LOW"})
+# Resources up to which the size factor is 1 (version-1 scores).
+_SIZE_BASELINE = 20
+
+
+def _size_factor(resources_scanned: int | None) -> float:
+    """``max(1, sqrt(resources / 20))``; 1 when the count is unknown."""
+    if not resources_scanned:
+        return 1.0
+    return max(1.0, math.sqrt(resources_scanned / _SIZE_BASELINE))
+
+
+def _effective_weight(urgency: str, size_factor: float) -> float:
+    w = _RISK_WEIGHTS.get(urgency, 0)
+    return w / size_factor if urgency in _SIZE_SCALED else float(w)
 
 _RISK_WEIGHTS: dict[str, int] = {
     "CRITICAL": 15,
@@ -99,6 +124,11 @@ def explain_score(
     can give beyond the "you broke rule X" line.
     """
     base_score = int(summary.get("score", 100))
+    factor = float(summary.get("size_factor", 1.0))
+    # Project from the unclamped penalty: adding a fixed finding's weight
+    # back onto a score already clamped at 0 promised a ceiling the fix
+    # would never reach (500 CRITICALs "→ 75 (B) if you fix 5").
+    penalty = float(summary.get("penalty", 100 - base_score))
     eligible = [
         f for f in findings
         if _RISK_WEIGHTS.get(f.get("urgency", "MEDIUM"), 0) > 0
@@ -114,12 +144,17 @@ def explain_score(
         ),
     )
     top = ranked[:top_n]
-    cumulative = 0
+    cumulative = 0.0
     rows: list[dict] = []
+
+    def project(removed: float) -> int:
+        return min(100, max(0, math.floor(100 - (penalty - removed))))
+
     for i, f in enumerate(top, start=1):
-        w = _RISK_WEIGHTS.get(f.get("urgency", "MEDIUM"), 0)
-        cumulative += w
-        projected = min(100, base_score + cumulative)
+        u = f.get("urgency", "MEDIUM")
+        w = _RISK_WEIGHTS.get(u, 0)
+        cumulative += _effective_weight(u, factor)
+        projected = project(cumulative)
         rows.append({
             "rank": i,
             "id": f.get("id"),
@@ -132,7 +167,7 @@ def explain_score(
             "projected_score": projected,
             "projected_grade": _grade_for_score(projected),
         })
-    perfect = min(100, base_score + sum(r["weight"] for r in rows))
+    perfect = project(cumulative)
     return {
         "base_score": base_score,
         "base_grade": summary.get("grade", _grade_for_score(base_score)),
@@ -177,13 +212,16 @@ def _compute_summary(
     findings: list[dict],
     suppressed: list[dict] | None = None,
     suppressed_by_baseline: list[dict] | None = None,
+    resources_scanned: int | None = None,
 ) -> dict:
     """Compute the always-emitted summary block.
 
-    Score formula: ``max(0, 100 - sum(weight * count))`` where suppressed
-    findings (both ignore-suppressed and baseline-suppressed) contribute
-    half weight. INFO findings carry weight 0 so they never affect the
-    score; their count is reported for context.
+    Score formula: see the module docstring — CRITICAL / HIGH at full
+    weight, MEDIUM / LOW divided by the size factor for
+    `resources_scanned` (1 when it is None, i.e. version-1 scoring).
+    Suppressed findings (both ignore-suppressed and baseline-suppressed)
+    contribute half weight. INFO findings carry weight 0 so they never
+    affect the score; their count is reported for context.
 
     The dict returned is JSON-safe and stable: keys, types, and ordering
     are part of the public contract pinned by ``scoring_version``.
@@ -194,16 +232,17 @@ def _compute_summary(
         counts[u] = counts.get(u, 0) + 1
 
     # Half-weight contribution from suppressed/baselined findings.
+    factor = _size_factor(resources_scanned)
     suppressed_count = 0
     half_penalty = 0.0
     for bucket in (suppressed or [], suppressed_by_baseline or []):
         for f in bucket:
             suppressed_count += 1
-            u = f.get("urgency", "MEDIUM")
-            half_penalty += _RISK_WEIGHTS.get(u, 0) / 2
+            half_penalty += _effective_weight(f.get("urgency", "MEDIUM"), factor) / 2
 
-    full_penalty = sum(_RISK_WEIGHTS.get(u, 0) * c for u, c in counts.items())
-    raw_score = 100 - full_penalty - half_penalty
+    full_penalty = sum(_effective_weight(u, factor) * c for u, c in counts.items())
+    penalty = full_penalty + half_penalty
+    raw_score = 100 - penalty
     # Round DOWN (floor), not round-half-to-even. A suppressed finding adds a
     # half-weight penalty, so raw_score can land on X.5; banker's rounding then
     # moved the grade up or down depending only on parity (99.5→100 but
@@ -216,9 +255,13 @@ def _compute_summary(
         "grade": _grade_for_score(score),
         "counts": counts,
         "suppressed_count": suppressed_count,
+        "resources_scanned": resources_scanned,
+        "size_factor": round(factor, 3),
+        "penalty": round(penalty, 3),
         "formula": (
-            "max(0, floor(100 - sum(weight * count))); "
-            "weights: CRITICAL=15, HIGH=7, MEDIUM=3, LOW=1, INFO=0; "
-            "suppressed at half weight"
+            "max(0, floor(100 - (15*CRITICAL + 7*HIGH "
+            "+ (3*MEDIUM + 1*LOW) / size_factor))); "
+            "size_factor = max(1, sqrt(resources_scanned / 20)); "
+            "INFO=0; suppressed at half weight"
         ),
     }

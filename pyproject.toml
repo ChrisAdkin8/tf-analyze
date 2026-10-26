@@ -1,6 +1,6 @@
 [project]
 name = "tf-analyze"
-version = "0.2.6"
+dynamic = ["version"]
 description = "Terraform static analysis and security scanner"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -63,6 +63,7 @@ py-modules = [
     "_hcl",
     "_iam_policy",
     "_lsp",
+    "_meta",
     "_mitre",
     "_modes",
     "_network",
@@ -76,6 +77,11 @@ py-modules = [
     "_verify",
     "_versions",
 ]
+
+[tool.setuptools.dynamic]
+# Single source of truth: scripts/_meta.py (also read by --version, SARIF
+# and the LSP server; the release workflow checks the tag against it).
+version = { attr = "_meta.__version__" }
 
 [tool.setuptools.package-data]
 tf_analyze_catalog = ["*.yaml", "*.md"]

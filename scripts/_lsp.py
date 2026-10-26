@@ -28,6 +28,8 @@ import json
 import re
 import sys
 from pathlib import Path
+
+from _meta import __version__
 from typing import Callable
 
 
@@ -258,7 +260,7 @@ def run_lsp_server(
                             },
                             "codeActionProvider": True,
                         },
-                        "serverInfo": {"name": "tf-analyze", "version": "0.1.0"},
+                        "serverInfo": {"name": "tf-analyze", "version": __version__},
                     }
                 })
 
