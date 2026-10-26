@@ -29,6 +29,41 @@ previous code.
 
 ---
 
+## Round 58 — `--apply-fixes` is safe on ordinary files — 2026-10-26
+
+From the critical review, plus one found while testing the fixes on
+terragoat. Each is pinned by `tests/test_apply_fixes_robustness.py`,
+whose behaviour tests all fail on the previous code.
+
+- **Braces in comments and strings** moved fixes: the block-end, depth
+  and argument scans counted every `{` / `}`, so `# see the closing }
+  below` inside a `tags` map put `storage_encrypted = true` into the
+  map. They now count on a code-only view of the file (`code_lines`:
+  comments, heredocs and string contents blanked), per CLAUDE.md.
+- **CRLF files** were rewritten as LF; files are now read and written
+  byte-for-byte and inserted lines use the file's own line ending.
+- **A second run overwrote `.bak`**, losing the original. Backups go to
+  the first free `.bak`, `.bak.1`, … and are created exclusively, so an
+  existing file or link is never overwritten or followed.
+- **The dry-run diff** printed every line twice (`lineterm=""` on
+  newline-terminated lines); it is now a patch `git apply` accepts.
+- **Suppressed findings were patched**: apply-fixes ran before
+  `ignore_rules` and inline / `.tf-analyze-ignore.yaml` suppressions, so
+  a database marked "cannot be replaced" got a replacement-forcing fix.
+  It now runs after them.
+- **A wrong value was never fixed**: the patcher used the rule's first
+  pattern for the resource type, so for `storage_encrypted = false` it
+  tried the "missing argument" fix, saw the argument, and gave up. It
+  now tries each of the rule's patterns until one applies (terragoat: 150
+  → 160 fixes).
+- **Multi-line list values in a fix were cut to their first line**
+  (`enabled_cluster_log_types = [`), leaving invalid HCL in 2 terragoat
+  files. Values opening with `[` or a call's `(` are now followed to the
+  matching close, like `{`. Applying every fix to terragoat now leaves
+  every file parseable (a new test).
+
+---
+
 ## Round 57 — VS Code settings can't choose what runs; the Action pins its engine — 2026-10-26
 
 From the critical review's delivery-surface findings.

@@ -3423,14 +3423,6 @@ def main():
         )
         findings.extend(registry_findings)
 
-    # Auto-fix application — runs before suppression so the patched file
-    # re-scan (if the user re-runs) won't report those findings.
-    # Audit item 15 — direct access on argparse-wired flags.
-    if args.apply_fixes:
-        # Exit after a real apply so the user can re-run to confirm clean state.
-        if _cmd_apply_fixes(args, findings, entries):
-            return
-
     # Apply project-wide ignore_rules from .tf-analyze.yaml
     _ignore_rules = project_config.get("ignore_rules") or []
     if _ignore_rules:
@@ -3476,6 +3468,16 @@ def main():
             if entry:
                 f["was_suppressed_until"] = entry.get("expires")
                 f["prior_suppression_reason"] = entry.get("reason", "")
+
+    # Auto-fix application — after project `ignore_rules` and inline /
+    # `.tf-analyze-ignore.yaml` suppressions, so a finding the user has
+    # suppressed (e.g. "this database cannot be replaced") is never
+    # patched. It used to run first and patched everything.
+    # Audit item 15 — direct access on argparse-wired flags.
+    if args.apply_fixes:
+        # Exit after a real apply so the user can re-run to confirm clean state.
+        if _cmd_apply_fixes(args, findings, entries):
+            return
 
     # Auto-stub generation — scaffold YAML files for either:
     #   (a) IDs explicitly passed via --propose-stub (judgement-pass promotion)
