@@ -15,13 +15,6 @@ patterns:
       indefinitely by default — CloudWatch storage is billed per GB/month
       and log groups without retention are a routine source of cost drift
       in large accounts.
-  - kind: resource_missing_arg
-    resource: aws_autoscaling_group
-    arg: max_size
-    description: |
-      Auto Scaling Group without explicit `max_size`. Without a cap,
-      a runaway scale-out event can generate thousands of instances and
-      tens of thousands of dollars before anyone notices.
 recommendation: |
   Add explicit cost controls:
 

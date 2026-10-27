@@ -22,7 +22,8 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_s3_bucket
     arg: object_lock_enabled
-    name_regex: '(?i)(audit|log|cloudtrail|access[-_]log|s3[-_]log)'
+    # Whole name parts only: `log` inside `catalog` / `blog` is not a log bucket.
+    name_regex: '(?i)(?:^|[-_.])(?:audit|logs?|logging|cloudtrail|access[-_]logs?|s3[-_]logs?)(?:[-_.]|$)'
     description: |
       An S3 bucket whose name suggests it holds audit/access logs
       must have object-lock enabled with a retention period of at

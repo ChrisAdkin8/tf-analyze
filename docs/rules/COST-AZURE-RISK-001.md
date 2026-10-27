@@ -43,8 +43,8 @@ keywords: "ops, medium, terraform, iac, azure, mitre-T1496"
 
 1. **`resource_arg`** on `azurerm_kubernetes_cluster` (`sku_tier`) matching `/^Premium$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   AKS cluster on Premium tier — confirm uptime SLA is required (Premium ≈ 3x Standard cost)
-2. **`resource_missing_arg`** on `azurerm_kubernetes_cluster_node_pool` (`enable_auto_scaling`) — _the resource is missing a required attribute (or nested attribute path)._
-  Node pool without enable_auto_scaling (fixed node count, no scale-down on low utilisation)
+2. **`resource_missing_arg`** on `azurerm_kubernetes_cluster_node_pool` (`auto_scaling_enabled`) — _the resource is missing a required attribute (or nested attribute path)._
+  Node pool without auto_scaling_enabled (fixed node count, no scale-down on low utilisation)
 3. **`resource_missing_arg`** on `azurerm_cosmosdb_account` (`capabilities`) — _the resource is missing a required attribute (or nested attribute path)._
   Cosmos account without `capabilities { name = "EnableServerless" }` and
 no explicit provisioned `throughput` block on associated containers.
@@ -58,7 +58,7 @@ Provisioned throughput defaults are expensive ($24/mo per 100 RU/s).
 
 AKS cluster on Premium tier — confirm uptime SLA is required (Premium ≈ 3x Standard cost)
 
-Node pool without enable_auto_scaling (fixed node count, no scale-down on low utilisation)
+Node pool without auto_scaling_enabled (fixed node count, no scale-down on low utilisation)
 
 Cosmos account without `capabilities { name = "EnableServerless" }` and
 no explicit provisioned `throughput` block on associated containers.
@@ -96,7 +96,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "main" {
   name                  = "default"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
   vm_size               = "Standard_D2s_v3"
-  enable_auto_scaling   = true
+  auto_scaling_enabled   = true
   min_count             = 1
   max_count             = 5
 }

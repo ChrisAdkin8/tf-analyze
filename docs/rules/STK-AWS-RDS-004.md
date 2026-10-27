@@ -41,16 +41,13 @@ keywords: "stack, high, terraform, iac, aws"
 
 ## What this checks
 
-1. **`resource_arg`** on `aws_db_instance` (`engine_version`) matching `/^(5\.6|9\.6|10\.|11\.|12\.)/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  RDS instance using MySQL 5.6, PostgreSQL 9.6, 10, 11, or 12 — all
-past or approaching end of standard support. AWS stops publishing
-security patches for EOL versions; known CVEs accumulate silently.
+1. **`resource_arg`** on `aws_db_instance` (`engine_version`) matching `/^(?:9\.|1[0-3](?:\.|$))/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+2. **`resource_arg`** on `aws_db_instance` (`engine_version`) matching `/^(?:5\.|8\.0(?:\.|$))/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+3. **`resource_arg`** on `aws_db_instance` (`engine_version`) matching `/^10\.[0-5](?:\.|$)/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 
 ## Why it likely fired
 
-RDS instance using MySQL 5.6, PostgreSQL 9.6, 10, 11, or 12 — all
-past or approaching end of standard support. AWS stops publishing
-security patches for EOL versions; known CVEs accumulate silently.
+Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
 
 ## Adversarial scenario
 

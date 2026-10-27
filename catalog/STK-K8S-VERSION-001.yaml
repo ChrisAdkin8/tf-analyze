@@ -1,5 +1,5 @@
 id: STK-K8S-VERSION-001
-title: "EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2"
+title: "EKS/GKE cluster on a Kubernetes version past end of standard support"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
@@ -23,21 +23,18 @@ owasp:
   - "A06"
   - "K05"
 patterns:
+  # Past end of standard support on 2026-10-26: EKS and GKE <= 1.33 (EKS
+  # 1.33 ended 2026-07-29, GKE 1.33 2026-08-12). AKS is
+  # STK-AZURE-AKS-VERSION-001 (this rule used to repeat it with a
+  # different cut-off).
   - kind: resource_arg
     resource: aws_eks_cluster
     arg: version
-    regex: '^(?:1\.(?:1[0-9]|2[0-7]))$'
-    description: EKS pinned to <= 1.27 (N-2 floor at time of writing)
+    regex: '^1\.(?:1?[0-9]|2[0-9]|3[0-3])(?:[.-].*)?$'
   - kind: resource_arg
     resource: google_container_cluster
     arg: min_master_version
-    regex: '^(?:1\.(?:1[0-9]|2[0-7]))'
-    description: GKE pinned to <= 1.27
-  - kind: resource_arg
-    resource: azurerm_kubernetes_cluster
-    arg: kubernetes_version
-    regex: '^(?:1\.(?:1[0-9]|2[0-7]))'
-    description: AKS pinned to <= 1.27
+    regex: '^1\.(?:1?[0-9]|2[0-9]|3[0-3])(?:[.-].*)?$'
 recommendation: |
   Bump to a supported Kubernetes minor (N-2 floor). EKS/GKE/AKS each
   publish a support matrix — running below N-2 means no security

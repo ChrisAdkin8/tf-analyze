@@ -21,7 +21,8 @@ csa_ccm:
 patterns:
   - kind: resource_body_contains
     resource: google_compute_instance
-    regex: 'access_config\s*\{'
+    # Not `ipv6_access_config` (IPv6 egress, not a public IPv4 address).
+    regex: '(?<![\w])access_config\s*\{'
     description: |
       A `google_compute_instance` body contains an `access_config {}`
       sub-block (always inside `network_interface`). Even an empty

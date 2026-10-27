@@ -8,8 +8,9 @@ patterns:
   - kind: resource_arg
     resource: aws_lambda_function
     arg: runtime
-    regex: '^(nodejs10\.x|nodejs12\.x|nodejs14\.x|python2\.7|python3\.6|python3\.7|ruby2\.5|java8|go1\.x|dotnetcore2\.1|dotnetcore3\.1)$'
-    description: Lambda function using an end-of-life runtime no longer patched by AWS
+    # AWS Lambda "Deprecated runtimes" table, checked 2026-10-26. Due next:
+    # python3.10 (2026-10-31), dotnet8 (2026-11-10).
+    regex: '^(?:nodejs|nodejs4\.3|nodejs4\.3\-edge|nodejs6\.10|nodejs8\.10|nodejs10\.x|nodejs12\.x|nodejs14\.x|nodejs16\.x|nodejs18\.x|nodejs20\.x|python2\.7|python3\.6|python3\.7|python3\.8|python3\.9|ruby2\.5|ruby2\.7|ruby3\.2|java8|go1\.x|provided|provided\.al2|dotnetcore1\.0|dotnetcore2\.0|dotnetcore2\.1|dotnetcore3\.1|dotnet5\.0|dotnet6|dotnet7)$'
 recommendation: |
   Upgrade the `runtime` to a currently supported version. EOL runtimes
   no longer receive security patches or OS updates from AWS, meaning known

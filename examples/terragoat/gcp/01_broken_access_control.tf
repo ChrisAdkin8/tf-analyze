@@ -21,7 +21,7 @@
 #
 # Expected tf-analyze findings:
 #   - SEC-GCP-IAM-001     HIGH       Project-level binding of overly broad role
-#   - SEC-GCP-IAM-002     CRITICAL   Public IAM binding (allUsers)
+#   - SEC-GCP-STORAGE-IAM-001 CRITICAL Public bucket binding (allUsers)
 #   - SEC-GCP-IAM-003     HIGH       Member has both project-level and resource-level IAM grants
 #
 # Fix summary: bind narrow roles at the resource level using

@@ -8,11 +8,30 @@ patterns:
   - kind: resource_arg
     resource: aws_db_instance
     arg: engine_version
-    regex: '^(5\.6|9\.6|10\.|11\.|12\.)'
-    description: |
-      RDS instance using MySQL 5.6, PostgreSQL 9.6, 10, 11, or 12 — all
-      past or approaching end of standard support. AWS stops publishing
-      security patches for EOL versions; known CVEs accumulate silently.
+    regex: '^(?:9\.|1[0-3](?:\.|$))'
+    # PostgreSQL 9.x-13: RDS standard support ended (13 on 2026-02-28). Skipped when `engine` is a different known engine; an
+    # unresolved engine still fires (fail closed).
+    suppress_if:
+      arg: engine
+      regex: '^(?:mysql|mariadb|oracle.*|sqlserver.*|aurora.*|db2.*)$'
+  - kind: resource_arg
+    resource: aws_db_instance
+    arg: engine_version
+    regex: '^(?:5\.|8\.0(?:\.|$))'
+    # MySQL 5.x and 8.0: RDS standard support ended (8.0 on 2026-07-31). Skipped when `engine` is a different known engine; an
+    # unresolved engine still fires (fail closed).
+    suppress_if:
+      arg: engine
+      regex: '^(?:postgres|mariadb|oracle.*|sqlserver.*|aurora.*|db2.*)$'
+  - kind: resource_arg
+    resource: aws_db_instance
+    arg: engine_version
+    regex: '^10\.[0-5](?:\.|$)'
+    # MariaDB 10.0-10.5: RDS standard support ended (10.5 on 2026-08-31). Skipped when `engine` is a different known engine; an
+    # unresolved engine still fires (fail closed).
+    suppress_if:
+      arg: engine
+      regex: '^(?:postgres|mysql|oracle.*|sqlserver.*|aurora.*|db2.*)$'
 recommendation: |
   Upgrade to a supported engine version. AWS maintains a support calendar
   at https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/MySQL.Concepts.VersionMgmt.html
