@@ -121,10 +121,10 @@ class TestWorkflowShape:
     def test_engine_install_pins_ref(self, yaml_text: str) -> None:
         """The bot clones tf-analyze; the ref must come from the
         `ref` input so consumers can pin to a release tag for
-        reproducibility. Default is 'main' which is acceptable for
-        the bot's auto-update behaviour."""
+        reproducibility. The default is a release tag, not `main`: the
+        job holds a write token, so it must not run a moving branch."""
         assert "ref:" in yaml_text
-        assert 'default: "main"' in yaml_text
+        assert re.search(r'default: "v\d+\.\d+\.\d+"', yaml_text)
         assert "git clone --depth 1 --branch \"$ref\"" in yaml_text
 
 

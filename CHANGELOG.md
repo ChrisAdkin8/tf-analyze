@@ -5,6 +5,42 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 67 — Untrusted pull requests can't script the report or hijack the summary — 2026-10-27
+
+- **HTML report**: the Suppressed list was the one section that skipped
+  HTML escaping. A suppression reason in `.tf-analyze-ignore.yaml`, or a
+  file name, could put a running `<script>` in `tf-analyze-report.html`.
+  It is now escaped like every other field.
+- **VS Code report panel**: the Content-Security-Policy was skipped when
+  the words "Content-Security-Policy" appeared anywhere in the report,
+  which report text controls. It is now always injected.
+- **PR summary comment** (Action and `integrations/github-action.yml`):
+  the comment to update was found by its first line alone, so a PR
+  author could post `## tf-analyze: …` and receive every later summary
+  in a comment they can edit. It must now be written by
+  `github-actions[bot]`, and all pages of comments are searched, so PRs
+  with more than 30 comments no longer get a new summary each run.
+- **`integrations/github-action.yml`**: the top-level `inputs:` block
+  (not valid workflow syntax) moved under `workflow_dispatch`. Inputs
+  reach the shell through `env:`. Actions are pinned to commit SHAs. The
+  engine `ref` defaults to `v0.2.6` instead of `main`. The `fail-on`
+  gate never failed, because its exit code was lost in `| tee`; the step
+  now sets `pipefail`.
+- **`integrations/github-action-bot.yml`**: inputs reach the shell
+  through `env:`; actions are pinned; `ref` defaults to `v0.2.6`. It no
+  longer deletes or commits tracked `.bak` files (`git add -u` instead
+  of `git add -A`), and `pip install python-hcl2` is hash-pinned (7.2.1, with lark 1.3.1)
+  (v0.2.6 predates the vendored parser and uses it only when installed).
+- **Template default engine**: `v0.2.6` is the latest release, and it
+  predates this round's HTML escaping fix and the vendored parser. Bump
+  the templates' `ref` default when the next release is tagged; until
+  then, set `ref:` to a commit that includes these fixes if you upload
+  the HTML report from untrusted PRs.
+- **pre-commit hooks** run the installed `tf-analyze` command. The old
+  `python3 scripts/detect.py` entry looked for that file in *your* repo.
+
+---
+
 ## Round 66 — A gated scan that checked nothing fails — 2026-10-27
 
 - **Empty target**: a scan with `--fail-on` that found no `.tf` /

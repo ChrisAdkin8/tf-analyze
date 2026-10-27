@@ -76,6 +76,16 @@ test('injectReportCsp is idempotent', () => {
     'a panel re-render must not stack a second CSP meta');
 });
 
+test('injectReportCsp is not skipped by report text naming the policy', () => {
+  // A suppression reason is attacker-controlled; naming the header in it
+  // must not switch the policy off.
+  const input = '<html><head></head><body><li>Content-Security-Policy</li>' +
+    '<meta http-equiv="Content-Security-Policy" content="default-src *"></body></html>';
+  const out = injectReportCsp(input);
+  assert.ok(out.startsWith('<html><head><meta http-equiv="Content-Security-Policy" ' +
+    'content="default-src \'none\';'), 'the policy must be injected right after <head>');
+});
+
 test('injectReportCsp falls back to prepend when <head> is missing', () => {
   const out = injectReportCsp('<div>no head</div>');
   assert.ok(out.startsWith('<meta http-equiv="Content-Security-Policy"'),

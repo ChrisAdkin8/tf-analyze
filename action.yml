@@ -587,13 +587,17 @@ runs:
                     `<sub>scoring_version ${summary.scoring_version ?? 1} · ${summary.formula ?? ''}</sub>`,
                   ].join('\n'));
 
-          const comments = await github.rest.issues.listComments({
+          // Match on author as well as prefix: anyone can post a comment
+          // that starts with `## tf-analyze:`, and updating theirs would put
+          // the real summary in a comment they can rewrite. Paginate so a
+          // PR with more than 30 comments still finds the prior summary.
+          const comments = await github.paginate(github.rest.issues.listComments, {
             owner: context.repo.owner, repo: context.repo.repo,
-            issue_number: context.payload.pull_request.number,
+            issue_number: context.payload.pull_request.number, per_page: 100,
           });
-          const prior = comments.data.find(c =>
-            c.body.startsWith('## tf-analyze:') ||
-            c.body.startsWith('✅ **tf-analyze**')
+          const prior = comments.find(c =>
+            c.user && c.user.type === 'Bot' && c.user.login === 'github-actions[bot]' &&
+            (c.body.startsWith('## tf-analyze:') || c.body.startsWith('✅ **tf-analyze**'))
           );
           if (prior) {
             await github.rest.issues.updateComment({

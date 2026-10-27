@@ -51,7 +51,7 @@ into the file for the scheduled runs:
 | Input | Default | Effect |
 |---|---|---|
 | `max-disruption` | `none` | Highest `fix_disruption` tier the bot will apply. `plan_required` lets the bot apply changes that show in `terraform plan` but don't force replacement; **never** set to `forces_replacement` for an unattended bot. |
-| `ref` | `main` | tf-analyze ref the bot installs (branch / tag / SHA). Pin to a release tag for reproducible behaviour. |
+| `ref` | `v0.2.6` | tf-analyze ref the bot installs (tag or branch). Defaults to a release tag: the job holds a write token, so it should not run a moving branch. |
 
 ## Cadence
 
@@ -80,6 +80,9 @@ calibrated default.
 - **No-op on clean.** When the apply step leaves the working tree
   unchanged the workflow emits `::notice::No non-disruptive fixes
   available; skipping PR.` and exits 0 — no empty PR is opened.
+- **Only patched files are committed.** The bot stages with `git add -u`
+  (files it changed, nothing new) and removes only the *untracked* `.bak`
+  backups the engine wrote, so `.bak` files your repo tracks are left alone.
 - **Self-trigger guarded.** `if: github.actor != 'tf-analyze-bot[bot]'`
   prevents the bot's own commits from kicking off another apply.
 - **PR body composition.** [`render_pr_body.py`](https://github.com/ChrisAdkin8/tf-analyze/blob/main/integrations/github-action-bot/render_pr_body.py)

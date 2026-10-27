@@ -2025,8 +2025,8 @@ def to_html(
     suppressed_section = ""
     if suppressed:
         sups = "".join(
-            f"<li><code>{s['id']}</code> {s.get('file','')}:{s.get('line','')} — "
-            f"{s.get('suppression_reason','')}</li>"
+            f"<li><code>{_h(str(s['id']))}</code> {_h(str(s.get('file','')))}:"
+            f"{_h(str(s.get('line','')))} — {_h(str(s.get('suppression_reason','')))}</li>"
             for s in suppressed
         )
         suppressed_section = f"<h2>Suppressed ({len(suppressed)})</h2><ul>{sups}</ul>"

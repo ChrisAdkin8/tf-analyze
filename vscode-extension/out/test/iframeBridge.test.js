@@ -96,6 +96,15 @@ const iframeBridge_1 = require("../iframeBridge");
     const once = (0, iframeBridge_1.injectReportCsp)(input);
     assert.equal((0, iframeBridge_1.injectReportCsp)(once), once, 'a panel re-render must not stack a second CSP meta');
 });
+(0, node_test_1.test)('injectReportCsp is not skipped by report text naming the policy', () => {
+    // A suppression reason is attacker-controlled; naming the header in it
+    // must not switch the policy off.
+    const input = '<html><head></head><body><li>Content-Security-Policy</li>' +
+        '<meta http-equiv="Content-Security-Policy" content="default-src *"></body></html>';
+    const out = (0, iframeBridge_1.injectReportCsp)(input);
+    assert.ok(out.startsWith('<html><head><meta http-equiv="Content-Security-Policy" ' +
+        'content="default-src \'none\';'), 'the policy must be injected right after <head>');
+});
 (0, node_test_1.test)('injectReportCsp falls back to prepend when <head> is missing', () => {
     const out = (0, iframeBridge_1.injectReportCsp)('<div>no head</div>');
     assert.ok(out.startsWith('<meta http-equiv="Content-Security-Policy"'), 'with no <head>, prepend the policy (the iframe sandbox still isolates it)');

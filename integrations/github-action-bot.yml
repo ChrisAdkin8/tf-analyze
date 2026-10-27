@@ -24,9 +24,9 @@ on:
         required: false
         default: "none"
       ref:
-        description: "tf-analyze ref to install (branch / tag / SHA)"
+        description: "tf-analyze ref to install (tag or branch). Pinned to a release: this job holds a write token."
         required: false
-        default: "main"
+        default: "v0.2.6"
 
 permissions:
   # The bot writes a new branch + opens a PR. No security-events scope
@@ -48,21 +48,33 @@ jobs:
     if: github.actor != 'tf-analyze-bot[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # Required so the bot can push the auto-fixes branch back.
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
+      # Inputs reach the shell through `env:`, never a template expression in `run:`,
+      # so a dispatched value can't inject shell.
       - name: Fetch tf-analyze
+        env:
+          TFA_REF: ${{ github.event.inputs.ref || 'v0.2.6' }}
         run: |
-          ref="${{ github.event.inputs.ref || 'main' }}"
+          ref="$TFA_REF"
           git clone --depth 1 --branch "$ref" https://github.com/ChrisAdkin8/tf-analyze.git /tmp/tf-analyze
-          pip install python-hcl2  # optional fast-path
+          # Releases up to v0.2.6 predate the vendored parser and use
+          # python-hcl2 only when installed (heredoc-aware attribute values).
+          # Hash-pinned, wheels only, with its one dependency: this job
+          # holds a write token. Same versions later releases vendor.
+          cat > /tmp/tfa-requirements.txt <<'REQ'
+          python-hcl2==7.2.1 --hash=sha256:cf54115c7f9878f0666b69ce692bca0b42262e6984b8838216251248c82bf838
+          lark==1.3.1 --hash=sha256:c629b661023a014c37da873b4ff58a817398d12635d3bbb2c5a03be7fe5d1e12
+          REQ
+          pip install --require-hashes --only-binary=:all: -r /tmp/tfa-requirements.txt
 
       - name: Run scan (capture JSON for the PR body)
         id: scan
@@ -75,8 +87,10 @@ jobs:
 
       - name: Apply non-disruptive fixes
         id: apply
+        env:
+          TFA_MAX_DISRUPTION: ${{ github.event.inputs.max-disruption || 'none' }}
         run: |
-          max_disruption="${{ github.event.inputs.max-disruption || 'none' }}"
+          max_disruption="$TFA_MAX_DISRUPTION"
           python3 /tmp/tf-analyze/scripts/detect.py \
             --target . \
             --catalog /tmp/tf-analyze/catalog \
@@ -92,8 +106,9 @@ jobs:
       - name: Check whether anything changed
         id: diff
         run: |
-          # Reset .bak files the engine wrote — keep the diff clean.
-          find . -name '*.bak' -delete
+          # Remove the untracked .bak files the engine wrote. Tracked .bak
+          # files are the repo's own and must not be deleted.
+          git ls-files -z --others --exclude-standard -- '*.bak' | xargs -0 rm -f
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::No non-disruptive fixes available; skipping PR."
@@ -114,13 +129,15 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           BRANCH="tf-analyze-bot/auto-fixes"
           git config user.name  "tf-analyze-bot"
           git config user.email "tf-analyze-bot@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add -A
+          # Only files the engine patched; never stray untracked files.
+          git add -u
           git commit -m "[tf-analyze] Auto-apply non-disruptive fixes"
           # Force-push so a stale fix branch from a prior run is replaced
           # rather than rejected as non-fast-forward.
@@ -131,7 +148,7 @@ jobs:
           existing=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' || echo "")
           if [ -z "$existing" ]; then
             gh pr create \
-              --base "${{ github.event.repository.default_branch }}" \
+              --base "$BASE_BRANCH" \
               --head "$BRANCH" \
               --title "[tf-analyze] Auto-apply non-disruptive fixes" \
               --body-file /tmp/pr-body.md
