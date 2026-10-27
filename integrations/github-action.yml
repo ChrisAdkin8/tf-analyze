@@ -10,35 +10,32 @@ on:
     paths:
       - "**/*.tf"
 
+  # A workflow has no top-level `inputs:`; these only take effect on a
+  # manual run. On push / pull_request every `inputs.*` is empty, so each
+  # use below falls back to the same default with `||`.
   workflow_dispatch:
     inputs:
+      fail-on:
+        description: 'Minimum urgency level to fail CI (CRITICAL, HIGH, MEDIUM, LOW)'
+        default: 'HIGH'
+      section:
+        description: 'Restrict findings to a catalogue section (security, robustness, ops, …). Empty = all.'
+        default: ''
+      compliance-framework:
+        description: 'Optional. cis | pci_dss | soc2 | owasp_iac | all. When set, the engine also runs a compliance gap report and the PR comment gains a collapsible compliance section.'
+        default: ''
+      attack-graph:
+        description: 'Build the internet → crown-jewels attack graph; promotes critical-path findings and embeds the Mermaid graph in the PR summary.'
+        default: 'false'
+      show-info:
+        description: 'Include INFO-tier advisories (Module Reuse, etc.) in findings. Default false.'
+        default: 'false'
+      ref:
+        description: 'Git ref of tf-analyze to install (tag, branch, or SHA). Defaults to a release tag so CI is reproducible.'
+        default: 'v0.2.6'
       post-pr-comment:
-        description: "Post findings as a PR comment (for manual trigger on a PR branch)"
-        required: false
-        default: "true"
-
-inputs:
-  fail-on:
-    description: 'Minimum urgency level to fail CI (CRITICAL, HIGH, MEDIUM, LOW)'
-    default: 'HIGH'
-  section:
-    description: 'Restrict findings to a catalogue section (security, robustness, ops, …). Empty = all.'
-    default: ''
-  compliance-framework:
-    description: 'Optional. cis | pci_dss | soc2 | owasp_iac | all. When set, the engine also runs a compliance gap report and the PR comment gains a collapsible compliance section.'
-    default: ''
-  attack-graph:
-    description: 'Build the internet → crown-jewels attack graph; promotes critical-path findings and embeds the Mermaid graph in the PR summary.'
-    default: 'false'
-  show-info:
-    description: 'Include INFO-tier advisories (Module Reuse, etc.) in findings. Default false.'
-    default: 'false'
-  ref:
-    description: 'Git ref of tf-analyze to install (branch, tag, or SHA). Pin to a release tag for reproducible CI; default tracks main.'
-    default: 'main'
-  post-pr-comment:
-    description: 'Post PR suggestion comments on pull_request events'
-    default: 'true'
+        description: 'Post PR suggestion comments on pull_request events'
+        default: 'true'
 
 permissions:
   contents: read
@@ -49,20 +46,24 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0  # full history for diff-mode base detection
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
+      # Inputs reach the shell through `env:`, never a template expression
+      # in `run:`, so an input value can't inject shell.
       - name: Fetch tf-analyze
+        env:
+          TFA_REF: ${{ inputs.ref || 'v0.2.6' }}
         run: |
           # Clone the engine itself; pin to a tag/SHA via the `ref` input
           # for reproducible CI. `--depth 1 --branch <ref>` works for
           # branches and tags; SHAs require a full clone.
-          REF="${{ inputs.ref || 'main' }}"
+          REF="$TFA_REF"
           if [[ "$REF" =~ ^[0-9a-f]{7,40}$ ]]; then
             git clone https://github.com/ChrisAdkin8/tf-analyze.git ~/.tf-analyze
             git -C ~/.tf-analyze checkout "$REF"
@@ -73,27 +74,35 @@ jobs:
 
       - name: Run tf-analyze
         id: analyze
+        env:
+          TFA_EVENT: ${{ github.event_name }}
+          TFA_SECTION: ${{ inputs.section }}
+          TFA_COMPLIANCE: ${{ inputs.compliance-framework }}
+          TFA_ATTACK_GRAPH: ${{ inputs.attack-graph }}
+          TFA_SHOW_INFO: ${{ inputs.show-info }}
+          FAIL_ON: ${{ inputs.fail-on || 'HIGH' }}
         run: |
+          # Without pipefail the gate's exit code is lost in `| tee` below.
+          set -o pipefail
           MODE=static
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$TFA_EVENT" = "pull_request" ]; then
             MODE=diff
           fi
           # Collect optional engine flags into a bash array so empty
           # inputs don't leak as bare shell tokens.
           EXTRA_ARGS=()
-          if [ -n "${{ inputs.section }}" ]; then
-            EXTRA_ARGS+=(--section "${{ inputs.section }}")
+          if [ -n "$TFA_SECTION" ]; then
+            EXTRA_ARGS+=(--section "$TFA_SECTION")
           fi
-          if [ -n "${{ inputs.compliance-framework }}" ]; then
-            EXTRA_ARGS+=(--compliance-framework "${{ inputs.compliance-framework }}")
+          if [ -n "$TFA_COMPLIANCE" ]; then
+            EXTRA_ARGS+=(--compliance-framework "$TFA_COMPLIANCE")
           fi
-          if [ "${{ inputs.attack-graph }}" = "true" ]; then
+          if [ "$TFA_ATTACK_GRAPH" = "true" ]; then
             EXTRA_ARGS+=(--attack-graph)
           fi
-          if [ "${{ inputs.show-info }}" = "true" ]; then
+          if [ "$TFA_SHOW_INFO" = "true" ]; then
             EXTRA_ARGS+=(--show-info)
           fi
-          FAIL_ON="${{ inputs.fail-on || 'HIGH' }}"
 
           # JSON for suggestion-block step + exit-code evaluation.
           python3 ~/.tf-analyze/scripts/detect.py \
@@ -124,22 +133,22 @@ jobs:
           # Optional compliance gap report — appended to the PR comment
           # as a collapsible section so reviewers see framework posture
           # without leaving the diff.
-          if [ -n "${{ inputs.compliance-framework }}" ]; then
+          if [ -n "$TFA_COMPLIANCE" ]; then
             python3 ~/.tf-analyze/scripts/detect.py \
               --target . \
               --mode "$MODE" \
               --format compliance \
-              --compliance-framework "${{ inputs.compliance-framework }}" \
+              --compliance-framework "$TFA_COMPLIANCE" \
               > tf-analyze-compliance.txt 2>/dev/null || true
           fi
 
           # Determine exit code based on fail-on threshold.
           python3 -c "
-          import json, sys
+          import json, os, sys
           d = json.load(open('tf-analyze-findings.json'))
           findings = d.get('findings', d if isinstance(d, list) else [])
           rank = {'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1, 'INFO': 0}
-          threshold = rank.get('${FAIL_ON}', 3)
+          threshold = rank.get(os.environ['FAIL_ON'].upper(), 3)
           breach = [f for f in findings if rank.get(f.get('urgency',''), 0) >= threshold]
           print(f'finding_count={len(findings)}')
           sys.exit(1 if breach else 0)
@@ -148,7 +157,7 @@ jobs:
       - name: Upload SARIF to Code Scanning
         if: always()
         continue-on-error: true   # free-tier repos lack Code Scanning; don't fail the job
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: tf-analyze.sarif
           category: tf-analyze
@@ -158,7 +167,9 @@ jobs:
           always() &&
           github.event_name == 'pull_request' &&
           (inputs.post-pr-comment != 'false')
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          TFA_COMPLIANCE: ${{ inputs.compliance-framework }}
         with:
           script: |
             const fs = require('fs');
@@ -263,7 +274,7 @@ jobs:
             // Optional compliance appendix when --compliance-framework
             // was set. The engine writes the rendered text; we wrap it
             // in <details> so the headline summary stays scannable.
-            const fw = '${{ inputs.compliance-framework }}';
+            const fw = process.env.TFA_COMPLIANCE || '';
             if (fw) {
               try {
                 const compliance = fs.readFileSync('tf-analyze-compliance.txt', 'utf8').trim();
@@ -287,13 +298,16 @@ jobs:
 
             // Upsert the summary comment so repeated CI runs replace
             // the prior summary instead of stacking N comments per PR.
-            const comments = await github.rest.issues.listComments({
+            // Match on author as well as prefix, so a comment anyone posts
+            // starting `## tf-analyze` can't capture the summary. Paginate
+            // so PRs with more than 30 comments still find it.
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
+              issue_number: context.payload.pull_request.number, per_page: 100,
             });
-            const prior = comments.data.find(c =>
-              c.body.startsWith('## tf-analyze')
-              || c.body.startsWith('✅ **tf-analyze**')
+            const prior = comments.find(c =>
+              c.user && c.user.type === 'Bot' && c.user.login === 'github-actions[bot]' &&
+              (c.body.startsWith('## tf-analyze') || c.body.startsWith('✅ **tf-analyze**'))
             );
             if (prior) {
               await github.rest.issues.updateComment({
@@ -316,7 +330,7 @@ jobs:
 
       - name: Upload HTML artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: tf-analyze-report
           path: tf-analyze-report.html

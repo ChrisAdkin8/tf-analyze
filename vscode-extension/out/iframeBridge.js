@@ -106,15 +106,18 @@ const REPORT_CSP_META = `<meta http-equiv="Content-Security-Policy" content="def
  * so the policy is parsed before the document's inline scripts/styles.
  * Idempotent; falls back to prepending when there's no `<head>` (the
  * iframe's `sandbox` attribute still isolates it either way).
+ *
+ * The idempotency check looks only at the insertion point. It used to skip
+ * injection if the string "Content-Security-Policy" appeared anywhere, and
+ * report text (e.g. a suppression reason) is attacker-controlled.
  */
 function injectReportCsp(html) {
-    if (!html || html.indexOf('Content-Security-Policy') !== -1)
+    if (!html)
         return html;
     const m = html.match(/<head[^>]*>/i);
-    if (m && m.index !== undefined) {
-        const at = m.index + m[0].length;
-        return html.slice(0, at) + REPORT_CSP_META + html.slice(at);
-    }
-    return REPORT_CSP_META + html;
+    const at = m && m.index !== undefined ? m.index + m[0].length : 0;
+    if (html.startsWith(REPORT_CSP_META, at))
+        return html;
+    return html.slice(0, at) + REPORT_CSP_META + html.slice(at);
 }
 //# sourceMappingURL=iframeBridge.js.map

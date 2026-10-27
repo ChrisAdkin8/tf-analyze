@@ -39,6 +39,10 @@ Or reference it as a composite action from any workflow:
 
 ## Inputs
 
+These are `workflow_dispatch` inputs: set them when you run the workflow
+by hand. On `push` and `pull_request` runs the defaults below apply; to
+change them for those runs, edit the fallback after `||` in the file.
+
 | Input | Default | Purpose |
 |---|---|---|
 | `fail-on` | `HIGH` | Minimum urgency that fails the job. One of `CRITICAL` / `HIGH` / `MEDIUM` / `LOW`. |
@@ -46,7 +50,7 @@ Or reference it as a composite action from any workflow:
 | `compliance-framework` | _empty_ | Optional. `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`. When set, the engine renders a compliance gap report alongside its findings and the PR comment gains a collapsible `<details>📋 Compliance: <fw></details>` section. |
 | `attack-graph` | `false` | Build the internet → crown-jewels graph; promotes critical-path findings and embeds the Mermaid graph in the PR summary. |
 | `show-info` | `false` | Include INFO-tier advisories (Module Reuse advisories, etc.). Default off because INFO findings are advisory rather than gating. |
-| `ref` | `main` | Git ref of tf-analyze to install (branch, tag, or 7+ char SHA). Pin to a release tag for reproducible CI; default tracks `main`. |
+| `ref` | `v0.2.6` | Git ref of tf-analyze to install (tag, branch, or 7+ char SHA). Defaults to a release tag so CI is reproducible. |
 | `post-pr-comment` | `true` | Post the suggestion-block comments + summary comment on PRs. Set `false` to skip the comment surface entirely. |
 
 ## Behavior
@@ -98,8 +102,8 @@ or via repo settings.
 
 ## Pinning the engine version
 
-Production CI should pin `ref` to a release tag rather than tracking
-`main`:
+The template defaults `ref` to a release tag. When you use the composite
+Action instead, pin the engine the same way:
 
 ```yaml
 - uses: ChrisAdkin8/tf-analyze@v1

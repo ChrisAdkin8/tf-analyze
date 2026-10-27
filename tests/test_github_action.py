@@ -112,9 +112,12 @@ class TestPRSummaryContract:
 
 class TestInputs:
     def _inputs(self, action: dict) -> dict:
-        # The reusable-action inputs are at the top level under `inputs:`.
-        # `workflow_dispatch.inputs` is a separate block for manual runs.
-        return action.get("inputs", {}) or {}
+        # A workflow has no top-level `inputs:` (GitHub rejects the file),
+        # so the inputs live under `workflow_dispatch`. PyYAML reads the
+        # `on:` key as Python `True`.
+        assert "inputs" not in action, "top-level `inputs:` is not valid workflow syntax"
+        on = action.get(True) or action.get("on") or {}
+        return (on.get("workflow_dispatch") or {}).get("inputs", {}) or {}
 
     def test_fail_on_input_present(self, action: dict) -> None:
         assert "fail-on" in self._inputs(action)

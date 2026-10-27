@@ -4,7 +4,7 @@
     Runs tf-analyze against the staged Terraform files. Fails the commit
     when any finding meets or exceeds the configured urgency threshold.
   language: python
-  entry: python3 scripts/detect.py
+  entry: tf-analyze
   args: ["--target", ".", "--fail-on", "HIGH"]
   types: [file]
   files: '\.(tf|tfvars)$'
@@ -18,7 +18,7 @@
     you want a fast gate that only blocks on security issues while ops/
     robustness findings are informational.
   language: python
-  entry: python3 scripts/detect.py
+  entry: tf-analyze
   args: ["--target", ".", "--fail-on", "HIGH", "--focus", "security"]
   types: [file]
   files: '\.(tf|tfvars)$'
@@ -32,7 +32,7 @@
     mandatory check that blocks merges without generating noise from
     MEDIUM/LOW items.
   language: python
-  entry: python3 scripts/detect.py
+  entry: tf-analyze
   args: ["--target", ".", "--fail-on", "CRITICAL"]
   types: [file]
   files: '\.(tf|tfvars)$'
