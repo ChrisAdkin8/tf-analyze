@@ -5,6 +5,33 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 65 — verify-fixed works, SARIF severity per finding, big files 2.5x faster — 2026-10-27
+
+The remaining smaller findings from the critical review.
+
+- **`--mode verify-fixed`** was broken three ways:
+  - its report-row regex allowed only letters between the dashes of a
+    rule ID, so 23 rules (SEC-AWS-S3-001, every SEC-K8S-*) and all
+    CUSTOM-* rules were silently dropped from verification;
+  - `reprobe_finding` can return BROKEN-SYMLINK but the results had no
+    such key, so a broken symlink in the target crashed the run;
+  - the report's relative path (`main.tf`) was compared as a string with
+    the scanner's absolute path, so every still-present finding came out
+    MOVED (and the corpus pass ran against the current directory, not
+    the target). Paths are now resolved against the target.
+- **SARIF results** took `level` from the rule's default, so an escalated
+  finding (SSH open to the world: CRITICAL, rule default HIGH) was
+  reported at the default. Each result now carries its own `level` and
+  `security-severity` (GitHub documents `security-severity` on the rule,
+  so its score may still follow the rule; `level` is per result).
+- **Large files**: `find_blocks` computed each block's line with
+  `text.count("\n", 0, pos)`, re-scanning the file from the top per
+  block. A cached newline table and a binary search replace it: a
+  4,000-resource file scans in 3.1 s instead of 7.8 s, with identical
+  findings and line numbers.
+
+---
+
 ## Round 63 — Run Task, badge and MCP services hardened — 2026-10-26
 
 From the critical review's hosted-service findings.
