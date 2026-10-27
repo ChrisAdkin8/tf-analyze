@@ -231,6 +231,14 @@ def evaluate_against_resources(
             kind = pat.get("kind", "")
             if kind not in PLAN_SUPPORTED_KINDS:
                 continue
+            # `unless_repo_has`, as on the static path: the account-level
+            # resource is in the plan and not `enabled = false`.
+            if pat.get("unless_repo_has") and any(
+                r.get("type") == pat["unless_repo_has"]
+                and (r.get("values") or {}).get("enabled") is not False
+                for r in resources
+            ):
+                continue
             if kind == "resource_arg":
                 # Same semantics as the static handler: value at
                 # nested_path or (possibly dotted) arg, any instance

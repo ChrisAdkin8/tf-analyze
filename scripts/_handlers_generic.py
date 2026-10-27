@@ -21,6 +21,7 @@ field interpretation.
 """
 from __future__ import annotations
 
+import ipaddress
 import re
 
 from _hcl import (
@@ -135,6 +136,17 @@ def _suppressed_by(spec: dict | None, blk: dict, var_defaults: dict) -> bool:
     return False
 
 
+def _repo_has(pat: dict, var_defaults: dict) -> bool:
+    """``unless_repo_has: T`` — whether a resource of type ``T`` that is
+    not ``enabled = false`` exists anywhere in the scan. For account-level
+    settings that change what a resource rule means (e.g.
+    ``aws_ebs_encryption_by_default`` encrypts every new volume), which
+    usually live in another module. The types present are recorded under
+    ``__repo_has__`` when the variable contexts are built."""
+    rtype = pat.get("unless_repo_has")
+    return bool(rtype) and rtype in var_defaults.get("__repo_has__", "").split()
+
+
 @_register_infile("resource_arg")
 def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     """``resource_arg`` — match a regex (or its negation) against the
@@ -144,7 +156,8 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     ``fire_if_absent`` (fire when the arg is missing entirely), and the
     ``suppress_if`` (see `_suppressed_by`), ``suppress_if_body_contains``
     and ``count = 0`` (resource definitely not created) escape hatches,
-    and ``name_regex`` / ``name_not_regex`` (see `_name_selected`). Variable references in the value are
+    ``name_regex`` / ``name_not_regex`` (see `_name_selected`) and
+    ``unless_repo_has`` (see `_repo_has`). Variable references in the value are
     resolved via the directory-scoped var_defaults.
 
     The value is looked up at ``nested_path`` if set, else at ``arg``;
@@ -163,6 +176,8 @@ def _detect_resource_arg(c: InFileCtx) -> list[dict]:
     if "resource" not in pat or not (pat.get("arg") or pat.get("nested_path")):
         return []
     if not has_regex and not has_not_regex:
+        return []
+    if _repo_has(pat, c.var_defaults):
         return []
     rt = pat["resource"]
     path = pat.get("nested_path") or pat["arg"]
@@ -210,8 +225,9 @@ def _has_companion(blk: dict, spec: dict, candidates: list[dict]) -> bool:
     points at `blk` through its ``spec["via"]`` argument (default
     ``bucket``; a list means any of them): by reference
     (``aws_s3_bucket.x.id``, ``.bucket``, ``[0].id`` …), by the same
-    literal value `blk` has for that argument (``bucket = "my-bucket"`` on
-    both), or by iterating it (``for_each = aws_s3_bucket.x`` with
+    value `blk` has for that argument (``bucket = "my-bucket"``, or the
+    same ``local.bucket_name`` / ``var.name`` expression, on both), or by
+    iterating it (``for_each = aws_s3_bucket.x`` with
     ``bucket = each.value.id``)."""
     ctype = spec.get("resource")
     via = spec.get("via", "bucket")
@@ -223,7 +239,11 @@ def _has_companion(blk: dict, spec: dict, candidates: list[dict]) -> bool:
     literals: dict[str, str] = {}
     for arg in vias:
         literal = block_arg_value(blk["body"], arg)
-        if literal and not literal.startswith(("var.", "local.", "data.", "${")):
+        # Within one module the same expression is the same value, so
+        # `bucket = local.bucket_name` on both links them (it used to be
+        # skipped, a false positive). Not `each.` / `count.` / `self.`:
+        # those differ per instance.
+        if literal and not literal.startswith(("each.", "count.", "self.", "${each.", "${count.")):
             literals[arg] = literal
     for cand in candidates:
         if cand["groups"][0] != ctype:
@@ -239,6 +259,47 @@ def _has_companion(blk: dict, spec: dict, candidates: list[dict]) -> bool:
             if value and iterates_blk and re.match(r"\$?\{?\s*each\.", value):
                 return True
     return False
+
+
+@_register_infile("ip_range_span")
+def _detect_ip_range_span(c: InFileCtx) -> list[dict]:
+    """``ip_range_span`` — fire when the IP range a resource allows, from
+    ``start_arg`` to ``end_arg``, covers at least ``min_addresses``
+    addresses. For firewall rules written as a start / end pair (Azure
+    SQL, PostgreSQL / MySQL flexible server, Synapse …): matching the two
+    ends against fixed values missed ``0.0.0.1``–``255.255.255.254``,
+    which is just as open. Ends that are not literal addresses (an
+    unresolved variable) are skipped.
+    """
+    pat = c.pat
+    rt, start_arg, end_arg = pat.get("resource"), pat.get("start_arg"), pat.get("end_arg")
+    min_addresses = int(pat.get("min_addresses") or 0)
+    if not (rt and start_arg and end_arg and min_addresses):
+        return []
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        if btype != rt or _resource_is_count_zero(blk["body"], c.var_defaults):
+            continue
+        ends = []
+        for arg in (start_arg, end_arg):
+            values = resource_values_at(blk, arg)
+            try:
+                ends.append(ipaddress.ip_address(
+                    _resolve_var_ref(values[0], c.var_defaults).strip()
+                ))
+            except (IndexError, ValueError):
+                break
+        if len(ends) != 2 or ends[0].version != ends[1].version:
+            continue
+        if int(ends[1]) - int(ends[0]) + 1 >= min_addresses:
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+            })
+    return out
 
 
 @_register_infile("resource_missing_arg")
@@ -273,6 +334,8 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
     rt = pat["resource"]
     arg_path = pat.get("nested_path") or pat.get("arg") or ""
     if not arg_path:
+        return []
+    if _repo_has(pat, c.var_defaults):
         return []
     if (
         rt.startswith("aws_")

@@ -119,7 +119,7 @@ AWS, GCP, and Azure are at **rule-count parity (91 rules each)** — IAM, storag
 | **Kubernetes / Helm** | 18 | Helm release `set { }` overrides (`SEC-K8S-HELM-001`, `-002`); `kubernetes_*` resource hardening (PSA, network policy, cluster-admin RoleBindings). |
 | **Cross-cloud / engine** | 63 | Secrets in HCL/tfvars, provisioner usage, module pinning / supply-chain refs / staleness, `required_providers` version pinning, lifecycle controls (`ROB-DRIFT-001`, `-002`), `count`/`for_each` anti-patterns including `ROB-FOREACH-002` keyset stability, orphan modules (`MOD-UNUSED-001`), variable validation, sensitive outputs, provider aliases, backends, Vault data sources, `applies_when` provider-version gating. |
 
-AWS / GCP / Azure are at numerical parity (91 rules each). **Total: 354 catalogue rules** (352 active + 2 stubs; `--list-rules` reports the 352 active). Re-run `python3 scripts/detect.py --list-rules` for the full live enumeration. README.md's "Rules at a glance" table is the maintained per-cloud breakdown.
+AWS 91, GCP 90, Azure 91. **Total: 353 active catalogue rules** (plus 2 stubs; `--list-rules` reports the active ones). Re-run `python3 scripts/detect.py --list-rules` for the full live enumeration. README.md's "Rules at a glance" table is the maintained per-cloud breakdown.
 
 When a finding fires against an AWS or Azure resource and the catalogue doesn't have a stable ID for it, tag it as **EXPLORATORY** (per the architecture section below) — not as a regression in the next run.
 

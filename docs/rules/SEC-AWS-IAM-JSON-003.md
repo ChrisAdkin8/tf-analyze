@@ -9,7 +9,7 @@ keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, m
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "SEC-AWS-IAM-JSON-003 \u2014 Inline IAM policy JSON grants `Action: \\\"*\\\"` AND `Resource: \\\"*\\\"`",
-  "description": "If true administrator access is intended, attach\n`arn:aws:iam::aws:policy/AdministratorAccess` directly via\n`aws_iam_role_policy_attachment`. Otherwise, scope to the explicit\nminimum action and resource set.",
+  "description": "Replace the wildcard with the explicit minimum action and resource set\nthe workload needs. Attaching the AWS-managed `AdministratorAccess`\npolicy instead is not a fix: it grants exactly the same access. If a\nprincipal truly needs full admin",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-IAM-JSON-003/",
   "mainEntityOfPage": {
     "@type": "WebPage",
@@ -64,10 +64,11 @@ Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/C
 
 ## Remediation
 
-If true administrator access is intended, attach
-`arn:aws:iam::aws:policy/AdministratorAccess` directly via
-`aws_iam_role_policy_attachment`. Otherwise, scope to the explicit
-minimum action and resource set.
+Replace the wildcard with the explicit minimum action and resource set
+the workload needs. Attaching the AWS-managed `AdministratorAccess`
+policy instead is not a fix: it grants exactly the same access. If a
+principal truly needs full administrator access, keep it to a
+break-glass role behind MFA and an SCP guardrail, and record why.
 
 ## Suggested fix (`fix_hcl`)
 
