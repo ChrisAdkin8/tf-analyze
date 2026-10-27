@@ -29,13 +29,16 @@ patterns:
       to access this server" — but it also opens the SQL endpoint to any
       Azure-hosted attacker (a shared IP range). Combined with weak
       credentials, it becomes internet-exposed.
-  - kind: resource_arg
+  - kind: ip_range_span
     resource: azurerm_mssql_firewall_rule
-    arg: end_ip_address
-    regex: '^255\.255\.255\.255$'
+    start_arg: start_ip_address
+    end_arg: end_ip_address
+    # Wider than a /8. Matching `end_ip_address = "255.255.255.255"` alone
+    # missed 0.0.0.1-255.255.255.254, which is just as open.
+    min_addresses: 16777217
     description: |
-      `azurerm_mssql_firewall_rule` with `end_ip_address = "255.255.255.255"`
-      — a world-open rule accepting connections from every IP address.
+      `azurerm_mssql_firewall_rule` whose start-end range covers more
+      than a /8 (16.7 million addresses) — effectively world-open.
 recommendation: |
   Replace world-open firewall rules with the narrowest CIDR your workload
   needs. Prefer Private Endpoints over firewall rules for production:

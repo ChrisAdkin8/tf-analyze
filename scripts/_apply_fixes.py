@@ -32,7 +32,9 @@ from __future__ import annotations
 import difflib
 import os
 import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 from _hcl import _string_end, brace_walk, mask_comments_and_heredocs
@@ -109,12 +111,18 @@ def fix_block_for_nested_arg(fix_hcl: str, arg: str) -> str | None:
     return text[:end_pos]
 
 
-def reindent_fix_snippet(raw: str, indent: str, eol: str = "\n") -> list[str]:
+def reindent_fix_snippet(
+    raw: str, indent: str, eol: str = "\n", unit: str | None = None,
+) -> list[str]:
     """Re-indent a fix snippet (single or multi-line) for insertion.
 
     Strips the base indentation of the first line from every line,
-    then prepends ``indent``. Returns a list of `eol`-terminated
-    strings ready for list insertion via ``modified[end:end] = ...``.
+    then prepends ``indent``. With ``unit`` (the file's own indentation
+    step, e.g. four spaces or a tab), each two-space step of the
+    snippet's inner indentation (the catalogue's `terraform fmt` style)
+    becomes one ``unit``, so a fix in a tab-indented file is not mixed
+    tabs and spaces. Returns a list of `eol`-terminated strings ready for
+    list insertion via ``modified[end:end] = ...``.
     """
     lines = raw.split('\n')
     base_len = len(lines[0]) - len(lines[0].lstrip())
@@ -122,6 +130,10 @@ def reindent_fix_snippet(raw: str, indent: str, eol: str = "\n") -> list[str]:
     result = []
     for line in lines:
         stripped = line[base_len:] if line.startswith(base) else line
+        if unit is not None:
+            body = stripped.lstrip(" ")
+            lead = len(stripped) - len(body)
+            stripped = unit * (lead // 2) + " " * (lead % 2) + body
         result.append(f"{indent}{stripped.rstrip(chr(13))}{eol}")
     return result
 
@@ -226,6 +238,57 @@ def _line_opens_finding_resource(line: str, resource_addr: str) -> bool:
     return m.group(1) == rtype and m.group(2) == rname
 
 
+_HEREDOC_RE = re.compile(r'=\s*<<-?\s*"?(\w+)"?\s*$')
+
+
+def _value_end_line(lines: list[str], code: list[str], li: int) -> int:
+    """0-based index of the last line of the ``arg = value`` that starts
+    on line `li`. A value whose brackets (``[`` ``{`` ``(``) do not close
+    on that line runs to the line where they do; a heredoc runs to its
+    terminator. Brackets are counted on `code` (strings and comments
+    blanked), so ``"a[b"`` does not open one.
+
+    Replacing only line `li` left the rest of a multi-line value behind
+    (``"api",`` and ``]`` after a new list): invalid HCL.
+    """
+    m = _HEREDOC_RE.search(lines[li].rstrip("\r\n"))
+    if m:
+        for j in range(li + 1, len(lines)):
+            if lines[j].strip() == m.group(1):
+                return j
+        return li
+    depth = 0
+    eq = code[li].find("=")
+    for j in range(li, len(lines)):
+        for ch in code[j][eq + 1:] if j == li else code[j]:
+            if ch in "[{(":
+                depth += 1
+            elif ch in "]})":
+                depth -= 1
+        if depth <= 0:
+            return j
+    return li
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """Write `text` to `path` as UTF-8 through a temporary file in the same
+    directory and `os.replace`, keeping the file's permissions. An
+    interrupted run leaves the original or the new file, never half of
+    one (it used to rewrite in place)."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        shutil.copymode(path, tmp)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _unsafe_write_reason(path: Path, roots: list[Path]) -> str | None:
     """Why patching `path` (and writing its ``.bak``) is unsafe, or None.
 
@@ -273,7 +336,7 @@ def _apply_pattern(
         raw = fix_line_for_arg(fix_hcl, arg) or fix_block_for_nested_arg(fix_hcl, arg)
         if not raw:
             return False
-        modified[block_end:block_end] = reindent_fix_snippet(raw, indent, eol)
+        modified[block_end:block_end] = reindent_fix_snippet(raw, indent, eol, unit=indent)
         return True
     if kind in ("resource_arg", "hcl_attr") and arg:
         fix_line = fix_line_for_arg(fix_hcl, arg)
@@ -303,10 +366,14 @@ def _apply_pattern(
             return False
         line = modified[target_li]
         indent = line[:len(line) - len(line.lstrip())]
-        new = f"{indent}{fix_line}{eol}"
-        if new == line:
+        # Replace the whole old value, and re-indent the new one (a
+        # multi-line fix kept the snippet's own indentation and `\n`).
+        value_end = _value_end_line(modified, code, target_li)
+        unit = block_indent(modified, start_idx, block_end)
+        new = reindent_fix_snippet(fix_line, indent, eol, unit=unit)
+        if new == modified[target_li:value_end + 1]:
             return False
-        modified[target_li] = new
+        modified[target_li:value_end + 1] = new
         return True
     return False
 
@@ -323,7 +390,8 @@ def handle_apply_fixes(
     insertions at later lines do not shift earlier positions. Before
     writing (not in dry-run mode) it saves the file to a backup that never
     overwrites an earlier one (`_backup_path`). Files are read and written
-    byte-for-byte, so CRLF line endings stay CRLF.
+    as UTF-8 with line endings untouched, so CRLF stays CRLF, and written
+    atomically (`_write_atomic`).
 
     Each of the rule's patterns on the finding's resource type is tried in
     order until one changes the block — the finding does not record which
@@ -370,8 +438,14 @@ def handle_apply_fixes(
             print(f"WARN: apply-fixes: skipping {file_path}: {unsafe}", file=sys.stderr)
             continue
 
-        with open(path, newline="") as fh:
-            original_lines = fh.readlines()
+        # Terraform source is UTF-8; the locale's encoding (cp1252 on
+        # Windows) could fail on, or rewrite, non-ASCII text.
+        try:
+            with open(path, encoding="utf-8", newline="") as fh:
+                original_lines = fh.readlines()
+        except UnicodeDecodeError:
+            print(f"WARN: apply-fixes: skipping {file_path}: not UTF-8", file=sys.stderr)
+            continue
         modified = original_lines[:]
         crlf = sum(line.endswith("\r\n") for line in original_lines)
         eol = "\r\n" if crlf * 2 > len(original_lines) else "\n"
@@ -436,8 +510,7 @@ def handle_apply_fixes(
             backup = _backup_path(path)
             with open(backup, "xb") as fh:  # "x": never follow or clobber
                 fh.write(original)
-            with open(path, "w", newline="") as fh:
-                fh.writelines(modified)
+            _write_atomic(path, "".join(modified))
             print(f"# patched {file_path} (backup: {backup.name})", file=sys.stderr)
 
     action = "would apply" if dry_run else "applied"

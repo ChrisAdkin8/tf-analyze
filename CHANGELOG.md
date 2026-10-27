@@ -5,6 +5,63 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 70 — `--apply-fixes` never leaves a file worse than it found it — 2026-10-27
+
+- **Multi-line values**: replacing a value that spans several lines (a
+  list, map, call or heredoc) only overwrote its first line, leaving the
+  rest behind as invalid HCL — e.g. `"api",` and `]` after the new
+  `enabled_cluster_log_types` list. The whole old value is now replaced.
+- **Indentation**: a multi-line fix kept the catalogue snippet's
+  indentation and `\n` endings, so the first line was indented twice and
+  the rest did not match the file. Fixes are now re-indented to the
+  file's own step (two or four spaces, or tabs) and line endings.
+- **Encoding**: files are read and written as UTF-8, the encoding
+  Terraform uses, not the locale's (cp1252 on Windows). A file that is
+  not UTF-8 is skipped with a warning instead of being rewritten.
+- **Atomic writes**: the patched file is written to a temporary file in
+  the same folder and swapped in, keeping its permissions; an
+  interrupted run leaves the original or the patched file, never half of
+  one. The `.bak` backup is still written first.
+
+---
+
+## Round 69 — Rules miss fewer real problems and flag fewer safe ones — 2026-10-27
+
+Findings change: some rules now fire where they did not, others stop
+firing on safe configuration. Terragoat totals are unchanged.
+
+- **"Open to the world", however it is written**: a CIDR counts as the
+  whole internet when its prefix length is 0, so `0::/0`, `::0/0` and
+  `0000::/0` are caught like `::/0`. Only the two canonical strings
+  were matched.
+- **GCP firewall with no source**: an ingress rule with no
+  `source_ranges`, `source_tags` or `source_service_accounts` is treated
+  as `0.0.0.0/0`, which is what Google Cloud applies. SSH open to
+  everyone this way was not flagged.
+- **IAM action names are case-insensitive**: `"IAM:*"` now triggers the
+  `iam:*` rules, and `"EC2:DescribeInstances"` on `Resource = "*"` is no
+  longer flagged as a wildcard grant.
+- **`SEC-AZURE-SQL-002`** measures the whole start–end range with the
+  new `ip_range_span` pattern kind (fires above a /8). Matching the end
+  address against `255.255.255.255` missed `0.0.0.1`–`255.255.255.254`,
+  and flagged the tiny `255.255.255.0`–`255.255.255.255`.
+- **`SEC-AWS-S3-001`**: an encryption configuration that points at the
+  bucket through the same `local.` / `var.` expression (`bucket =
+  local.bucket_name` on both) now counts. It was a false positive.
+- **`SEC-AWS-EBS-001`** does not fire when `aws_ebs_encryption_by_default`
+  is anywhere in the scan (any module) and not `enabled = false`: every
+  new volume is then encrypted. New pattern option `unless_repo_has`,
+  honoured in plan mode too.
+- **`SEC-AWS-IAM-JSON-003` / `SEC-AWS-IAM-POLICY-005`** no longer
+  recommend attaching the managed `AdministratorAccess` policy, which
+  grants the same access and cleared the finding without fixing it.
+- **`STK-GCP-DEPRECATION-001` is retired** (`status: deprecated`). None
+  of the arguments it called deprecated is deprecated in the google
+  provider, and its `.*` patterns fired on the secure
+  `enable_legacy_abac = false`. Active rules: 353 (GCP 90).
+
+---
+
 ## Round 68 — Every scan mode gates like a static scan — 2026-10-27
 
 **Exit codes change.** CI jobs that use these modes may start failing

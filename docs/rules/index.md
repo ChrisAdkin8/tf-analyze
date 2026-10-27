@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**354 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**353 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -57,7 +57,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`OPS-GCP-LABELS-001`](./OPS-GCP-LABELS-001.md) | MEDIUM | GCP resource missing labels block |
 | [`OPS-AWS-CWL-001`](./OPS-AWS-CWL-001.md) | LOW | CloudWatch log group has no retention policy |
 
-## robustness (51)
+## robustness (50)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -102,7 +102,6 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-VALIDATION-001`](./ROB-VALIDATION-001.md) | MEDIUM | Variable accepts dangerous input without validation block |
 | [`ROB-VALIDATION-002`](./ROB-VALIDATION-002.md) | MEDIUM | Variable typed as bare any |
 | [`ROB-VERSION-001`](./ROB-VERSION-001.md) | MEDIUM | required_version floor too old for skill assumptions |
-| [`STK-GCP-DEPRECATION-001`](./STK-GCP-DEPRECATION-001.md) | MEDIUM | Resource uses deprecated argument |
 | [`ROB-COUNT-001`](./ROB-COUNT-001.md) | LOW | Boolean count pattern instead of for_each |
 | [`ROB-COUNT-002`](./ROB-COUNT-002.md) | LOW | Module mixes count-based and for_each-based resources |
 | [`ROB-DRIFT-003`](./ROB-DRIFT-003.md) | LOW | ignore_changes lists too many attributes (drift-disable by attrition) |
