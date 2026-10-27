@@ -243,7 +243,12 @@ def test_fleet_with_an_empty_target_fails_when_gated(tmp_path: Path) -> None:
     assert "nothing was checked" in proc.stderr
 
 
-def test_fleet_honours_fail_on_parse_error(tmp_path: Path) -> None:
+def test_fleet_honours_fail_on_parse_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Needs the real parser: the forced-fallback CI job reports no parse
+    # failures at all.
+    monkeypatch.delenv("TF_ANALYZE_TEST_FORCE_FALLBACK", raising=False)
     a = tmp_path / "a"
     a.mkdir()
     (a / "main.tf").write_text("locals {\n  a = \n}\n")
