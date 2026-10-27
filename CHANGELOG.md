@@ -29,7 +29,7 @@ Self-test fixture counts are cumulative.
 - **`integrations/github-action-bot.yml`**: inputs reach the shell
   through `env:`; actions are pinned; `ref` defaults to `v0.2.6`. It no
   longer deletes or commits tracked `.bak` files (`git add -u` instead
-  of `git add -A`), and `pip install python-hcl2` is pinned to 7.2.1
+  of `git add -A`), and `pip install python-hcl2` is hash-pinned (7.2.1, with lark 1.3.1)
   (v0.2.6 predates the vendored parser and uses it only when installed).
 - **Template default engine**: `v0.2.6` is the latest release, and it
   predates this round's HTML escaping fix and the vendored parser. Bump

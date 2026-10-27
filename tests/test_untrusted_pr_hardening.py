@@ -132,8 +132,11 @@ def test_bot_never_deletes_or_stages_unrelated_files() -> None:
     assert "git add -A" not in text
     assert "git add -u" in text
     assert "--others --exclude-standard -- '*.bak'" in text
-    # v0.2.6 predates the vendored parser, so the bot installs it, pinned.
-    assert "pip install python-hcl2==7.2.1" in text
+    # v0.2.6 predates the vendored parser, so the bot installs it; the job
+    # holds a write token, so only hash-pinned wheels.
+    assert "pip install --require-hashes --only-binary=:all:" in text
+    assert "python-hcl2==7.2.1 --hash=sha256:" in text
+    assert "lark==1.3.1 --hash=sha256:" in text
 
 
 # ---------------------------------------------------------------------------
