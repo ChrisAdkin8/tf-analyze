@@ -627,6 +627,11 @@ runs:
             d = json.load(f)
         rank = {"CRITICAL":4,"HIGH":3,"MEDIUM":2,"LOW":1,"INFO":0}
         fail_on = os.environ.get("TFA_FAIL_ON", "HIGH")
+        # No .tf files under the target (wrong `target`, or ignore_paths
+        # excluding everything): a clean result would be a false pass.
+        if d.get("summary", {}).get("nothing_scanned"):
+            print("::error::tf-analyze: no .tf / .tf.json files found under the target; nothing was checked. Check the `target` input and ignore_paths.", file=sys.stderr)
+            sys.exit(1)
         threshold = rank.get(fail_on, 3)
         breach = [f for f in d.get("findings", []) if rank.get(f.get("urgency",""), 0) >= threshold]
         if breach:

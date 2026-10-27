@@ -93,7 +93,7 @@ Auto-discover most recent prior JSON report and compute delta.
 
 **Choices:** `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`
 
-Exit with code 1 if any finding at this urgency or above exists
+Exit with code 1 if any finding at this urgency or above exists, or if a file could not be read or a rule check ran out of time. Exit with code 2 if no .tf / .tf.json files were found to scan (unless --plan-json or --state-json supplies the input)
 
 
 ## Auto-stub
@@ -242,7 +242,7 @@ Override the cache file path used by --cache (default: a per-target file under t
 
 ### `--apply-fixes`
 
-Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying.
+Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying. 'apply' exits 0 after patching and does not apply --fail-on: re-run the scan to gate on what is left.
 
 ### `--apply-fixes-max-disruption`
 

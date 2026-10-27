@@ -2833,7 +2833,12 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
         "--fail-on",
         default=None,
         choices=["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
-        help="Exit with code 1 if any finding at this urgency or above exists",
+        help=(
+            "Exit with code 1 if any finding at this urgency or above exists, "
+            "or if a file could not be read or a rule check ran out of time. "
+            "Exit with code 2 if no .tf / .tf.json files were found to scan "
+            "(unless --plan-json or --state-json supplies the input)"
+        ),
     )
     ap.add_argument(
         "--fail-on-parse-error",
@@ -3170,7 +3175,9 @@ def _add_fix_args(ap: argparse.ArgumentParser) -> None:
             "'apply' writes the patched files to disk (creates .bak backups). "
             "Only resource_missing_arg and resource_arg/hcl_attr patterns are "
             "patched; patterns without fix_hcl are skipped. "
-            "Always review dry-run output before applying."
+            "Always review dry-run output before applying. "
+            "'apply' exits 0 after patching and does not apply --fail-on: "
+            "re-run the scan to gate on what is left."
         ),
     )
     ap.add_argument(
@@ -3440,6 +3447,19 @@ def main():
         and not _path_is_ignored(p, target, _ignore_paths)
     ]
     if not tf_files:
+        # A gated scan that checked no Terraform is a misconfigured CI job
+        # (wrong folder, or ignore_paths excluding everything), not a pass:
+        # it used to score 100 and exit 0. Plan / state input is a real
+        # scan without .tf files. Diff mode is unaffected: tf_files is the
+        # whole target here, so a PR that changes no Terraform still passes.
+        if args.fail_on and not args.plan_json and not args.state_json:
+            why = " after ignore_paths" if _ignore_paths else ""
+            print(
+                f"ERROR: no .tf / .tf.json files found under {target}{why}; "
+                f"nothing was checked (--fail-on)",
+                file=sys.stderr,
+            )
+            sys.exit(2)
         print(f"WARN: no .tf / .tf.json files found under {target}", file=sys.stderr)
     if _ignore_paths:
         print(
@@ -3806,6 +3826,12 @@ def main():
     # Likewise only when a rule check ran out of time (`_call_with_budget`).
     if RULE_TIMEOUTS:
         summary["rule_timeouts"] = list(RULE_TIMEOUTS)
+    # No Terraform and no plan/state input: the scan checked nothing. With
+    # --fail-on this already exited 2 above; ungated (the GitHub Action
+    # gates in a later step) the flag lets the gate fail instead of
+    # passing a 100 (A) score for an empty or fully-ignored target.
+    if not tf_files and not args.plan_json and not args.state_json:
+        summary["nothing_scanned"] = True
 
     _gate_findings = findings  # before INFO findings are hidden from output
 
