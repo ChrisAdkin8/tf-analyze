@@ -32,8 +32,12 @@ from typing import Callable
 from _tfjson import remap_lines
 
 
+# A catalogue ID: a 2–6 letter family (SEC … CUSTOM), then dash-separated
+# parts that may hold digits (`S3`, `K8S`), then a 3-digit number. Parts
+# were letters-only, so 23 rules (SEC-AWS-S3-001, every SEC-K8S-*) and all
+# CUSTOM-* rules were silently dropped from verification.
 _FINDING_ROW_RE = re.compile(
-    r'^\|\s*(?P<id>[A-Z]{2,4}(?:-[A-Z]+)+-\d{3})'
+    r'^\|\s*(?P<id>[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3})'
     r'(?:#\d+)?\s*\|'         # optional instance number
     r'(?P<middle>.*?)\|'       # skip urgency column(s)
     r'\s*`?(?P<file>[\w./-]+\.tf(?:\.json)?)`?'
@@ -83,8 +87,16 @@ def reprobe_finding(
     *,
     detect_in_file: Callable[[Path, str, list], list[dict]],
     detect_corpus: Callable[[Path, dict, list], list[dict]],
+    target: Path | None = None,
 ) -> str:
-    """One of: STILL-PRESENT, RESOLVED, MOVED, STALE-LOCATION, AMBIGUOUS.
+    """One of: STILL-PRESENT, RESOLVED, MOVED, STALE-LOCATION,
+    BROKEN-SYMLINK, AMBIGUOUS.
+
+    The report's file path is relative to the scan `target` (default: the
+    current directory) and is compared with each hit's file after both are
+    resolved: the report says `main.tf`, the scanner reports an absolute
+    path, and the plain string comparison made every still-present finding
+    look MOVED.
 
     Strategy: re-run just this catalogue entry against the named file
     (or all files, for corpus-level finders). If the pattern fires
@@ -95,15 +107,22 @@ def reprobe_finding(
     entry = catalog_by_id.get(finding["id"])
     if not entry:
         return "AMBIGUOUS"
+    root = Path(target) if target is not None else Path.cwd()
     target_file = Path(finding["file"])
+    if not target_file.is_absolute():
+        target_file = root / target_file
 
     hits: list[dict] = []
     for fp, text in all_files_text.items():
         hits.extend(detect_in_file(fp, text, [entry]))
-    hits.extend(detect_corpus(Path("."), all_files_text, [entry]))
+    hits.extend(detect_corpus(root, all_files_text, [entry]))
     remap_lines(hits)
 
-    same_file = [h for h in hits if str(h.get("file", "")) == str(target_file)]
+    def _same(path: str) -> bool:
+        p = Path(path)
+        return (p if p.is_absolute() else root / p).resolve() == target_file.resolve()
+
+    same_file = [h for h in hits if _same(str(h.get("file", "")))]
     if same_file:
         if any(abs(h["line"] - finding["line"]) <= 3 for h in same_file):
             return "STILL-PRESENT"
@@ -141,6 +160,9 @@ def verify_fixed(
         "RESOLVED": [],
         "MOVED": [],
         "STALE-LOCATION": [],
+        # `reprobe_finding` can return it; without the key a broken
+        # symlink in the target crashed the whole run with a KeyError.
+        "BROKEN-SYMLINK": [],
         "AMBIGUOUS": [],
     }
     for f in prior_findings:
@@ -148,6 +170,7 @@ def verify_fixed(
             f, catalog_by_id, all_files_text,
             detect_in_file=detect_in_file,
             detect_corpus=detect_corpus,
+            target=target,
         )
         results[state].append(f)
     return {

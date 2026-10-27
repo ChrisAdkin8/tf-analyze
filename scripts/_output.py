@@ -631,6 +631,17 @@ def to_sarif(
             idx = rule_index[fid]
             result["ruleIndex"] = idx
             result["level"] = rules[idx]["defaultConfiguration"]["level"]
+        # The finding's own urgency (escalated, or adjusted by the attack
+        # graph), not the rule's default: an SSH-open-to-the-world finding
+        # is CRITICAL even though SEC-AWS-SG-001 defaults to HIGH, and was
+        # reported to code scanning as the default. `security-severity` is
+        # set per result too; GitHub documents it on the rule, so its score
+        # may still follow the rule — `level` is honoured per result.
+        if f.get("urgency") in level_map:
+            result["level"] = level_map[f["urgency"]]
+            result.setdefault("properties", {})["security-severity"] = (
+                severity_map[f["urgency"]]
+            )
         # KEV exploitability tag (R30.2). Surfaced at the per-result
         # level rather than per-rule so consumers can distinguish "this
         # specific finding hit a KEV-listed CWE" from "the rule could
