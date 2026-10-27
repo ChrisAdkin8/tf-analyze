@@ -13,8 +13,9 @@ scan flow except scan callables and the catalogue entries:
 
 Both functions use the **callable-injection** pattern from ``_lsp.py``
 (R30.7) so this module doesn't import detect.py — the heavyweight
-helpers (``detect_corpus``, ``detect_in_file``, ``read_normalized``)
-are passed in by the caller. That keeps the seam testable in
+helpers are passed in by the caller: fleet gets a whole per-target scan
+(detect.py's ``_scan_target``, the static pipeline), trend gets
+``detect_in_file``. That keeps the seam testable in
 isolation and prevents the circular-import hazard.
 
 Extracted from ``detect.py`` as the **sixteenth modularisation seam**.
@@ -28,7 +29,6 @@ from pathlib import Path
 from typing import Callable
 
 from _output import _md_code
-from _tfjson import remap_lines, tf_source_files
 
 
 def resolve_fleet_targets(args) -> list[Path]:
@@ -47,13 +47,13 @@ def resolve_fleet_targets(args) -> list[Path]:
 
 def fleet_scan(
     targets: list[Path],
-    entries: list[dict],
-    *,
-    read_normalized: Callable[[Path], str],
-    detect_corpus: Callable[[Path, dict, list], list[dict]],
-    detect_in_file: Callable[[Path, str, list], list[dict]],
+    scan_target: Callable[[Path], dict],
 ) -> dict:
     """Scan multiple repos and cross-correlate findings.
+
+    `scan_target` runs one target through the same pipeline as a static
+    scan (detect.py's `_scan_target`): suppressions, `ignore_rules`,
+    `applies_when` and variable resolution all apply per repo.
 
     Returns::
 
@@ -62,29 +62,20 @@ def fleet_scan(
           "fleet_wide": [findings with fleet_count > 1],
           "summary": {str(target): int},
           "unreadable_files": [str(path)],
+          "parse_fallback_files": [{"file", "reason"}],
+          "suppressed_count": int,
         }
     """
     by_target: dict[str, list[dict]] = {}
     unreadable_files: list[str] = []
+    parse_fallback_files: list[dict] = []
+    suppressed_count = 0
     for target in targets:
-        root = target.resolve()
-        tf_files = [
-            p for p in tf_source_files(target)
-            if ".terraform" not in p.parts
-            # never a symlink that resolves outside the target
-            and p.resolve().is_relative_to(root)
-        ]
-        all_text: dict = {}
-        for fp in tf_files:
-            try:
-                all_text[fp] = read_normalized(fp)
-            except Exception as e:
-                print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
-                unreadable_files.append(str(fp))
-        target_findings = detect_corpus(target, all_text, entries)
-        for fp, text in all_text.items():
-            target_findings.extend(detect_in_file(fp, text, entries))
-        by_target[str(target)] = remap_lines(target_findings)
+        result = scan_target(target)
+        by_target[str(target)] = result["findings"]
+        unreadable_files.extend(result["unreadable_files"])
+        parse_fallback_files.extend(result["parse_fallback_files"])
+        suppressed_count += len(result["suppressed_findings"])
 
     # Same (rule_id, resource_name, file_base) tuple across >1 target.
     # Use sets so the same finding repeated in one repo only counts
@@ -114,6 +105,8 @@ def fleet_scan(
         "fleet_wide": fleet_wide,
         "summary": {t: len(fs) for t, fs in by_target.items()},
         "unreadable_files": unreadable_files,
+        "parse_fallback_files": parse_fallback_files,
+        "suppressed_count": suppressed_count,
     }
 
 

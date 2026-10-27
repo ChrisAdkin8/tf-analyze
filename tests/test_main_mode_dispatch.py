@@ -102,7 +102,8 @@ def test_verify_fixed_json_happy_path(tmp_path: Path) -> None:
     data = json.loads(res.stdout)
     assert data["total_prior"] == 1
     assert set(data["results"]) == {
-        "STILL-PRESENT", "RESOLVED", "MOVED", "STALE-LOCATION", "BROKEN-SYMLINK", "AMBIGUOUS"
+        "STILL-PRESENT", "RESOLVED", "MOVED", "STALE-LOCATION", "BROKEN-SYMLINK", "AMBIGUOUS",
+        "UNREADABLE",
     }
 
 

@@ -42,7 +42,7 @@ Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history.
 
 ### `--prior-report PRIOR_REPORT`
 
-Markdown report to verify (for --mode verify-fixed). If omitted, picks the most recent tf-analysis-*.md under reports/.
+Report to verify (for --mode verify-fixed): a markdown report, or this CLI's --format json / text output. If omitted, picks the most recent tf-analysis-*.md under reports/. Exits 1 under --fail-on when a STILL-PRESENT or MOVED finding meets the threshold.
 
 ### `--diff-base DIFF_BASE`
 

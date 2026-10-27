@@ -1365,12 +1365,13 @@ def reprobe_finding(finding: dict, catalog_by_id: dict,
 
 
 def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
-                 entries: list[dict]) -> dict:
+                 entries: list[dict], unreadable_files: list[str] = ()) -> dict:
     """Adapter passing detect_in_file + detect_corpus to _verify."""
     return _verify_verify_fixed(
         prior_report, target, all_files_text, entries,
         detect_in_file=detect_in_file,
         detect_corpus=detect_corpus,
+        unreadable_files=unreadable_files,
     )
 
 
@@ -1465,6 +1466,7 @@ from _plan_state import (
     evaluate_against_resources as _evaluate_against_resources,
     detect_in_plan,
     detect_in_state,
+    PlanInputError,
 )
 
 
@@ -1668,14 +1670,17 @@ from _modes import (
 )
 
 
-def _fleet_scan(targets: list[Path], entries: list[dict]) -> dict:
-    """detect.py-side adapter passing the heavyweight scan callables."""
-    return _fleet_scan_raw(
-        targets, entries,
-        read_normalized=_read_tf_source,
-        detect_corpus=detect_corpus,
-        detect_in_file=detect_in_file,
-    )
+def _fleet_scan(args: object, targets: list[Path], entries: list[dict]) -> dict:
+    """detect.py-side adapter: each target goes through `_scan_target`,
+    with its own `.tf-analyze.yaml` (or `--config`, or none with
+    `--no-project-config`)."""
+    def scan_one(target: Path) -> dict:
+        if args.no_project_config:
+            config = {}
+        else:
+            config = _load_project_config(Path(args.config).parent if args.config else target)
+        return _scan_target(args, target, entries, config, contain_symlinks=True)
+    return _fleet_scan_raw(targets, scan_one)
 
 
 def run_trend(target: Path, entries: list[dict], lookback_days: int) -> list[dict]:
@@ -2090,6 +2095,15 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     sink and (optional) `--output` file handle. Returns an exit code: the
     `--fail-on` gate over every target's findings, or 2 on bad input.
     """
+    if args.targets_file and not Path(args.targets_file).is_file():
+        print(f"ERROR: --targets-file not found: {args.targets_file}", file=sys.stderr)
+        return 2
+    # One plan / state file can't belong to every repo in the fleet; it
+    # used to be ignored silently.
+    if args.plan_json or args.state_json:
+        print("ERROR: --plan-json / --state-json are not supported with --mode fleet",
+              file=sys.stderr)
+        return 2
     fleet_targets = _resolve_fleet_targets(args)
     if not fleet_targets:
         print("ERROR: --mode fleet requires at least one --target or --targets-file", file=sys.stderr)
@@ -2101,14 +2115,15 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
             file=sys.stderr,
         )
         return 2
-    fleet_result = _fleet_scan(fleet_targets, entries)
+    fleet_result = _fleet_scan(args, fleet_targets, entries)
     total = sum(fleet_result["summary"].values())
     print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
     emit(_render_fleet_report(fleet_result, args.format))
     if out_file is not None:
         out_file.close()
     all_findings = [f for fs in fleet_result["by_target"].values() for f in fs]
-    return _gate_exit_code(args, all_findings, entries, [],
+    return _gate_exit_code(args, all_findings, entries,
+                           fleet_result["parse_fallback_files"],
                            fleet_result["unreadable_files"], RULE_TIMEOUTS)
 
 
@@ -2139,8 +2154,9 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
                        target: Path, reports_dir: Path, emit) -> int:
     """Re-probe a prior report's findings and classify fixed/still-present.
 
-    Extracted verbatim from main()'s `--mode verify-fixed` branch. Returns an
-    exit code.
+    Extracted from main()'s `--mode verify-fixed` branch. Returns an exit
+    code: the `--fail-on` gate over STILL-PRESENT and MOVED findings (and
+    unreadable files), or 2 when the prior report cannot be read.
     """
     prior = Path(args.prior_report) if args.prior_report else find_latest_prior(reports_dir, ".md")
     if not prior or not prior.exists():
@@ -2158,12 +2174,18 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         and not _path_is_ignored(p, target, _ignore_paths_vf)
     ]
     all_text = {}
+    unreadable_files: list[str] = []
     for fp in tf_files:
         try:
             all_text[fp] = _read_tf_source(fp)
-        except Exception:
-            continue
-    verify = verify_fixed(prior, target, all_text, entries)
+        except Exception as e:
+            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            unreadable_files.append(str(fp))
+    try:
+        verify = verify_fixed(prior, target, all_text, entries, unreadable_files)
+    except (OSError, ValueError) as e:
+        print(f"ERROR: cannot read prior report: {e}", file=sys.stderr)
+        return 2
     if args.format == "json":
         emit(json.dumps(verify, indent=2, default=str))
     else:
@@ -2174,7 +2196,11 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         print(f"# wrote {out_path}")
         for state, rows in verify["results"].items():
             print(f"# {state}: {len(rows)}")
-    return 0
+    # Gate on what is still there (in place or moved) and on files that
+    # could not be re-checked. This mode always exited 0.
+    results = verify["results"]
+    still_open = results["STILL-PRESENT"] + results["MOVED"]
+    return _gate_exit_code(args, still_open, entries, [], unreadable_files)
 
 
 def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
@@ -2393,7 +2419,12 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 file=sys.stderr,
             )
             sys.exit(2)
-        plan_findings = detect_in_plan(plan_path, entries)
+        try:
+            plan_findings = detect_in_plan(plan_path, entries)
+        except PlanInputError as e:
+            # Exit like a missing file: no findings is not a pass.
+            print(f"ERROR: {e}", file=sys.stderr)
+            sys.exit(2)
         if plan_findings:
             print(
                 f"# {len(plan_findings)} plan-time finding(s) from "
@@ -2425,7 +2456,12 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 file=sys.stderr,
             )
             sys.exit(2)
-        state_findings = detect_in_state(state_path, entries)
+        try:
+            state_findings = detect_in_state(state_path, entries)
+        except PlanInputError as e:
+            # Exit like a missing file: no findings is not a pass.
+            print(f"ERROR: {e}", file=sys.stderr)
+            sys.exit(2)
         if state_findings:
             print(
                 f"# {len(state_findings)} drift finding(s) from "
@@ -2456,6 +2492,207 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                              parse_fallback_files=parse_fallback_files)
 
     return findings, parse_fallback_files
+
+
+def _scan_target(args: object, target: Path, entries: list, project_config: dict,
+                 diff_files=None, *, contain_symlinks: bool = False) -> dict:
+    """One target through the static pipeline: read the files, filter rules
+    by `applies_when`, detect (with variable resolution), then apply
+    `ignore_rules`, de-duplication and inline / `.tf-analyze-ignore.yaml`
+    suppressions. Exits 2 when `--fail-on` is set and no Terraform is found.
+
+    Shared by the static scan and `--mode fleet`. Fleet had its own copy
+    that skipped suppressions, `ignore_rules` / `ignore_paths`,
+    `applies_when`, variable resolution and parse-fallback tracking, so a
+    finding suppressed in a static scan still failed a fleet gate.
+    `contain_symlinks` (fleet) skips files that resolve outside `target`.
+
+    Returns `findings`, `suppressed_findings`, `parse_fallback_files`,
+    `unreadable_files`, `all_text`, `tf_files` and the rule-filtered `entries`.
+    """
+    # Load suppressions. expired_suppressions is shown in the report so
+    # findings that just lost their cover are visible as "expired
+    # suppression" rather than buried under "new findings".
+    global_suppressions: dict = {}
+    expired_suppressions: dict = {}
+    if not args.no_suppress:
+        global_suppressions, expired_suppressions = load_suppressions(target)
+        if expired_suppressions:
+            print(
+                f"# {len(expired_suppressions)} suppression(s) expired; "
+                f"affected findings will be tagged in the report",
+                file=sys.stderr,
+            )
+
+    _ignore_paths = project_config.get("ignore_paths") or []
+    _root = target.resolve()
+    tf_files = [
+        p for p in tf_source_files(target)
+        if ".terraform" not in p.parts
+        and not _path_is_ignored(p, target, _ignore_paths)
+        # fleet targets may be untrusted repos: never follow a symlink out
+        and (not contain_symlinks or p.resolve().is_relative_to(_root))
+    ]
+    if not tf_files:
+        # A gated scan that checked no Terraform is a misconfigured CI job
+        # (wrong folder, or ignore_paths excluding everything), not a pass:
+        # it used to score 100 and exit 0. Plan / state input is a real
+        # scan without .tf files. Diff mode is unaffected: tf_files is the
+        # whole target here, so a PR that changes no Terraform still passes.
+        if args.fail_on and not args.plan_json and not args.state_json:
+            why = " after ignore_paths" if _ignore_paths else ""
+            print(
+                f"ERROR: no .tf / .tf.json files found under {target}{why}; "
+                f"nothing was checked (--fail-on)",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        print(f"WARN: no .tf / .tf.json files found under {target}", file=sys.stderr)
+    if _ignore_paths:
+        print(
+            f"# ignore_paths active: skipping {', '.join(map(str, _ignore_paths))}",
+            file=sys.stderr,
+        )
+    # Workflow-YAML walker — pick up `.github/workflows/*.yml`, `*.tfvars`,
+    # and any other non-tf file_glob declared in the catalogue so the
+    # CICD rules (SEC-CICD-001/002/003) actually fire. The Terraform
+    # rules still filter by `file_path.match(file_glob)` inside
+    # `detect_in_file`, so adding workflow YAMLs to the corpus does not
+    # cross-contaminate tf rules.
+    extra_files = _collect_extra_files(target, entries, ignore_paths=_ignore_paths)
+
+    # Pass 1 — load every file so we can compute provider constraints
+    # before deciding which rules apply. Inline suppressions are also
+    # collected here so we don't have to re-read text in pass 2.
+    all_text = {}
+    file_inline_suppressions: dict[str, dict[int, set[str]]] = {}
+    unreadable_files: list[str] = []
+    for fp in tf_files:
+        try:
+            text = _read_tf_source(fp)
+        except Exception as e:
+            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            unreadable_files.append(str(fp))
+            continue
+        all_text[fp] = text
+        # JSON has no comments: a `# tf-analyze:ignore` in rendered
+        # `.tf.json` text could only come from a string value (and sits in
+        # rendered-line space, not the JSON lines findings are reported
+        # in). Those files are suppressed via project/global config only.
+        if not args.no_suppress and not is_tf_json(fp):
+            file_inline_suppressions[str(fp)] = load_inline_suppressions(text)
+
+    # Extra files (workflow YAML, tfvars, etc.) — read with the same
+    # normaliser, but never used for provider-constraint detection.
+    extra_text: dict = {}
+    for fp in extra_files:
+        try:
+            extra_text[fp] = _read_normalized(fp)
+        except Exception as e:
+            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            unreadable_files.append(str(fp))
+
+    # Provider/Terraform-version-aware filter: entries with `applies_when`
+    # are skipped when the target's required_providers / required_version
+    # constraint cannot reach the minimum version. Surface the skip count
+    # so users know rules are conditionally off rather than silently
+    # disabled.
+    provider_constraints = _extract_provider_constraints(all_text)
+    tf_constraint = _extract_terraform_version(all_text)
+    pre_filter = len(entries)
+    entries = [
+        e for e in entries
+        if _entry_applies_to_providers(e, provider_constraints, tf_constraint)
+    ]
+    skipped = pre_filter - len(entries)
+    if skipped:
+        print(
+            f"# {skipped} rule(s) skipped due to applies_when "
+            f"provider/terraform-version constraints",
+            file=sys.stderr,
+        )
+
+    # Pass 2 — per-file + corpus detection (with the incremental cache),
+    # plus --plan-json and --state-json (drift) findings merged in.
+    # See _run_detection. `entries` is already provider-filtered above.
+    findings, parse_fallback_files = _run_detection(
+        args, all_text, extra_text, entries, diff_files, target,
+    )
+    remap_lines(findings)
+    for _pf in parse_fallback_files:
+        print(
+            f"WARN: {_pf['file']}: parse failed, scanned in fallback mode: "
+            f"{_pf['reason']}",
+            file=sys.stderr,
+        )
+
+    # Registry staleness check (opt-in; requires network access).
+    # Audit item 15 — direct attribute access; argparse boolean-flag
+    # always defaults to False so a typo would crash here instead of
+    # silently disabling the check.
+    if args.check_registry:
+        registry_findings = _check_module_registry_staleness(all_text)
+        print(
+            f"# registry check: {len(registry_findings)} stale module(s) found",
+            file=sys.stderr,
+        )
+        findings.extend(registry_findings)
+
+    # Apply project-wide ignore_rules from .tf-analyze.yaml
+    _ignore_rules = project_config.get("ignore_rules") or []
+    if _ignore_rules:
+        _ignore_set = set(_ignore_rules)
+        _before = len(findings)
+        findings = [f for f in findings if f["id"] not in _ignore_set]
+        _ignored = _before - len(findings)
+        if _ignored:
+            print(f"# {_ignored} finding(s) suppressed by project ignore_rules", file=sys.stderr)
+
+    # De-duplicate exact-duplicate findings — a whole-file grep rule or
+    # overlapping detection passes could emit the same (id, file, line,
+    # resource) twice; collapse them so counts/score and every output
+    # format see each finding once. Order-preserving.
+    _seen_fp: set = set()
+    _deduped: list[dict] = []
+    for _f in findings:
+        _fp = (_f.get("id"), _f.get("file"), _f.get("line"), _f.get("resource"))
+        if _fp in _seen_fp:
+            continue
+        _seen_fp.add(_fp)
+        _deduped.append(_f)
+    if len(_deduped) != len(findings):
+        print(
+            f"# {len(findings) - len(_deduped)} duplicate finding(s) collapsed",
+            file=sys.stderr,
+        )
+    findings = _deduped
+
+    # Apply suppressions
+    suppressed_findings: list[dict] = []
+    if not args.no_suppress and (global_suppressions or file_inline_suppressions):
+        findings, suppressed_findings = apply_suppressions(
+            findings, file_inline_suppressions, global_suppressions
+        )
+        if suppressed_findings:
+            print(f"# {len(suppressed_findings)} finding(s) suppressed", file=sys.stderr)
+    # Tag findings whose suppression just expired so the report can show
+    # them in a dedicated section instead of mislabelling them as "new".
+    if expired_suppressions:
+        for f in findings:
+            entry = expired_suppressions.get(f["id"])
+            if entry:
+                f["was_suppressed_until"] = entry.get("expires")
+                f["prior_suppression_reason"] = entry.get("reason", "")
+
+    return {
+        "findings": findings,
+        "suppressed_findings": suppressed_findings,
+        "parse_fallback_files": parse_fallback_files,
+        "unreadable_files": unreadable_files,
+        "all_text": all_text,
+        "tf_files": tf_files,
+        "entries": entries,
+    }
 
 
 def _render_report(args: object, findings: list, entries: list, *, emit,
@@ -3122,8 +3359,10 @@ def _add_comparison_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--prior-report",
         default=None,
-        help="Markdown report to verify (for --mode verify-fixed). "
-             "If omitted, picks the most recent tf-analysis-*.md under reports/.",
+        help="Report to verify (for --mode verify-fixed): a markdown report, or "
+             "this CLI's --format json / text output. If omitted, picks the most "
+             "recent tf-analysis-*.md under reports/. Exits 1 under --fail-on when "
+             "a STILL-PRESENT or MOVED finding meets the threshold.",
     )
     ap.add_argument(
         "--reports-dir",
@@ -3426,176 +3665,16 @@ def main():
         elif not diff_files:
             print("# no changed .tf / .tf.json files in diff", file=sys.stderr)
 
-    # Load suppressions. expired_suppressions is shown in the report so
-    # findings that just lost their cover are visible as "expired
-    # suppression" rather than buried under "new findings".
-    global_suppressions: dict = {}
-    expired_suppressions: dict = {}
-    if not args.no_suppress:
-        global_suppressions, expired_suppressions = load_suppressions(target)
-        if expired_suppressions:
-            print(
-                f"# {len(expired_suppressions)} suppression(s) expired; "
-                f"affected findings will be tagged in the report",
-                file=sys.stderr,
-            )
-
-    _ignore_paths = project_config.get("ignore_paths") or []
-    tf_files = [
-        p for p in tf_source_files(target)
-        if ".terraform" not in p.parts
-        and not _path_is_ignored(p, target, _ignore_paths)
-    ]
-    if not tf_files:
-        # A gated scan that checked no Terraform is a misconfigured CI job
-        # (wrong folder, or ignore_paths excluding everything), not a pass:
-        # it used to score 100 and exit 0. Plan / state input is a real
-        # scan without .tf files. Diff mode is unaffected: tf_files is the
-        # whole target here, so a PR that changes no Terraform still passes.
-        if args.fail_on and not args.plan_json and not args.state_json:
-            why = " after ignore_paths" if _ignore_paths else ""
-            print(
-                f"ERROR: no .tf / .tf.json files found under {target}{why}; "
-                f"nothing was checked (--fail-on)",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        print(f"WARN: no .tf / .tf.json files found under {target}", file=sys.stderr)
-    if _ignore_paths:
-        print(
-            f"# ignore_paths active: skipping {', '.join(map(str, _ignore_paths))}",
-            file=sys.stderr,
-        )
-    # Workflow-YAML walker — pick up `.github/workflows/*.yml`, `*.tfvars`,
-    # and any other non-tf file_glob declared in the catalogue so the
-    # CICD rules (SEC-CICD-001/002/003) actually fire. The Terraform
-    # rules still filter by `file_path.match(file_glob)` inside
-    # `detect_in_file`, so adding workflow YAMLs to the corpus does not
-    # cross-contaminate tf rules.
-    extra_files = _collect_extra_files(target, entries, ignore_paths=_ignore_paths)
-
-    # Pass 1 — load every file so we can compute provider constraints
-    # before deciding which rules apply. Inline suppressions are also
-    # collected here so we don't have to re-read text in pass 2.
-    all_text = {}
-    file_inline_suppressions: dict[str, dict[int, set[str]]] = {}
-    unreadable_files: list[str] = []
-    for fp in tf_files:
-        try:
-            text = _read_tf_source(fp)
-        except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
-            unreadable_files.append(str(fp))
-            continue
-        all_text[fp] = text
-        # JSON has no comments: a `# tf-analyze:ignore` in rendered
-        # `.tf.json` text could only come from a string value (and sits in
-        # rendered-line space, not the JSON lines findings are reported
-        # in). Those files are suppressed via project/global config only.
-        if not args.no_suppress and not is_tf_json(fp):
-            file_inline_suppressions[str(fp)] = load_inline_suppressions(text)
-
-    # Extra files (workflow YAML, tfvars, etc.) — read with the same
-    # normaliser, but never used for provider-constraint detection.
-    extra_text: dict = {}
-    for fp in extra_files:
-        try:
-            extra_text[fp] = _read_normalized(fp)
-        except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
-            unreadable_files.append(str(fp))
-
-    # Provider/Terraform-version-aware filter: entries with `applies_when`
-    # are skipped when the target's required_providers / required_version
-    # constraint cannot reach the minimum version. Surface the skip count
-    # so users know rules are conditionally off rather than silently
-    # disabled.
-    provider_constraints = _extract_provider_constraints(all_text)
-    tf_constraint = _extract_terraform_version(all_text)
-    pre_filter = len(entries)
-    entries = [
-        e for e in entries
-        if _entry_applies_to_providers(e, provider_constraints, tf_constraint)
-    ]
-    skipped = pre_filter - len(entries)
-    if skipped:
-        print(
-            f"# {skipped} rule(s) skipped due to applies_when "
-            f"provider/terraform-version constraints",
-            file=sys.stderr,
-        )
-
-    # Pass 2 — per-file + corpus detection (with the incremental cache),
-    # plus --plan-json and --state-json (drift) findings merged in.
-    # See _run_detection. `entries` is already provider-filtered above.
-    findings, parse_fallback_files = _run_detection(
-        args, all_text, extra_text, entries, diff_files, target,
-    )
-    remap_lines(findings)
-    for _pf in parse_fallback_files:
-        print(
-            f"WARN: {_pf['file']}: parse failed, scanned in fallback mode: "
-            f"{_pf['reason']}",
-            file=sys.stderr,
-        )
-
-    # Registry staleness check (opt-in; requires network access).
-    # Audit item 15 — direct attribute access; argparse boolean-flag
-    # always defaults to False so a typo would crash here instead of
-    # silently disabling the check.
-    if args.check_registry:
-        registry_findings = _check_module_registry_staleness(all_text)
-        print(
-            f"# registry check: {len(registry_findings)} stale module(s) found",
-            file=sys.stderr,
-        )
-        findings.extend(registry_findings)
-
-    # Apply project-wide ignore_rules from .tf-analyze.yaml
-    _ignore_rules = project_config.get("ignore_rules") or []
-    if _ignore_rules:
-        _ignore_set = set(_ignore_rules)
-        _before = len(findings)
-        findings = [f for f in findings if f["id"] not in _ignore_set]
-        _ignored = _before - len(findings)
-        if _ignored:
-            print(f"# {_ignored} finding(s) suppressed by project ignore_rules", file=sys.stderr)
-
-    # De-duplicate exact-duplicate findings — a whole-file grep rule or
-    # overlapping detection passes could emit the same (id, file, line,
-    # resource) twice; collapse them so counts/score and every output
-    # format see each finding once. Order-preserving.
-    _seen_fp: set = set()
-    _deduped: list[dict] = []
-    for _f in findings:
-        _fp = (_f.get("id"), _f.get("file"), _f.get("line"), _f.get("resource"))
-        if _fp in _seen_fp:
-            continue
-        _seen_fp.add(_fp)
-        _deduped.append(_f)
-    if len(_deduped) != len(findings):
-        print(
-            f"# {len(findings) - len(_deduped)} duplicate finding(s) collapsed",
-            file=sys.stderr,
-        )
-    findings = _deduped
-
-    # Apply suppressions
-    suppressed_findings: list[dict] = []
-    if not args.no_suppress and (global_suppressions or file_inline_suppressions):
-        findings, suppressed_findings = apply_suppressions(
-            findings, file_inline_suppressions, global_suppressions
-        )
-        if suppressed_findings:
-            print(f"# {len(suppressed_findings)} finding(s) suppressed", file=sys.stderr)
-    # Tag findings whose suppression just expired so the report can show
-    # them in a dedicated section instead of mislabelling them as "new".
-    if expired_suppressions:
-        for f in findings:
-            entry = expired_suppressions.get(f["id"])
-            if entry:
-                f["was_suppressed_until"] = entry.get("expires")
-                f["prior_suppression_reason"] = entry.get("reason", "")
+    # Read, detect, filter and suppress — see _scan_target (shared with
+    # --mode fleet so the two cannot drift apart again).
+    _scan = _scan_target(args, target, entries, project_config, diff_files)
+    findings = _scan["findings"]
+    suppressed_findings = _scan["suppressed_findings"]
+    parse_fallback_files = _scan["parse_fallback_files"]
+    unreadable_files = _scan["unreadable_files"]
+    all_text = _scan["all_text"]
+    tf_files = _scan["tf_files"]
+    entries = _scan["entries"]
 
     # Auto-fix application — after project `ignore_rules` and inline /
     # `.tf-analyze-ignore.yaml` suppressions, so a finding the user has
@@ -3734,14 +3813,6 @@ def main():
                 )
                 sys.exit(2)
 
-    # PR review mode — post inline comments and exit
-    if args.mode == "pr-review":
-        _pr_review_mode(args, findings, entries)
-        if _out_file is not None:
-            _out_file.close()
-        sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files,
-                                 unreadable_files, RULE_TIMEOUTS))
-
     if getattr(args, "gen_tests", None):
         written = generate_tftest(findings, entries, Path(args.gen_tests))
         print(f"# gen-tests: wrote {len(written)} file(s) to {args.gen_tests}", file=sys.stderr)
@@ -3768,6 +3839,16 @@ def main():
                 file=sys.stderr,
             )
         findings = retained
+
+    # PR review mode — post inline comments and exit. After the baseline,
+    # so a baselined finding is neither posted nor gated; it used to run
+    # before the baseline was applied.
+    if args.mode == "pr-review":
+        _pr_review_mode(args, findings, entries)
+        if _out_file is not None:
+            _out_file.close()
+        sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files,
+                                 unreadable_files, RULE_TIMEOUTS))
 
     # Threat-intel enrichment (R30.2 — KEV + EPSS exploitability ranking).
     # Cross-references each rule's `cwe:` tags with CISA KEV's CWE set

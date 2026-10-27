@@ -5,6 +5,42 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 68 — Every scan mode gates like a static scan — 2026-10-27
+
+**Exit codes change.** CI jobs that use these modes may start failing
+where they used to pass; each case below was a scan that had not
+checked what it claimed to.
+
+- **`--plan-json` / `--state-json`**: a missing, unreadable, malformed
+  or wrong-kind file (state passed as a plan, or the reverse) printed
+  ERROR, returned no findings and passed `--fail-on`. It now exits 2,
+  like a missing target, with a hint naming the right flag. The HCP
+  Terraform Run Task therefore fails the run (`SYN-SCAN-FAILED`)
+  instead of reporting 0 findings.
+- **`--mode verify-fixed`**:
+  - Applies `--fail-on` to STILL-PRESENT and MOVED findings. It always
+    exited 0.
+  - A file that cannot be read is now UNREADABLE (a new results key)
+    and fails `--fail-on`. Its findings used to come out RESOLVED.
+  - `--prior-report` reads the CLI's own `--format json` and
+    `--format text` reports, which used to parse to zero findings. An
+    HTML report exits 2 instead of verifying nothing.
+- **`--mode fleet`** runs each target through the same pipeline as a
+  static scan (the new `_scan_target`), so it now applies:
+  - inline and `.tf-analyze-ignore.yaml` suppressions (the JSON report
+    gains `suppressed_count`)
+  - each target's own `.tf-analyze.yaml` (`ignore_rules`, `ignore_paths`)
+  - the `applies_when` filter, and `var.` / `local.` resolution
+  - the no-Terraform check (exit 2 under `--fail-on`)
+  - `--fail-on-parse-error`
+
+  A missing `--targets-file` and `--plan-json` / `--state-json` exit 2;
+  they used to be ignored silently.
+- **`--mode pr-review`** applies `--baseline` before posting comments and
+  gating. Baselined findings were posted and failed the gate.
+
+---
+
 ## Round 67 — Untrusted pull requests can't script the report or hijack the summary — 2026-10-27
 
 - **HTML report**: the Suppressed list was the one section that skipped

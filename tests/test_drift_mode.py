@@ -101,13 +101,16 @@ class TestDetectInState:
         assert {f["mode"] for f in state_findings} == {"state"}
         assert {f["mode"] for f in plan_findings} == {"plan"}
 
-    def test_invalid_state_json_returns_empty(self, tmp_path: Path) -> None:
+    def test_invalid_state_json_raises(self, tmp_path: Path) -> None:
+        # It used to return [] after printing ERROR, which passed a
+        # --fail-on gate having checked nothing.
         bad = tmp_path / "broken.json"
         bad.write_text("not json")
         sys.path.insert(0, str(REPO_ROOT / "scripts"))
-        from detect import load_catalog  # type: ignore
+        from detect import load_catalog, PlanInputError  # type: ignore
         entries = load_catalog(REPO_ROOT / "catalog")
-        assert detect_in_state(bad, entries) == []
+        with pytest.raises(PlanInputError, match="malformed"):
+            detect_in_state(bad, entries)
 
 
 class TestDriftCLI:
