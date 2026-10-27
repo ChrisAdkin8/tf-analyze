@@ -14,8 +14,12 @@ patterns:
     description: AKS cluster on Premium tier — confirm uptime SLA is required (Premium ≈ 3x Standard cost)
   - kind: resource_missing_arg
     resource: azurerm_kubernetes_cluster_node_pool
-    arg: enable_auto_scaling
-    description: Node pool without enable_auto_scaling (fixed node count, no scale-down on low utilisation)
+    arg: auto_scaling_enabled
+    # azurerm 4+ name; `enable_auto_scaling = true` (azurerm 3) satisfies it.
+    suppress_if:
+      arg: enable_auto_scaling
+      equals: true
+    description: Node pool without auto_scaling_enabled (fixed node count, no scale-down on low utilisation)
   - kind: resource_missing_arg
     resource: azurerm_cosmosdb_account
     arg: capabilities
@@ -51,7 +55,7 @@ fix_hcl: |
     name                  = "default"
     kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
     vm_size               = "Standard_D2s_v3"
-    enable_auto_scaling   = true
+    auto_scaling_enabled   = true
     min_count             = 1
     max_count             = 5
   }

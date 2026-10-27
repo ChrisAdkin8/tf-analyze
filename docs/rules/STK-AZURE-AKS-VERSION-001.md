@@ -9,7 +9,7 @@ keywords: "stack, high, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "STK-AZURE-AKS-VERSION-001 \u2014 Azure AKS cluster on end-of-life Kubernetes version",
-  "description": "Upgrade to a supported AKS Kubernetes version (1.27+ as of May 2026).\nCheck the support matrix at\nhttps://learn.microsoft.com/azure/aks/supported-kubernetes-versions\nand test the upgrade in a non-production cluster first.",
+  "description": "Upgrade to a supported AKS Kubernetes version (1.34+ as of October 2026).\nCheck the support matrix at\nhttps://learn.microsoft.com/azure/aks/supported-kubernetes-versions\nand test the upgrade in a non-production cluster first.",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/STK-AZURE-AKS-VERSION-001/",
   "mainEntityOfPage": {
     "@type": "WebPage",
@@ -41,18 +41,11 @@ keywords: "stack, high, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca
 
 ## What this checks
 
-1. **`resource_arg`** on `azurerm_kubernetes_cluster` (`kubernetes_version`) matching `/^1\.(1[0-9]|2[0-6])(\..*)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  `azurerm_kubernetes_cluster.kubernetes_version` is on a Kubernetes
-release no longer supported by AKS (1.19–1.26 inclusive). EOL
-versions stop receiving security patches; AKS may force-upgrade
-them on a maintenance window the operator cannot defer.
+1. **`resource_arg`** on `azurerm_kubernetes_cluster` (`kubernetes_version`) matching `/^1\.(?:1?[0-9]|2[0-9]|3[0-3])(?:[.-].*)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 
 ## Why it likely fired
 
-`azurerm_kubernetes_cluster.kubernetes_version` is on a Kubernetes
-release no longer supported by AKS (1.19–1.26 inclusive). EOL
-versions stop receiving security patches; AKS may force-upgrade
-them on a maintenance window the operator cannot defer.
+Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
 
 ## Adversarial scenario
 
@@ -62,7 +55,7 @@ Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/C
 
 ## Remediation
 
-Upgrade to a supported AKS Kubernetes version (1.27+ as of May 2026).
+Upgrade to a supported AKS Kubernetes version (1.34+ as of October 2026).
 Check the support matrix at
 https://learn.microsoft.com/azure/aks/supported-kubernetes-versions
 and test the upgrade in a non-production cluster first.
@@ -77,7 +70,7 @@ resource "azurerm_kubernetes_cluster" "example" {
   location            = azurerm_resource_group.example.location
   resource_group_name = azurerm_resource_group.example.name
   dns_prefix          = "example"
-  kubernetes_version  = "1.29.4"
+  kubernetes_version  = "1.35.4"
   default_node_pool { name = "default" node_count = 1 vm_size = "Standard_D2s_v3" }
   identity { type = "SystemAssigned" }
 }

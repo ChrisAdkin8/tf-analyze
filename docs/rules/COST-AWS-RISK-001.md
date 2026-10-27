@@ -46,10 +46,6 @@ keywords: "ops, medium, terraform, iac, aws, mitre-T1496"
 indefinitely by default — CloudWatch storage is billed per GB/month
 and log groups without retention are a routine source of cost drift
 in large accounts.
-2. **`resource_missing_arg`** on `aws_autoscaling_group` (`max_size`) — _the resource is missing a required attribute (or nested attribute path)._
-  Auto Scaling Group without explicit `max_size`. Without a cap,
-a runaway scale-out event can generate thousands of instances and
-tens of thousands of dollars before anyone notices.
 
 ## Why it likely fired
 
@@ -57,10 +53,6 @@ CloudWatch log group without `retention_in_days`. Logs are retained
 indefinitely by default — CloudWatch storage is billed per GB/month
 and log groups without retention are a routine source of cost drift
 in large accounts.
-
-Auto Scaling Group without explicit `max_size`. Without a cap,
-a runaway scale-out event can generate thousands of instances and
-tens of thousands of dollars before anyone notices.
 
 ## Adversarial scenario
 

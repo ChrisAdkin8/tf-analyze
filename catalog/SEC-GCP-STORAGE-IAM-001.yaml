@@ -58,3 +58,4 @@ fix_hcl: |
 fix_disruption: plan_required
 fixtures:
   - gcp_storage_public_iam
+  - public_bucket

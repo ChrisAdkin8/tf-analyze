@@ -11,7 +11,8 @@ asserts the expected catalogue IDs appear (and no unexpected ones).
 | `missing_prevent_destroy/` | `ROB-GCP-LIFECYCLE-001`, `ROB-GCP-LIFECYCLE-002` |
 | `wide_provider_constraint/` | `SEC-PROVIDER-001` |
 | `no_validation_blocks/` | `ROB-VALIDATION-001`, `ROB-VALIDATION-002` |
-| `public_bucket/` | `SEC-GCP-IAM-002`, `SEC-GCP-BUCKET-001`, `SEC-GCP-BUCKET-002` |
+| `gcp_project_public_iam/` | `SEC-GCP-IAM-002` |
+| `public_bucket/` | `SEC-GCP-STORAGE-IAM-001`, `SEC-GCP-BUCKET-001`, `SEC-GCP-BUCKET-002` |
 | `sensitive_leak/` | `SEC-SENSITIVE-001`, `SEC-SENSITIVE-002` |
 | `audit_logs_missing/` | `SEC-GCP-LOGGING-001` |
 | `cloudsql_no_backup/` | `STK-GCP-CLOUDSQL-001` |

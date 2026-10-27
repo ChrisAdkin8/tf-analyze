@@ -496,7 +496,7 @@ Examine every `.tf` file in scope for:
 
 ### 2b. IAM and access control
 - Overly broad IAM roles (`roles/owner`, `roles/editor`, `roles/admin`, `*Admin`) → **SEC-GCP-IAM-001** | CIS 1.6
-- `allUsers` or `allAuthenticatedUsers` in any IAM binding → **SEC-GCP-IAM-002** | CIS 5.1, 7.1
+- `allUsers` or `allAuthenticatedUsers` in a project / dataset IAM binding → **SEC-GCP-IAM-002**; on a Cloud Storage bucket → **SEC-GCP-STORAGE-IAM-001** | CIS 5.1, 7.1
 - IAM bindings at project level that should be at resource level (consult Appendix A first)
 - Service accounts with more permissions than their usage requires
 - Missing `condition` blocks on IAM bindings where appropriate

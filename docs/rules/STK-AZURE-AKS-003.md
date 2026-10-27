@@ -122,7 +122,7 @@ both must return `true`.
 
 See also rules in the `STK-AZURE-AKS-*` family:
 
-- [`STK-AZURE-AKS-004`](./STK-AZURE-AKS-004.md) — AKS cluster API server is publicly accessible
+- [`STK-AZURE-AKS-004`](./STK-AZURE-AKS-004.md) — AKS public API server has no authorized IP ranges
 - [`STK-AZURE-AKS-005`](./STK-AZURE-AKS-005.md) — AKS cluster API server missing authorized IP ranges
 
 ---

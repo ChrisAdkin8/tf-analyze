@@ -56,7 +56,7 @@ Active rules that fire against this corpus:
 | `SEC-AZURE-WEBAPP-002` | 06, 07, 10 | App Service / Function App HTTPS not enforced |
 | `SEC-AZURE-MI-001` | 04 | Orphan UAMI — no role_assignment referencing its principal_id |
 | `STK-AZURE-AKS-003` | 05, 06 | AKS workload identity not enabled |
-| `STK-AZURE-AKS-004` | 05, 06 | AKS cluster is publicly accessible |
+| `STK-AZURE-AKS-004` | 05, 06 | AKS public API server has no authorized IP ranges |
 | `STK-AZURE-AKS-005` | 05, 06 | AKS API server missing authorized IP ranges |
 | `STK-AZURE-DB-001` | 07 | MySQL/PostgreSQL server missing SSL enforcement |
 | `STK-AZURE-NSG-001` | 05 | NSG rule open to the internet on sensitive ports |

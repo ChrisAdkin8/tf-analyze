@@ -140,7 +140,7 @@ must return a non-empty list.
 See also rules in the `STK-AZURE-AKS-*` family:
 
 - [`STK-AZURE-AKS-003`](./STK-AZURE-AKS-003.md) — AKS cluster workload identity not enabled
-- [`STK-AZURE-AKS-004`](./STK-AZURE-AKS-004.md) — AKS cluster API server is publicly accessible
+- [`STK-AZURE-AKS-004`](./STK-AZURE-AKS-004.md) — AKS public API server has no authorized IP ranges
 
 ---
 
