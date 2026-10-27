@@ -3,6 +3,8 @@
 Six functions extracted from ``detect.py`` as the **seventeenth
 modularisation seam**:
 
+* :func:`parse_prior_report` — read a prior ``--format json`` /
+  ``--format text`` / markdown report (markdown via the next function).
 * :func:`parse_markdown_report` — extract ``(id, file, line)`` rows from
   a prior tf-analyze markdown report; tolerant of the report
   template's optional columns. Skips "Resolved since…" sections.
@@ -25,6 +27,7 @@ injected via keyword args so this module imports nothing from
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Callable
@@ -78,6 +81,56 @@ def parse_markdown_report(path: Path) -> list[dict]:
             "resource": "",
         })
     return rows
+
+
+# One `--format text` finding line: `<ID> <file>:<line> <resource>`.
+_TEXT_ROW_RE = re.compile(
+    r'^(?P<id>[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3}) '
+    r'(?P<file>\S+\.tf(?:\.json)?):(?P<line>\d+)(?: (?P<resource>\S+))?',
+    re.MULTILINE,
+)
+
+
+def parse_prior_report(path: Path) -> list[dict]:
+    """Prior findings from any report the CLI writes in a re-probe-able
+    form: `--format json`, `--format text`, or a markdown report.
+
+    Only markdown used to be read, so the CLI's own JSON and text reports
+    parsed to zero findings and verification "passed". A report in a
+    format with no finding rows to read (SARIF, HTML) raises ValueError.
+    """
+    text = path.read_text()
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if data is not None:
+        rows = data.get("findings") if isinstance(data, dict) else data
+        if not isinstance(rows, list):
+            raise ValueError(f"{path} is JSON but not a tf-analyze --format json report")
+        return [
+            {
+                "id": f["id"],
+                "file": f.get("file", ""),
+                "line": int(f.get("line") or 0),
+                "resource": f.get("resource", ""),
+                "urgency": f.get("urgency"),
+            }
+            for f in rows if isinstance(f, dict) and f.get("id")
+        ]
+    if text.startswith("# tf-analyze:"):
+        return [
+            {
+                "id": m.group("id"),
+                "file": m.group("file"),
+                "line": int(m.group("line")),
+                "resource": m.group("resource") or "",
+            }
+            for m in _TEXT_ROW_RE.finditer(text)
+        ]
+    if text.lstrip().startswith("<"):
+        raise ValueError(f"{path} is HTML; pass a json, text or markdown report")
+    return parse_markdown_report(path)
 
 
 def reprobe_finding(
@@ -151,9 +204,15 @@ def verify_fixed(
     *,
     detect_in_file: Callable[[Path, str, list], list[dict]],
     detect_corpus: Callable[[Path, dict, list], list[dict]],
+    unreadable_files: list[str] = (),
 ) -> dict:
-    """Parse prior report, re-probe every finding, return a verification dict."""
-    prior_findings = parse_markdown_report(prior_report)
+    """Parse prior report, re-probe every finding, return a verification dict.
+
+    A finding in one of `unreadable_files` is UNREADABLE: it could not be
+    re-checked, and it used to come out RESOLVED.
+    """
+    prior_findings = parse_prior_report(prior_report)
+    unreadable = {Path(p).resolve() for p in unreadable_files}
     catalog_by_id = {e["id"]: e for e in entries}
     results: dict[str, list[dict]] = {
         "STILL-PRESENT": [],
@@ -164,8 +223,13 @@ def verify_fixed(
         # symlink in the target crashed the whole run with a KeyError.
         "BROKEN-SYMLINK": [],
         "AMBIGUOUS": [],
+        "UNREADABLE": [],
     }
     for f in prior_findings:
+        fp = Path(f["file"])
+        if (fp if fp.is_absolute() else Path(target) / fp).resolve() in unreadable:
+            results["UNREADABLE"].append(f)
+            continue
         state = reprobe_finding(
             f, catalog_by_id, all_files_text,
             detect_in_file=detect_in_file,

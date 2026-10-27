@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 
 from _hcl import attrs_values_at, render_hcl
@@ -354,6 +353,12 @@ def evaluate_against_resources(
     return findings
 
 
+class PlanInputError(ValueError):
+    """A `--plan-json` / `--state-json` file that cannot be scanned. The
+    readers used to print ERROR and return no findings, so a broken or
+    wrong-kind file passed a `--fail-on` gate having checked nothing."""
+
+
 def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
     """Re-evaluate applicable rules against ``terraform show -json`` plan output.
 
@@ -371,27 +376,28 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
     try:
         text = plan_json_path.read_text()
     except FileNotFoundError:
-        print(
-            f"ERROR: plan JSON not found: {plan_json_path}. "
-            f"Did `terraform show -json` run successfully?",
-            file=sys.stderr,
+        raise PlanInputError(
+            f"plan JSON not found: {plan_json_path}. "
+            f"Did `terraform show -json` run successfully?"
         )
-        return []
     except OSError as e:
-        print(
-            f"ERROR: cannot read plan JSON {plan_json_path} (OS error): {e}",
-            file=sys.stderr,
+        raise PlanInputError(
+            f"cannot read plan JSON {plan_json_path} (OS error): {e}"
         )
-        return []
     try:
         plan = json.loads(text)
     except json.JSONDecodeError as e:
-        print(
-            f"ERROR: plan JSON at {plan_json_path} is malformed: {e}. "
-            f"First 200 chars: {text[:200]!r}",
-            file=sys.stderr,
+        raise PlanInputError(
+            f"plan JSON at {plan_json_path} is malformed: {e}. "
+            f"First 200 chars: {text[:200]!r}"
         )
-        return []
+    if not isinstance(plan, dict) or "planned_values" not in plan:
+        hint = (" It looks like state output: use --state-json."
+                if isinstance(plan, dict) and "values" in plan else "")
+        raise PlanInputError(
+            f"{plan_json_path} is not `terraform show -json` plan output "
+            f"(no planned_values).{hint}"
+        )
     resources = walk_plan_resources(plan.get("planned_values") or {})
     return evaluate_against_resources(
         resources, entries,
@@ -419,29 +425,29 @@ def detect_in_state(state_json_path: Path, entries: list[dict]) -> list[dict]:
     try:
         text = state_json_path.read_text()
     except FileNotFoundError:
-        print(
-            f"ERROR: state JSON not found: {state_json_path}. "
-            f"Did `terraform show -json` run successfully?",
-            file=sys.stderr,
+        raise PlanInputError(
+            f"state JSON not found: {state_json_path}. "
+            f"Did `terraform show -json` run successfully?"
         )
-        return []
     except OSError as e:
-        print(
-            f"ERROR: cannot read state JSON {state_json_path} (OS error): {e}",
-            file=sys.stderr,
+        raise PlanInputError(
+            f"cannot read state JSON {state_json_path} (OS error): {e}"
         )
-        return []
     try:
         state = json.loads(text)
     except json.JSONDecodeError as e:
-        print(
-            f"ERROR: state JSON at {state_json_path} is malformed: {e}. "
-            f"First 200 chars: {text[:200]!r}",
-            file=sys.stderr,
+        raise PlanInputError(
+            f"state JSON at {state_json_path} is malformed: {e}. "
+            f"First 200 chars: {text[:200]!r}"
         )
-        return []
     # plan.tfplan → planned_values; state.tfstate → values; both share
     # the same {root_module, child_modules} shape underneath.
+    # An empty state has no `values`, so only the wrong kind is refused.
+    if not isinstance(state, dict) or ("planned_values" in state and "values" not in state):
+        hint = " It looks like plan output: use --plan-json." if isinstance(state, dict) else ""
+        raise PlanInputError(
+            f"{state_json_path} is not `terraform show -json` state output.{hint}"
+        )
     root = state.get("values") or {}
     resources = walk_plan_resources(root)
     return evaluate_against_resources(
