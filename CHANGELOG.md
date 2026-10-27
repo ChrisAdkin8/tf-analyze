@@ -5,6 +5,23 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 66 — A gated scan that checked nothing fails — 2026-10-27
+
+- **Empty target**: a scan with `--fail-on` that found no `.tf` /
+  `.tf.json` files (wrong folder, or `ignore_paths` excluding everything)
+  scored 100 (A) and exited 0, so a misconfigured CI job passed having
+  checked nothing. It now exits 2, like a missing target. Without
+  `--fail-on` it stays a warning; `--plan-json` / `--state-json` input
+  counts as a real scan; diff mode on a PR that changes no Terraform
+  still passes.
+- **GitHub Action**: the Action gates in its own step (it does not pass
+  `--fail-on` to the engine), so the JSON summary now carries
+  `"nothing_scanned": true` in that case and the gate step fails on it.
+- **`--apply-fixes apply`** is documented as exiting 0 after patching
+  without applying `--fail-on`; re-run the scan to gate.
+
+---
+
 ## Round 65 — verify-fixed works, SARIF severity per finding, big files 2.5x faster — 2026-10-27
 
 The remaining smaller findings from the critical review.

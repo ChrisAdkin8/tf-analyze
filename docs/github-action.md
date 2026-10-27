@@ -53,6 +53,11 @@ Or reference it as a composite action from any workflow:
 
 - **PR runs** use `--mode diff` — only changed files are scanned.
   Failures are gated by the `fail-on` threshold (default `HIGH`).
+- **No Terraform found fails the job.** If there are no `.tf` /
+  `.tf.json` files under `target` (a wrong path, or `ignore_paths`
+  excluding everything), the job fails with "nothing was checked"
+  instead of passing with a score of 100. A PR that simply changes no
+  Terraform still passes.
 - **Pushes to `main` / `master`** run `--mode static` — full workspace
   scan. SARIF is always uploaded; the HTML report is always attached.
 - **SARIF upload** lights up findings in the repo's Security → Code
