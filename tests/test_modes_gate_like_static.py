@@ -277,6 +277,26 @@ def test_fleet_does_not_follow_symlinks_out_of_a_target(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="needs symlinks")
+def test_fleet_does_not_read_extra_files_through_symlinks(tmp_path: Path) -> None:
+    """Fleet now scans workflow YAML / tfvars too; a symlinked one must
+    not pull a file from outside the target into the scan."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "other.yml"
+    # SEC-CICD-001: `terraform apply` with no `environment:` gate.
+    secret.write_text("jobs:\n  deploy:\n    steps:\n      - run: terraform apply\n")
+    a = _sg(tmp_path / "a")
+    workflows = a / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "ci.yml").symlink_to(secret)
+    assert "ci.yml" not in _fleet(a).stdout
+    # A real copy is scanned, so it is the guard that skips the symlink.
+    (workflows / "ci.yml").unlink()
+    (workflows / "ci.yml").write_text(secret.read_text())
+    assert "ci.yml" in _fleet(a).stdout
+
+
 # ---- --mode pr-review -------------------------------------------------------
 
 
