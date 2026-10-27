@@ -1,5 +1,5 @@
 id: STK-AZURE-AKS-004
-title: "AKS cluster API server is publicly accessible"
+title: "AKS public API server has no authorized IP ranges"
 section: stack
 default_urgency: HIGH
 blast_radius: environment
@@ -17,42 +17,45 @@ nist_800_53:
 csa_ccm:
   - "IVS-04"
 patterns:
+  # Used to repeat SEC-AZURE-AKS-PRIVATE-001 exactly (missing / false
+  # private_cluster_enabled). Now the layer under it: a cluster that is
+  # public should at least restrict who can reach the API server.
   - kind: resource_missing_arg
     resource: azurerm_kubernetes_cluster
-    arg: private_cluster_enabled
+    nested_path: api_server_access_profile.authorized_ip_ranges
+    suppress_if:
+      arg: private_cluster_enabled
+      equals: true
     description: |
-      `azurerm_kubernetes_cluster` without `private_cluster_enabled = true`.
-      The Kubernetes API server is reachable over the internet. Any credential
-      (service account token, kubeconfig) leaked from CI or developer machines
-      can be used to reach the API from anywhere.
-  - kind: hcl_attr
-    resource: azurerm_kubernetes_cluster
-    path: private_cluster_enabled
-    not_equal: true
+      `azurerm_kubernetes_cluster` with a public API server (no
+      `private_cluster_enabled = true`) and no
+      `api_server_access_profile { authorized_ip_ranges = [...] }`: the
+      API server accepts connections from the whole internet, so a
+      leaked kubeconfig or an API server CVE is exploitable from
+      anywhere. SEC-AZURE-AKS-PRIVATE-001 reports the cluster not being
+      private; this reports the missing allow-list.
 recommendation: |
-  Enable the private cluster feature so the API server is only reachable
-  from within the VNet:
+  Prefer a private cluster (SEC-AZURE-AKS-PRIVATE-001). If the API server
+  must stay public, restrict it to known networks:
 
       resource "azurerm_kubernetes_cluster" "app" {
-        private_cluster_enabled             = true
-        private_cluster_public_fqdn_enabled = false
+        api_server_access_profile {
+          authorized_ip_ranges = ["203.0.113.0/24"]
+        }
       }
-
-  When the cluster is private, `kubectl` must run from a jumpbox or VPN
-  host inside (or peered with) the cluster VNet. Integrate with Azure
-  Private DNS for internal FQDN resolution. Equivalent to GKE
-  `private_cluster_config.enable_private_endpoint = true`.
 verification: |
   `az aks show --name <cluster> --resource-group <rg> \
-    --query 'enablePrivateCluster'`
-  must return `true`.
+    --query 'apiServerAccessProfile.authorizedIpRanges'`
+  must list the expected ranges (or the cluster must be private).
 fix_hcl: |
   resource "azurerm_kubernetes_cluster" "example" {
     name                = "example"
     resource_group_name = azurerm_resource_group.example.name
     location            = azurerm_resource_group.example.location
     dns_prefix          = "example"
-    private_cluster_enabled = true
+    api_server_access_profile {
+      authorized_ip_ranges = ["203.0.113.0/24"]
+    }
     default_node_pool {
       name       = "default"
       node_count = 1
@@ -60,6 +63,6 @@ fix_hcl: |
     }
     identity { type = "SystemAssigned" }
   }
-fix_disruption: forces_replacement
+fix_disruption: none
 fixtures:
   - azure_aks_not_private

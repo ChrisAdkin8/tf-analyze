@@ -32,6 +32,46 @@ The remaining smaller findings from the critical review.
 
 ---
 
+## Round 64 — Rule accuracy: current version lists, tighter matches, no duplicates — 2026-10-26
+
+From the critical review's catalogue findings. Version cut-offs were
+checked against the providers' own pages on 2026-10-26 (AWS Lambda
+runtimes, RDS release calendars, EKS / AKS / GKE release calendars) and
+each rule notes the date and the next change due.
+
+- **STK-AWS-RDS-004** used one version list for every engine, so `10.`
+  flagged MariaDB 10.11 (supported) while MySQL 5.7 was missed. It now has
+  a pattern per engine, each skipped only when `engine` is a different
+  known engine: PostgreSQL 9.x–13, MySQL 5.x and 8.0 (standard support
+  ended 2026-07-31), MariaDB 10.0–10.5.
+- **STK-AWS-LAMBDA-001** adds the runtimes deprecated since the list was
+  written: python3.8/3.9, nodejs16.x/18.x/20.x, ruby2.7/3.2, dotnet5–7,
+  provided, provided.al2 and the older Node.js identifiers.
+- **Kubernetes versions**: STK-K8S-VERSION-001 and
+  STK-AZURE-AKS-VERSION-001 both fired on AKS with different, stale
+  cut-offs (1.27 / 1.26). AKS is now only STK-AZURE-AKS-VERSION-001; both
+  flag ≤ 1.33, past end of standard support on EKS, GKE and AKS.
+- **SEC-AWS-LOG-RETENTION-001** matched `log` inside any name (`catalog`,
+  `unlogged`); it now matches whole name parts.
+- **SEC-GCP-COMPUTE-PUBLIC-IP-001** fired on `ipv6_access_config`.
+- **COST-AWS-RISK-001** checked for a missing `max_size`, a required
+  argument, so that pattern could never fire; removed.
+- **COST-AZURE-RISK-001 / STK-AZURE-AKS-AUTOSCALE-001** read only the
+  azurerm 3 name `enable_auto_scaling`; both now accept azurerm 4+'s
+  `auto_scaling_enabled`.
+- **Duplicates**: SEC-GCP-IAM-002 and SEC-GCP-STORAGE-IAM-001 were a double
+  CRITICAL on every public bucket binding; storage is now only the
+  latter (which also covers `members`), IAM-002 keeps project and
+  dataset bindings (new `gcp_project_public_iam` fixture).
+  STK-AZURE-AKS-004 repeated SEC-AZURE-AKS-PRIVATE-001 exactly; it now
+  reports a public API server with no `authorized_ip_ranges`.
+
+New `tests/test_rule_accuracy.py` (15 tests; 12 fail on the previous
+catalogue, the 3 others are supported-runtime controls). Terragoat
+snapshot 366 → 363 (the `unlogged` false positive and two duplicates).
+
+---
+
 ## Round 63 — Run Task, badge and MCP services hardened — 2026-10-26
 
 From the critical review's hosted-service findings.

@@ -41,9 +41,8 @@ keywords: "security, critical, terraform, iac, gcp, cis-5.1, cis-7.1, mitre-T107
 
 ## What this checks
 
-1. **`resource_arg`** on `google_storage_bucket_iam_member` (`member`) matching `/^(allUsers|allAuthenticatedUsers)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-2. **`resource_arg`** on `google_project_iam_member` (`member`) matching `/^(allUsers|allAuthenticatedUsers)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-3. **`resource_arg`** on `google_bigquery_dataset_iam_member` (`member`) matching `/^(allUsers|allAuthenticatedUsers)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+1. **`resource_arg`** on `google_project_iam_member` (`member`) matching `/^(allUsers|allAuthenticatedUsers)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+2. **`resource_arg`** on `google_bigquery_dataset_iam_member` (`member`) matching `/^(allUsers|allAuthenticatedUsers)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 
 ## Why it likely fired
 

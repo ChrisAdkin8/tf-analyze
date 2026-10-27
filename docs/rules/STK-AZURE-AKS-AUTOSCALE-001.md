@@ -41,11 +41,11 @@ keywords: "stack, low, terraform, iac, azure, mitre-T1496, nist-csf-pr.pt-1"
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_kubernetes_cluster` matching `/enable_auto_scaling\s*=\s*false/` — _the resource body matches a regex inside the block._
+1. **`resource_body_contains`** on `azurerm_kubernetes_cluster` matching `/(?:enable_auto_scaling|auto_scaling_enabled)\s*=\s*false/` — _the resource body matches a regex inside the block._
   `azurerm_kubernetes_cluster.default_node_pool.enable_auto_scaling = false`
 explicitly disables the cluster autoscaler. Fixed node count
 wastes capacity at low load and hits ceiling at high load.
-2. **`resource_body_contains`** on `azurerm_kubernetes_cluster_node_pool` matching `/enable_auto_scaling\s*=\s*false/` — _the resource body matches a regex inside the block._
+2. **`resource_body_contains`** on `azurerm_kubernetes_cluster_node_pool` matching `/(?:enable_auto_scaling|auto_scaling_enabled)\s*=\s*false/` — _the resource body matches a regex inside the block._
   Standalone AKS node pool with auto-scaling disabled
 
 ## Why it likely fired

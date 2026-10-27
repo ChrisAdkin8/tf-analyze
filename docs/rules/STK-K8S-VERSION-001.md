@@ -1,6 +1,6 @@
 ---
-title: "STK-K8S-VERSION-001 — EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2"
-description: "tf-analyze rule STK-K8S-VERSION-001 (HIGH · stack): EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2"
+title: "STK-K8S-VERSION-001 — EKS/GKE cluster on a Kubernetes version past end of standard support"
+description: "tf-analyze rule STK-K8S-VERSION-001 (HIGH · stack): EKS/GKE cluster on a Kubernetes version past end of standard support"
 keywords: "stack, high, terraform, iac, mitre-T1190, mitre-T1068, cwe-1395, cwe-1104, nist-csf-id.ra-1, nist-csf-pr.ip-12, nist-800-53-si-2, nist-800-53-ra-5, csa-ccm-tvm-04, csa-ccm-tvm-05"
 ---
 
@@ -8,7 +8,7 @@ keywords: "stack, high, terraform, iac, mitre-T1190, mitre-T1068, cwe-1395, cwe-
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "STK-K8S-VERSION-001 \u2014 EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2",
+  "headline": "STK-K8S-VERSION-001 \u2014 EKS/GKE cluster on a Kubernetes version past end of standard support",
   "description": "Bump to a supported Kubernetes minor (N-2 floor). EKS/GKE/AKS each\npublish a support matrix \u2014 running below N-2 means no security\npatches and increasingly large CVE backlog. OWASP K05 (Inadequate\nLogging and Monitoring) compounds when the p",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/STK-K8S-VERSION-001/",
   "mainEntityOfPage": {
@@ -31,30 +31,22 @@ keywords: "stack, high, terraform, iac, mitre-T1190, mitre-T1068, cwe-1395, cwe-
 }
 </script>
 
-# ⚠️ STK-K8S-VERSION-001 — EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2
+# ⚠️ STK-K8S-VERSION-001 — EKS/GKE cluster on a Kubernetes version past end of standard support
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-K8S-VERSION-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-K8S-VERSION-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-K8S-VERSION-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **EKS/GKE cluster on a Kubernetes version past end of standard support.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
 
 ## What this checks
 
-1. **`resource_arg`** on `aws_eks_cluster` (`version`) matching `/^(?:1\.(?:1[0-9]|2[0-7]))$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  EKS pinned to <= 1.27 (N-2 floor at time of writing)
-2. **`resource_arg`** on `google_container_cluster` (`min_master_version`) matching `/^(?:1\.(?:1[0-9]|2[0-7]))/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  GKE pinned to <= 1.27
-3. **`resource_arg`** on `azurerm_kubernetes_cluster` (`kubernetes_version`) matching `/^(?:1\.(?:1[0-9]|2[0-7]))/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  AKS pinned to <= 1.27
+1. **`resource_arg`** on `aws_eks_cluster` (`version`) matching `/^1\.(?:1?[0-9]|2[0-9]|3[0-3])(?:[.-].*)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+2. **`resource_arg`** on `google_container_cluster` (`min_master_version`) matching `/^1\.(?:1?[0-9]|2[0-9]|3[0-3])(?:[.-].*)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 
 ## Why it likely fired
 
-EKS pinned to <= 1.27 (N-2 floor at time of writing)
-
-GKE pinned to <= 1.27
-
-AKS pinned to <= 1.27
+Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
 
 ## Adversarial scenario
 

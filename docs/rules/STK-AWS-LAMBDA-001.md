@@ -41,12 +41,11 @@ keywords: "stack, high, terraform, iac, aws"
 
 ## What this checks
 
-1. **`resource_arg`** on `aws_lambda_function` (`runtime`) matching `/^(nodejs10\.x|nodejs12\.x|nodejs14\.x|python2\.7|python3\.6|python3\.7|ruby2\.5|java8|go1\.x|dotnetcore2\.1|dotnetcore3\.1)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  Lambda function using an end-of-life runtime no longer patched by AWS
+1. **`resource_arg`** on `aws_lambda_function` (`runtime`) matching `/^(?:nodejs|nodejs4\.3|nodejs4\.3\-edge|nodejs6\.10|nodejs8\.10|nodejs10\.x|nodejs12\.x|nodejs14\.x|nodejs16\.x|nodejs18\.x|nodejs20\.x|python2\.7|python3\.6|python3\.7|python3\.8|python3\.9|ruby2\.5|ruby2\.7|ruby3\.2|java8|go1\.x|provided|provided\.al2|dotnetcore1\.0|dotnetcore2\.0|dotnetcore2\.1|dotnetcore3\.1|dotnet5\.0|dotnet6|dotnet7)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 
 ## Why it likely fired
 
-Lambda function using an end-of-life runtime no longer patched by AWS
+Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
 
 ## Adversarial scenario
 

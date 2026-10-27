@@ -11,14 +11,14 @@ nist_csf:
 patterns:
   - kind: resource_body_contains
     resource: azurerm_kubernetes_cluster
-    regex: 'enable_auto_scaling\s*=\s*false'
+    regex: '(?:enable_auto_scaling|auto_scaling_enabled)\s*=\s*false'
     description: |
       `azurerm_kubernetes_cluster.default_node_pool.enable_auto_scaling = false`
       explicitly disables the cluster autoscaler. Fixed node count
       wastes capacity at low load and hits ceiling at high load.
   - kind: resource_body_contains
     resource: azurerm_kubernetes_cluster_node_pool
-    regex: 'enable_auto_scaling\s*=\s*false'
+    regex: '(?:enable_auto_scaling|auto_scaling_enabled)\s*=\s*false'
     description: Standalone AKS node pool with auto-scaling disabled
 recommendation: |
   Enable cluster autoscaler on the default node pool:

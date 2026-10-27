@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284, d
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_compute_instance` matching `/access_config\s*\{/` — _the resource body matches a regex inside the block._
+1. **`resource_body_contains`** on `google_compute_instance` matching `/(?<![\w])access_config\s*\{/` — _the resource body matches a regex inside the block._
   A `google_compute_instance` body contains an `access_config {}`
 sub-block (always inside `network_interface`). Even an empty
 `access_config` block requests an ephemeral public IP, exposing

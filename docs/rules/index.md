@@ -324,7 +324,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-AWS-LAUNCH-TEMPLATE-001`](./STK-AWS-LAUNCH-TEMPLATE-001.md) | HIGH | EC2 launch template does not enforce IMDSv2 |
 | [`STK-AWS-RDS-004`](./STK-AWS-RDS-004.md) | HIGH | RDS instance uses end-of-life database engine version |
 | [`STK-AZURE-AKS-003`](./STK-AZURE-AKS-003.md) | HIGH | AKS cluster workload identity not enabled |
-| [`STK-AZURE-AKS-004`](./STK-AZURE-AKS-004.md) | HIGH | AKS cluster API server is publicly accessible |
+| [`STK-AZURE-AKS-004`](./STK-AZURE-AKS-004.md) | HIGH | AKS public API server has no authorized IP ranges |
 | [`STK-AZURE-AKS-VERSION-001`](./STK-AZURE-AKS-VERSION-001.md) | HIGH | Azure AKS cluster on end-of-life Kubernetes version |
 | [`STK-AZURE-DB-001`](./STK-AZURE-DB-001.md) | HIGH | Azure MySQL/PostgreSQL server missing SSL enforcement |
 | [`STK-AZURE-FUNCTION-001`](./STK-AZURE-FUNCTION-001.md) | HIGH | Azure Function App uses end-of-life runtime |
@@ -359,7 +359,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-K8S-INGRESS-001`](./STK-K8S-INGRESS-001.md) | HIGH | kubernetes_ingress_v1 has no `tls` block (HTTP traffic exposed in clear) |
 | [`STK-K8S-PSA-002`](./STK-K8S-PSA-002.md) | HIGH | kubernetes_namespace Pod Security Admission `enforce` level is `privileged` (no enforcement) |
 | [`STK-K8S-PSP-001`](./STK-K8S-PSP-001.md) | HIGH | kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25) |
-| [`STK-K8S-VERSION-001`](./STK-K8S-VERSION-001.md) | HIGH | EKS/GKE/AKS cluster pinned to a Kubernetes version older than N-2 |
+| [`STK-K8S-VERSION-001`](./STK-K8S-VERSION-001.md) | HIGH | EKS/GKE cluster on a Kubernetes version past end of standard support |
 | [`STK-AWS-ECS-001`](./STK-AWS-ECS-001.md) | MEDIUM | ECS cluster Container Insights not configured |
 | [`STK-AWS-EKS-004`](./STK-AWS-EKS-004.md) | MEDIUM | EKS cluster missing OIDC provider for IRSA |
 | [`STK-AWS-LAMBDA-002`](./STK-AWS-LAMBDA-002.md) | MEDIUM | Lambda function missing dead-letter queue configuration |
