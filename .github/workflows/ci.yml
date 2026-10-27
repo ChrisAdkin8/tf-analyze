@@ -163,6 +163,29 @@ jobs:
       - run: pytest tests/ --tb=short -q --timeout=300 --timeout-method=thread
       - run: python3 scripts/self_test.py
 
+  service-tests:
+    # The Run Task, badge and MCP services' tests importorskip their
+    # dependencies, which the other jobs don't install, so they never ran
+    # in CI — and an unpinned `mcp` built an MCP image that crashed on
+    # start unnoticed. Install each service's pinned requirements and run
+    # its tests.
+    name: service tests (run-task, badge, mcp)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install --quiet pytest pyyaml httpx \
+            -r integrations/run-task/requirements.txt \
+            -r integrations/badge-service/requirements.txt \
+            -r integrations/mcp-server/requirements.txt
+      - run: >-
+          pytest --tb=short -q
+          tests/test_run_task_hardening.py tests/test_badge_service.py
+          tests/test_mcp_server.py tests/test_mcp_server_hardening.py
+
   docker-images:
     # docker.yml only builds the root image, and only on push to main /
     # tags, so nothing gated a PR that broke an image: the root image went

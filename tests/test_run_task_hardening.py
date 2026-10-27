@@ -130,3 +130,55 @@ def test_repo_root_honours_env_override(tmp_path):
 def test_repo_root_defaults_to_source_checkout():
     m = _load(TFA_REPO_ROOT=None)
     assert m.DETECT_PY == Path(__file__).resolve().parent.parent / "scripts" / "detect.py"
+
+
+# ---- real HCP signatures, body cap, prompt reply ------------------------------
+
+def _signed(body: bytes, key: bytes = b"s3cret") -> str:
+    return _hmac.new(key, body, sha512).hexdigest()
+
+
+def test_hmac_accepts_the_bare_hex_digest_hcp_sends():
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret", TFA_RUN_TASK_ALLOW_INSECURE=None)
+    body = b'{"x":1}'
+    assert m._verify_hmac(body, _signed(body)) is True
+    assert m._verify_hmac(body, "sha512=" + _signed(body)) is True  # tolerated
+    assert m._verify_hmac(body, _signed(b"other")) is False
+
+
+def _client(m):
+    from fastapi.testclient import TestClient
+    return TestClient(m.app)
+
+
+def test_oversized_body_is_rejected_before_the_signature_check():
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret", TFA_RUN_TASK_ALLOW_INSECURE=None)
+    big = b"{" + b" " * (m.MAX_REQUEST_BYTES + 10) + b"}"
+    r = _client(m).post("/runtask", content=big, headers={"x-tfc-task-signature": _signed(big)})
+    assert r.status_code == 413
+
+
+def test_run_task_replies_before_doing_the_work(monkeypatch):
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret", TFA_RUN_TASK_ALLOW_INSECURE=None)
+    monkeypatch.setattr(m, "_validate_outbound_url", lambda url, what: None)
+    scheduled = []
+    monkeypatch.setattr(m, "_process_run_task", lambda *a: scheduled.append(a))
+    body = (b'{"plan_json_api_url": "https://app.terraform.io/plan",'
+            b' "task_result_callback_url": "https://app.terraform.io/cb",'
+            b' "access_token": "tok"}')
+    r = _client(m).post("/runtask", content=body, headers={"x-tfc-task-signature": _signed(body)})
+    assert r.status_code == 200 and r.json() == {"accepted": True}
+    assert scheduled == [("https://app.terraform.io/plan", "https://app.terraform.io/cb", "tok")]
+
+
+def test_a_failed_plan_download_is_reported_to_the_callback(monkeypatch):
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret", TFA_RUN_TASK_ALLOW_INSECURE=None)
+
+    class _Resp:
+        status_code = 404
+
+    sent = []
+    monkeypatch.setattr(m.requests, "get", lambda *a, **k: _Resp())
+    monkeypatch.setattr(m, "_callback", lambda url, headers, body: sent.append(body))
+    m._process_run_task("https://app.terraform.io/plan", "https://app.terraform.io/cb", "tok")
+    assert sent and sent[0]["data"]["attributes"]["status"] == "failed"

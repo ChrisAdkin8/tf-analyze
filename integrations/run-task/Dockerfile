@@ -26,6 +26,11 @@ RUN TFA_REPO_ROOT=/tf-analyze python3 -c "import sys; sys.path.insert(0, '/app')
 ENV TFA_REPO_ROOT=/tf-analyze
 ENV TFA_RUN_TASK_FAIL_ON=HIGH
 
+# Run as an unprivileged user, like the root Dockerfile: the service
+# handles untrusted input (webhooks / tool calls / uploads).
+RUN useradd -r -u 1001 tfanalyze
+USER tfanalyze
+
 EXPOSE 8000
 
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
