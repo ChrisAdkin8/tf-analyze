@@ -19,6 +19,8 @@ suite still runs cleanly when FastAPI is absent locally.
 from __future__ import annotations
 
 import hashlib
+import time
+import itertools
 import hmac
 import json
 import os
@@ -157,10 +159,18 @@ class TestPathValidation:
 SECRET = "test-secret-32+-bytes-of-shared-key-material"
 
 
-def _sign(body: bytes, secret: str = SECRET) -> str:
-    return "sha256=" + hmac.new(
-        secret.encode("utf-8"), body, hashlib.sha256
-    ).hexdigest()
+_TICK = itertools.count()
+
+
+def _signed(body: bytes, secret: str = SECRET, *, ts: int | None = None) -> dict:
+    """Headers for an /ingest: HMAC-SHA256 of ``<ts>.<body>`` under the
+    repo's derived key. Each call gets a later timestamp, so consecutive
+    uploads in one test are not taken for replays."""
+    payload = json.loads(body)
+    key = server.repo_ingest_key(secret, payload["owner"], payload["repo"]).encode()
+    ts = int(time.time()) + next(_TICK) % 60 if ts is None else ts
+    sig = hmac.new(key, f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+    return {"X-TFA-Signature": "sha256=" + sig, "X-TFA-Timestamp": str(ts)}
 
 
 @pytest.fixture(autouse=True)
@@ -169,6 +179,7 @@ def _set_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     # Reset the in-memory store between tests so leftovers from one
     # test don't bleed into the next.
     server._store = server.InMemoryStore()
+    server._last_ingest_ts.clear()
 
 
 def _scan_body(score: int = 82, grade: str = "B") -> bytes:
@@ -203,7 +214,7 @@ class TestIngestAuth:
         wrong = "sha256=" + ("a" * 64)
         resp = client.post(
             "/ingest", content=body,
-            headers={"X-TFA-Signature": wrong},
+            headers={"X-TFA-Signature": wrong, "X-TFA-Timestamp": str(int(time.time()))},
         )
         assert resp.status_code == 401
         assert "mismatch" in resp.text
@@ -212,7 +223,7 @@ class TestIngestAuth:
         body = _scan_body()
         resp = client.post(
             "/ingest", content=body,
-            headers={"X-TFA-Signature": _sign(body)},
+            headers=_signed(body),
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
@@ -226,7 +237,7 @@ class TestIngestAuth:
         body = _scan_body()
         resp = client.post(
             "/ingest", content=body,
-            headers={"X-TFA-Signature": _sign(body, "irrelevant")},
+            headers=_signed(body, "irrelevant"),
         )
         assert resp.status_code == 503
 
@@ -237,7 +248,7 @@ class TestIngestAuth:
         }).encode("utf-8")
         resp = client.post(
             "/ingest", content=bad,
-            headers={"X-TFA-Signature": _sign(bad)},
+            headers=_signed(bad),
         )
         assert resp.status_code == 400
         assert "score" in resp.text
@@ -246,7 +257,7 @@ class TestIngestAuth:
         bad = _scan_body(score=50, grade="Z")
         resp = client.post(
             "/ingest", content=bad,
-            headers={"X-TFA-Signature": _sign(bad)},
+            headers=_signed(bad),
         )
         assert resp.status_code == 400
 
@@ -267,7 +278,7 @@ class TestRoundTrip:
         body = _scan_body(score=82, grade="B")
         ingest_resp = client.post(
             "/ingest", content=body,
-            headers={"X-TFA-Signature": _sign(body)},
+            headers=_signed(body),
         )
         assert ingest_resp.status_code == 200
 
@@ -291,7 +302,7 @@ class TestRoundTrip:
         }).encode("utf-8")
         client.post(
             "/ingest", content=body,
-            headers={"X-TFA-Signature": _sign(body)},
+            headers=_signed(body),
         )
         resp = client.get("/score/ChrisAdkin8/tf-analyze/feat/new-stuff.svg")
         assert resp.status_code == 200
@@ -305,9 +316,59 @@ class TestRoundTrip:
         body = _scan_body(score=99, grade="A")
         client.post(
             "/ingest", content=body,
-            headers={"X-TFA-Signature": _sign(body)},
+            headers=_signed(body),
         )
         resp = client.get("/score/ChrisAdkin8/tf-analyze/feature-branch.svg")
         assert resp.status_code == 200
         assert b"no data" in resp.content
         assert b"99" not in resp.content
+
+
+# ---------------------------------------------------------------------------
+# Label escaping, per-repo keys, replays, body cap (critical review)
+# ---------------------------------------------------------------------------
+
+
+def test_label_is_escaped_in_the_svg() -> None:
+    svg = server.render_badge_svg('"/><a href="//x">pwn', 80, "B")
+    assert "<a href" not in svg and "&lt;a href" in svg
+    assert "<a href" not in server.render_unknown_badge('"><a href="//x">')
+
+
+class TestIngestHardening:
+    @pytest.fixture
+    def client(self) -> TestClient:
+        return TestClient(server.app)
+
+    def test_one_repos_key_cannot_write_another_repo(self, client: TestClient) -> None:
+        body = _scan_body()  # ChrisAdkin8/tf-analyze
+        other = json.loads(body)
+        other["repo"] = "someone-elses-repo"
+        forged = json.dumps(other).encode()
+        headers = _signed(body)  # signed with tf-analyze's key …
+        ts = headers["X-TFA-Timestamp"]
+        key = server.repo_ingest_key(SECRET, "ChrisAdkin8", "tf-analyze").encode()
+        sig = hmac.new(key, f"{ts}.".encode() + forged, hashlib.sha256).hexdigest()
+        resp = client.post("/ingest", content=forged,  # … for a different repo
+                           headers={"X-TFA-Signature": "sha256=" + sig, "X-TFA-Timestamp": ts})
+        assert resp.status_code == 401
+
+    def test_a_replayed_upload_is_refused(self, client: TestClient) -> None:
+        body = _scan_body()
+        headers = _signed(body)
+        assert client.post("/ingest", content=body, headers=headers).status_code == 200
+        replay = client.post("/ingest", content=body, headers=headers)
+        assert replay.status_code == 401 and "replay" in replay.text
+
+    def test_a_stale_timestamp_is_refused(self, client: TestClient) -> None:
+        body = _scan_body()
+        resp = client.post("/ingest", content=body,
+                           headers=_signed(body, ts=int(time.time()) - 3600))
+        assert resp.status_code == 401 and "window" in resp.text
+
+    def test_an_oversized_body_is_refused_before_parsing(self, client: TestClient) -> None:
+        big = b"{" + b" " * (server.MAX_INGEST_BYTES + 1) + b"}"
+        resp = client.post("/ingest", content=big,
+                           headers={"X-TFA-Signature": "sha256=" + "a" * 64,
+                                    "X-TFA-Timestamp": str(int(time.time()))})
+        assert resp.status_code == 413

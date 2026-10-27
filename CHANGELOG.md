@@ -45,6 +45,50 @@ snapshot 366 → 363 (the `unlogged` false positive and two duplicates).
 
 ---
 
+## Round 63 — Run Task, badge and MCP services hardened — 2026-10-26
+
+From the critical review's hosted-service findings.
+
+- **HCP Run Task server** (`integrations/run-task/`):
+  - The signature check required a `sha512=` prefix that HashiCorp's
+    docs do not describe (they give an HMAC-SHA512 of the body), so real
+    requests were likely all rejected. A bare hex digest is now
+    accepted and a prefix tolerated; the full digest is still compared
+    in constant time.
+  - It downloaded the plan, scanned it (up to 120 s) and called back
+    before replying, with blocking `requests` calls in an async handler,
+    so one run stalled every other request. It now replies 200 at once
+    (as HCP expects) and does the work in a background thread; a failure
+    is reported to the callback as `failed` rather than leaving HCP to
+    time out.
+  - The body is read with a 1 MiB cap before the signature check.
+- **Badge service** (`integrations/badge-service/`):
+  - `?label=` was inserted into the SVG unescaped (markup injection);
+    it is XML-escaped.
+  - One shared secret let any holder write every repo's badge. Uploads
+    are now signed with a per-repo key derived from the master secret
+    (`scripts/derive-key.sh`), so a repo's key writes only its badge.
+  - Signed uploads could be replayed: the signature now covers
+    `X-TFA-Timestamp`, which must be within 5 minutes and newer than the
+    repo's last accepted upload.
+  - The body is read with an 8 MiB cap before parsing or verification.
+  - `upload-score.sh` passed the secret on `openssl`'s command line (in
+    the process list); it now computes the HMAC with the key read from
+    the environment. Uploads use `TFA_BADGE_INGEST_KEY` (the repo key).
+    Nothing in this repo uploads yet, so there is nothing to migrate.
+- **MCP, Run Task and badge images** run as an unprivileged user and pin
+  their direct dependencies. The MCP image's open `mcp[cli]>=1.0` now
+  resolves to mcp 2.x, which renamed `FastMCP`: a freshly built image
+  crashed on start, unnoticed because its build-time check covered only
+  the engine. It is pinned to `mcp[cli]==1.30.0` and the build now
+  imports the server.
+- **New CI job `service-tests`** installs the three services' pinned
+  requirements and runs their tests, which every other job skipped (they
+  `importorskip` fastapi / mcp) — so a dependency bump that breaks a
+  service now fails CI.
+
+---
+
 ## Round 62 — Action and CI hardening; the LSP sees spaces and unsaved edits — 2026-10-26
 
 From the critical review's delivery-surface findings.
