@@ -17,11 +17,11 @@
 
 <!-- Content row — what does it cover? -->
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 354](https://img.shields.io/badge/rules-354-brightgreen)
+![Rules: 353](https://img.shields.io/badge/rules-353-brightgreen)
 ![fix_hcl: 93%](https://img.shields.io/badge/fix__hcl-93%25-brightgreen)
 ![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-80%25%20%2F%2068%25%20%2F%2047%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
-[![Rule docs](https://img.shields.io/badge/rule%20docs-354%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
+[![Rule docs](https://img.shields.io/badge/rule%20docs-353%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 
 **[Quickstart](#quickstart) · [Why tf-analyze?](#why-tf-analyze) · [Features](#features) · [Integrations](#integrations) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Adding a rule](#adding-a-rule) · [Demo corpora](#demo-corpora--examples) · [Repo layout](#repository-layout) · [Contributing](#contributing--maintenance) · [Provenance](#provenance) · [License](#license)**
 
@@ -32,11 +32,11 @@ Same engine, ten surfaces — Claude Code skill, Python CLI, GitHub Action, Dock
 | Cloud | Security | Hardening | Ops & Reuse | **Total** |
 |---|---:|---:|---:|---:|
 | AWS | 62 | 25 | 4 | **91** |
-| GCP | 41 | 47 | 3 | **91** |
+| GCP | 41 | 46 | 3 | **90** |
 | Azure | 56 | 32 | 3 | **91** |
 | K8s / Helm | 12 | 6 | 0 | **18** |
 | Cross-cloud / engine | 22 | 27 | 14 | **63** |
-| **Total** | **193** | **137** | **24** | **354** |
+| **Total** | **193** | **136** | **24** | **353** |
 
 Hardening = `ROB-*` + `STK-*`; Ops & Reuse = `OPS-*` + `COST-*` + `MOD-*` + `MOD-REUSE-*` + `INT-*` + `CI-*` + `STYLE-*`. Full per-family breakdown and shape-by-cloud commentary in [Detection ↓](#detection).
 
@@ -176,7 +176,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-354 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+353 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -187,17 +187,17 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 | Cross-resource | `INT-*`, `graph_check` | Intent–implementation gaps, KMS location parity, IAM breadth |
 | Module reuse (advisory) | `MOD-REUSE-*` | Hand-rolled scaffolding that mirrors a popular Terraform Registry module — INFO tier, never gates CI. Pass `--show-info` to render |
 
-**Per-cloud breakdown** (numerical parity across AWS, GCP, Azure as of 2026-05-13):
+**Per-cloud breakdown** (as of 2026-10-27):
 
 | Cloud  | SEC | ROB | STK | OPS | COST | MOD-REUSE | **Total** |
 |--------|----:|----:|----:|----:|-----:|----------:|----------:|
 | AWS    | 62  | 13  | 12  | 2   | 1    | 1         | **91**    |
-| GCP    | 41  | 5   | 42  | 1   | 1    | 1         | **91**    |
+| GCP    | 41  | 5   | 41  | 1   | 1    | 1         | **90**    |
 | Azure  | 56  | 7   | 25  | 1   | 1    | 1         | **91**    |
 | K8s/Helm | 12 | —  | 6   | —   | —    | —         | **18**    |
 | Cross-cloud / engine | — | — | — | — | — | — | **63** |
 
-**Why the per-section shapes differ at the same headline count.** Each cloud puts services in different boxes, and the catalogue follows the provider taxonomy rather than forcing a synthetic split:
+**Why the per-section shapes differ.** Each cloud puts services in different boxes, and the catalogue follows the provider taxonomy rather than forcing a synthetic split:
 
 - **AWS skews `SEC` (62)** because more discrete services have their own dedicated security rule — KMS, ECR, CloudTrail, GuardDuty, Security Hub, MSK, Neptune, DocDB, Athena, Cognito, Kinesis, SNS, SQS, Secrets Manager, SSM. Each surfaces a distinct misconfiguration class that maps 1:1 to a rule.
 - **GCP skews `STK` (42)** because GCP rolls multi-feature platforms (GKE, Cloud Run, Cloud SQL, BigQuery, Composer, Dataproc) where hardening is expressed as *stack-level configuration* (release channels, workload identity, binary authorization, IAM auth flags, CMEK on the platform) rather than per-service `SEC-*` rules.
@@ -205,7 +205,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 - **`ROB` is small everywhere** (13 / 5 / 7) because lifecycle and backup gaps map onto a small set of stateful resource shapes per cloud (RDS / Cloud SQL / Azure SQL + Cosmos + VMSS).
 - **`OPS` / `COST` / `MOD-REUSE` are deliberately 1-2 each per cloud** — these tier-INFO/MEDIUM rules are about workflow ergonomics, not service depth, so one well-curated rule per cloud beats many redundant ones.
 
-The headline number is parity. The shape is a property of each provider's product surface.
+The per-cloud totals are close but not a target; a rule exists because it catches a real problem. The shape is a property of each provider's product surface.
 
 ### Execution modes
 

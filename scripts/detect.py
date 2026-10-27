@@ -483,6 +483,19 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             if pblk["groups"][0] == "aws" and block_has_arg(pblk["body"], "default_tags"):
                 base.setdefault(str(Path(fp).parent), {})["__aws_default_tags__"] = "true"
 
+    # Resource types present anywhere in the scan, minus ones switched off
+    # with `enabled = false`, for `unless_repo_has` (account-level settings
+    # such as aws_ebs_encryption_by_default live in another module).
+    present = sorted({
+        blk["groups"][0]
+        for text in all_files_text.values()
+        for blk in find_blocks(text, RESOURCE_START)
+        if block_arg_value(blk["body"], "enabled") != "false"
+    })
+    if present:
+        for dir_key in {str(Path(fp).parent) for fp in all_files_text}:
+            base.setdefault(dir_key, {})["__repo_has__"] = " ".join(present)
+
     # Module calls, in a stable order: (caller dir, child dir, inputs).
     calls: list[tuple[str, str, dict[str, str]]] = []
     for fp in sorted(all_files_text, key=str):

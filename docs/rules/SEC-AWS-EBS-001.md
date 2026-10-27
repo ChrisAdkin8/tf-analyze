@@ -9,7 +9,7 @@ keywords: "security, high, terraform, iac, aws, cis-2.2.1, mitre-T1530, cwe-311,
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "SEC-AWS-EBS-001 \u2014 EBS volume not encrypted",
-  "description": "Set `encrypted = true` and supply a `kms_key_id` for every `aws_ebs_volume`.\nUnencrypted EBS volumes expose data if a snapshot is accidentally shared\nor if physical media is decommissioned. Enable the account-level default\nencryption via `a",
+  "description": "Set `encrypted = true` and supply a `kms_key_id` for every `aws_ebs_volume`.\nUnencrypted EBS volumes expose data if a snapshot is accidentally shared\nor if physical media is decommissioned. The account-level\n`aws_ebs_encryption_by_default` ",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-EBS-001/",
   "mainEntityOfPage": {
     "@type": "WebPage",
@@ -62,10 +62,10 @@ Narratives are baked into the engine ([`scripts/detect.py`](https://github.com/C
 
 Set `encrypted = true` and supply a `kms_key_id` for every `aws_ebs_volume`.
 Unencrypted EBS volumes expose data if a snapshot is accidentally shared
-or if physical media is decommissioned. Enable the account-level default
-encryption via `aws_ebs_encryption_by_default` as a safety net, but also
-set `encrypted = true` explicitly in Terraform so the intent is auditable
-in code.
+or if physical media is decommissioned. The account-level
+`aws_ebs_encryption_by_default` encrypts every new volume in the region;
+when it is in the scanned code this rule does not fire, but set
+`encrypted = true` anyway so the intent is visible in the module itself.
 
 ## Suggested fix (`fix_hcl`)
 

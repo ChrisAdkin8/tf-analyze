@@ -35,11 +35,11 @@ nist_800_53:
 csa_ccm:
   - "IAM-09"
 recommendation: |
-  If true administrator access is intentional, attach
-  `arn:aws:iam::aws:policy/AdministratorAccess` directly via
-  `aws_iam_role_policy_attachment` so audit and least-privilege tools
-  flag it correctly. Otherwise, replace with the explicit minimum
-  action and resource set the workload needs.
+  Replace the wildcard with the explicit minimum action and resource set
+  the workload needs. Attaching the AWS-managed `AdministratorAccess`
+  policy instead is not a fix: it grants exactly the same access. If a
+  principal truly needs full administrator access, keep it to a
+  break-glass role behind MFA and an SCP guardrail, and record why.
 verification: |
   No policy statement should combine `Action: "*"` and `Resource: "*"`.
   CloudTrail data events on this principal should narrow to a small

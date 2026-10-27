@@ -47,9 +47,9 @@ This is the Azure convention for "Allow Azure services and resources
 to access this server" — but it also opens the SQL endpoint to any
 Azure-hosted attacker (a shared IP range). Combined with weak
 credentials, it becomes internet-exposed.
-2. **`resource_arg`** on `azurerm_mssql_firewall_rule` (`end_ip_address`) matching `/^255\.255\.255\.255$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  `azurerm_mssql_firewall_rule` with `end_ip_address = "255.255.255.255"`
-— a world-open rule accepting connections from every IP address.
+2. **`ip_range_span`** on `azurerm_mssql_firewall_rule` — _a `ip_range_span` pattern._
+  `azurerm_mssql_firewall_rule` whose start-end range covers more
+than a /8 (16.7 million addresses) — effectively world-open.
 
 ## Why it likely fired
 
@@ -59,8 +59,8 @@ to access this server" — but it also opens the SQL endpoint to any
 Azure-hosted attacker (a shared IP range). Combined with weak
 credentials, it becomes internet-exposed.
 
-`azurerm_mssql_firewall_rule` with `end_ip_address = "255.255.255.255"`
-— a world-open rule accepting connections from every IP address.
+`azurerm_mssql_firewall_rule` whose start-end range covers more
+than a /8 (16.7 million addresses) — effectively world-open.
 
 ## Adversarial scenario
 
