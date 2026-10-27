@@ -25,6 +25,7 @@ Pure functions only; no engine state.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from dataclasses import dataclass
 
@@ -36,9 +37,10 @@ from _hcl import (
 )
 
 ALL_PORTS = (0, 65535)
-_WORLD = {"0.0.0.0/0", "::/0"}
-# Azure service tags / wildcards that mean "anywhere".
-_AZURE_WORLD = {"*", "internet", "any", "0.0.0.0/0", "::/0"}
+# Azure service tags / wildcards that mean "anywhere". CIDRs are checked
+# by prefix length in is_world, so every spelling of 0.0.0.0/0 and ::/0
+# counts (`0::/0`, `::0/0`, `0000::/0`), not just the two canonical ones.
+_AZURE_WORLD = {"*", "internet", "any"}
 _ALL_PROTOCOLS = {"-1", "all", "*"}
 _REF_RE = re.compile(r"^(var|local)\.([\w-]+)$")
 _RANGE_RE = re.compile(r"^\s*(\d+)\s*(?:-\s*(\d+))?\s*$")
@@ -254,6 +256,13 @@ def _gcp_rules(view, vd: dict) -> list[InboundRule]:
     if str(resolve(view.get("direction"), vd) or "INGRESS").upper() == "EGRESS":
         return []
     sources = _str_list(view, ("source_ranges",), vd)
+    # Google Cloud: an ingress rule with no source "uses the default source
+    # IPv4 address range 0.0.0.0/0" (VPC firewall docs). It used to count
+    # as no source at all, so SSH open to everyone was not flagged.
+    if not sources and all(
+        view.get(k) is None for k in ("source_tags", "source_service_accounts")
+    ):
+        sources = ("0.0.0.0/0",)
     rules: list[InboundRule] = []
     for allow in view.blocks("allow"):
         protocol = str(resolve(allow.get("protocol"), vd)).lower()
@@ -311,9 +320,12 @@ def inbound_rules(resource_type: str, view, var_defaults: dict) -> list[InboundR
 
 def is_world(source: str, resource_type: str) -> bool:
     s = source.strip()
-    if resource_type.startswith("azurerm_"):
-        return s.lower() in _AZURE_WORLD
-    return s in _WORLD
+    if resource_type.startswith("azurerm_") and s.lower() in _AZURE_WORLD:
+        return True
+    try:
+        return ipaddress.ip_network(s, strict=False).prefixlen == 0
+    except ValueError:
+        return False
 
 
 def world_open_rules(resource_type: str, view, var_defaults: dict) -> list[InboundRule]:

@@ -39,7 +39,7 @@ WILDCARD_ACTIONS = frozenset({"*", "*:*"})
 # Read-only Describe* / List* calls: many accept no resource ARN at all
 # (ec2:DescribeInstances, s3:ListAllMyBuckets), so `Resource = "*"` is the
 # only valid value and must not count as a wildcard grant.
-_READ_ONLY_LIST_ACTION = re.compile(r"^[a-z0-9-]+:(?:Describe|List)[A-Za-z0-9*]*$")
+_READ_ONLY_LIST_ACTION = re.compile(r"^[a-z0-9-]+:(?:describe|list)[a-z0-9*]*$")
 
 
 @dataclass
@@ -59,10 +59,11 @@ class Statement:
         Deny statements never do."""
         if self.effect.lower() == "deny":
             return False
-        wild_action = any(a in WILDCARD_ACTIONS for a in self.actions)
+        # IAM action names are case-insensitive: `IAM:*` is `iam:*`.
+        actions = [a.lower() for a in self.actions]
+        wild_action = any(a in WILDCARD_ACTIONS for a in actions)
         wild_resource = "*" in self.resources and not (
-            self.actions
-            and all(_READ_ONLY_LIST_ACTION.match(a) for a in self.actions)
+            actions and all(_READ_ONLY_LIST_ACTION.match(a) for a in actions)
         )
         if check == "wildcard_action":
             return wild_action
@@ -71,7 +72,7 @@ class Statement:
         if check == "wildcard_action_and_resource":
             return wild_action and wild_resource
         if check == "wildcard_action_iam":
-            return any(a.startswith("iam:") and "*" in a for a in self.actions)
+            return any(a.startswith("iam:") and "*" in a for a in actions)
         if check == "public_principal":
             return "*" in self.principals
         if check == "not_action_or_not_resource":

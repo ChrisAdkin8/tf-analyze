@@ -3,7 +3,12 @@ title: "Resource uses deprecated argument"
 section: robustness
 default_urgency: MEDIUM
 blast_radius: single-resource
-status: active
+# Retired: none of its arguments is deprecated in the google provider
+# (checked against the provider docs, 2026-10-27). enable_legacy_abac,
+# logging_service, monitoring_service, metadata_startup_script and
+# google_compute_address.address are all current, and the `.*` patterns
+# also fired on the secure `enable_legacy_abac = false`.
+status: deprecated
 mitre:
   - "T1195.002"
 cwe:

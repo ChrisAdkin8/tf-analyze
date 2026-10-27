@@ -11,18 +11,21 @@ patterns:
     resource: aws_ebs_volume
     arg: encrypted
     regex: "^false$"
+    # Default encryption encrypts every new volume, whatever `encrypted` says.
+    unless_repo_has: aws_ebs_encryption_by_default
     description: EBS volume with encrypted = false
   - kind: resource_missing_arg
     resource: aws_ebs_volume
     arg: encrypted
+    unless_repo_has: aws_ebs_encryption_by_default
     description: EBS volume missing encrypted argument (defaults to false)
 recommendation: |
   Set `encrypted = true` and supply a `kms_key_id` for every `aws_ebs_volume`.
   Unencrypted EBS volumes expose data if a snapshot is accidentally shared
-  or if physical media is decommissioned. Enable the account-level default
-  encryption via `aws_ebs_encryption_by_default` as a safety net, but also
-  set `encrypted = true` explicitly in Terraform so the intent is auditable
-  in code.
+  or if physical media is decommissioned. The account-level
+  `aws_ebs_encryption_by_default` encrypts every new volume in the region;
+  when it is in the scanned code this rule does not fire, but set
+  `encrypted = true` anyway so the intent is visible in the module itself.
 pci_dss:
   - "Req-3.4"
 soc2_cc:
