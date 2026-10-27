@@ -5,6 +5,26 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 70 — `--apply-fixes` never leaves a file worse than it found it — 2026-10-27
+
+- **Multi-line values**: replacing a value that spans several lines (a
+  list, map, call or heredoc) only overwrote its first line, leaving the
+  rest behind as invalid HCL — e.g. `"api",` and `]` after the new
+  `enabled_cluster_log_types` list. The whole old value is now replaced.
+- **Indentation**: a multi-line fix kept the catalogue snippet's
+  indentation and `\n` endings, so the first line was indented twice and
+  the rest did not match the file. Fixes are now re-indented to the
+  file's own step (two or four spaces, or tabs) and line endings.
+- **Encoding**: files are read and written as UTF-8, the encoding
+  Terraform uses, not the locale's (cp1252 on Windows). A file that is
+  not UTF-8 is skipped with a warning instead of being rewritten.
+- **Atomic writes**: the patched file is written to a temporary file in
+  the same folder and swapped in, keeping its permissions; an
+  interrupted run leaves the original or the patched file, never half of
+  one. The `.bak` backup is still written first.
+
+---
+
 ## Round 69 — Rules miss fewer real problems and flag fewer safe ones — 2026-10-27
 
 Findings change: some rules now fire where they did not, others stop
