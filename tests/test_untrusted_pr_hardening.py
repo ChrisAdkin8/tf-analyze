@@ -17,7 +17,6 @@ import re
 from pathlib import Path
 
 import pytest
-import tomllib
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
@@ -133,7 +132,8 @@ def test_bot_never_deletes_or_stages_unrelated_files() -> None:
     assert "git add -A" not in text
     assert "git add -u" in text
     assert "--others --exclude-standard -- '*.bak'" in text
-    assert "pip install python-hcl2" not in text
+    # v0.2.6 predates the vendored parser, so the bot installs it, pinned.
+    assert "pip install python-hcl2==7.2.1" in text
 
 
 # ---------------------------------------------------------------------------

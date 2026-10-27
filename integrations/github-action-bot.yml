@@ -66,6 +66,10 @@ jobs:
         run: |
           ref="$TFA_REF"
           git clone --depth 1 --branch "$ref" https://github.com/ChrisAdkin8/tf-analyze.git /tmp/tf-analyze
+          # Releases up to v0.2.6 predate the vendored parser and use
+          # python-hcl2 only when installed (heredoc-aware attribute values).
+          # Pinned to the version later releases vendor.
+          pip install python-hcl2==7.2.1
 
       - name: Run scan (capture JSON for the PR body)
         id: scan

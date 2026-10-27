@@ -50,7 +50,7 @@ change them for those runs, edit the fallback after `||` in the file.
 | `compliance-framework` | _empty_ | Optional. `cis` / `pci_dss` / `soc2` / `owasp_iac` / `all`. When set, the engine renders a compliance gap report alongside its findings and the PR comment gains a collapsible `<details>📋 Compliance: <fw></details>` section. |
 | `attack-graph` | `false` | Build the internet → crown-jewels graph; promotes critical-path findings and embeds the Mermaid graph in the PR summary. |
 | `show-info` | `false` | Include INFO-tier advisories (Module Reuse advisories, etc.). Default off because INFO findings are advisory rather than gating. |
-| `ref` | `v0.2.6` | Git ref of tf-analyze to install (tag, branch, or 7+ char SHA). Defaults to a release tag so CI is reproducible. |
+| `ref` | `v0.2.6` | Git ref of tf-analyze to install (tag, branch, or 7+ char SHA). Defaults to a release tag so CI is reproducible. `v0.2.6` predates the HTML-report escaping fix: if you upload the HTML report from untrusted PRs, pin a later commit until the next release. |
 | `post-pr-comment` | `true` | Post the suggestion-block comments + summary comment on PRs. Set `false` to skip the comment surface entirely. |
 
 ## Behavior

@@ -29,7 +29,13 @@ Self-test fixture counts are cumulative.
 - **`integrations/github-action-bot.yml`**: inputs reach the shell
   through `env:`; actions are pinned; `ref` defaults to `v0.2.6`. It no
   longer deletes or commits tracked `.bak` files (`git add -u` instead
-  of `git add -A`), and the unpinned `pip install python-hcl2` is gone.
+  of `git add -A`), and `pip install python-hcl2` is pinned to 7.2.1
+  (v0.2.6 predates the vendored parser and uses it only when installed).
+- **Template default engine**: `v0.2.6` is the latest release, and it
+  predates this round's HTML escaping fix and the vendored parser. Bump
+  the templates' `ref` default when the next release is tagged; until
+  then, set `ref:` to a commit that includes these fixes if you upload
+  the HTML report from untrusted PRs.
 - **pre-commit hooks** run the installed `tf-analyze` command. The old
   `python3 scripts/detect.py` entry looked for that file in *your* repo.
 
