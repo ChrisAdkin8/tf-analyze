@@ -1,1 +1,3 @@
-mcp[cli]>=1.0
+# Pinned: an open range (`mcp[cli]>=1.0`) installed mcp 2.x, which renamed
+# FastMCP, so a fresh image crashed on start. Bump deliberately.
+mcp[cli]==1.30.0

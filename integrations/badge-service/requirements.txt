@@ -1,2 +1,4 @@
-fastapi>=0.110
-uvicorn>=0.27
+# Pinned direct dependencies (the image is rebuilt on every push; an open
+# range picks up whatever was released that day). Bump deliberately.
+fastapi==0.162.0
+uvicorn==0.54.0

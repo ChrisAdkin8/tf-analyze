@@ -20,9 +20,10 @@ Stateless on the request path: every score is keyed by
 ``(owner, repo, branch, scan_id)`` in a small KV store (env-var
 ``TFA_BADGE_BACKEND``: ``memory`` for local dev, ``redis://…`` for
 Fly.io). A scan workflow (see ``scripts/upload-score.sh``) POSTs the
-JSON output of ``detect.py --format json`` to ``/ingest`` with an
-HMAC-signed shared secret; the badge endpoint reads the most recent
-ingestion for the path.
+JSON output of ``detect.py --format json`` to ``/ingest``, signed with that
+repository's own key (derived from ``TFA_BADGE_INGEST_SECRET``; see
+``repo_ingest_key``) over a timestamp and the body; the badge endpoint
+reads the most recent ingestion for the path.
 
 ## Why static SVG (not shields.io endpoint)
 
@@ -43,6 +44,7 @@ in their schema. We could shim that, but rendering the SVG ourselves:
 from __future__ import annotations
 
 import hashlib
+import html
 import hmac
 import json
 import os
@@ -155,6 +157,9 @@ def _grade_colour(grade: str) -> tuple[str, str]:
 def render_badge_svg(label: str, score: int, grade: str) -> str:
     """Render a shields.io-shape SVG badge: ``<label> | <score> (<grade>)``.
 
+    `label` comes from the `?label=` query string, so it is XML-escaped:
+    raw, `?label="/><a href=…>` injected markup into the badge.
+
     The width of the score region scales with the rendered text length
     so a "B-" grade doesn't get clipped. Uses Verdana (shields.io's
     canonical font) to match the rest of the badge ecosystem visually.
@@ -163,6 +168,8 @@ def render_badge_svg(label: str, score: int, grade: str) -> str:
     score_text = f"{score} ({grade})"
     # Approximate width: 6.7 px per character in 11-pt Verdana, +14 padding.
     label_w = max(74, int(6.7 * len(label) + 14))
+    label = html.escape(label, quote=True)
+    grade = html.escape(str(grade), quote=True)
     score_w = max(56, int(6.7 * len(score_text) + 14))
     total_w = label_w + score_w
 
@@ -198,6 +205,7 @@ def render_badge_svg(label: str, score: int, grade: str) -> str:
 
 
 def render_unknown_badge(label: str = "tf-analyze") -> str:
+    label = html.escape(label, quote=True)
     """Badge shown when no scan is on file for the requested repo.
     Click-through behaviour is on the README author — they can wrap the
     badge in a link to the workflow that runs the scan."""
@@ -226,11 +234,33 @@ def render_unknown_badge(label: str = "tf-analyze") -> str:
 # ---------------------------------------------------------------------------
 
 
-def _verify_hmac(body: bytes, signature_hdr: Optional[str]) -> None:
-    """Reject any /ingest body whose HMAC-SHA256 doesn't match the
-    shared secret. The header shape is ``sha256=<hex>``, matching
-    GitHub's webhook convention so existing webhook tooling round-trips.
-    """
+# Upper bound on an /ingest body (a `--format json` report), enforced
+# while reading, before any parsing or verification.
+MAX_INGEST_BYTES = 8 * 1024 * 1024
+# A signed upload is valid this long; a replay of an accepted one is
+# refused anyway (`_last_ingest_ts`).
+REPLAY_WINDOW_S = 300
+_last_ingest_ts: dict[str, int] = {}
+
+
+def repo_ingest_key(master_secret: str, owner: str, repo: str) -> str:
+    """The upload key for one repository, derived from the master secret.
+
+    Each repo's CI is given only its own key (`scripts/derive-key.sh`), so
+    a leaked key can write that repo's badge and no other — with the one
+    shared secret any holder could overwrite every repo's badge."""
+    return hmac.new(
+        master_secret.encode("utf-8"), f"ingest:{owner}/{repo}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _verify_ingest(body: bytes, owner: str, repo: str,
+                   signature_hdr: Optional[str], timestamp_hdr: Optional[str]) -> None:
+    """Reject an /ingest whose ``X-TFA-Signature: sha256=<hex>`` is not the
+    HMAC-SHA256, under `owner/repo`'s key, of ``<X-TFA-Timestamp>.<body>``;
+    whose timestamp is outside `REPLAY_WINDOW_S`; or which is not newer
+    than the last accepted upload for that repo (a replay)."""
     secret = os.environ.get("TFA_BADGE_INGEST_SECRET")
     if not secret:
         # Without a secret configured, /ingest is disabled rather than
@@ -238,12 +268,33 @@ def _verify_hmac(body: bytes, signature_hdr: Optional[str]) -> None:
         raise HTTPException(503, "TFA_BADGE_INGEST_SECRET is not configured")
     if not signature_hdr or not signature_hdr.startswith("sha256="):
         raise HTTPException(401, "missing X-TFA-Signature: sha256=<hex>")
-    expected = hmac.new(
-        secret.encode("utf-8"), body, hashlib.sha256
-    ).hexdigest()
-    actual = signature_hdr.removeprefix("sha256=")
-    if not hmac.compare_digest(expected, actual):
+    if not timestamp_hdr or not timestamp_hdr.isdigit():
+        raise HTTPException(401, "missing X-TFA-Timestamp: <unix seconds>")
+    ts = int(timestamp_hdr)
+    if abs(time.time() - ts) > REPLAY_WINDOW_S:
+        raise HTTPException(401, "X-TFA-Timestamp outside the allowed window")
+    key = repo_ingest_key(secret, owner, repo).encode("utf-8")
+    expected = hmac.new(key, f"{ts}.".encode("utf-8") + body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature_hdr.removeprefix("sha256=")):
         raise HTTPException(401, "HMAC signature mismatch")
+    repo_id = f"{owner}/{repo}"
+    if ts <= _last_ingest_ts.get(repo_id, 0):
+        raise HTTPException(401, "replayed upload (timestamp not newer than the last)")
+    _last_ingest_ts[repo_id] = ts
+
+
+async def _read_capped_body(request: Request) -> bytes:
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_INGEST_BYTES:
+        raise HTTPException(413, "request body too large")
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_INGEST_BYTES:
+            raise HTTPException(413, "request body too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +369,8 @@ def score_branch(owner: str, repo: str, branch: str,
 @app.post("/ingest")
 async def ingest(request: Request) -> dict:
     """Accept a tf-analyze JSON output and register the score for the
-    repo. Authenticated by HMAC-SHA256 over the raw request body.
+    repo. Authenticated per repository (`_verify_ingest`): HMAC-SHA256 of
+    ``<timestamp>.<body>`` under the repo's derived key.
 
     Expected body:
 
@@ -329,13 +381,23 @@ async def ingest(request: Request) -> dict:
           "scan":  {<full --format json output, must include `summary`>}
         }
     """
-    body = await request.body()
-    _verify_hmac(body, request.headers.get("X-TFA-Signature"))
+    body = await _read_capped_body(request)
+    if not os.environ.get("TFA_BADGE_INGEST_SECRET"):
+        raise HTTPException(503, "TFA_BADGE_INGEST_SECRET is not configured")
+    if not request.headers.get("X-TFA-Signature", "").startswith("sha256="):
+        raise HTTPException(401, "missing X-TFA-Signature: sha256=<hex>")
 
+    # The key is per repository, so owner/repo are read (from a size-capped
+    # body) before the signature is checked; nothing is stored until then.
     try:
         payload = json.loads(body)
     except json.JSONDecodeError as e:
         raise HTTPException(400, f"invalid JSON body: {e}")
+    if isinstance(payload, dict):
+        _verify_ingest(
+            body, str(payload.get("owner") or ""), str(payload.get("repo") or ""),
+            request.headers.get("X-TFA-Signature"), request.headers.get("X-TFA-Timestamp"),
+        )
 
     # Round-5 audit fix #10 — explicit shape validation. The prior
     # code used optional chaining (`payload.get("scan") or {}`) which
