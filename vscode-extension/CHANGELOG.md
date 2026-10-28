@@ -5,9 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
-## [Unreleased]
+## [0.1.59] — 2026-10-28
 
 ### Security
+
+- **No writes through a symlink.** Suppressing a finding writes
+  `.tf-analyze-baseline.json`, and "ignore workspace-wide" writes
+  `.tf-analyze.yaml`. A cloned repo could commit either as a symlink to a
+  file outside the workspace (`../../.bashrc`) and have it overwritten.
+  A symlinked or non-file target is now refused, and the new content is
+  written to a fresh file and renamed into place. "Open in browser"
+  reports go in a private temp folder instead of a guessable name in the
+  shared one.
+- **Bundled engine** carries the engine fixes since 0.1.58: PRs can't
+  switch off their own scan or inject Markdown into comments, value checks
+  for S3 / security groups / RDS, one finding per IAM statement,
+  recalibrated severities, comment-aware rules, one variable resolver,
+  rules that read parsed settings, and a crash exits 2 instead of looking
+  like findings.
 
 - **The report panel's Content-Security-Policy is always applied.** It
   used to be skipped if the words "Content-Security-Policy" appeared
