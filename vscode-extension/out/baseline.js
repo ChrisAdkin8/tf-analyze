@@ -41,6 +41,7 @@ exports.unsuppress = unsuppress;
 exports.ensureBaselineFile = ensureBaselineFile;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const safeWrite_1 = require("./safeWrite");
 /** Filename relative to the workspace root. Picked to be discoverable
  * by users (visible in the file tree, not hidden in `.vscode/`) but
  * obviously a config file (leading dot, kebab-case). */
@@ -72,7 +73,7 @@ function read(wsFolder) {
 }
 function write(wsFolder, data) {
     data.meta = { ...(data.meta ?? {}), last_updated: new Date().toISOString(), created_by: 'tf-analyze (vscode-extension)' };
-    fs.writeFileSync(baselinePath(wsFolder), JSON.stringify(data, null, 2) + '\n', 'utf8');
+    (0, safeWrite_1.writeFileNoFollow)(baselinePath(wsFolder), JSON.stringify(data, null, 2) + '\n');
 }
 /** Match key compatible with the engine's (id, file, resource)
  * baseline criterion (`_baseline._pair_findings`). The line is not part

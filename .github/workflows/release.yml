@@ -49,6 +49,11 @@ jobs:
         # fail the release rather than publish a half-broken docs site.
         run: python3 scripts/gen_rule_docs.py --check
 
+      - name: No unbuilt changelog fragments
+        # Release notes come from the top of CHANGELOG.md; a fragment still
+        # in changelog.d/ would be missing from them.
+        run: python3 scripts/changelog.py pending
+
       - name: Build VS Code extension VSIX
         id: build-vsix
         continue-on-error: true
