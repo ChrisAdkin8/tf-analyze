@@ -5,6 +5,16 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 80 — A character reference can't undo PR-comment escaping — 2026-10-28
+
+- **`&` is escaped**: Markdown turns a character reference such as `&#64;`
+  or `&commat;` into the character it names, so a custom rule title could
+  spell an `@mention` or an `https://` link after the escaping from Round 72
+  had removed them. `_md_text` and the Action's `mdText` now escape `&` too.
+- **Inline comment narrative**: the Action's inline review comments printed
+  the adversarial narrative as-is. It carries the resource name and file
+  path from the scanned repo, so it now goes through `mdText` like the title.
+
 ## Round 79 — One resolver for variable and local values — 2026-10-28
 
 Findings change: values behind a chain of locals or a ternary are now
