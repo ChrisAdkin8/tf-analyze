@@ -6,8 +6,8 @@
   },
   "counts": {
     "gcp": 112,
-    "aws": 122,
+    "aws": 123,
     "azure": 122,
-    "total": 359
+    "total": 360
   }
 }

@@ -1,0 +1,70 @@
+id: SEC-AWS-S3-PUBLIC-001
+title: "S3 bucket ACL grants access to everyone"
+section: security
+default_urgency: HIGH
+blast_radius: single-resource
+cis:
+  - "2.1.5.1"
+mitre:
+  - "T1530"
+cwe:
+  - "CWE-732"
+  - "CWE-284"
+nist_csf:
+  - "PR.AC-3"
+  - "PR.AC-4"
+nist_800_53:
+  - "AC-3"
+  - "AC-6"
+csa_ccm:
+  - "IAM-09"
+  - "DSP-17"
+status: active
+patterns:
+  - kind: resource_arg
+    resource: aws_s3_bucket_acl
+    arg: acl
+    regex: "^(public-read|public-read-write|authenticated-read)$"
+    description: "`aws_s3_bucket_acl` with a canned ACL that grants everyone (or every AWS account) access"
+  - kind: resource_arg
+    resource: aws_s3_bucket
+    arg: acl
+    regex: "^(public-read|public-read-write|authenticated-read)$"
+    description: legacy inline `acl` on `aws_s3_bucket` (pre-v4 provider)
+  - kind: resource_arg
+    resource: aws_s3_bucket_acl
+    arg: access_control_policy.grant.grantee.uri
+    regex: 'acs\.amazonaws\.com/groups/global/(AllUsers|AuthenticatedUsers)$'
+    description: "`access_control_policy` grant to the AllUsers or AuthenticatedUsers group"
+  - kind: resource_arg
+    resource: aws_s3_bucket
+    arg: grant.uri
+    regex: 'acs\.amazonaws\.com/groups/global/(AllUsers|AuthenticatedUsers)$'
+    description: legacy inline `grant` to the AllUsers or AuthenticatedUsers group
+recommendation: |
+  Keep bucket ACLs private and grant access through IAM or a bucket
+  policy that names specific principals. `public-read` and
+  `public-read-write` let anyone on the internet list or change the
+  objects; `authenticated-read` and the `AuthenticatedUsers` group mean
+  any AWS account at all, not just yours.
+
+  Better still, turn ACLs off: set `object_ownership = "BucketOwnerEnforced"`
+  on `aws_s3_bucket_ownership_controls` and add an
+  `aws_s3_bucket_public_access_block` with all four flags `true`. For a
+  public website, serve the bucket through CloudFront with origin access
+  control instead of making it public.
+verification: |
+  `aws s3api get-bucket-acl --bucket <name>` must show no grant to
+  `http://acs.amazonaws.com/groups/global/AllUsers` or
+  `.../AuthenticatedUsers`.
+fix_hcl: |
+  resource "aws_s3_bucket_ownership_controls" "example" {
+    bucket = aws_s3_bucket.example.id
+    rule {
+      object_ownership = "BucketOwnerEnforced"
+    }
+  }
+fix_disruption: plan_required
+fix_disruption_note: "Disabling ACLs removes every ACL grant on the bucket and its objects; clients relying on a public or cross-account ACL lose access."
+fixtures:
+  - aws_s3_public_acl
