@@ -1,7 +1,7 @@
 id: ROB-AWS-RDS-002
 title: "RDS instance or Aurora cluster skips final snapshot on deletion"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

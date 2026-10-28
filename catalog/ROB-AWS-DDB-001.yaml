@@ -1,7 +1,7 @@
 id: ROB-AWS-DDB-001
 title: "DynamoDB table missing deletion protection"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

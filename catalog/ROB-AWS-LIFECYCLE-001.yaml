@@ -1,7 +1,7 @@
 id: ROB-AWS-LIFECYCLE-001
 title: "Stateful AWS resource missing lifecycle.prevent_destroy"
 section: robustness
-default_urgency: HIGH
+default_urgency: LOW
 blast_radius: single-resource
 status: active
 patterns:
@@ -54,7 +54,7 @@ verification: |
   the resource with an error citing the prevent_destroy lifecycle rule.
 escalation:
   - condition: "is_production_environment"
-    new_urgency: CRITICAL
+    new_urgency: MEDIUM
 fixtures:
   - attack_graph_demo
   - aws_missing_prevent_destroy

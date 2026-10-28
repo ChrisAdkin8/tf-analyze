@@ -5,6 +5,24 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 77 — A secure module passes `--fail-on HIGH` — 2026-10-28
+
+Severity change only: no finding appears or disappears. 20 rules move
+down a tier; the reasons are in `docs/severity-calibration.md`.
+
+- **LOW**: missing `lifecycle.prevent_destroy` (AWS, Azure, GCP) and
+  `SEC-AWS-S3-001` (S3 has encrypted every bucket by default since
+  January 2023).
+- **MEDIUM**: `SEC-AWS-S3-PUBLIC-BLOCK-001` (new buckets block public
+  access by default since April 2023); backups, final snapshot,
+  deletion protection and `force_destroy` rules; and plan/apply
+  correctness rules (count/for_each re-keying, `ignore_changes = all`,
+  undeclared provider alias, unpinned providers, no state lock).
+- `robustness` rules are now at most MEDIUM, and a test keeps them so.
+- A private, versioned bucket with a public access block, or an encrypted
+  RDS instance with backups and deletion protection, now passes
+  `--fail-on HIGH`; before, the bucket failed on two HIGHs.
+
 ## Round 70 — `--apply-fixes` never leaves a file worse than it found it — 2026-10-27
 
 - **Multi-line values**: replacing a value that spans several lines (a
