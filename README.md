@@ -108,6 +108,8 @@ To see the deeper panels render against rich input, open one of the showcase cor
 
 By default the engine image follows the ref you call the action at — `uses: ChrisAdkin8/tf-analyze@v0.2.6` runs `ghcr.io/chrisadkin8/tf-analyze:0.2.6`, and a commit-SHA pin runs that commit's image; a branch ref falls back to `:latest` with a warning. `ref:` is a convenience alias — `ref: v0.2.6` is equivalent to `image: ghcr.io/chrisadkin8/tf-analyze:0.2.6` (the leading `v` is stripped before building the docker tag, since `docker/metadata-action` publishes semver tags without it). Both `v0.2.6` and `0.2.6` work; non-semver values like `main` or `latest` pass through untouched. Set `ref:` or `image:`, not both. See [`action.yml`](action.yml) for the full input reference, and [`integrations/github-action.yml`](integrations/github-action.yml) for an alternative install-from-source workflow that adds SARIF upload + HTML artefact.
 
+On pull requests (and merge-queue runs) the action reads `.tf-analyze.yaml`, `.tf-analyze-ignore.yaml` and the custom rules in `rules_dir` from the PR's **base branch**, not from the PR, so a PR cannot add an `ignore_rules` entry or a suppression that switches off the check it is being judged by. Settings already merged still apply, and inline `# tf-analyze:ignore` comments still count because they show in the PR diff. Set `trust-pr-config: true` to use the PR's own copies.
+
 ---
 
 ## Why tf-analyze?
