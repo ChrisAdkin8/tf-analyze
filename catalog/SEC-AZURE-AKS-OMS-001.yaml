@@ -7,7 +7,7 @@ status: active
 soc2_cc:
   - "CC7.2"
 mitre:
-  - "T1530"
+  - "T1562.008"
 cwe:
   - "CWE-778"
 d3fend:

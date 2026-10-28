@@ -9,8 +9,6 @@ blast_radius: single-resource
 # google_compute_address.address are all current, and the `.*` patterns
 # also fired on the secure `enable_legacy_abac = false`.
 status: deprecated
-mitre:
-  - "T1195.002"
 cwe:
   - "CWE-1104"
 d3fend:

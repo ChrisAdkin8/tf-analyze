@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-ALB-001 — Load balancer deletion protection disabled"
 description: "tf-analyze rule ROB-AWS-ALB-001 (MEDIUM · robustness): Load balancer deletion protection disabled"
-keywords: "robustness, medium, terraform, iac, aws, mitre-T1485, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
+keywords: "robustness, medium, terraform, iac, aws, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, aws, mitre-T1485, nist-csf-pr.ip-
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, MITRE T1485",
+  "keywords": "robustness, medium, terraform",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -100,9 +100,6 @@ must return `true`.
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **NIST CSF 2.0**
   - [`PR.IP-4`](https://www.nist.gov/cyberframework)

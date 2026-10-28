@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-RBAC-002 — RoleBinding / ClusterRoleBinding subject targets a broad system Group"
 description: "tf-analyze rule SEC-K8S-RBAC-002 (CRITICAL · security): RoleBinding / ClusterRoleBinding subject targets a broad system Group"
-keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.5, mitre-T1078.001, mitre-T1078.004, cwe-269, cwe-732, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
+keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.5, mitre-T1078.001, cwe-269, cwe-732, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.5, mitre-T1078
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 5.1.1, CIS 5.1.5, MITRE T1078.001, MITRE T1078.004, CWE-269, CWE-732",
+  "keywords": "security, critical, terraform, CIS 5.1.1, CIS 5.1.5, MITRE T1078.001, CWE-269, CWE-732",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -166,7 +166,6 @@ should not list any binding outside `kube-system`.
 
 **MITRE ATT&CK**
   - [`T1078.001`](https://attack.mitre.org/techniques/T1078/001/)
-  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
 
 **CWE**
   - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)
