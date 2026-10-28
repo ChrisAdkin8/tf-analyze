@@ -1353,6 +1353,10 @@ def mask_comments(body: str) -> str:
     return mask_comments_and_heredocs(body, heredocs=False)
 
 
+# Cached: every rule masks the same resource bodies, so without the cache
+# a scan re-walks each body once per rule (it lost its cache when the
+# `heredocs` option was added, and corpus scans got ~25% slower).
+@functools.lru_cache(maxsize=4096)
 def mask_comments_and_heredocs(body: str, *, heredocs: bool = True) -> str:
     """Return ``body`` with comments and heredoc bodies blanked to spaces
     (newlines kept, so offsets and line numbers line up). Ordinary string
