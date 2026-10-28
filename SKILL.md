@@ -238,6 +238,7 @@ Suppressed findings MUST still appear in the report under a dedicated **"Suppres
 The detection pass supports CI gating via exit codes and multiple output formats:
 
 - **`--fail-on LEVEL`** — exit with code 1 if any finding at the given urgency or above exists. Example: `detect.py --target . --fail-on HIGH` fails CI on any HIGH or CRITICAL finding but passes on MEDIUM/LOW/INFO.
+- **Exit codes** — 0 clean, 1 findings at or above `--fail-on`, 2 an error (bad input, a scan that checked nothing under a gate, or an internal crash, which prints its traceback). A crash used to exit 1 and read as "findings found".
 - **`--format sarif`** — SARIF v2.1.0 JSON for GitHub Actions Code Scanning, Azure DevOps, or any SARIF-compatible CI system. The emitter attaches `helpUri` (catalog YAML on GitHub), `help.markdown` (recommendation text), `partialFingerprints` (sha256 of `id|file|resource` — stable when prose drifts but **not** stable across file moves; a renamed file emits a RESOLVED + NEW pair), `security-severity` scores (9.5/7.5/5.0/3.0/1.0 for CRITICAL/HIGH/MEDIUM/LOW/INFO), and CIS control tags for controls-mapped findings.
 - **`--format html`** — self-contained HTML report with collapsible `<details>` per catalogue ID and urgency-colored badges. Right for human review of large findings lists — use alongside `--format sarif` in CI to publish both as workflow artifacts.
 - **`--compare <prior.json>`** — compare against a prior `--format json` report and output a delta (new, resolved, unchanged). Useful for PR comments showing what changed.

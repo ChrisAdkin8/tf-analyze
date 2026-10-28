@@ -52,16 +52,24 @@ def walk_plan_resources(planned: dict) -> list[dict]:
     """
     out: list[dict] = []
 
-    def walk(node: dict | None) -> None:
-        if not node:
+    # Plan / state JSON can be hand-edited or produced by other tools, so
+    # check each shape rather than trust it: a non-object resource, a
+    # non-object ``values`` or a non-list ``child_modules`` used to raise
+    # AttributeError / TypeError and exit 1, the "findings found" code.
+    def walk(node) -> None:
+        if not isinstance(node, dict):
             return
-        for r in node.get("resources") or []:
+        resources = node.get("resources")
+        for r in resources if isinstance(resources, list) else []:
+            if not isinstance(r, dict) or not isinstance(r.get("values", {}), (dict, type(None))):
+                continue
             if r.get("mode") == "managed" or r.get("mode") is None:
                 out.append(r)
-        for cm in node.get("child_modules") or []:
+        children = node.get("child_modules")
+        for cm in children if isinstance(children, list) else []:
             walk(cm)
 
-    walk((planned or {}).get("root_module"))
+    walk(planned.get("root_module") if isinstance(planned, dict) else None)
     return out
 
 

@@ -3534,7 +3534,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main():
+def _main():
     ap = _build_parser()
     args = ap.parse_args()
     _warn_deprecated_parser_switches(args)
@@ -3994,6 +3994,27 @@ import _handlers_robustness  # noqa: E402,F401  (R30.15 — 14 robustness handle
 import _handlers_modules  # noqa: E402,F401  (R30.15 — 7 module-lifecycle handlers)
 import _handlers_infra  # noqa: E402,F401  (R30.15 — 9 infra/backend/provider handlers)
 import _handlers_policy  # noqa: E402,F401  (policy-as-code DSL — kind: policy)
+
+
+
+def main():
+    """Console entry point (``tf-analyze`` / ``detect.py``).
+
+    Exit codes: 0 clean, 1 findings at or above ``--fail-on``, 2 an error.
+    Python exits 1 on an uncaught exception, so a crash used to read as
+    "findings found" to every CI gate; it now prints the traceback and
+    exits 2. ``SystemExit`` (the deliberate exits) passes through."""
+    try:
+        _main()
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        print("tf-analyze: internal error, exiting 2 (not a findings result). "
+              "Please report it with the traceback above.", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
