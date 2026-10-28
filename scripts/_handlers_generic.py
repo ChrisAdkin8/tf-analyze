@@ -32,6 +32,7 @@ from _hcl import (
     block_has_nested_path,
     resource_has_path,
     resource_values_at,
+    mask_comments,
     mask_comments_and_heredocs,
     brace_walk,
     strip_hcl_context,
@@ -117,12 +118,15 @@ def _name_selected(pat: dict, blk: dict) -> bool:
     return True
 
 
-def _suppressed_by(spec: dict | None, blk: dict, var_defaults: dict) -> bool:
+def _suppressed_by(spec: dict | list | None, blk: dict, var_defaults: dict) -> bool:
     """Whether ``suppress_if: {arg, equals | regex}`` holds for a resource:
     a value of `arg` (variables resolved; may be a dotted path such as
     ``default_action.type``, where any instance counts) equals the
     literal, case-insensitively, or matches the regex. Read from the
-    parse tree, so `terraform fmt` alignment does not matter."""
+    parse tree, so `terraform fmt` alignment does not matter. A list of
+    such mappings holds when any one of them does."""
+    if isinstance(spec, list):
+        return any(_suppressed_by(s, blk, var_defaults) for s in spec if isinstance(s, dict))
     if not spec or not spec.get("arg"):
         return False
     want = str(spec.get("equals", "")).lower().strip("\"'")
@@ -396,10 +400,14 @@ def _detect_resource_missing_companion(c: InFileCtx) -> list[dict]:
     a resource points at — e.g. a bucket that is some
     ``aws_s3_bucket_logging``'s ``target_bucket`` is a log destination and
     does not log its own access.
+
+    ``unless_repo_has: T`` (see `_repo_has`) skips the pattern when an
+    account-level resource stands in for every companion, e.g. an
+    ``aws_s3_account_public_access_block``.
     """
     pat = c.pat
     rt, ctype, via = pat.get("resource"), pat.get("companion"), pat.get("via")
-    if not (rt and ctype and via):
+    if not (rt and ctype and via) or _repo_has(pat, c.var_defaults):
         return []
     spec = {"resource": ctype, "via": via}
     exempt = pat.get("exempt_if_companion")
@@ -560,6 +568,18 @@ def _detect_removed_block_present(c: InFileCtx) -> list[dict]:
     return out
 
 
+_LINE_COMMENT_RE = re.compile(r"(?m)^[ \t]*#.*$")
+
+
+def _without_comments(c: InFileCtx) -> str:
+    """The file with comments blanked: HCL-aware for Terraform sources
+    (heredoc text kept), whole ``#`` comment lines for anything else
+    (workflow YAML, shell)."""
+    if c.file_path.name.endswith((".tf", ".tf.json", ".tfvars")):
+        return mask_comments(c.text)
+    return _LINE_COMMENT_RE.sub("", c.text)
+
+
 @_register_infile("grep")
 def _detect_grep(c: InFileCtx) -> list[dict]:
     """``grep`` — the most-used pattern kind. Match a regex against
@@ -568,7 +588,8 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
     * ``scope == "resource_body"`` — search only inside resource
       bodies, optionally filtered by resource type via ``resource``.
       Honours ``count = 0`` so resources definitely not created are
-      skipped.
+      skipped. Comments are blanked first; heredoc text (``user_data``
+      scripts) is kept.
     * default — search the full file. ``code_only: true`` first blanks
       comments and heredoc bodies (HCL-aware); ``hcl_context: true``
       blanks comments only (older stripper, keeps heredoc text). Both
@@ -608,7 +629,9 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
             ) from e
         if not matched:
             return []
-    if not_regex_grep is not None and not_regex_grep.search(c.text):
+    # A commented-out line can't switch a rule off (`# environment: prod`
+    # in a workflow silenced SEC-CICD-001), nor, below, switch one on.
+    if not_regex_grep is not None and not_regex_grep.search(_without_comments(c)):
         return []
     scope = pat.get("scope", "")
     out: list[dict] = []
@@ -620,7 +643,7 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
                 continue
             if _resource_is_count_zero(blk["body"], c.var_defaults):
                 continue
-            if regex.search(blk["body"]):
+            if regex.search(mask_comments(blk["body"])):
                 out.append({
                     "id": c.eid,
                     "file": str(c.file_path),

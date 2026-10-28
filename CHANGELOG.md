@@ -15,6 +15,124 @@ Self-test fixture counts are cumulative.
   the adversarial narrative as-is. It carries the resource name and file
   path from the scanned repo, so it now goes through `mdText` like the title.
 
+## Round 79 — One resolver for variable and local values — 2026-10-28
+
+Findings change: values behind a chain of locals or a ternary are now
+read correctly. Terragoat totals are unchanged.
+
+- **Chains**: `locals { enc = var.enc }` then `encrypted = local.enc`
+  resolved to the text `var.enc`, so `SEC-AWS-REDSHIFT-001` fired even
+  with `default = true`. References are now followed (up to 8 steps;
+  a cycle is left as written).
+- **Ternaries**: `var.prod ? "aws:kms" : "AES256"` was split on its
+  first `:` and folded to `aws`. The split now steps over strings,
+  brackets, parentheses and nested ternaries. Single quotes are no
+  longer stripped from a branch (HCL has none).
+- **Firewall rules** use the same resolver (`_network.resolve` had its
+  own), so a ternary port such as `var.admin ? 22 : 443` folds there too.
+  A ternary that picks a *list* of CIDRs still does not fold.
+
+## Round 78 — `grep` rules don't read commented-out code — 2026-10-28
+
+Findings change: fewer false alarms on commented-out code, and one
+missed CI/CD problem now caught.
+
+- **`scope: resource_body`** greps (`SEC-USERDATA-001`) blank comments
+  before searching, so `# user_data = "curl … | bash"` no longer fires.
+  Heredoc text is still searched (a `user_data` script lives there), and
+  a `#` inside a heredoc or string is not taken for a comment.
+- **Whole-file greps over Terraform code** (`SEC-AWS-IAM-OIDC-001`,
+  `SEC-LOG-CROSS-ACCOUNT-001`, `SEC-PROVISIONER-002`) now set
+  `code_only: true`. The secret-scanning greps still read comments: a
+  secret in a comment is still a leak.
+- **`not_regex`** is tested with comments removed, so a commented-out
+  `# environment: production` no longer silences `SEC-CICD-001`.
+
+## Round 77 — A secure module passes `--fail-on HIGH` — 2026-10-28
+
+Severity change only: no finding appears or disappears. 20 rules move
+down a tier; the reasons are in `docs/severity-calibration.md`.
+
+- **LOW**: missing `lifecycle.prevent_destroy` (AWS, Azure, GCP) and
+  `SEC-AWS-S3-001` (S3 has encrypted every bucket by default since
+  January 2023).
+- **MEDIUM**: `SEC-AWS-S3-PUBLIC-BLOCK-001` (new buckets block public
+  access by default since April 2023); backups, final snapshot,
+  deletion protection and `force_destroy` rules; and plan/apply
+  correctness rules (count/for_each re-keying, `ignore_changes = all`,
+  undeclared provider alias, unpinned providers, no state lock).
+- `robustness` rules are now at most MEDIUM, and a test keeps them so.
+- A private, versioned bucket with a public access block, or an encrypted
+  RDS instance with backups and deletion protection, now passes
+  `--fail-on HIGH`; before, the bucket failed on two HIGHs.
+
+## Round 76 — One IAM statement, one finding — 2026-10-28
+
+Findings change: AWS terragoat 127 → 123.
+
+- A statement with both `Action = "*"` and `Resource = "*"` raised three
+  findings — wildcard action, wildcard resource, and both — which
+  tripled the count and the score hit for one problem. It is now
+  reported once, by `SEC-AWS-IAM-JSON-003` (inline JSON) or
+  `SEC-AWS-IAM-POLICY-005` (`aws_iam_policy_document`), both CRITICAL.
+  `SEC-AWS-IAM-JSON-001` / `SEC-AWS-IAM-001` and
+  `SEC-AWS-IAM-POLICY-001` / `-003` cover statements with only one of
+  the two wildcards. If you turn off the "both" rules with
+  `ignore_rules`, turn off the single-wildcard rules too or expect
+  admin statements to go unreported.
+
+## Round 75 — RDS rules follow what the AWS provider sends — 2026-10-28
+
+Findings change: fewer RDS false alarms.
+
+- **`ROB-AWS-RDS-001`** no longer flags Aurora clusters. The provider
+  omits an unset (or `0`) `backup_retention_period` for
+  `aws_rds_cluster`, so AWS's 1-day default applies, and Aurora can't
+  turn backups off. `aws_db_instance` is still flagged: there the
+  provider sends `0`. Read replicas (`replicate_source_db`) are skipped.
+  Its Terraform test template checked `deletion_protection`; it now
+  checks `backup_retention_period > 0`.
+- **`SEC-AWS-RDS-002`** skips a missing `storage_encrypted` on read
+  replicas and snapshot restores (encryption comes from the source),
+  on Aurora Serverless v1 (always encrypted) and on cross-region
+  replica clusters. An explicit `storage_encrypted = false` still fires.
+- **`suppress_if`** accepts a list; the finding is skipped when any entry
+  holds (static, plan and state modes).
+
+## Round 74 — Firewall rules see dynamic blocks and the default security group — 2026-10-28
+
+Findings change: some firewall rules now fire where they did not.
+Terragoat totals are unchanged.
+
+- **`dynamic` blocks**: a `dynamic "ingress"` (AWS), `dynamic
+  "security_rule"` (Azure) or `dynamic "allow"` (GCP) block was folded
+  in once with its `ingress.value.*` references unresolved, so SSH open
+  to the world through a variable-driven list passed. When `for_each`
+  is a literal list or map, or a `var.` / `local.` with a default, each
+  instance is now checked with its values filled in (named `iterator`s
+  too). An unknown `for_each` is not guessed.
+- **`aws_default_security_group`**: now checked by `SEC-AWS-SG-001`; a
+  default group with an `ingress` open to 0.0.0.0/0 or ::/0 passed.
+
+## Round 73 — S3 rules read the setting, not just its presence — 2026-10-28
+
+Findings change: AWS terragoat 126 → 127. New rule: 354 in all.
+
+- **New `SEC-AWS-S3-PUBLIC-001` (HIGH)**: a bucket ACL that grants
+  everyone access — `public-read`, `public-read-write` or
+  `authenticated-read`, on `aws_s3_bucket_acl` or the legacy inline
+  `acl`, or a grant to the `AllUsers` / `AuthenticatedUsers` group.
+  Nothing caught a public bucket before.
+- **`SEC-AWS-S3-PUBLIC-BLOCK-001`** now also fires on a public access
+  block (bucket or account level) with any of its four flags `false` or
+  left out (they default to `false`); before, a block with every flag
+  off passed. An `aws_s3_account_public_access_block` now covers every
+  bucket, so buckets without their own block no longer each raise HIGH.
+- **`ROB-AWS-S3-001`** catches the legacy inline
+  `versioning { enabled = false }`, which passed because only the
+  block's presence was checked.
+- `resource_missing_companion` accepts `unless_repo_has`.
+
 ## Round 72 — A custom rule can't write Markdown into PR comments — 2026-10-28
 
 - **Rule titles**: a custom rule in a repo's `rules_dir` supplies its own

@@ -1,7 +1,7 @@
 id: ROB-AWS-LIFECYCLE-002
 title: "S3 bucket has force_destroy enabled"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

@@ -6,7 +6,9 @@ list of inbound rules — sources, port range — so one matcher (and the
 structured ``escalation: match: {ports: [...]}``) works across AWS, Azure
 and GCP:
 
-* ``aws_security_group`` — ``ingress`` blocks and the ``ingress = [{...}]``
+* ``aws_security_group`` / ``aws_default_security_group`` — ``ingress``
+  blocks (``dynamic`` ones expanded when their ``for_each`` is known,
+  see `expand_dynamic`) and the ``ingress = [{...}]``
   attribute form (egress is ignored);
 * ``aws_security_group_rule`` with ``type = "ingress"``;
 * ``aws_vpc_security_group_ingress_rule``;
@@ -33,6 +35,8 @@ from _hcl import (
     _is_block_list,
     _mask_to_top_level,
     _top_level_arg_value,
+    parse_tf,
+    resolve_value_text,
     single_interpolation,
 )
 
@@ -47,6 +51,7 @@ _RANGE_RE = re.compile(r"^\s*(\d+)\s*(?:-\s*(\d+))?\s*$")
 
 SUPPORTED_TYPES = frozenset(
     {
+        "aws_default_security_group",
         "aws_security_group",
         "aws_security_group_rule",
         "aws_vpc_security_group_ingress_rule",
@@ -135,9 +140,10 @@ def parse_literal(text: str):
 
 
 def resolve(value, var_defaults: dict, _depth: int = 0):
-    """Resolve a plain ``var.X`` / ``local.X`` reference (bare or as a
-    single ``${...}``) to its default, recursively and element-wise for
-    lists. Anything unresolvable is returned unchanged."""
+    """Resolve a value through `_hcl.resolve_value_text` (``var.X`` /
+    ``local.X`` chains, bare or as one ``${...}``, and ``cond ? a : b``
+    folding) and parse the result, element-wise for lists. Anything
+    unresolvable is returned unchanged."""
     if isinstance(value, list):
         out: list = []
         for v in value:
@@ -146,15 +152,76 @@ def resolve(value, var_defaults: dict, _depth: int = 0):
         return out
     if not isinstance(value, str) or _depth > 4:
         return value
-    expr = single_interpolation(value)
-    m = _REF_RE.match((expr if expr is not None else value).strip())
-    if not m:
+    text = resolve_value_text(value, var_defaults)
+    if text == value:
         return value
-    key = m.group(2) if m.group(1) == "var" else "__local__" + m.group(2)
-    raw = var_defaults.get(key)
-    if raw is None:
+    return resolve(parse_literal(text), var_defaults, _depth + 1)
+
+
+_ITER_REF_RE = re.compile(r"^([\w-]+)\.(value|key)((?:\.[\w-]+)*)$")
+
+
+def _collection(expr, var_defaults: dict):
+    """The value a ``for_each`` iterates: a literal list / map, or the
+    value a ``var.X`` / ``local.X`` reference resolves to (followed through
+    chains like ``resolve``). None when unknown."""
+    if isinstance(expr, (list, dict)):
+        return expr
+    if not isinstance(expr, str):
+        return None
+    raw = resolve_value_text(expr, var_defaults)
+    if raw == expr:
+        return None
+    tree, _ = parse_tf(f"__v = {raw}\n")
+    value = (tree or {}).get("__v")
+    return value if isinstance(value, (list, dict)) else None
+
+
+def _substitute(value, iterator: str, key, element):
+    """`value` with every whole ``${<iterator>.value[.a.b]}`` /
+    ``${<iterator>.key}`` replaced from one ``for_each`` element."""
+    if isinstance(value, dict):
+        return {k: _substitute(v, iterator, key, element) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_substitute(v, iterator, key, element) for v in value]
+    inner = single_interpolation(value) if isinstance(value, str) else None
+    m = _ITER_REF_RE.match(inner.strip()) if inner is not None else None
+    if not m or m.group(1) != iterator:
         return value
-    return resolve(parse_literal(raw), var_defaults, _depth + 1)
+    if m.group(2) == "key":
+        return key
+    out = element
+    for part in filter(None, m.group(3).split(".")):
+        if not isinstance(out, dict) or part not in out:
+            return value
+        out = out[part]
+    return out
+
+
+def expand_dynamic(views: list, var_defaults: dict) -> list:
+    """One view per instance of each ``dynamic`` block whose ``for_each``
+    is known (see `_hcl.normalise_attrs`), with the iterator's values
+    filled in, so ``dynamic "ingress"`` over a variable is checked like
+    the literal blocks it produces. An unknown ``for_each`` keeps the one
+    folded block, as before."""
+    out: list = []
+    for v in views:
+        attrs = getattr(v, "_attrs", None)
+        if not isinstance(attrs, dict) or "__for_each__" not in attrs:
+            out.append(v)
+            continue
+        coll = _collection(attrs["__for_each__"], var_defaults)
+        if isinstance(coll, dict):
+            items = list(coll.items())
+        elif isinstance(coll, list):
+            items = list(enumerate(coll))
+        else:
+            out.append(v)
+            continue
+        body = {k: x for k, x in attrs.items() if k not in ("__for_each__", "__iterator__")}
+        iterator = str(attrs.get("__iterator__"))
+        out.extend(TreeView(_substitute(body, iterator, k, e)) for k, e in items)
+    return out
 
 
 def _as_list(value) -> list:
@@ -264,7 +331,7 @@ def _gcp_rules(view, vd: dict) -> list[InboundRule]:
     ):
         sources = ("0.0.0.0/0",)
     rules: list[InboundRule] = []
-    for allow in view.blocks("allow"):
+    for allow in expand_dynamic(view.blocks("allow"), vd):
         protocol = str(resolve(allow.get("protocol"), vd)).lower()
         specs = _as_list(resolve(allow.get("ports"), vd))
         if not specs or protocol in _ALL_PROTOCOLS:
@@ -277,7 +344,7 @@ def _gcp_rules(view, vd: dict) -> list[InboundRule]:
 def inbound_rules(resource_type: str, view, var_defaults: dict) -> list[InboundRule]:
     """Every inbound allow rule on one resource, normalised."""
     vd = var_defaults
-    if resource_type == "aws_security_group":
+    if resource_type in ("aws_security_group", "aws_default_security_group"):
         return [
             _aws_rule(
                 i,
@@ -285,7 +352,7 @@ def inbound_rules(resource_type: str, view, var_defaults: dict) -> list[InboundR
                 cidr_keys=("cidr_blocks", "ipv6_cidr_blocks"),
                 protocol_key="protocol",
             )
-            for i in view.blocks("ingress")
+            for i in expand_dynamic(view.blocks("ingress"), vd)
         ]
     if resource_type == "aws_security_group_rule":
         if _is_not(resolve(view.get("type"), vd), "ingress"):
@@ -309,7 +376,9 @@ def inbound_rules(resource_type: str, view, var_defaults: dict) -> list[InboundR
         ]
     if resource_type == "azurerm_network_security_group":
         return [
-            r for rule in view.blocks("security_rule") for r in _azure_rules(rule, vd)
+            r
+            for rule in expand_dynamic(view.blocks("security_rule"), vd)
+            for r in _azure_rules(rule, vd)
         ]
     if resource_type == "azurerm_network_security_rule":
         return _azure_rules(view, vd)

@@ -284,9 +284,11 @@ def parse_tf(text: str) -> tuple[dict | None, str | None]:
 def normalise_attrs(body: dict) -> dict:
     """Return a copy of a resource/block subtree with every
     ``dynamic "X" { content { ... } }`` folded in as a plain ``X`` block,
-    recursively — the tree counterpart of `_expand_dynamic_blocks`. The
-    ``for_each`` value is dropped: values that come from it
-    (``${X.value}``) are unknown at parse time."""
+    recursively — the tree counterpart of `_expand_dynamic_blocks`.
+    Values that come from ``for_each`` (``${X.value}``) are unknown at
+    parse time, so the block is folded in once; it keeps its ``for_each``
+    and iterator name under ``__for_each__`` / ``__iterator__`` for
+    callers that can evaluate them (`_network.expand_dynamic`)."""
     out: dict = {}
     dynamic = body.get("dynamic")
     for k, v in body.items():
@@ -304,11 +306,18 @@ def normalise_attrs(body: dict) -> dict:
         for name, spec in item.items():
             if not isinstance(spec, dict):
                 continue
+            iterator = spec.get("iterator") or name
+            if isinstance(iterator, str):
+                iterator = single_interpolation(iterator) or iterator
             for content in spec.get("content") or []:
                 if isinstance(content, dict):
+                    folded = normalise_attrs(content)
+                    if "for_each" in spec:
+                        folded["__for_each__"] = spec["for_each"]
+                        folded["__iterator__"] = iterator
                     out.setdefault(name, [])
                     if isinstance(out[name], list):
-                        out[name].append(normalise_attrs(content))
+                        out[name].append(folded)
     return out
 
 
@@ -361,6 +370,108 @@ def attrs_has_path(attrs: dict, path: str, *, every: bool = True) -> bool:
 # (tasks/hcl-parser-migration.md §4.6).
 
 _HCL_IDENT_RE = re.compile(r'^[A-Za-z_][\w-]*$')
+
+
+_PLAIN_REF_RE = re.compile(r"^(var|local)\.([\w-]+)$")
+_MAX_RESOLVE_DEPTH = 8
+
+
+def _split_ternary(expr: str) -> tuple[str, str, str] | None:
+    """``(cond, then, else)`` for ``cond ? then : else`` at the top level of
+    `expr`, or None. Strings, ``${}``, brackets and nested ternaries are
+    stepped over, so ``"aws:kms"`` or ``a ? b ? c : d : e`` split where
+    Terraform splits them (a regex on the first ``:`` does not)."""
+    depth = 0
+    q = -1
+    pending = 0
+    i, n = 0, len(expr)
+    while i < n:
+        ch = expr[i]
+        if ch == '"':
+            i = _string_end(expr, i)
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and ch == "?":
+            if q < 0:
+                q = i
+            else:
+                pending += 1
+        elif depth == 0 and ch == ":" and q >= 0:
+            if pending:
+                pending -= 1
+            else:
+                return expr[:q].strip(), expr[q + 1:i].strip(), expr[i + 1:].strip()
+        i += 1
+    return None
+
+
+def _strip_parens(expr: str) -> str:
+    """`expr` without parentheses that wrap all of it: ``(a ? b : c)``."""
+    while expr.startswith("(") and expr.endswith(")"):
+        depth, i, n = 0, 0, len(expr)
+        while i < n:
+            ch = expr[i]
+            if ch == '"':
+                i = _string_end(expr, i)
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if i != n - 1:
+            return expr
+        expr = expr[1:-1].strip()
+    return expr
+
+
+def _unquote_literal(text: str) -> str:
+    """A whole ``"..."`` string literal without its quotes; anything else
+    as is. HCL has no single-quoted strings."""
+    t = text.strip()
+    if len(t) >= 2 and t[0] == '"' and _string_end(t, 0) == len(t):
+        return t[1:-1]
+    return t
+
+
+def resolve_value_text(val: str, var_defaults: dict, _seen: frozenset = frozenset()) -> str:
+    """The value of an HCL expression, as text, when it is known statically:
+    a plain ``var.X`` / ``local.X`` (bare or one ``${...}``) is replaced by
+    its default, following chains (``local.a = var.b``); ``cond ? a : b``
+    folds when ``cond`` resolves to ``true`` / ``false``. Anything else,
+    including an unknown or cyclic reference, is returned unchanged. The
+    one resolver behind `detect._resolve_var_ref` and `_network.resolve`.
+    Locals are stored as ``__local__<name>``."""
+    if len(_seen) > _MAX_RESOLVE_DEPTH:
+        return val
+    expr = val.strip()
+    inner = single_interpolation(expr)
+    if inner is not None:
+        expr = inner.strip()
+    expr = _strip_parens(expr)
+    m = _PLAIN_REF_RE.match(expr)
+    if m:
+        key = m.group(2) if m.group(1) == "var" else "__local__" + m.group(2)
+        raw = var_defaults.get(key)
+        if raw is None or key in _seen:
+            return val
+        resolved = resolve_value_text(raw, var_defaults, _seen | {key})
+        # A cycle (local.a = local.b = local.a) never settles: keep `val`.
+        return val if _PLAIN_REF_RE.match(_strip_parens(resolved.strip())) and \
+            resolved.strip() != raw.strip() else resolved
+    parts = _split_ternary(expr)
+    if parts:
+        cond, then_b, else_b = parts
+        c = _unquote_literal(resolve_value_text(cond, var_defaults, _seen)).lower()
+        if c in ("true", "false"):
+            branch = then_b if c == "true" else else_b
+            return _unquote_literal(resolve_value_text(branch, var_defaults, _seen))
+    return val
 
 
 def single_interpolation(value: str) -> str | None:
@@ -1171,7 +1282,15 @@ def _mask_to_top_level(body: str) -> str:
 
 
 @functools.lru_cache(maxsize=4096)
-def mask_comments_and_heredocs(body: str) -> str:
+def mask_comments(body: str) -> str:
+    """`mask_comments_and_heredocs` without blanking heredocs: comments
+    go, heredoc text stays (and a ``#`` inside it, such as a script's
+    ``#!/bin/bash``, is not taken for a comment). For rules that read
+    scripts or documents in heredocs, such as ``user_data``."""
+    return mask_comments_and_heredocs(body, heredocs=False)
+
+
+def mask_comments_and_heredocs(body: str, *, heredocs: bool = True) -> str:
     """Return ``body`` with comments and heredoc bodies blanked to spaces
     (newlines kept, so offsets and line numbers line up). Ordinary string
     literals are kept — regexes over a body commonly match quoted values
@@ -1209,7 +1328,8 @@ def mask_comments_and_heredocs(body: str) -> str:
             term = re.compile(rf'(?m)^[ \t]*{re.escape(m.group(1))}[ \t]*\r?$')
             t = term.search(body, m.end())
             j = n if t is None else t.end()
-            blank(i, j)
+            if heredocs:
+                blank(i, j)
             i = j
         else:
             i += 1

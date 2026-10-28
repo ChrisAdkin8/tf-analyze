@@ -34,6 +34,7 @@ patterns:
     text_scan: "stub rule (inactive) - not yet reviewed for a structured rewrite"
     file_glob: "**/*.tf"
     regex: 'image\s*=\s*"(?!.*@sha256:)[^"]+:latest"'
+    code_only: true
     description: K8s container image with `:latest` tag, no SHA pin
 recommendation: |
   Pin every image to a SHA256 digest:

@@ -1,7 +1,7 @@
 id: ROB-COUNTREF-002
 title: "Unguarded indexed reference to count = length(...) resource"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 patterns:

@@ -1,6 +1,6 @@
 # Custom rules
 
-tf-analyze ships a 353-rule built-in catalogue, but every team has
+tf-analyze ships a 354-rule built-in catalogue, but every team has
 patterns that aren't generally applicable: company-wide tagging
 conventions, naming schemes, blocked module sources, vendor-specific
 limits. The custom-rules system lets you ship those rules alongside
