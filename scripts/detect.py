@@ -446,13 +446,20 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
     # provider declares default_tags is recorded under the synthetic key
     # __aws_default_tags__. Tag-related findings in that dir are then
-    # suppressed (the provider injects the tags downstream).
+    # suppressed (the provider injects the tags downstream). Which provider
+    # configurations carry them (`aws`, `aws.<alias>`) is kept under
+    # __aws_default_tags_providers__ so child modules inherit them below.
     for fp, text in all_files_text.items():
         for pblk in find_blocks(text, PROVIDER_START):
             # A real `default_tags` block, not the word in a comment or
             # string (`# TODO: add default_tags` silenced every AWS tag rule).
             if pblk["groups"][0] == "aws" and block_has_arg(pblk["body"], "default_tags"):
-                base.setdefault(str(Path(fp).parent), {})["__aws_default_tags__"] = "true"
+                ctx = base.setdefault(str(Path(fp).parent), {})
+                ctx["__aws_default_tags__"] = "true"
+                alias = (block_arg_value(pblk["body"], "alias") or "").strip().strip('"')
+                names = set(ctx.get("__aws_default_tags_providers__", "").split())
+                names.add(f"aws.{alias}" if alias else "aws")
+                ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
 
     # Resource types present anywhere in the scan, minus ones switched off
     # with `enabled = false`, for `unless_repo_has` (account-level settings
@@ -467,8 +474,9 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
         for dir_key in {str(Path(fp).parent) for fp in all_files_text}:
             base.setdefault(dir_key, {})["__repo_has__"] = " ".join(present)
 
-    # Module calls, in a stable order: (caller dir, child dir, inputs).
-    calls: list[tuple[str, str, dict[str, str]]] = []
+    # Module calls, in a stable order: (caller dir, child dir, inputs, the
+    # caller's provider configuration the child's default `aws` is).
+    calls: list[tuple[str, str, dict[str, str], str]] = []
     for fp in sorted(all_files_text, key=str):
         parent_dir = str(Path(fp).parent)
         for mblk in find_blocks(all_files_text[fp], MODULE_START):
@@ -479,11 +487,12 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
                 child_dir = str((Path(parent_dir) / source).resolve())
             except (OSError, ValueError):
                 continue
-            inputs = {
-                k: v for k, v in _top_level_assignments(mblk["body"]).items()
-                if k not in _MODULE_META_ARGS
-            }
-            calls.append((parent_dir, child_dir, inputs))
+            assigns = _top_level_assignments(mblk["body"])
+            inputs = {k: v for k, v in assigns.items() if k not in _MODULE_META_ARGS}
+            # A child uses the caller's default `aws` unless `providers = {
+            # aws = aws.<alias> }` passes another configuration.
+            m = re.search(r'(?<![\w.])aws\s*=\s*(aws(?:\.[\w-]+)?)\b', assigns.get("providers", ""))
+            calls.append((parent_dir, child_dir, inputs, m.group(1) if m else "aws"))
 
     contexts: dict[str, list[dict]] = {}
     in_progress: set[str] = set()
@@ -492,7 +501,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
         if d in contexts:
             return contexts[d]
         own = base.get(d, {})
-        incoming = [(p, inputs) for p, c, inputs in calls if c == d]
+        incoming = [(p, inputs, aws) for p, c, inputs, aws in calls if c == d]
         if d in in_progress:  # a call cycle: stop at this module's own values
             return [dict(own)]
         if not incoming:  # a root module
@@ -500,9 +509,15 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             return contexts[d]
         in_progress.add(d)
         found: list[dict] = []
-        for parent_dir, inputs in incoming:
+        for parent_dir, inputs, aws_provider in incoming:
             for parent_ctx in contexts_of(parent_dir):
                 ctx = dict(own)
+                # Provider default_tags reach the child's resources through
+                # the configuration it is given, so its tag rules see them.
+                if aws_provider in parent_ctx.get("__aws_default_tags_providers__", "").split():
+                    ctx["__aws_default_tags__"] = "true"
+                    names = set(ctx.get("__aws_default_tags_providers__", "").split()) | {"aws"}
+                    ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
                 for k, raw in inputs.items():
                     # Only literal values flow (after resolving the caller's
                     # own var./local. references); an unresolved expression
@@ -517,7 +532,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
         contexts[d] = found
         return found
 
-    for d in sorted(set(base) | {c for _, c, _ in calls}):
+    for d in sorted(set(base) | {c for _, c, _, _ in calls}):
         contexts_of(d)
     return contexts
 
