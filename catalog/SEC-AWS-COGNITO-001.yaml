@@ -1,7 +1,7 @@
 id: SEC-AWS-COGNITO-001
 title: "Cognito user pool MFA not enabled"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:

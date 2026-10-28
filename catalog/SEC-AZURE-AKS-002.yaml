@@ -1,7 +1,7 @@
 id: SEC-AZURE-AKS-002
 title: "AKS cluster missing network policy"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 cis:
   - "5.3"

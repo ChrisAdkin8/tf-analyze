@@ -1,7 +1,7 @@
 id: SEC-SENSITIVE-003
 title: "Sensitive variable passed to templatefile()"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 mitre:

@@ -1,7 +1,7 @@
 id: SEC-AWS-CLOUDFRONT-001
 title: "CloudFront distribution serves HTTP without redirect"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:

@@ -1,7 +1,7 @@
 id: SEC-AWS-REDSHIFT-001
 title: "Redshift cluster encryption disabled"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:
@@ -60,3 +60,6 @@ fix_hcl: |
 fix_disruption: forces_replacement
 fixtures:
   - aws_redshift_no_encryption
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: HIGH

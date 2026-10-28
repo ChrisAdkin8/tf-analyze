@@ -1,7 +1,7 @@
 id: STK-AWS-EKS-001
 title: "EKS cluster API endpoint private access not enabled"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 cis:
   - "5.4.3"

@@ -1,7 +1,7 @@
 id: SEC-GCP-COMPUTE-SA-001
 title: "Compute instance uses default Compute Engine service account"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:

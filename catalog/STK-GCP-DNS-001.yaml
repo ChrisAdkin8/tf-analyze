@@ -1,7 +1,7 @@
 id: STK-GCP-DNS-001
 title: "Cloud DNS managed zone missing DNSSEC"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

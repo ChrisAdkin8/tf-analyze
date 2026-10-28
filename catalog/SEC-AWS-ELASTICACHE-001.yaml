@@ -1,7 +1,7 @@
 id: SEC-AWS-ELASTICACHE-001
 title: "ElastiCache replication group missing encryption"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 nist_csf:
@@ -57,3 +57,6 @@ fix_disruption_note: "Encryption settings cannot be changed on an existing Elast
 
 fixtures:
   - aws_elasticache_no_encryption
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: HIGH

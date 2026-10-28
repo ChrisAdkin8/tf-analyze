@@ -1,7 +1,7 @@
 ---
 title: "SEC-DATASOURCE-003 — `data \\"external\\"` or `data \\"http\\"` runs at plan time"
-description: "tf-analyze rule SEC-DATASOURCE-003 (HIGH · security): `data \'external\'` or `data \'http\'` runs at plan time"
-keywords: "security, high, terraform, iac, mitre-T1059, mitre-T1071.001, cwe-829, cwe-78, nist-csf-pr.ds-6, nist-800-53-si-3, nist-800-53-cm-7, csa-ccm-tvm-04, slsa-build"
+description: "tf-analyze rule SEC-DATASOURCE-003 (MEDIUM · security): `data \'external\'` or `data \'http\'` runs at plan time"
+keywords: "security, medium, terraform, iac, mitre-T1059, mitre-T1071.001, cwe-829, cwe-78, nist-csf-pr.ds-6, nist-800-53-si-3, nist-800-53-cm-7, csa-ccm-tvm-04, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, mitre-T1059, mitre-T1071.001, cwe-829
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1059, MITRE T1071.001, CWE-829, CWE-78",
+  "keywords": "security, medium, terraform, MITRE T1059, MITRE T1071.001, CWE-829, CWE-78",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-DATASOURCE-003 — `data \"external\"` or `data \"http\"` runs at plan time
+# 💡 SEC-DATASOURCE-003 — `data \"external\"` or `data \"http\"` runs at plan time
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-DATASOURCE-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-DATASOURCE-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-DATASOURCE-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **`data \"external\"` or `data \"http\"` runs at plan time.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+> **`data \"external\"` or `data \"http\"` runs at plan time.** This rule has `default_urgency: MEDIUM` and operates on a module blast radius. 
 
 ## What this checks
 

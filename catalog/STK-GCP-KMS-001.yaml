@@ -1,7 +1,7 @@
 id: STK-GCP-KMS-001
 title: "KMS crypto key missing rotation period"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:

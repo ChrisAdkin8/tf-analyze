@@ -1,7 +1,7 @@
 id: SEC-AZURE-KV-001
 title: "Azure Key Vault missing purge protection or soft delete"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 cis:
   - "8.4"

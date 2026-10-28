@@ -1,7 +1,7 @@
 id: STK-GCP-FUNCTIONS-001
 title: "GCP Cloud Function uses end-of-life runtime"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:

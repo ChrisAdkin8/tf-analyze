@@ -1,7 +1,7 @@
 id: STK-AZURE-AKS-003
 title: "AKS cluster workload identity not enabled"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 applies_when:

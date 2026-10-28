@@ -1,7 +1,7 @@
 id: SEC-GCP-COMPUTE-PUBLIC-IP-001
 title: "Compute instance has a public IP via access_config"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:

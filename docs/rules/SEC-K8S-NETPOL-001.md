@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-NETPOL-001 — kubernetes_network_policy absent for the corpus"
-description: "tf-analyze rule SEC-K8S-NETPOL-001 (HIGH · security): kubernetes_network_policy absent for the corpus"
-keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1611, nist-csf-pr.ac-5, nist-800-53-sc-7, csa-ccm-ivs-04"
+description: "tf-analyze rule SEC-K8S-NETPOL-001 (MEDIUM · security): kubernetes_network_policy absent for the corpus"
+keywords: "security, medium, terraform, iac, cis-5.3.2, mitre-T1611, nist-csf-pr.ac-5, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1611, nist-csf-pr.a
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.3.2, MITRE T1611",
+  "keywords": "security, medium, terraform, CIS 5.3.2, MITRE T1611",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-K8S-NETPOL-001 — kubernetes_network_policy absent for the corpus
+# 💡 SEC-K8S-NETPOL-001 — kubernetes_network_policy absent for the corpus
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-NETPOL-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-K8S-NETPOL-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-K8S-NETPOL-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **kubernetes_network_policy absent for the corpus.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **kubernetes_network_policy absent for the corpus.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-HELM-003 — helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)"
-description: "tf-analyze rule SEC-K8S-HELM-003 (HIGH · security): helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)"
-keywords: "security, high, terraform, iac, cis-5.3.1, mitre-T1195.002, mitre-T1078, cwe-494, cwe-345, nist-csf-pr.ds-6, nist-csf-id.sc-3, nist-800-53-si-7, nist-800-53-sr-4, csa-ccm-ais-04, csa-ccm-tvm-09"
+description: "tf-analyze rule SEC-K8S-HELM-003 (MEDIUM · security): helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)"
+keywords: "security, medium, terraform, iac, cis-5.3.1, mitre-T1195.002, mitre-T1078, cwe-494, cwe-345, nist-csf-pr.ds-6, nist-csf-id.sc-3, nist-800-53-si-7, nist-800-53-sr-4, csa-ccm-ais-04, csa-ccm-tvm-09"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, cis-5.3.1, mitre-T1195.002, mitre-T10
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.3.1, MITRE T1195.002, MITRE T1078, CWE-494, CWE-345",
+  "keywords": "security, medium, terraform, CIS 5.3.1, MITRE T1195.002, MITRE T1078, CWE-494, CWE-345",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-K8S-HELM-003 — helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)
+# 💡 SEC-K8S-HELM-003 — helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-HELM-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-K8S-HELM-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-K8S-HELM-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **helm_release weak supply-chain controls (`verify = false` OR `version` unpinned).** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **helm_release weak supply-chain controls (`verify = false` OR `version` unpinned).** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

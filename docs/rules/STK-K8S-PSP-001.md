@@ -1,7 +1,7 @@
 ---
 title: "STK-K8S-PSP-001 — kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25)"
-description: "tf-analyze rule STK-K8S-PSP-001 (HIGH · stack): kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25)"
-keywords: "stack, high, terraform, iac, cis-5.2.1, mitre-T1611, cwe-477, cwe-269, nist-csf-pr.ip-1, nist-800-53-cm-7, nist-800-53-si-2, csa-ccm-ais-07"
+description: "tf-analyze rule STK-K8S-PSP-001 (MEDIUM · stack): kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25)"
+keywords: "stack, medium, terraform, iac, cis-5.2.1, mitre-T1611, cwe-477, cwe-269, nist-csf-pr.ip-1, nist-800-53-cm-7, nist-800-53-si-2, csa-ccm-ais-07"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, cis-5.2.1, mitre-T1611, cwe-477, cwe-269
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 5.2.1, MITRE T1611, CWE-477, CWE-269",
+  "keywords": "stack, medium, terraform, CIS 5.2.1, MITRE T1611, CWE-477, CWE-269",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-K8S-PSP-001 — kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25)
+# 💡 STK-K8S-PSP-001 — kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25)
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-K8S-PSP-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-K8S-PSP-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-K8S-PSP-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25).** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **kubernetes_pod_security_policy is declared (deprecated 1.21, removed 1.25).** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

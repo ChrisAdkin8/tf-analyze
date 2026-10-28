@@ -1,7 +1,7 @@
 id: STK-AZURE-VM-IMG-EOL-001
 title: "Azure virtual machine using end-of-life OS image"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:

@@ -1,7 +1,7 @@
 id: SEC-DATASOURCE-003
 title: "`data \"external\"` or `data \"http\"` runs at plan time"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 mitre:
