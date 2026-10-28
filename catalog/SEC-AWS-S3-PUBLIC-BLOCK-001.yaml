@@ -1,7 +1,7 @@
 id: SEC-AWS-S3-PUBLIC-BLOCK-001
 title: "S3 public access block missing or switched off"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 cis:
   - "2.1.5.1"

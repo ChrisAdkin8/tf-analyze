@@ -1,7 +1,7 @@
 id: STK-GCP-CLOUDSQL-001
 title: "Cloud SQL instance missing backup_configuration"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:
@@ -30,7 +30,7 @@ verification: |
   Run `gcloud sql instances describe <instance> --format='value(settings.backupConfiguration.enabled)'`.
 escalation:
   - condition: "is_production_environment"
-    new_urgency: CRITICAL
+    new_urgency: HIGH
 fix_hcl: |
   resource "google_sql_database_instance" "example" {
     name             = "example"

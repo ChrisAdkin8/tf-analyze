@@ -10,7 +10,15 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_db_instance
     arg: storage_encrypted
-    description: RDS instance missing storage_encrypted (defaults to false)
+    suppress_if:
+      - arg: replicate_source_db
+        regex: "."
+      - arg: snapshot_identifier
+        regex: "."
+    description: |
+      RDS instance missing storage_encrypted (defaults to false). Skipped
+      for read replicas and snapshot restores, which take their encryption
+      from the source.
   - kind: resource_arg
     resource: aws_db_instance
     arg: storage_encrypted
@@ -19,7 +27,18 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_rds_cluster
     arg: storage_encrypted
-    description: Aurora cluster missing storage_encrypted (defaults to false)
+    suppress_if:
+      - arg: engine_mode
+        equals: serverless
+      - arg: snapshot_identifier
+        regex: "."
+      - arg: replication_source_identifier
+        regex: "."
+    description: |
+      Aurora cluster missing storage_encrypted (defaults to false for
+      provisioned clusters). Skipped for Aurora Serverless v1
+      (`engine_mode = "serverless"`, always encrypted), snapshot restores
+      and cross-region replicas, which take their encryption from the source.
   - kind: resource_arg
     resource: aws_rds_cluster
     arg: storage_encrypted

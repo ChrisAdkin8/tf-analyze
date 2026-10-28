@@ -1,7 +1,5 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import { writePrivateTempFile } from './safeWrite';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
 import { injectLinkInterceptor, injectReportCsp, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
 import { runEngine } from './engineRunner';
@@ -163,9 +161,8 @@ export class CompliancePanel {
     if (!this._lastHtml) return;
     const wsName = vscode.workspace.workspaceFolders?.[0]?.name ?? 'workspace';
     const safe = wsName.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const file = path.join(os.tmpdir(), `tf-analyze-${safe}-compliance-${this._framework}-${Date.now()}.html`);
     try {
-      fs.writeFileSync(file, this._lastHtml, 'utf8');
+      const file = writePrivateTempFile(`tf-analyze-${safe}-compliance-${this._framework}.html`, this._lastHtml);
       await vscode.env.openExternal(vscode.Uri.file(file));
     } catch (e) {
       void vscode.window.showErrorMessage(`tf-analyze: failed to open report — ${(e as Error).message}`);

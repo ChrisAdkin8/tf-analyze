@@ -36,6 +36,7 @@ from _hcl import (
     _mask_to_top_level,
     _top_level_arg_value,
     parse_tf,
+    resolve_value_text,
     single_interpolation,
 )
 
@@ -139,9 +140,10 @@ def parse_literal(text: str):
 
 
 def resolve(value, var_defaults: dict, _depth: int = 0):
-    """Resolve a plain ``var.X`` / ``local.X`` reference (bare or as a
-    single ``${...}``) to its default, recursively and element-wise for
-    lists. Anything unresolvable is returned unchanged."""
+    """Resolve a value through `_hcl.resolve_value_text` (``var.X`` /
+    ``local.X`` chains, bare or as one ``${...}``, and ``cond ? a : b``
+    folding) and parse the result, element-wise for lists. Anything
+    unresolvable is returned unchanged."""
     if isinstance(value, list):
         out: list = []
         for v in value:
@@ -150,15 +152,10 @@ def resolve(value, var_defaults: dict, _depth: int = 0):
         return out
     if not isinstance(value, str) or _depth > 4:
         return value
-    expr = single_interpolation(value)
-    m = _REF_RE.match((expr if expr is not None else value).strip())
-    if not m:
+    text = resolve_value_text(value, var_defaults)
+    if text == value:
         return value
-    key = m.group(2) if m.group(1) == "var" else "__local__" + m.group(2)
-    raw = var_defaults.get(key)
-    if raw is None:
-        return value
-    return resolve(parse_literal(raw), var_defaults, _depth + 1)
+    return resolve(parse_literal(text), var_defaults, _depth + 1)
 
 
 _ITER_REF_RE = re.compile(r"^([\w-]+)\.(value|key)((?:\.[\w-]+)*)$")
@@ -166,18 +163,14 @@ _ITER_REF_RE = re.compile(r"^([\w-]+)\.(value|key)((?:\.[\w-]+)*)$")
 
 def _collection(expr, var_defaults: dict):
     """The value a ``for_each`` iterates: a literal list / map, or the
-    default of a plain ``var.X`` / ``local.X``. None when unknown."""
+    value a ``var.X`` / ``local.X`` reference resolves to (followed through
+    chains like ``resolve``). None when unknown."""
     if isinstance(expr, (list, dict)):
         return expr
     if not isinstance(expr, str):
         return None
-    inner = single_interpolation(expr)
-    m = _REF_RE.match((inner if inner is not None else expr).strip())
-    if not m:
-        return None
-    key = m.group(2) if m.group(1) == "var" else "__local__" + m.group(2)
-    raw = var_defaults.get(key)
-    if raw is None:
+    raw = resolve_value_text(expr, var_defaults)
+    if raw == expr:
         return None
     tree, _ = parse_tf(f"__v = {raw}\n")
     value = (tree or {}).get("__v")

@@ -39,6 +39,7 @@ const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
+const safeWrite_1 = require("./safeWrite");
 const attackGraph_1 = require("./attackGraph");
 const htmlReport_1 = require("./htmlReport");
 const deltaPanel_1 = require("./deltaPanel");
@@ -456,7 +457,7 @@ function appendIgnoreRule(ws, ruleId, out) {
         text += `ignore_rules:\n  - ${ruleId}\n`;
     }
     try {
-        fs.writeFileSync(yamlPath, text, "utf-8");
+        (0, safeWrite_1.writeFileNoFollow)(yamlPath, text);
         return true;
     }
     catch (err) {
