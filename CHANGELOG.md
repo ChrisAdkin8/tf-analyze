@@ -24,7 +24,9 @@ finding, and a few missed problems are now caught.
   `required_providers` entries and no longer takes a commented-out
   `version` as set; `ROB-VERSION-002` no longer takes a commented-out
   `required_version` as set; `ROB-VERSION-001` reads every `.tf` file,
-  not only `versions.tf`.
+  not only `versions.tf`. Its own `fix_hcl` and the `clean_baseline`
+  fixture pinned `>= 1.5.0`, which the rule calls too old; both now say
+  `>= 1.6.0`.
 
 ## Round 79 — One resolver for variable and local values — 2026-10-28
 
