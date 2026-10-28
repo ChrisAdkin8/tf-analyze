@@ -204,6 +204,50 @@ def _md_code(s: object) -> str:
     return f"{fence}{pad}{text}{pad}{fence}"
 
 
+# A code span: a backtick run, then text, then a run of the same length.
+_MD_CODE_SPAN_RE = re.compile(r"(`+).+?(?<!`)\1(?!`)", re.S)
+
+
+def _md_text(s: object) -> str:
+    """Catalogue prose (a rule title) made inert for a PR comment.
+
+    Custom rules from a scanned repo's ``rules_dir`` supply their own
+    title, so the text may try to add links, images, raw HTML, mentions
+    or a heading to a comment the bot account posts. Outside code spans
+    this escapes ``\\ [ ] < >``, breaks ``@mentions`` and bare
+    ``http(s)://`` / ``www.`` autolinks with a zero-width space, and
+    escapes a leading ``#``. Code spans pass through unchanged, so
+    built-in titles like ``Missing `deletion_protection` `` render as
+    before. Newlines are folded: a title is one line. Table cells
+    still need ``_md_cell`` for ``|``."""
+    text = re.sub(r"[\r\n]+", " ", str(s))
+
+    def esc(chunk: str) -> str:
+        chunk = re.sub(r"([\\\[\]<>])", r"\\\1", chunk)
+        chunk = chunk.replace("@", "@\u200b")
+        chunk = re.sub(r"(?i)(https?):(?=//)", "\\1:\u200b", chunk)
+        return re.sub(r"(?i)\bwww\.", lambda m: m.group(0)[:3] + "\u200b.", chunk)
+
+    out: list[str] = []
+    last = 0
+    for m in _MD_CODE_SPAN_RE.finditer(text):
+        out.append(esc(text[last:m.start()]))
+        out.append(m.group(0))
+        last = m.end()
+    out.append(esc(text[last:]))
+    return re.sub(r"^(\s*)#", r"\1\\#", "".join(out))
+
+
+def _md_fence(body: str, info: str = "") -> list[str]:
+    """``body`` as a fenced code block whose fence is longer than any
+    backtick run inside it, so a ```` ``` ```` line in a custom rule's
+    ``fix_hcl`` can't close the block early and add Markdown after it.
+    GitHub accepts a longer fence for ``suggestion`` blocks too."""
+    longest = max((len(run) for run in re.findall(r"`+", body)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return [f"{fence}{info}", body, fence]
+
+
 # ---- rule-docs canonical URL --------------------------------------------
 # Single source of truth for the per-rule docs URL — drives:
 #   - SARIF `helpUri` on every result + every rule definition
@@ -1634,7 +1678,7 @@ def _render_pr_summary_impl(
         kev_badge = "🔥 " if f.get("kev") else ""
         # Link rule ID to the canonical docs page so reviewers can
         # one-click for full rationale.
-        rule_link = f"[`{rid}`]({RULE_DOCS_URL_BASE.format(id=rid)}) — {_md_cell(title)}"
+        rule_link = f"[`{rid}`]({RULE_DOCS_URL_BASE.format(id=rid)}) — {_md_cell(_md_text(title))}"
         parts.append(f"| {kev_badge}**{urg}** | {rule_link} | {loc} |")
     if len(ranked) > 3:
         parts.append("")
@@ -1696,9 +1740,7 @@ def _render_pr_summary_impl(
         )
         parts.append(f"### Top fix — {rid}{disruption_note}")
         parts.append("")
-        parts.append("```hcl")
-        parts.append(fix)
-        parts.append("```")
+        parts.extend(_md_fence(fix, "hcl"))
         parts.append("")
 
     # Attack graph (collapsed). Only emit when the graph was built and
