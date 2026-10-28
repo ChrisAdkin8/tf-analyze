@@ -1,7 +1,7 @@
 id: SEC-GCP-LOGGING-001
 title: "Cloud Audit Logs not configured"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: infrastructure-wide
 status: active
 cis:

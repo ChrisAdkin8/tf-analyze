@@ -1,7 +1,7 @@
 id: SEC-K8S-NETPOL-002
 title: "kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

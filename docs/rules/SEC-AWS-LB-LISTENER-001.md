@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-LB-LISTENER-001 — ALB listener serves plain HTTP without redirect"
-description: "tf-analyze rule SEC-AWS-LB-LISTENER-001 (HIGH · security): ALB listener serves plain HTTP without redirect"
-keywords: "security, high, terraform, iac, aws, cis-{'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, mitre-T1071.001, cwe-319, d3-ei, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, csa-ccm-cek-06"
+description: "tf-analyze rule SEC-AWS-LB-LISTENER-001 (MEDIUM · security): ALB listener serves plain HTTP without redirect"
+keywords: "security, medium, terraform, iac, aws, cis-{'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, mitre-T1071.001, cwe-319, d3-ei, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, csa-ccm-cek-06"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, aws, cis-{'id': '2.1', 'title': 'Ensu
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS {'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, MITRE T1071.001, CWE-319, D3-EI",
+  "keywords": "security, medium, terraform, CIS {'id': '2.1', 'title': 'Ensure all HTTP traffic is redirected to HTTPS'}, MITRE T1071.001, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AWS-LB-LISTENER-001 — ALB listener serves plain HTTP without redirect
+# 💡 SEC-AWS-LB-LISTENER-001 — ALB listener serves plain HTTP without redirect
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-LB-LISTENER-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-LB-LISTENER-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-LB-LISTENER-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **ALB listener serves plain HTTP without redirect.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **ALB listener serves plain HTTP without redirect.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 

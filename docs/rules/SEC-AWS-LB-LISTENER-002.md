@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-LB-LISTENER-002 — Load balancer HTTPS listener allows TLS < 1.2"
-description: "tf-analyze rule SEC-AWS-LB-LISTENER-002 (HIGH · security): Load balancer HTTPS listener allows TLS < 1.2"
-keywords: "security, high, terraform, iac, aws, mitre-T1565.001, cwe-326, cwe-327, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, nist-800-53-sc-13, csa-ccm-ekm-04, csa-ccm-dsi-03"
+description: "tf-analyze rule SEC-AWS-LB-LISTENER-002 (MEDIUM · security): Load balancer HTTPS listener allows TLS < 1.2"
+keywords: "security, medium, terraform, iac, aws, mitre-T1565.001, cwe-326, cwe-327, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, nist-800-53-sc-13, csa-ccm-ekm-04, csa-ccm-dsi-03"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, aws, mitre-T1565.001, cwe-326, cwe-32
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1565.001, CWE-326, CWE-327",
+  "keywords": "security, medium, terraform, MITRE T1565.001, CWE-326, CWE-327",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AWS-LB-LISTENER-002 — Load balancer HTTPS listener allows TLS < 1.2
+# 💡 SEC-AWS-LB-LISTENER-002 — Load balancer HTTPS listener allows TLS < 1.2
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-LB-LISTENER-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-LB-LISTENER-002" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-LB-LISTENER-002 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Load balancer HTTPS listener allows TLS < 1.2.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **Load balancer HTTPS listener allows TLS < 1.2.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-001 — GKE cluster missing private nodes"
-description: "tf-analyze rule STK-GCP-GKE-001 (HIGH · stack): GKE cluster missing private nodes"
-keywords: "stack, high, terraform, iac, gcp, cis-8.5.3, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
+description: "tf-analyze rule STK-GCP-GKE-001 (MEDIUM · stack): GKE cluster missing private nodes"
+keywords: "stack, medium, terraform, iac, gcp, cis-8.5.3, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, gcp, cis-8.5.3, mitre-T1190, cwe-284, d3
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 8.5.3, MITRE T1190, CWE-284, D3-IAA",
+  "keywords": "stack, medium, terraform, CIS 8.5.3, MITRE T1190, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-GCP-GKE-001 — GKE cluster missing private nodes
+# 💡 STK-GCP-GKE-001 — GKE cluster missing private nodes
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-GKE-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-GKE-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-GKE-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **GKE cluster missing private nodes.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **GKE cluster missing private nodes.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

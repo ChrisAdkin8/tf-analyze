@@ -1,7 +1,7 @@
 id: STK-GCP-KMS-LOCATION-001
 title: "CMEK consumer location mismatches KMS key ring location"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 patterns:

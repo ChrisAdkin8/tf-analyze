@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GCS-LOGGING-001 — GCS bucket logging target lacks public_access_prevention"
-description: "tf-analyze rule STK-GCP-GCS-LOGGING-001 (HIGH · stack): GCS bucket logging target lacks public_access_prevention"
-keywords: "stack, high, terraform, iac, gcp, cis-5.1, mitre-T1530, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
+description: "tf-analyze rule STK-GCP-GCS-LOGGING-001 (MEDIUM · stack): GCS bucket logging target lacks public_access_prevention"
+keywords: "stack, medium, terraform, iac, gcp, cis-5.1, mitre-T1530, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, gcp, cis-5.1, mitre-T1530, mitre-T1562.0
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 5.1, MITRE T1530, MITRE T1562.008, CWE-778, D3-FAA",
+  "keywords": "stack, medium, terraform, CIS 5.1, MITRE T1530, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-GCP-GCS-LOGGING-001 — GCS bucket logging target lacks public_access_prevention
+# 💡 STK-GCP-GCS-LOGGING-001 — GCS bucket logging target lacks public_access_prevention
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-GCS-LOGGING-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-GCS-LOGGING-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-GCS-LOGGING-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **GCS bucket logging target lacks public_access_prevention.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **GCS bucket logging target lacks public_access_prevention.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

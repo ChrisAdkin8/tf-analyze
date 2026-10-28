@@ -1,7 +1,7 @@
 id: SEC-AZURE-DATABRICKS-001
 title: "Azure Databricks workspace publicly accessible (no_public_ip = false)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 cis:

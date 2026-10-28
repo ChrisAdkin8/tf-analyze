@@ -1,7 +1,7 @@
 id: STK-GCP-GKE-NODEPOOL-001
 title: "GKE node pool missing shielded-instance hardening"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

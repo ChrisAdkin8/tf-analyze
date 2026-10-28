@@ -1,7 +1,7 @@
 id: STK-GCP-FUNCTIONS-002
 title: "GCP Cloud Function uses default service account"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 cis:

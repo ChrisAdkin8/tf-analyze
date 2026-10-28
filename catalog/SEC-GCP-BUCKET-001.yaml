@@ -1,7 +1,7 @@
 id: SEC-GCP-BUCKET-001
 title: "GCS bucket missing public_access_prevention=enforced"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-FUNCTIONS-001 — GCP Cloud Function uses end-of-life runtime"
-description: "tf-analyze rule STK-GCP-FUNCTIONS-001 (HIGH · stack): GCP Cloud Function uses end-of-life runtime"
-keywords: "stack, high, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
+description: "tf-analyze rule STK-GCP-FUNCTIONS-001 (MEDIUM · stack): GCP Cloud Function uses end-of-life runtime"
+keywords: "stack, medium, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe-1
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, MITRE T1190, MITRE T1195.002, CWE-1104, D3-SCA",
+  "keywords": "stack, medium, terraform, MITRE T1190, MITRE T1195.002, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-GCP-FUNCTIONS-001 — GCP Cloud Function uses end-of-life runtime
+# 💡 STK-GCP-FUNCTIONS-001 — GCP Cloud Function uses end-of-life runtime
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-FUNCTIONS-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-FUNCTIONS-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-FUNCTIONS-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **GCP Cloud Function uses end-of-life runtime.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **GCP Cloud Function uses end-of-life runtime.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 

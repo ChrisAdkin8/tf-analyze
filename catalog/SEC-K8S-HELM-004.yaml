@@ -1,7 +1,7 @@
 id: SEC-K8S-HELM-004
 title: "helm_release bypasses chart safety (`disable_webhooks = true` OR `skip_crds = true`)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

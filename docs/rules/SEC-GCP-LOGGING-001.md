@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-LOGGING-001 — Cloud Audit Logs not configured"
-description: "tf-analyze rule SEC-GCP-LOGGING-001 (HIGH · security): Cloud Audit Logs not configured"
-keywords: "security, high, terraform, iac, gcp, cis-2.1, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
+description: "tf-analyze rule SEC-GCP-LOGGING-001 (MEDIUM · security): Cloud Audit Logs not configured"
+keywords: "security, medium, terraform, iac, gcp, cis-2.1, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, gcp, cis-2.1, mitre-T1562.008, cwe-77
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 2.1, MITRE T1562.008, CWE-778, D3-FAA",
+  "keywords": "security, medium, terraform, CIS 2.1, MITRE T1562.008, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-GCP-LOGGING-001 — Cloud Audit Logs not configured
+# 💡 SEC-GCP-LOGGING-001 — Cloud Audit Logs not configured
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: infrastructure-wide](https://img.shields.io/badge/blast%20radius-infrastructure--wide-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-GCP-LOGGING-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-GCP-LOGGING-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-GCP-LOGGING-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Cloud Audit Logs not configured.** This rule has `default_urgency: HIGH` and operates on a infrastructure wide blast radius. 
+> **Cloud Audit Logs not configured.** This rule has `default_urgency: MEDIUM` and operates on a infrastructure wide blast radius. 
 
 ## What this checks
 

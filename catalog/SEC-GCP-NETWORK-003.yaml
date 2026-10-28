@@ -1,7 +1,7 @@
 id: SEC-GCP-NETWORK-003
 title: "VPC subnet missing flow logs"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

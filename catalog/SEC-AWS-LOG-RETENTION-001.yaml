@@ -1,7 +1,7 @@
 id: SEC-AWS-LOG-RETENTION-001
 title: "Log bucket missing object_lock_configuration with retention >= 90 days"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 mitre:

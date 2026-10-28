@@ -1,7 +1,7 @@
 id: SEC-AWS-RDS-002
 title: "RDS instance or Aurora cluster storage not encrypted"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:
@@ -76,3 +76,6 @@ fix_disruption: forces_replacement
 fix_disruption_note: "Storage encryption cannot be enabled on an existing RDS instance — requires snapshot + restore to a new encrypted instance and traffic cutover."
 fixtures:
   - aws_rds_unencrypted
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: HIGH

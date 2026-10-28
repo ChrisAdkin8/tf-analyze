@@ -1,7 +1,7 @@
 id: SEC-AZURE-WEBAPP-002
 title: "App Service / Function App HTTPS not enforced"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 cis:
   - "9.2"

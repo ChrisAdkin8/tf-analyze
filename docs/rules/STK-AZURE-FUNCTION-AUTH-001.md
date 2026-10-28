@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-FUNCTION-AUTH-001 — Azure Function App missing platform-level authentication"
-description: "tf-analyze rule STK-AZURE-FUNCTION-AUTH-001 (HIGH · stack): Azure Function App missing platform-level authentication"
-keywords: "stack, high, terraform, iac, azure, mitre-T1190, cwe-287, d3-uac, nist-csf-pr.ac-1, nist-800-53-ac-3"
+description: "tf-analyze rule STK-AZURE-FUNCTION-AUTH-001 (MEDIUM · stack): Azure Function App missing platform-level authentication"
+keywords: "stack, medium, terraform, iac, azure, mitre-T1190, cwe-287, d3-uac, nist-csf-pr.ac-1, nist-800-53-ac-3"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, azure, mitre-T1190, cwe-287, d3-uac, nis
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, MITRE T1190, CWE-287, D3-UAC",
+  "keywords": "stack, medium, terraform, MITRE T1190, CWE-287, D3-UAC",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-AZURE-FUNCTION-AUTH-001 — Azure Function App missing platform-level authentication
+# 💡 STK-AZURE-FUNCTION-AUTH-001 — Azure Function App missing platform-level authentication
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AZURE-FUNCTION-AUTH-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-AZURE-FUNCTION-AUTH-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-AZURE-FUNCTION-AUTH-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Azure Function App missing platform-level authentication.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Azure Function App missing platform-level authentication.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 

@@ -1,7 +1,7 @@
 id: SEC-AWS-SNS-001
 title: "SNS topic missing KMS encryption"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

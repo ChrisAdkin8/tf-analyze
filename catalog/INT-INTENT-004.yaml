@@ -1,7 +1,7 @@
 id: INT-INTENT-004
 title: "Prod-tagged resource has force_destroy=true"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

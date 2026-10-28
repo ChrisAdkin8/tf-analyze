@@ -1,7 +1,7 @@
 id: SEC-GCP-CLOUDRUN-001
 title: "Cloud Run service allows all ingress traffic"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:

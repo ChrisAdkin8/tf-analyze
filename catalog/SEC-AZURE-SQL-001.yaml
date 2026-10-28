@@ -1,7 +1,7 @@
 id: SEC-AZURE-SQL-001
 title: "Azure SQL Server has no Azure AD administrator configured"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 cis:
   - "4.1.2"

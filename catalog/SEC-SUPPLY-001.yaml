@@ -1,7 +1,7 @@
 id: SEC-SUPPLY-001
 title: "Module source not pinned to an immutable digest or signed tag"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: infrastructure-wide
 status: active
 mitre:

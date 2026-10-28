@@ -1,7 +1,7 @@
 id: SEC-AWS-ES-002
 title: "OpenSearch / Elasticsearch domain missing node-to-node encryption"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:

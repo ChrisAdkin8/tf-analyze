@@ -1,7 +1,7 @@
 id: STK-K8S-INGRESS-001
 title: "kubernetes_ingress_v1 has no `tls` block (HTTP traffic exposed in clear)"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:
