@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as path from "path";
 import * as fs from "fs";
+import { writeFileNoFollow } from "./safeWrite";
 import { AttackGraphPanel } from "./attackGraph";
 import { HtmlReportPanel } from "./htmlReport";
 import { DeltaPanel } from "./deltaPanel";
@@ -566,7 +567,7 @@ function appendIgnoreRule(
     text += `ignore_rules:\n  - ${ruleId}\n`;
   }
   try {
-    fs.writeFileSync(yamlPath, text, "utf-8");
+    writeFileNoFollow(yamlPath, text);
     return true;
   } catch (err) {
     out.appendLine(`[tf-analyze] failed to write ${yamlPath}: ${err}`);

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { writeFileNoFollow } from './safeWrite';
 
 /** Subset of the engine's finding shape that's needed to identify a
  * record in the baseline. The engine matches by (id, file, resource) —
@@ -50,7 +51,7 @@ function read(wsFolder: string): BaselineFile {
 
 function write(wsFolder: string, data: BaselineFile): void {
   data.meta = { ...(data.meta ?? {}), last_updated: new Date().toISOString(), created_by: 'tf-analyze (vscode-extension)' };
-  fs.writeFileSync(baselinePath(wsFolder), JSON.stringify(data, null, 2) + '\n', 'utf8');
+  writeFileNoFollow(baselinePath(wsFolder), JSON.stringify(data, null, 2) + '\n');
 }
 
 /** Match key compatible with the engine's (id, file, resource)

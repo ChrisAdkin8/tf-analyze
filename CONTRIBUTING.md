@@ -156,6 +156,24 @@ A version bump is not finished until:
 
 Skipping any of (2)–(4) is a doc bug; skipping (5)–(6) is a release bug. Both are caught at review time.
 
+## Changelog
+
+Don't edit `CHANGELOG.md` in a PR. Add `changelog.d/<branch-name>.md`
+instead: a `## Title` heading (no round number, no date) and the entry
+text. Each PR writes its own file, so open PRs never conflict over the
+changelog. See [`changelog.d/README.md`](changelog.d/README.md) for the
+format.
+
+- `python3 scripts/changelog.py check` — fragments are well formed.
+- CI (`changelog fragment present`) fails a PR that adds no fragment or
+  edits `CHANGELOG.md` directly. Label the PR `no-changelog` when users
+  won't notice the change (CI tweaks, typo fixes).
+- `python3 scripts/changelog.py build` — numbers the rounds in the order
+  the fragments reached `main`, adds the date, moves them into
+  `CHANGELOG.md` and deletes them. Run it in its own PR, and always before
+  tagging a release: the release workflow refuses to run while fragments
+  are unbuilt.
+
 ## Testing conventions
 
 - **Self-test must pass.** Adding a rule without a fixture is a defect; the CI gate catches it.
