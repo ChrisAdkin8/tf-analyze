@@ -46,6 +46,8 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-2
 `resources = ["*"]`. Combined with any non-trivial action set,
 this lets the principal touch every matching resource in the
 account, not just the ones it owns.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-POLICY-005, not by this rule.
 
 ## Why it likely fired
 
@@ -53,6 +55,8 @@ A statement inside `data "aws_iam_policy_document"` grants
 `resources = ["*"]`. Combined with any non-trivial action set,
 this lets the principal touch every matching resource in the
 account, not just the ones it owns.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-POLICY-005, not by this rule.
 
 ## Adversarial scenario
 

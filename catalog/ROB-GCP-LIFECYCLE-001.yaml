@@ -1,7 +1,7 @@
 id: ROB-GCP-LIFECYCLE-001
 title: "Stateful resource missing lifecycle.prevent_destroy"
 section: robustness
-default_urgency: HIGH
+default_urgency: LOW
 blast_radius: single-resource
 status: active
 patterns:
@@ -31,10 +31,8 @@ verification: |
   Run `terraform plan -destroy` and confirm Terraform refuses to destroy
   the resource with an error citing the prevent_destroy lifecycle rule.
 escalation:
-  - condition: "estimated_monthly_cost_usd > 500"
-    new_urgency: HIGH
   - condition: "resource_holds_production_data"
-    new_urgency: CRITICAL
+    new_urgency: MEDIUM
 soc2_cc:
   - "A1.2"
 mitre:

@@ -1,7 +1,7 @@
 id: STK-GCP-CLOUDSQL-003
 title: "Cloud SQL instance missing deletion protection"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:
@@ -31,7 +31,7 @@ verification: |
   must return `True`.
 escalation:
   - condition: "is_production_environment"
-    new_urgency: CRITICAL
+    new_urgency: HIGH
 fix_hcl: |
   resource "google_sql_database_instance" "example" {
     name             = "example"

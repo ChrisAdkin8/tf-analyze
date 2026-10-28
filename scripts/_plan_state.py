@@ -84,11 +84,13 @@ def plan_value_at_path(values: dict, path: str):
     return cur
 
 
-def _plan_suppressed(spec: dict | None, values: dict) -> bool:
+def _plan_suppressed(spec: dict | list | None, values: dict) -> bool:
     """Plan/state counterpart of `_handlers_generic._suppressed_by`:
     ``suppress_if: {arg, equals | regex}`` holds when any value at the
     (possibly dotted) `arg` equals the literal, case-insensitively, or
-    matches the regex."""
+    matches the regex; a list of them holds when any one does."""
+    if isinstance(spec, list):
+        return any(_plan_suppressed(s, values) for s in spec if isinstance(s, dict))
     if not spec or not spec.get("arg"):
         return False
     want = spec.get("equals")
