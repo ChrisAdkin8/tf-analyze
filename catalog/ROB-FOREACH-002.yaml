@@ -1,7 +1,7 @@
 id: ROB-FOREACH-002
 title: "for_each keyset is derived from another resource's attributes (apply-flicker)"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 patterns:
