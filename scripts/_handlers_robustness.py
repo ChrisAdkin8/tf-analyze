@@ -18,6 +18,7 @@ Corpus handlers (6):
 """
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
@@ -66,8 +67,14 @@ from detect import (
 
 def _corpus_resources(fp, text: str) -> list[dict]:
     """The file's resource blocks with their parse-tree subtrees attached,
-    as `detect_in_file` gives in-file handlers (`attach_tree_attrs`)."""
-    tree = parse_tf(text)[0] if is_tf_source(Path(fp)) else None
+    as `detect_in_file` gives in-file handlers (`attach_tree_attrs`).
+    Read-only for callers: one list serves every corpus handler."""
+    return _resources_with_attrs(is_tf_source(Path(fp)), text)
+
+
+@functools.lru_cache(maxsize=1024)
+def _resources_with_attrs(parse: bool, text: str) -> list[dict]:
+    tree = parse_tf(text)[0] if parse else None
     return attach_tree_attrs(find_blocks(text, RESOURCE_START), tree)
 
 
