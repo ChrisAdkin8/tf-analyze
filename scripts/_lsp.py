@@ -225,7 +225,14 @@ def run_lsp_server(
             return []
         return scanner(path, entries, text)
 
-    def _read_message() -> dict | None:
+    # A frame that can't be framed or decoded. The loop answers it with a
+    # JSON-RPC error and reads on: one bad frame (or a JSON array, which
+    # LSP doesn't allow) used to raise outside the handler's try block
+    # and end the server.
+    _BAD_JSON = object()
+    _NO_LENGTH = object()
+
+    def _read_message():
         header = b""
         while not header.endswith(b"\r\n\r\n"):
             ch = sys.stdin.buffer.read(1)
@@ -234,10 +241,15 @@ def run_lsp_server(
             header += ch
         m = re.search(rb"Content-Length: (\d+)", header)
         if not m:
-            return None
+            return _NO_LENGTH
         length = int(m.group(1))
         body = sys.stdin.buffer.read(length)
-        return json.loads(body)
+        if len(body) < length:
+            return None
+        try:
+            return json.loads(body)
+        except (ValueError, RecursionError):
+            return _BAD_JSON
 
     def _send(obj: dict) -> None:
         body = json.dumps(obj).encode()
@@ -253,6 +265,14 @@ def run_lsp_server(
         msg = _read_message()
         if msg is None:
             break
+        if msg is _NO_LENGTH:
+            print("[tf-analyze lsp] skipped a header with no Content-Length", file=sys.stderr)
+            continue
+        if msg is _BAD_JSON or not isinstance(msg, dict):
+            code, text = (-32700, "Parse error") if msg is _BAD_JSON else (-32600, "Invalid Request")
+            print(f"[tf-analyze lsp] {text.lower()}; message skipped", file=sys.stderr)
+            _send({"jsonrpc": "2.0", "id": None, "error": {"code": code, "message": text}})
+            continue
         method = msg.get("method", "")
         mid = msg.get("id")
 
