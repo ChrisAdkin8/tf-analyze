@@ -536,6 +536,23 @@ runs:
           const changedPaths = new Set(changed.data.map(f => f.filename));
           const rank = u => ({ CRITICAL:4, HIGH:3, MEDIUM:2, LOW:1, INFO:0 }[u] ?? 0);
           const URGENCY_EMOJI = { CRITICAL:'🚨', HIGH:'⚠️', MEDIUM:'💡', LOW:'ℹ️' };
+          // A custom rule's title and fix_hcl come from the scanned repo, and
+          // this comment is posted as the bot. Same rules as the engine's
+          // _md_text / _md_fence: outside code spans escape \ [ ] < >, break
+          // @mentions and autolinks, escape a leading #; fence code with a
+          // run longer than any backtick run inside it.
+          const mdText = (s) => {
+            const t = String(s ?? '').replace(/[\r\n]+/g, ' ');
+            const esc = (x) => x.replace(/[\\\[\]<>]/g, '\\$&').replace(/@/g, '@\u200b')
+              .replace(/(https?):(?=\/\/)/gi, '$1:\u200b').replace(/\bwww\./gi, (m) => m.slice(0, 3) + '\u200b.');
+            let out = '', last = 0;
+            for (const m of t.matchAll(/(?<!`)(`+)(?!`)[\s\S]+?(?<!`)\1(?!`)/g)) {
+              out += esc(t.slice(last, m.index)) + m[0];
+              last = m.index + m[0].length;
+            }
+            return (out + esc(t.slice(last))).replace(/^(\s*)#/, '$1\\#');
+          };
+          const fence = (body) => '`'.repeat(Math.max(3, ...[...String(body).matchAll(/`+/g)].map((m) => m[0].length + 1)));
 
           // Dedup by (file, line, rule_id) so multiple rules on the same line each
           // post a suggestion, but identical rule re-fires (e.g. from -recursive scans)
@@ -591,13 +608,13 @@ runs:
             if (!inDiff || !inDiff.has(f.line)) { skipReasons.not_in_diff_hunk++; continue; }
             const emoji = URGENCY_EMOJI[f.urgency] ?? '•';
             const body = [
-              `${emoji} **[${f.id}]** — ${f.title}`,
+              `${emoji} **[${f.id}]** — ${mdText(f.title)}`,
               '',
               `> Urgency: \`${f.urgency}\`` + (f.fix_disruption ? ` · Disruption: \`${f.fix_disruption}\`` : ''),
               f.narrative ? `\n> *Adversarial scenario:* ${f.narrative}\n` : '',
-              '```suggestion',
+              `${fence(f.fix_hcl)}suggestion`,
               f.fix_hcl.trimEnd(),
-              '```',
+              fence(f.fix_hcl),
             ].join('\n');
             try {
               await github.rest.pulls.createReviewComment({

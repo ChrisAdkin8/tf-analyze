@@ -5,6 +5,24 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 72 — A custom rule can't write Markdown into PR comments — 2026-10-28
+
+- **Rule titles**: a custom rule in a repo's `rules_dir` supplies its own
+  title, which went into the PR summary and the inline review comments
+  as-is. A title could add a link, an image, raw HTML or an `@mention`
+  to a comment the bot account posts. Outside code spans, titles now
+  have `\ [ ] < >` escaped, mentions and bare links broken with a
+  zero-width space, and a leading `#` escaped. Built-in titles render
+  as before.
+- **Fix blocks**: a `fix_hcl` containing a ```` ``` ```` line closed the
+  `hcl` / `suggestion` block early, so the text after it (for example
+  `## All checks passed - safe to merge`) rendered as Markdown. Fences
+  are now longer than any backtick run inside the fix.
+- **pr-review mode**: a `CUSTOM-` rule's recommendation is shown as plain
+  text.
+- **Rule ids**: an id must be upper-case letters and digits in
+  dash-separated parts (`CUSTOM-ACME-001`); ids are printed as-is.
+
 ## Round 71 — A pull request can't switch off its own scan — 2026-10-28
 
 - **Base-branch config on PRs**: on `pull_request`,
