@@ -1,7 +1,7 @@
 id: STK-GCP-BIGQUERY-001
 title: "BigQuery dataset missing default CMEK"
 section: stack
-default_urgency: HIGH
+default_urgency: LOW
 blast_radius: single-resource
 status: active
 cis:

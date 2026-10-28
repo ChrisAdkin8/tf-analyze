@@ -1,7 +1,7 @@
 id: STK-AWS-EKS-003
 title: "EKS cluster Kubernetes Secrets not encrypted with KMS"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 cis:
   - "5.3.1"

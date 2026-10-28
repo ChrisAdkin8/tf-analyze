@@ -1,7 +1,7 @@
 id: SEC-AWS-ECR-001
 title: "ECR repository missing scan-on-push"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

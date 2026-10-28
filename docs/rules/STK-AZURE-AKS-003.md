@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-AKS-003 — AKS cluster workload identity not enabled"
-description: "tf-analyze rule STK-AZURE-AKS-003 (HIGH · stack): AKS cluster workload identity not enabled"
-keywords: "stack, high, terraform, iac, azure, mitre-T1078.004"
+description: "tf-analyze rule STK-AZURE-AKS-003 (MEDIUM · stack): AKS cluster workload identity not enabled"
+keywords: "stack, medium, terraform, iac, azure, mitre-T1078.004"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, azure, mitre-T1078.004"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, MITRE T1078.004",
+  "keywords": "stack, medium, terraform, MITRE T1078.004",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-AZURE-AKS-003 — AKS cluster workload identity not enabled
+# 💡 STK-AZURE-AKS-003 — AKS cluster workload identity not enabled
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AZURE-AKS-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-AZURE-AKS-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-AZURE-AKS-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **AKS cluster workload identity not enabled.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. _Conditional: only applies when `azurerm ≥ 3.40`._
+> **AKS cluster workload identity not enabled.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. _Conditional: only applies when `azurerm ≥ 3.40`._
 
 ## What this checks
 

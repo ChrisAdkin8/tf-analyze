@@ -1,7 +1,7 @@
 id: STK-K8S-PSA-002
 title: "kubernetes_namespace Pod Security Admission `enforce` level is `privileged` (no enforcement)"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

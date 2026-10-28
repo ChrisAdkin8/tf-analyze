@@ -1,7 +1,7 @@
 id: SEC-AZURE-REDIS-001
 title: "Azure Redis Cache allows non-TLS connections"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 pci_dss:

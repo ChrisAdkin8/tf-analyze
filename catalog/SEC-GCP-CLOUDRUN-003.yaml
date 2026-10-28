@@ -1,7 +1,7 @@
 id: SEC-GCP-CLOUDRUN-003
 title: "GCP Cloud Run service uses default compute service account"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 cis:

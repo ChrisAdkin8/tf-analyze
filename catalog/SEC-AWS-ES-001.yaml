@@ -1,7 +1,7 @@
 id: SEC-AWS-ES-001
 title: "OpenSearch / Elasticsearch domain missing encryption at rest"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:
@@ -66,3 +66,6 @@ fix_hcl: |
 fix_disruption: forces_replacement
 fixtures:
   - aws_opensearch_no_encrypt_at_rest
+escalation:
+  - condition: "is_production_environment"
+    new_urgency: HIGH

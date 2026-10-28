@@ -1,7 +1,7 @@
 id: STK-K8S-VERSION-001
 title: "EKS/GKE cluster on a Kubernetes version past end of standard support"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 mitre:

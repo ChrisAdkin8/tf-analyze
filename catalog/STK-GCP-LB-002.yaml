@@ -1,7 +1,7 @@
 id: STK-GCP-LB-002
 title: "GCP HTTPS load balancer missing SSL policy (default permits TLS 1.0)"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:

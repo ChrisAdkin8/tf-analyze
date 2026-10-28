@@ -1,7 +1,7 @@
 id: STK-GCP-GKE-003
 title: "GKE cluster has application-layer secrets encryption turned off"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

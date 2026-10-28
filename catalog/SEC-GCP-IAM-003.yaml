@@ -1,7 +1,7 @@
 id: SEC-GCP-IAM-003
 title: "Member has both project-level and resource-level IAM grants"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

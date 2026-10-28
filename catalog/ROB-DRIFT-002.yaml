@@ -8,7 +8,7 @@ patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
-    regex: '(?m)^[ \t]*ignore_changes\s*=\s*\[\s*"\*"\s*\]'
+    regex: '(?m)^[ \t]*ignore_changes\s*=\s*\[\s*"\*"\s*,?\s*\]'
     code_only: true  # ignore comments and heredoc text
     description: |
       ignore_changes = ["*"] is the array form of the `all` wildcard.
@@ -17,7 +17,7 @@ patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     file_glob: "**/*.tf"
-    regex: '(?m)^[ \t]*ignore_changes\s*=\s*\[\s*tags\s*\]'
+    regex: '(?m)^[ \t]*ignore_changes\s*=\s*\[\s*tags\s*,?\s*\]'
     code_only: true  # ignore comments and heredoc text
     description: |
       ignore_changes = [tags] silently drops every tag drift. On AWS this

@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
-description: "tf-analyze rule SEC-K8S-PSA-001 (HIGH · security): kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / cap…"
-keywords: "security, high, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, cwe-269, cwe-250, nist-csf-pr.pt-3, nist-800-53-ac-6, csa-ccm-iam-09"
+description: "tf-analyze rule SEC-K8S-PSA-001 (MEDIUM · security): kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / c…"
+keywords: "security, medium, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, cwe-269, cwe-250, nist-csf-pr.pt-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, cw
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.2.1, CIS 5.7.3, MITRE T1611, CWE-269, CWE-250",
+  "keywords": "security, medium, terraform, CIS 5.2.1, CIS 5.7.3, MITRE T1611, CWE-269, CWE-250",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop
+# 💡 SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-PSA-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-K8S-PSA-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-K8S-PSA-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

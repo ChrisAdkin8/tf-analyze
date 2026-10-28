@@ -1,7 +1,7 @@
 id: SEC-K8S-HELM-003
 title: "helm_release weak supply-chain controls (`verify = false` OR `version` unpinned)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

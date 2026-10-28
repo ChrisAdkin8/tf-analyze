@@ -1,7 +1,7 @@
 id: SEC-PROVISIONER-001
 title: "Provisioner block used for shell execution"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:

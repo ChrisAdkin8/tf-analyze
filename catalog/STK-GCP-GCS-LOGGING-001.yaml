@@ -1,7 +1,7 @@
 id: STK-GCP-GCS-LOGGING-001
 title: "GCS bucket logging target lacks public_access_prevention"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

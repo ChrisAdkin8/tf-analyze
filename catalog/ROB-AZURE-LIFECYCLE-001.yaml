@@ -8,24 +8,52 @@ patterns:
   - kind: resource_missing_arg
     resource: azurerm_mssql_database
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: azurerm_mssql_database
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: azurerm_sql_database
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: azurerm_sql_database
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: azurerm_postgresql_server
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: azurerm_postgresql_server
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: azurerm_postgresql_flexible_server
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: azurerm_postgresql_flexible_server
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: azurerm_mysql_server
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: azurerm_mysql_server
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: azurerm_storage_account
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: azurerm_storage_account
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: azurerm_key_vault
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: azurerm_key_vault
+    path: lifecycle.prevent_destroy
+    not_equal: true
 owasp_iac:
   - "Deploy / Resource Decommissioning Process"
 mitre:

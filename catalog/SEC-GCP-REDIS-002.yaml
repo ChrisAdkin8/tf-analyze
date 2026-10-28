@@ -1,7 +1,7 @@
 id: SEC-GCP-REDIS-002
 title: "Cloud Memorystore Redis instance transit encryption disabled"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:

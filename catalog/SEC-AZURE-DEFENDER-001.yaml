@@ -1,7 +1,7 @@
 id: SEC-AZURE-DEFENDER-001
 title: "Microsoft Defender for Cloud not enabled on subscription"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:
@@ -69,3 +69,9 @@ fix_disruption: none
 fix_disruption_note: "Defender activation has no plane-of-control impact; it adds per-resource cost (see Azure pricing)."
 fixtures:
   - azure_defender_free_tier
+escalation:
+  - condition: "Defender plan explicitly set to the Free tier"
+    # Evaluated by the engine: an explicit opt-out of threat detection.
+    match:
+      tier: '^Free$'
+    new_urgency: HIGH

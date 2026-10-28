@@ -1,7 +1,7 @@
 id: SEC-AZURE-APPGW-002
 title: "Azure Application Gateway uses weak TLS policy"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:

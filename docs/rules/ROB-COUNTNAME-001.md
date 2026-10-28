@@ -47,7 +47,7 @@ keywords: "robustness, medium, terraform, iac, mitre-T1485, cwe-1188, d3-cspp, n
 ``db_name``, ``instance_name``, ``cluster_identifier``,
 ``function_name``, ``topic_name``, ``queue_name``,
 ``table_name``, ``role_name``, ``user_name``,
-``repository_name``, ``key_name``) whose value interpolates
+``repository_name``, ``key_name``, or the ``Name`` tag) whose value interpolates
 ``${count.index}`` or ``count.index``. Changing ``count``
 from N to M (with M < N) destroys instance ``[M..N-1]``;
 reordering destroys-and-recreates every instance whose
@@ -62,7 +62,7 @@ Resource declares ``count = N`` AND has a name-like attribute
 ``db_name``, ``instance_name``, ``cluster_identifier``,
 ``function_name``, ``topic_name``, ``queue_name``,
 ``table_name``, ``role_name``, ``user_name``,
-``repository_name``, ``key_name``) whose value interpolates
+``repository_name``, ``key_name``, or the ``Name`` tag) whose value interpolates
 ``${count.index}`` or ``count.index``. Changing ``count``
 from N to M (with M < N) destroys instance ``[M..N-1]``;
 reordering destroys-and-recreates every instance whose
