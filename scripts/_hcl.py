@@ -338,6 +338,27 @@ def resource_subtrees(tree: dict | None) -> dict[tuple[str, str], list[dict]]:
     return out
 
 
+def attach_tree_attrs(blocks: list[dict], tree: dict | None) -> list[dict]:
+    """Give each resource block found by `find_blocks` its parsed subtree
+    as ``blk["attrs"]`` (dynamic blocks folded in), joined on (type, name).
+    ``attrs`` is None — callers then use the regex fallback — when there
+    is no tree or the key is ambiguous (seen twice by either side). Line
+    numbers still come from the regex blocks."""
+    subtrees = resource_subtrees(tree)
+    seen: dict[tuple, int] = {}
+    for blk in blocks:
+        key = tuple(blk["groups"])
+        seen[key] = seen.get(key, 0) + 1
+    for blk in blocks:
+        key = tuple(blk["groups"])
+        found = subtrees.get(key, [])
+        blk["attrs"] = (
+            normalise_attrs(found[0])
+            if len(found) == 1 and seen[key] == 1 else None
+        )
+    return blocks
+
+
 def attrs_has_path(attrs: dict, path: str, *, every: bool = True) -> bool:
     """Tree counterpart of `block_has_nested_path` (§4.4 rules 1–3).
 

@@ -132,6 +132,7 @@ from _hcl import (
     comments_only,
     normalise_attrs,
     resource_subtrees,
+    attach_tree_attrs,
     resource_values_at,
 )
 from _network import parse_literal as _net_parse_literal, resolve as _net_resolve
@@ -793,19 +794,9 @@ def detect_in_file(
     # when the file did not parse, is not `.tf`, or the key is ambiguous
     # (seen twice by either side). Line numbers still come from
     # find_blocks (tasks/hcl-parser-migration.md §4.3, §4.5).
-    _tree = parse_tf(text)[0] if is_tf_source(file_path) else None
-    _subtrees = resource_subtrees(_tree)
-    _regex_keys: dict[tuple, int] = {}
-    for _blk in resources:
-        _k = tuple(_blk["groups"])
-        _regex_keys[_k] = _regex_keys.get(_k, 0) + 1
-    for _blk in resources:
-        _k = tuple(_blk["groups"])
-        _found = _subtrees.get(_k, [])
-        _blk["attrs"] = (
-            normalise_attrs(_found[0])
-            if len(_found) == 1 and _regex_keys[_k] == 1 else None
-        )
+    attach_tree_attrs(
+        resources, parse_tf(text)[0] if is_tf_source(file_path) else None,
+    )
     modules = find_blocks(text, MODULE_START)
     variables = find_blocks(text, VARIABLE_START)
 
