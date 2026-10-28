@@ -38,6 +38,7 @@ def load_suppressions(
     target: Path,
     *,
     load_yaml: Callable[[str], dict],
+    ignore_file: Path | None = None,
 ) -> tuple[dict, dict]:
     """Read ``.tf-analyze-ignore.yaml`` and return ``(active, expired)``.
 
@@ -48,8 +49,11 @@ def load_suppressions(
     """
     active: dict[str, dict] = {}
     expired: dict[str, dict] = {}
-    ignore_file = target / ".tf-analyze-ignore.yaml"
-    if not ignore_file.exists():
+    if ignore_file is not None:
+        # An explicit file replaces the lookup: missing means "none".
+        if not ignore_file.is_file():
+            return active, expired
+    elif not (ignore_file := target / ".tf-analyze-ignore.yaml").exists():
         parent_ignore = target.parent / ".tf-analyze-ignore.yaml"
         if parent_ignore.exists():
             ignore_file = parent_ignore
