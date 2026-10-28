@@ -32,6 +32,23 @@ Active rules at HIGH or CRITICAL: 175 of 352 (50%) → 66 (19%).
   account and Key Vault; private bucket and Cloud Run) now passes
   `--fail-on HIGH`; before, each failed on two or three HIGHs.
 
+## Round 79 — One resolver for variable and local values — 2026-10-28
+
+Findings change: values behind a chain of locals or a ternary are now
+read correctly. Terragoat totals are unchanged.
+
+- **Chains**: `locals { enc = var.enc }` then `encrypted = local.enc`
+  resolved to the text `var.enc`, so `SEC-AWS-REDSHIFT-001` fired even
+  with `default = true`. References are now followed (up to 8 steps;
+  a cycle is left as written).
+- **Ternaries**: `var.prod ? "aws:kms" : "AES256"` was split on its
+  first `:` and folded to `aws`. The split now steps over strings,
+  brackets, parentheses and nested ternaries. Single quotes are no
+  longer stripped from a branch (HCL has none).
+- **Firewall rules** use the same resolver (`_network.resolve` had its
+  own), so a ternary port such as `var.admin ? 22 : 443` folds there too.
+  A ternary that picks a *list* of CIDRs still does not fold.
+
 ## Round 78 — `grep` rules don't read commented-out code — 2026-10-28
 
 Findings change: fewer false alarms on commented-out code, and one

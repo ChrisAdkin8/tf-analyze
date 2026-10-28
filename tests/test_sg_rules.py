@@ -69,6 +69,12 @@ PORT_CIDRS = """      from_port   = ingress.value.port
         ),
         ("", '[{ port = 22, cidrs = ["0.0.0.0/0"] }]'),
         (
+            # A chain: dynamic blocks share the one resolver (local -> var).
+            'variable "rules" {\n  default = [{ port = 22, cidrs = ["0.0.0.0/0"] }]\n}\n'
+            'locals {\n  rules = var.rules\n}\n',
+            "local.rules",
+        ),
+        (
             'variable "rules" {\n  default = {\n    ssh = { port = 22, cidrs = ["0.0.0.0/0"] }\n  }\n}\n',
             "var.rules",
         ),
