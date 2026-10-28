@@ -105,12 +105,58 @@ def _arg_line(blk: dict, arg: str) -> int:
 _BLOCK_HEADER_LINE_RE = re.compile(r'^\s*[\w-]+(?:\s+(?:"[^"\n]*"|[\w-]+))*\s*\{\s*$')
 
 
+def _interpolation_end(text: str, j: int) -> int:
+    """Index just past the ``${ ... }`` / ``%{ ... }`` starting at ``text[j]``."""
+    depth, k, n = 1, j + 2, len(text)
+    while k < n and depth:
+        ch = text[k]
+        if ch == '"':
+            k = _string_end(text, k)
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        k += 1
+    return k
+
+
+def _blank_string_text(text: str) -> str:
+    """``text`` with the literal text of every double-quoted string blanked
+    (newlines kept), leaving ``${...}`` / ``%{...}`` interpolations as they
+    are. ``description = "see aws_instance.a[0].id"`` names a resource but
+    doesn't reference it; ``"${aws_instance.a[0].id}"`` does."""
+    out = list(text)
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != '"':
+            i += 1
+            continue
+        end = _string_end(text, i)
+        j = i + 1
+        while j < end - 1:
+            ch = text[j]
+            if ch in "$%" and text.startswith(ch * 2 + "{", j):
+                for k in range(j, j + 3):
+                    out[k] = " "
+                j += 3
+            elif ch in "$%" and text.startswith(ch + "{", j):
+                j = _interpolation_end(text, j)
+            else:
+                if ch != "\n":
+                    out[j] = " "
+                j += 1
+        i = end
+    return "".join(out)
+
+
 def _code_lines(text: str) -> tuple[list[str], list[str], list[int]]:
     """``(refs, structure, depths)`` per line of ``text``: `refs` has the
-    comments blanked (heredoc text kept — a ``${...}`` there is a real
-    reference); `structure` also blanks heredocs; `depths` is the
-    ``([{`` nesting depth at the start of each line, strings skipped."""
-    refs = mask_comments(text)
+    comments and the literal text of strings blanked (``${...}`` kept, in
+    strings and heredocs — that's a real reference); `structure` also
+    blanks heredocs; `depths` is the ``([{`` nesting depth at the start of
+    each line, strings skipped."""
+    refs = _blank_string_text(mask_comments(text))
     code = mask_comments_and_heredocs(text)
     depths = [0]
     depth, i, n = 0, 0, len(code)
