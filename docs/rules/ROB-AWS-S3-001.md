@@ -43,7 +43,9 @@ keywords: "robustness, medium, terraform, iac, aws, cis-2.1.2, mitre-T1490, nist
 
 1. **`resource_arg`** on `aws_s3_bucket_versioning` (`versioning_configuration.status`) matching `/^(Disabled|Suspended)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   S3 bucket versioning disabled or suspended
-2. **`resource_missing_arg`** on `aws_s3_bucket` (`versioning`) — _the resource is missing a required attribute (or nested attribute path)._
+2. **`resource_arg`** on `aws_s3_bucket` (`versioning.enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  legacy inline `versioning { enabled = false }` (pre-v4 provider)
+3. **`resource_missing_arg`** on `aws_s3_bucket` (`versioning`) — _the resource is missing a required attribute (or nested attribute path)._
   S3 bucket with neither the legacy inline `versioning` block (pre-v4
 provider) nor an `aws_s3_bucket_versioning` in the same module
 pointing at it (v4+).
@@ -51,6 +53,8 @@ pointing at it (v4+).
 ## Why it likely fired
 
 S3 bucket versioning disabled or suspended
+
+legacy inline `versioning { enabled = false }` (pre-v4 provider)
 
 S3 bucket with neither the legacy inline `versioning` block (pre-v4
 provider) nor an `aws_s3_bucket_versioning` in the same module

@@ -118,12 +118,15 @@ def _name_selected(pat: dict, blk: dict) -> bool:
     return True
 
 
-def _suppressed_by(spec: dict | None, blk: dict, var_defaults: dict) -> bool:
+def _suppressed_by(spec: dict | list | None, blk: dict, var_defaults: dict) -> bool:
     """Whether ``suppress_if: {arg, equals | regex}`` holds for a resource:
     a value of `arg` (variables resolved; may be a dotted path such as
     ``default_action.type``, where any instance counts) equals the
     literal, case-insensitively, or matches the regex. Read from the
-    parse tree, so `terraform fmt` alignment does not matter."""
+    parse tree, so `terraform fmt` alignment does not matter. A list of
+    such mappings holds when any one of them does."""
+    if isinstance(spec, list):
+        return any(_suppressed_by(s, blk, var_defaults) for s in spec if isinstance(s, dict))
     if not spec or not spec.get("arg"):
         return False
     want = str(spec.get("equals", "")).lower().strip("\"'")
@@ -397,10 +400,14 @@ def _detect_resource_missing_companion(c: InFileCtx) -> list[dict]:
     a resource points at — e.g. a bucket that is some
     ``aws_s3_bucket_logging``'s ``target_bucket`` is a log destination and
     does not log its own access.
+
+    ``unless_repo_has: T`` (see `_repo_has`) skips the pattern when an
+    account-level resource stands in for every companion, e.g. an
+    ``aws_s3_account_public_access_block``.
     """
     pat = c.pat
     rt, ctype, via = pat.get("resource"), pat.get("companion"), pat.get("via")
-    if not (rt and ctype and via):
+    if not (rt and ctype and via) or _repo_has(pat, c.var_defaults):
         return []
     spec = {"resource": ctype, "via": via}
     exempt = pat.get("exempt_if_companion")

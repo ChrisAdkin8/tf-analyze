@@ -1,7 +1,7 @@
 id: ROB-PROVIDER-ALIAS-001
 title: "Module references provider alias that is not declared"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 slsa:

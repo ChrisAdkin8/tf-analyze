@@ -19,11 +19,10 @@
 #     all public-S3 incidents.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-IAM-001  HIGH   IAM policy with wildcard resource
+#   - SEC-AWS-IAM-POLICY-005  CRITICAL  IAM policy document with actions and resources `*`
 #   - SEC-AWS-S3-001   HIGH   S3 bucket missing server-side encryption
-#                             (note: this is the existing AWS rule;
-#                             public_access_block detection is a
-#                             future catalogue addition)
+#   - SEC-AWS-S3-PUBLIC-BLOCK-001  HIGH  S3 bucket with no public access block
+#   - SEC-AWS-S3-PUBLIC-001        HIGH  S3 bucket ACL `public-read`
 #
 # Fix summary: scope every IAM policy to specific Actions and
 # Resources; declare `aws_s3_bucket_public_access_block` with all
@@ -48,6 +47,12 @@ resource "aws_iam_policy" "godmode" {
 # possible if any future binding grants public.
 resource "aws_s3_bucket" "no_block" {
   bucket = "demo-no-public-access-block"
+}
+
+# ... and a canned ACL that hands every object to anyone on the internet.
+resource "aws_s3_bucket_acl" "no_block" {
+  bucket = aws_s3_bucket.no_block.id
+  acl    = "public-read"
 }
 
 # IAM role with wildcard principal — every AWS account can assume it.

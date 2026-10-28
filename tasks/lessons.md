@@ -41,3 +41,13 @@ gate catches a changed default or a moved-but-still-present argument.
   existing or cheap-new test, and record the deliberate non-extractions (e.g. keeping `(emit,
   out_file)` as two params rather than one object) so the next person knows they were a
   choice, not an oversight.
+
+## 2026-10-28 — a double-quoted `\\.` in a catalogue regex silently never matches
+
+**What happened:** `regex: "acs\\.amazonaws\\.com/..."` in SEC-AWS-S3-PUBLIC-001 matched
+nothing. Real YAML turns `\\` into one backslash; the engine's own YAML reader keeps both,
+so the regex looked for a literal backslash. `test_schema.py` and `--strict-catalog` passed.
+
+**Prevention rules:**
+- Write catalogue regexes in single quotes (`regex: 'a\.b'`), as the existing rules do.
+- Every new pattern needs a fixture that proves it fires; a schema pass proves nothing.
