@@ -27,6 +27,7 @@ Pure functions only; no engine state.
 
 from __future__ import annotations
 
+import ast
 import ipaddress
 import re
 from dataclasses import dataclass
@@ -134,6 +135,18 @@ def parse_literal(text: str):
     else is returned as the string itself."""
     t = text.strip()
     if t.startswith("[") and t.endswith("]"):
+        # Inside an expression (a ternary branch) python-hcl2 prints a list
+        # with Python's repr — `['0.0.0.0/0']`, or `"it's"` when the string
+        # holds an apostrophe — not as HCL. literal_eval reads that form
+        # (and plain HCL string lists) without running anything; lists with
+        # references or `true`/`false` aren't Python literals and fall
+        # through to the HCL reading below.
+        try:
+            lit = ast.literal_eval(t)
+        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            lit = None
+        if isinstance(lit, list) and all(isinstance(i, (str, int)) for i in lit):
+            return lit
         items = re.findall(r'"(?:[^"\\]|\\.)*"|[^,\s\[\]][^,\[\]]*', t[1:-1])
         return [_scalar(i) for i in items if i.strip()]
     return _scalar(t)
