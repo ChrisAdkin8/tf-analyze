@@ -182,3 +182,83 @@ def test_a_failed_plan_download_is_reported_to_the_callback(monkeypatch):
     monkeypatch.setattr(m, "_callback", lambda url, headers, body: sent.append(body))
     m._process_run_task("https://app.terraform.io/plan", "https://app.terraform.io/cb", "tok")
     assert sent and sent[0]["data"]["attributes"]["status"] == "failed"
+
+
+# ---- plan-json redirect ------------------------------------------------------
+# HCP's plan-json endpoint answers with a 307 to a signed download URL.
+
+class _FakeResp:
+    def __init__(self, status: int, location: str = "", body: bytes = b"{}") -> None:
+        self.status_code = status
+        self.headers = {"Location": location} if location else {}
+        self._body = body
+
+    def iter_content(self, _n: int):
+        yield self._body
+
+    def close(self) -> None:
+        pass
+
+
+def _run_with(monkeypatch, m, responses: list[_FakeResp]):
+    calls: list[tuple[str, dict]] = []
+    sent: list[dict] = []
+
+    def fake_get(url, headers=None, **kw):
+        assert kw.get("allow_redirects") is False
+        calls.append((url, dict(headers or {})))
+        return responses[len(calls) - 1]
+
+    monkeypatch.setattr(m.requests, "get", fake_get)
+    monkeypatch.setattr(m, "_callback", lambda url, headers, body: sent.append(body))
+    monkeypatch.setattr(m.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("8.8.8.8", 443))])
+    monkeypatch.setattr(m, "_run_detect", lambda path: ({"findings": []}, 0))
+    m._process_run_task("https://app.terraform.io/api/v2/plans/p/json-output",
+                        "https://app.terraform.io/cb", "tok")
+    return calls, sent
+
+
+def test_hcp_redirect_to_archivist_is_followed_without_the_token(monkeypatch):
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret", TFA_RUN_TASK_ALLOWED_REDIRECT_HOSTS=None)
+    calls, sent = _run_with(monkeypatch, m, [
+        _FakeResp(307, "https://archivist.terraform.io/v1/object/signed"),
+        _FakeResp(200),
+    ])
+    assert [u for u, _ in calls] == ["https://app.terraform.io/api/v2/plans/p/json-output",
+                                     "https://archivist.terraform.io/v1/object/signed"]
+    assert calls[0][1] == {"Authorization": "Bearer tok"}
+    assert calls[1][1] == {}
+    assert sent and sent[0]["data"]["attributes"]["status"] == "passed"
+
+
+def test_same_host_redirect_keeps_the_token(monkeypatch):
+    # Terraform Enterprise redirects to its own /_archivist path.
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret")
+    calls, _ = _run_with(monkeypatch, m, [_FakeResp(307, "/_archivist/v1/object/x"), _FakeResp(200)])
+    assert calls[1] == ("https://app.terraform.io/_archivist/v1/object/x", {"Authorization": "Bearer tok"})
+
+
+def test_redirect_to_an_unlisted_host_is_refused(monkeypatch):
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret", TFA_RUN_TASK_ALLOWED_REDIRECT_HOSTS=None)
+    for target in ("https://169.254.169.254/latest/meta-data/", "http://archivist.terraform.io/x",
+                   "https://evil.example.com/x"):
+        calls, sent = _run_with(monkeypatch, m, [_FakeResp(307, target)])
+        assert len(calls) == 1, target
+        assert "redirect refused" in sent[0]["data"]["attributes"]["message"]
+
+
+def test_only_one_redirect_is_followed(monkeypatch):
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret")
+    calls, sent = _run_with(monkeypatch, m, [
+        _FakeResp(307, "https://archivist.terraform.io/a"),
+        _FakeResp(307, "https://archivist.terraform.io/b"),
+    ])
+    assert len(calls) == 2
+    assert "(307)" in sent[0]["data"]["attributes"]["message"]
+
+
+def test_operator_can_allow_another_redirect_host(monkeypatch):
+    m = _load(TFA_RUN_TASK_HMAC_KEY="s3cret", TFA_RUN_TASK_ALLOWED_REDIRECT_HOSTS="blobs.tfe.example.com")
+    calls, _ = _run_with(monkeypatch, m, [_FakeResp(307, "https://blobs.tfe.example.com/x"), _FakeResp(200)])
+    assert calls[1] == ("https://blobs.tfe.example.com/x", {})
+    os.environ.pop("TFA_RUN_TASK_ALLOWED_REDIRECT_HOSTS", None)
