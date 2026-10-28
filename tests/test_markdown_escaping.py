@@ -159,6 +159,11 @@ def test_md_text_neutralises_markup_outside_code_spans() -> None:
     # "``" closes it, so here the link is prose and must be escaped.
     tricky = "``[a](https://e.vil)`"
     assert _md_text(tricky) == "``\\[a\\](https:\u200b//e.vil)`"
+    # A character reference renders as the character it names, so
+    # "&#64;user" would ping and "https&#58;//" would link after the rest
+    # of the escaping. Escaping "&" keeps the reference as literal text.
+    for ref in ("&#64;someone", "https&#58;//e.vil", "&commat;someone", "&lbrack;a&rbrack;(b)"):
+        assert re.search(r"(?<!\\)&", _md_text(ref)) is None, _md_text(ref)
 
 
 def test_md_fence_cannot_be_closed_by_its_body() -> None:
@@ -233,7 +238,7 @@ def test_action_comment_escaping_matches_the_engine() -> None:
     end = helpers.index("\n", helpers.index("const fence")) if "\n" in helpers[helpers.index("const fence"):] else len(helpers)
     js = helpers[start:end]
     samples = [HOSTILE_TITLE, "## heading", r"\[x](y)", "`[a](b) @c` and [d]", "Missing `x` on `y`",
-               "``[a](https://e.vil)`", "``x`[a](b)`"]
+               "``[a](https://e.vil)`", "``x`[a](b)`", "&#64;someone & https&#58;//e.vil"]
     prog = js + "\nconst S = " + json.dumps(samples) + ";\n" + \
         "console.log(JSON.stringify({t: S.map(mdText), f: fence(" + json.dumps(HOSTILE_FIX) + ")}));"
     out = json.loads(subprocess.run(["node", "-e", prog], capture_output=True, text=True, check=True).stdout)
