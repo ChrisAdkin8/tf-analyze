@@ -1,7 +1,5 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import { writePrivateTempFile } from './safeWrite';
 import { resolveScriptPath, defaultSearchPaths } from './scriptResolver';
 import { injectLinkInterceptor, injectReportCsp, LINK_BRIDGE_PARENT_JS } from './iframeBridge';
 import { runEngine, engineExtraArgs } from './engineRunner';
@@ -198,12 +196,12 @@ export class HtmlReportPanel {
     // Audit follow-up #21 — guard against an empty result. If wsName
     // contained only `[^a-zA-Z0-9._-]` characters, `safe` would be all
     // underscores; if wsName were an empty string the path would be
-    // `tf-analyze--<ts>.html` with a double dash. Fall back to a
-    // sentinel so the filename always has a recognisable middle token.
+    // `tf-analyze-.html`. Fall back to a sentinel so the filename always
+    // has a recognisable middle token. The file goes in a fresh private
+    // temp dir, so the name needs no timestamp to be unique.
     const safe = (wsName.replace(/[^a-zA-Z0-9._-]/g, '_') || 'workspace');
-    const file = path.join(os.tmpdir(), `tf-analyze-${safe}-${Date.now()}.html`);
     try {
-      fs.writeFileSync(file, this._lastHtml, 'utf8');
+      const file = writePrivateTempFile(`tf-analyze-${safe}.html`, this._lastHtml);
       await vscode.env.openExternal(vscode.Uri.file(file));
     } catch (e) {
       void vscode.window.showErrorMessage(`tf-analyze: failed to open report — ${(e as Error).message}`);

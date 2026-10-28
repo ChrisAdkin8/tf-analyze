@@ -35,9 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HtmlReportPanel = void 0;
 const vscode = __importStar(require("vscode"));
-const fs = __importStar(require("fs"));
-const os = __importStar(require("os"));
-const path = __importStar(require("path"));
+const safeWrite_1 = require("./safeWrite");
 const scriptResolver_1 = require("./scriptResolver");
 const iframeBridge_1 = require("./iframeBridge");
 const engineRunner_1 = require("./engineRunner");
@@ -206,12 +204,12 @@ class HtmlReportPanel {
         // Audit follow-up #21 — guard against an empty result. If wsName
         // contained only `[^a-zA-Z0-9._-]` characters, `safe` would be all
         // underscores; if wsName were an empty string the path would be
-        // `tf-analyze--<ts>.html` with a double dash. Fall back to a
-        // sentinel so the filename always has a recognisable middle token.
+        // `tf-analyze-.html`. Fall back to a sentinel so the filename always
+        // has a recognisable middle token. The file goes in a fresh private
+        // temp dir, so the name needs no timestamp to be unique.
         const safe = (wsName.replace(/[^a-zA-Z0-9._-]/g, '_') || 'workspace');
-        const file = path.join(os.tmpdir(), `tf-analyze-${safe}-${Date.now()}.html`);
         try {
-            fs.writeFileSync(file, this._lastHtml, 'utf8');
+            const file = (0, safeWrite_1.writePrivateTempFile)(`tf-analyze-${safe}.html`, this._lastHtml);
             await vscode.env.openExternal(vscode.Uri.file(file));
         }
         catch (e) {
