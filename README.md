@@ -17,9 +17,9 @@
 
 <!-- Content row — what does it cover? -->
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
-![Rules: 354](https://img.shields.io/badge/rules-354-brightgreen)
+![Rules: 352](https://img.shields.io/badge/rules-352-brightgreen)
 ![fix_hcl: 93%](https://img.shields.io/badge/fix__hcl-93%25-brightgreen)
-![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-80%25%20%2F%2068%25%20%2F%2046%25-brightgreen)
+![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-80%25%20%2F%2068%25%20%2F%2047%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-354%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 
@@ -34,9 +34,9 @@ Same engine, ten surfaces — Claude Code skill, Python CLI, GitHub Action, Dock
 | AWS | 63 | 25 | 4 | **92** |
 | GCP | 41 | 46 | 3 | **90** |
 | Azure | 56 | 32 | 3 | **91** |
-| K8s / Helm | 12 | 6 | 0 | **18** |
-| Cross-cloud / engine | 22 | 27 | 14 | **63** |
-| **Total** | **194** | **136** | **24** | **354** |
+| K8s / Helm | 12 | 5 | 0 | **17** |
+| Cross-cloud / engine | 21 | 27 | 14 | **62** |
+| **Total** | **193** | **135** | **24** | **352** |
 
 Hardening = `ROB-*` + `STK-*`; Ops & Reuse = `OPS-*` + `COST-*` + `MOD-*` + `MOD-REUSE-*` + `INT-*` + `CI-*` + `STYLE-*`. Full per-family breakdown and shape-by-cloud commentary in [Detection ↓](#detection).
 
@@ -178,7 +178,7 @@ A scanner is only as good as the actions it provokes. Where comparable tools sto
 
 ### Detection
 
-354 rules across six families. `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
+352 active rules across six families (plus 2 stubs that don't run yet). `--list-rules` enumerates them; `--explain RULE-ID` prints one in full.
 
 | Family | Prefix | Focus |
 |--------|--------|-------|
@@ -389,7 +389,7 @@ The single-rule fixtures under [`fixtures/`](fixtures/) (239 positive + 146 clea
 ├── install.sh                  # Symlinks repo into ~/.claude/skills/tf-analyze
 ├── .pre-commit-hooks.yaml      # pre-commit.com hook declaration
 ├── .github/workflows/          # CI (ci.yml, docker.yml)
-├── catalog/                    # 354 rule definitions (one YAML per rule)
+├── catalog/                    # 352 active rule definitions (one YAML per rule)
 │   └── README.md               # Schema reference
 ├── fixtures/                   # 360 positive + 264 clean (negative) fixtures
 ├── examples/                   # Showcase corpora
