@@ -121,6 +121,7 @@ from _hcl import (
     strip_hcl_context,
     find_blocks,
     find_simple_blocks,
+    mask_comments,
     block_has_arg,
     block_arg_value,
     brace_walk,
@@ -934,19 +935,29 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
 
     # Pre-build per-directory variable reference index for unused detection
     # dir -> set of var names referenced as var.X in any .tf file in that dir
+    # Comments are not references; nor is a variable's mention of itself in
+    # its own block (a `validation` condition must name `var.X`, so every
+    # validated variable looked used). Heredoc text is kept: `${var.x}` in
+    # a `user_data` script is a real use.
     var_refs_by_dir: dict[str, set[str]] = {}
     for fp, text in all_files_text.items():
         dirkey = str(Path(fp).parent)
         if dirkey not in var_refs_by_dir:
             var_refs_by_dir[dirkey] = set()
-        for m in re.finditer(r'\bvar\.([\w-]+)', text):
-            var_refs_by_dir[dirkey].add(m.group(1))
+        code = mask_comments(text)
+        own = [
+            (b["start_pos"], b["end_pos"], b["groups"][0])
+            for b in find_blocks(text, VARIABLE_START)
+        ]
+        for m in re.finditer(r'\bvar\.([\w-]+)', code):
+            if not any(a <= m.start() < b and n == m.group(1) for a, b, n in own):
+                var_refs_by_dir[dirkey].add(m.group(1))
 
     # Pre-build output-consumption index for output_unused:
     # Find all module.X.output_name references across all files
     output_refs: set[tuple[str, str]] = set()  # (module_name, output_name)
     for fp, text in all_files_text.items():
-        for m in re.finditer(r'\bmodule\.([\w-]+)\.([\w-]+)', text):
+        for m in re.finditer(r'\bmodule\.([\w-]+)\.([\w-]+)', mask_comments(text)):
             output_refs.add((m.group(1), m.group(2)))
 
     # Pre-build module source -> module name mapping for output_unused

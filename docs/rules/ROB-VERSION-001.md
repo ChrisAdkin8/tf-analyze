@@ -67,7 +67,7 @@ Terraform 1.6+: native test framework (`*.tftest.hcl`), `import` blocks,
 
 ```hcl
 terraform {
-  required_version = ">= 1.5.0, < 2.0.0"
+  required_version = ">= 1.6.0, < 2.0.0"
 }
 ```
 
