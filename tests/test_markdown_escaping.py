@@ -155,6 +155,10 @@ def test_md_text_neutralises_markup_outside_code_spans() -> None:
     assert _md_text(built_in) == built_in
     # Text inside a code span is literal in Markdown, so it is left alone.
     assert _md_text("`[a](b) @c`") == "`[a](b) @c`"
+    # A span can't start inside a backtick run: "``" opens a span only if
+    # "``" closes it, so here the link is prose and must be escaped.
+    tricky = "``[a](https://e.vil)`"
+    assert _md_text(tricky) == "``\\[a\\](https:\u200b//e.vil)`"
 
 
 def test_md_fence_cannot_be_closed_by_its_body() -> None:
@@ -228,9 +232,21 @@ def test_action_comment_escaping_matches_the_engine() -> None:
     start = helpers.index("const mdText")
     end = helpers.index("\n", helpers.index("const fence")) if "\n" in helpers[helpers.index("const fence"):] else len(helpers)
     js = helpers[start:end]
-    samples = [HOSTILE_TITLE, "## heading", r"\[x](y)", "`[a](b) @c` and [d]", "Missing `x` on `y`"]
+    samples = [HOSTILE_TITLE, "## heading", r"\[x](y)", "`[a](b) @c` and [d]", "Missing `x` on `y`",
+               "``[a](https://e.vil)`", "``x`[a](b)`"]
     prog = js + "\nconst S = " + json.dumps(samples) + ";\n" + \
         "console.log(JSON.stringify({t: S.map(mdText), f: fence(" + json.dumps(HOSTILE_FIX) + ")}));"
     out = json.loads(subprocess.run(["node", "-e", prog], capture_output=True, text=True, check=True).stdout)
     assert out["t"] == [_md_text(s) for s in samples]
     assert out["f"] == _md_fence(HOSTILE_FIX)[2]
+
+
+def test_custom_rule_id_must_be_plain(tmp_path) -> None:
+    """The id is printed in comments as-is, so only A-Z, 0-9 and dashes."""
+    from _catalog import validate_catalog_entry
+
+    assert not [e for e in validate_catalog_entry({"id": "CUSTOM-ACME-001"}, "x/CUSTOM-ACME-001.yaml")
+                if "upper-case" in e]
+    for bad in ("CUSTOM-[x](https:", "CUSTOM-<img>", "CUSTOM-a", "custom-x-1", "CUSTOM"):
+        errs = validate_catalog_entry({"id": bad}, f"x/{bad}.yaml")
+        assert any("upper-case" in e for e in errs), bad

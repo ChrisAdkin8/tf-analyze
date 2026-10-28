@@ -20,6 +20,8 @@ Self-test fixture counts are cumulative.
   are now longer than any backtick run inside the fix.
 - **pr-review mode**: a `CUSTOM-` rule's recommendation is shown as plain
   text.
+- **Rule ids**: an id must be upper-case letters and digits in
+  dash-separated parts (`CUSTOM-ACME-001`); ids are printed as-is.
 
 ## Round 70 — `--apply-fixes` never leaves a file worse than it found it — 2026-10-27
 

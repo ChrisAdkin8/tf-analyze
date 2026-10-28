@@ -458,7 +458,7 @@ runs:
             const esc = (x) => x.replace(/[\\\[\]<>]/g, '\\$&').replace(/@/g, '@\u200b')
               .replace(/(https?):(?=\/\/)/gi, '$1:\u200b').replace(/\bwww\./gi, (m) => m.slice(0, 3) + '\u200b.');
             let out = '', last = 0;
-            for (const m of t.matchAll(/(`+)[\s\S]+?(?<!`)\1(?!`)/g)) {
+            for (const m of t.matchAll(/(?<!`)(`+)(?!`)[\s\S]+?(?<!`)\1(?!`)/g)) {
               out += esc(t.slice(last, m.index)) + m[0];
               last = m.index + m[0].length;
             }

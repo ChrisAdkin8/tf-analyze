@@ -204,8 +204,10 @@ def _md_code(s: object) -> str:
     return f"{fence}{pad}{text}{pad}{fence}"
 
 
-# A code span: a backtick run, then text, then a run of the same length.
-_MD_CODE_SPAN_RE = re.compile(r"(`+).+?(?<!`)\1(?!`)", re.S)
+# A code span: a whole backtick run, then text, then a run of the same
+# length. Both runs must be whole (CommonMark): starting inside a run would
+# treat text as code that Markdown renders as prose.
+_MD_CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.S)
 
 
 def _md_text(s: object) -> str:
