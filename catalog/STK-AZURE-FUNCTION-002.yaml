@@ -6,8 +6,6 @@ blast_radius: single-resource
 status: active
 soc2_cc:
   - "CC7.2"
-mitre:
-  - "T1530"
 cwe:
   - "CWE-778"
 d3fend:

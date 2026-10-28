@@ -12,7 +12,7 @@ pci_dss:
 soc2_cc:
   - "CC6.1"
 mitre:
-  - "T1078.004"
+  - "T1078"
   - "T1098.001"
 cwe:
   - "CWE-269"
@@ -58,6 +58,13 @@ patterns:
     description: |
       R30.5 extension — `bind` / `escalate` / `impersonate` verbs
       allow privilege escalation outside the role's normal scope.
+  - kind: resource_arg
+    resource: kubernetes_cluster_role
+    arg: rule.verbs
+    regex: '"(?:bind|escalate|impersonate)"'
+    description: |
+      `bind` / `escalate` / `impersonate` on a ClusterRole: the same
+      escalation as on a Role, but across every namespace.
   - kind: resource_arg
     resource: kubernetes_cluster_role_binding
     arg: subject.name

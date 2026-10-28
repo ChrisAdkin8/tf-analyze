@@ -12,8 +12,6 @@ patterns:
       scans never report it.
 owasp_iac:
   - "Develop and Distribute / Open Source Dependency Scanning"
-mitre:
-  - "T1195.002"
 cwe:
   - "CWE-1395"
 d3fend:

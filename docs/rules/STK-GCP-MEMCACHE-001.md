@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-MEMCACHE-001 — GCP Memorystore Memcache missing maintenance policy"
 description: "tf-analyze rule STK-GCP-MEMCACHE-001 (LOW · stack): GCP Memorystore Memcache missing maintenance policy"
-keywords: "stack, low, terraform, iac, gcp, mitre-T1485, nist-csf-pr.ip-1"
+keywords: "stack, low, terraform, iac, gcp, nist-csf-pr.ip-1"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, low, terraform, iac, gcp, mitre-T1485, nist-csf-pr.ip-1"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, low, terraform, MITRE T1485",
+  "keywords": "stack, low, terraform",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -106,9 +106,6 @@ resource "google_memcache_instance" "example" {
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **NIST CSF 2.0**
   - [`PR.IP-1`](https://www.nist.gov/cyberframework)

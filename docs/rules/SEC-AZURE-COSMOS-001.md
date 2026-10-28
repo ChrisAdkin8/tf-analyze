@@ -45,14 +45,18 @@ keywords: "security, high, terraform, iac, azure, cis-5.4, mitre-T1190, mitre-T1
   `azurerm_cosmosdb_account` has `public_network_access_enabled = true`,
 exposing the Cosmos endpoint to the public internet. Even with
 strong authentication, public exposure widens the attack surface
-(credential stuffing, key leaks, network-layer scanning).
+(credential stuffing, key leaks, network-layer scanning). Leaving
+the argument out counts too: the azurerm provider defaults it to
+`true`.
 
 ## Why it likely fired
 
 `azurerm_cosmosdb_account` has `public_network_access_enabled = true`,
 exposing the Cosmos endpoint to the public internet. Even with
 strong authentication, public exposure widens the attack surface
-(credential stuffing, key leaks, network-layer scanning).
+(credential stuffing, key leaks, network-layer scanning). Leaving
+the argument out counts too: the azurerm provider defaults it to
+`true`.
 
 ## Adversarial scenario
 

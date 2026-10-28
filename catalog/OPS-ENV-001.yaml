@@ -10,15 +10,18 @@ mitre:
   - "T1485"
 patterns:
   - kind: prod_no_deletion_protection
-    description: A resource in a prod path (or with environment=prod label) is missing deletion_protection=true on a type that supports it
+    description: A resource under a production folder or file (a word prod / production / prd, not pre-prod or non-prod), or labelled environment / env = a production value, is missing deletion_protection=true on a type that supports it
 recommendation: |
   Production databases, GKE clusters, and storage buckets should be locked
   against accidental `terraform destroy`. Add `deletion_protection = true`
   (or `prevent_destroy = true` in a `lifecycle {}` block if the type doesn't
   expose `deletion_protection`).
 
-  Scope of the check: path containing `prod`, or `labels = { environment =
-  "prod" }` on the resource. Dev/staging environments are excluded by design.
+  Scope of the check: a folder or file name under the scan target whose
+  words include `prod`, `production` or `prd` (so `prod/`, `envs/prod-eu/`;
+  not `nonprod/`, `pre-prod/` or `products/`), or `labels = { environment =
+  "prod" }` (or `env`) on the resource. Dev/staging environments are
+  excluded by design.
 verification: |
   Run `terraform plan` after the change and confirm only `+` additions
   appear — the resource itself is not modified.

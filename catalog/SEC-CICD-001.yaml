@@ -6,7 +6,6 @@ blast_radius: environment
 status: active
 mitre:
   - "T1199"
-  - "T1078.004"
 cwe:
   - "CWE-732"
 nist_csf:

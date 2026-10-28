@@ -11,7 +11,7 @@ pci_dss:
 soc2_cc:
   - "CC7.2"
 mitre:
-  - "T1530"
+  - "T1562.008"
   - "T1213"
 cwe:
   - "CWE-778"

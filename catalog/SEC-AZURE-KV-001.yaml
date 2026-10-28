@@ -6,7 +6,7 @@ blast_radius: module
 cis:
   - "8.4"
 mitre:
-  - "T1530"
+  - "T1485"
 cwe:
   - "CWE-311"
 d3fend:

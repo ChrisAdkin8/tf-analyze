@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDARMOR-001 — GCP Cloud Armor security policy missing rate-based rule"
 description: "tf-analyze rule STK-GCP-CLOUDARMOR-001 (MEDIUM · stack): GCP Cloud Armor security policy missing rate-based rule"
-keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, mitre-T1190, cwe-770, cwe-799, d3-waf, nist-csf-pr.pt-4, nist-800-53-sc-5, nist-800-53-si-4, csa-ccm-ais-04"
+keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, cwe-770, cwe-799, d3-waf, nist-csf-pr.pt-4, nist-800-53-sc-5, nist-800-53-si-4, csa-ccm-ais-04"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, mitre-T1190, cwe-770
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1498, MITRE T1190, CWE-770, CWE-799, D3-WAF",
+  "keywords": "stack, medium, terraform, MITRE T1498, CWE-770, CWE-799, D3-WAF",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -150,7 +150,6 @@ least one rate-based rule.
 
 **MITRE ATT&CK**
   - [`T1498`](https://attack.mitre.org/techniques/T1498/)
-  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
 
 **CWE**
   - [`CWE-770`](https://cwe.mitre.org/data/definitions/770.html)

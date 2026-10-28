@@ -1,7 +1,7 @@
 ---
 title: "ROB-AZURE-VMSS-001 — Azure VM Scale Set missing automatic instance repair"
 description: "tf-analyze rule ROB-AZURE-VMSS-001 (MEDIUM · robustness): Azure VM Scale Set missing automatic instance repair"
-keywords: "robustness, medium, terraform, iac, azure, mitre-T1485, nist-csf-pr.ip-1, nist-800-53-cp-10"
+keywords: "robustness, medium, terraform, iac, azure, nist-csf-pr.ip-1, nist-800-53-cp-10"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, azure, mitre-T1485, nist-csf-pr.i
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, MITRE T1485",
+  "keywords": "robustness, medium, terraform",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -122,9 +122,6 @@ must return `true`.
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **NIST CSF 2.0**
   - [`PR.IP-1`](https://www.nist.gov/cyberframework)
