@@ -6,7 +6,6 @@ blast_radius: single-resource
 status: active
 mitre:
   - "T1190"
-  - "T1195.002"
 cwe:
   - "CWE-1104"
 d3fend:

@@ -1,7 +1,7 @@
 ---
 title: "SEC-CICD-001 — Workflow file applies Terraform without required-reviewers gate"
 description: "tf-analyze rule SEC-CICD-001 (HIGH · cicd): Workflow file applies Terraform without required-reviewers gate"
-keywords: "cicd, high, terraform, iac, mitre-T1199, mitre-T1078.004, cwe-732, nist-csf-pr.ac-4, nist-csf-gv.po-1, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09, slsa-l3, slsa-build"
+keywords: "cicd, high, terraform, iac, mitre-T1199, cwe-732, nist-csf-pr.ac-4, nist-csf-gv.po-1, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09, slsa-l3, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "cicd, high, terraform, iac, mitre-T1199, mitre-T1078.004, cwe-732, ni
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "cicd, high, terraform, MITRE T1199, MITRE T1078.004, CWE-732",
+  "keywords": "cicd, high, terraform, MITRE T1199, CWE-732",
   "proficiencyLevel": "Expert",
   "articleSection": "cicd",
   "isAccessibleForFree": true
@@ -89,7 +89,6 @@ environment.
 
 **MITRE ATT&CK**
   - [`T1199`](https://attack.mitre.org/techniques/T1199/)
-  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
 
 **CWE**
   - [`CWE-732`](https://cwe.mitre.org/data/definitions/732.html)

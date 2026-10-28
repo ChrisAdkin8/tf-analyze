@@ -46,7 +46,9 @@ keywords: "security, high, terraform, iac, gcp, cis-6.6, mitre-T1190, cwe-284, d
 assigns the instance a public IPv4 address. Even with
 `authorized_networks` set, this exposes the SQL endpoint outside
 the VPC perimeter — any network reachability mistake is now an
-exfiltration path.
+exfiltration path. Leaving it out counts too: the google provider
+defaults `ipv4_enabled` to `true`, with or without a
+`private_network`.
 
 ## Why it likely fired
 
@@ -54,7 +56,9 @@ exfiltration path.
 assigns the instance a public IPv4 address. Even with
 `authorized_networks` set, this exposes the SQL endpoint outside
 the VPC perimeter — any network reachability mistake is now an
-exfiltration path.
+exfiltration path. Leaving it out counts too: the google provider
+defaults `ipv4_enabled` to `true`, with or without a
+`private_network`.
 
 ## Adversarial scenario
 

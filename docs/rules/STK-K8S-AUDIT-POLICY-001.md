@@ -1,7 +1,7 @@
 ---
 title: "STK-K8S-AUDIT-POLICY-001 — Managed Kubernetes control plane has no audit-log configuration"
 description: "tf-analyze rule STK-K8S-AUDIT-POLICY-001 (MEDIUM · stack): Managed Kubernetes control plane has no audit-log configuration"
-keywords: "stack, medium, terraform, iac, mitre-T1562.008, mitre-T1530, cwe-778, cwe-223, nist-csf-de.cm-1, nist-csf-de.cm-7, nist-csf-pr.pt-1, nist-800-53-au-2, nist-800-53-au-3, nist-800-53-au-12, csa-ccm-log-02, csa-ccm-log-08"
+keywords: "stack, medium, terraform, iac, mitre-T1562.008, cwe-778, cwe-223, nist-csf-de.cm-1, nist-csf-de.cm-7, nist-csf-pr.pt-1, nist-800-53-au-2, nist-800-53-au-3, nist-800-53-au-12, csa-ccm-log-02, csa-ccm-log-08"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, mitre-T1562.008, mitre-T1530, cwe-778,
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1562.008, MITRE T1530, CWE-778, CWE-223",
+  "keywords": "stack, medium, terraform, MITRE T1562.008, CWE-778, CWE-223",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -108,7 +108,6 @@ resource "azurerm_kubernetes_cluster" "app" {
 
 **MITRE ATT&CK**
   - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
-  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
 
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)

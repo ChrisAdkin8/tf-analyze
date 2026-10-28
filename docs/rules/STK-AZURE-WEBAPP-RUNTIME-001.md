@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-WEBAPP-RUNTIME-001 — Azure App Service Web App uses end-of-life runtime"
 description: "tf-analyze rule STK-AZURE-WEBAPP-RUNTIME-001 (MEDIUM · stack): Azure App Service Web App uses end-of-life runtime"
-keywords: "stack, medium, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
+keywords: "stack, medium, terraform, iac, azure, mitre-T1190, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-s
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1195.002, CWE-1104, D3-SCA",
+  "keywords": "stack, medium, terraform, MITRE T1190, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -128,7 +128,7 @@ must reference a currently-supported runtime.
 ## References
 
 **MITRE ATT&CK**
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
 
 **CWE**
   - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)

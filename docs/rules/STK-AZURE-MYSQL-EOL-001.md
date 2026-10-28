@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-MYSQL-EOL-001 — Azure MySQL/PostgreSQL flexible server on end-of-life version"
 description: "tf-analyze rule STK-AZURE-MYSQL-EOL-001 (MEDIUM · stack): Azure MySQL/PostgreSQL flexible server on end-of-life version"
-keywords: "stack, medium, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
+keywords: "stack, medium, terraform, iac, azure, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-s
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1195.002, CWE-1104, D3-SCA",
+  "keywords": "stack, medium, terraform, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -93,9 +93,6 @@ must return a non-EOL major version.
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)
