@@ -1277,9 +1277,6 @@ _INTENT_FALSE_DEFAULT_RE = re.compile(
 _INTENT_MUST_TRUE_RE = re.compile(
     r'(?i)(must\s+be\s+true|required|enforced|mandatory)', re.IGNORECASE
 )
-_INTENT_PROD_TAG_RE = re.compile(
-    r'(?i)Environment\s*=\s*"?(prod|production)', re.IGNORECASE
-)
 _INTENT_DEL_PROT_FALSE_RE = re.compile(
     r'(?m)^\s*deletion_protection\s*=\s*false'
 )
