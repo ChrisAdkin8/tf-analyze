@@ -543,7 +543,7 @@ runs:
           // run longer than any backtick run inside it.
           const mdText = (s) => {
             const t = String(s ?? '').replace(/[\r\n]+/g, ' ');
-            const esc = (x) => x.replace(/[\\\[\]<>]/g, '\\$&').replace(/@/g, '@\u200b')
+            const esc = (x) => x.replace(/[\\\[\]<>&]/g, '\\$&').replace(/@/g, '@\u200b')
               .replace(/(https?):(?=\/\/)/gi, '$1:\u200b').replace(/\bwww\./gi, (m) => m.slice(0, 3) + '\u200b.');
             let out = '', last = 0;
             for (const m of t.matchAll(/(?<!`)(`+)(?!`)[\s\S]+?(?<!`)\1(?!`)/g)) {
@@ -611,7 +611,7 @@ runs:
               `${emoji} **[${f.id}]** — ${mdText(f.title)}`,
               '',
               `> Urgency: \`${f.urgency}\`` + (f.fix_disruption ? ` · Disruption: \`${f.fix_disruption}\`` : ''),
-              f.narrative ? `\n> *Adversarial scenario:* ${f.narrative}\n` : '',
+              f.narrative ? `\n> *Adversarial scenario:* ${mdText(f.narrative)}\n` : '',
               `${fence(f.fix_hcl)}suggestion`,
               f.fix_hcl.trimEnd(),
               fence(f.fix_hcl),
