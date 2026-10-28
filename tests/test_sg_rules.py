@@ -18,6 +18,13 @@ import pytest
 DETECT = Path(__file__).resolve().parents[1] / "scripts" / "detect.py"
 
 
+@pytest.fixture(autouse=True)
+def _real_parser(monkeypatch):
+    # Dynamic blocks are expanded from the parse tree; the forced-fallback
+    # CI job would route these modules through the legacy text path instead.
+    monkeypatch.delenv("TF_ANALYZE_TEST_FORCE_FALLBACK", raising=False)
+
+
 def _findings(tmp_path: Path, hcl: str, rule: str) -> list[tuple[str, str]]:
     (tmp_path / "main.tf").write_text(hcl)
     proc = subprocess.run(
