@@ -7,8 +7,8 @@ Self-test fixture counts are cumulative.
 
 ## Round 71 — A pull request can't switch off its own scan — 2026-10-28
 
-- **Base-branch config on PRs**: on `pull_request` and
-  `pull_request_target` events the GitHub Action now reads
+- **Base-branch config on PRs**: on `pull_request`,
+  `pull_request_target` and `merge_group` events the GitHub Action now reads
   `.tf-analyze.yaml`, `.tf-analyze-ignore.yaml` and the custom rules in
   `rules_dir` from the PR's base branch. Before, a PR could add
   `ignore_rules: [SEC-AWS-SG-001]` and its own CRITICAL finding vanished.

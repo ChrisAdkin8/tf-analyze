@@ -57,15 +57,16 @@ inputs:
     default: ''
   trust-pr-config:
     description: |
-      On pull_request events the scanned files come from the PR, so the PR
+      On pull_request, pull_request_target and merge_group events the
+      scanned files come from the PR, so the PR
       could edit `.tf-analyze.yaml` (ignore_rules / ignore_paths / rules_dir)
       or `.tf-analyze-ignore.yaml` to switch the gate off. By default
       (`false`) the action reads both files, and the custom rules they point
       at, from the PR's base branch instead: settings already merged still
       apply, the PR's changes to them do not. Inline `tf-analyze:ignore`
       comments are still honoured, because they show in the PR diff. Set
-      `true` to use the PR's own copies. Other events always use the
-      checked-out files.
+      `true` to use the PR's own copies. Other events (push, schedule, …)
+      use the checked-out files.
     default: 'false'
   ref:
     description: 'Shorthand for pinning the engine image tag. Accepts both `v0.2.3` (matches GitHub release URLs / CHANGELOG / marketplace listing) and `0.2.3` (matches the docker tag emitted by `docker/metadata-action`); the leading `v` is stripped when followed by a digit. Non-semver refs like `main` or `latest` pass through untouched. Mutually exclusive with an explicit `image:`.'
@@ -168,24 +169,26 @@ runs:
     - name: Use the base branch's tf-analyze config
       id: trusted
       if: >-
-        (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+        (github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+         || github.event_name == 'merge_group')
         && inputs.trust-pr-config != 'true'
       shell: bash
       env:
         TFA_TARGET: ${{ inputs.target }}
-        TFA_BASE_REF: ${{ github.base_ref }}
+        # A merge queue run scans the PR merged onto its target branch.
+        TFA_BASE_REF: ${{ github.base_ref || github.event.merge_group.base_ref }}
         TFA_WORKSPACE: ${{ github.workspace }}
       run: |
         DIR="${RUNNER_TEMP}/tf-analyze-trusted"
         rm -rf "$DIR" && mkdir -p "$DIR"
         echo "dir=$DIR" >> "$GITHUB_OUTPUT"
-        BASE="origin/${TFA_BASE_REF}"
+        BRANCH="${TFA_BASE_REF#refs/heads/}"
+        # Fetch into a ref of our own: a short name like `origin/main` would
+        # resolve to a tag of that name first, and tags can come from a PR.
+        BASE="refs/tf-analyze/base"
         cd "$TFA_WORKSPACE"
-        if ! git rev-parse --verify -q "${BASE}^{commit}" >/dev/null; then
-          git fetch --depth=1 origin "${TFA_BASE_REF}" >/dev/null 2>&1 || true
-        fi
-        if ! git rev-parse --verify -q "${BASE}^{commit}" >/dev/null; then
-          echo "::warning::tf-analyze: cannot read base branch '${BASE}'; scanning with no project config and no ignore file"
+        if [ -z "$BRANCH" ] || ! git fetch --no-tags --depth=1 origin "+refs/heads/${BRANCH}:${BASE}" >/dev/null 2>&1; then
+          echo "::warning::tf-analyze: cannot read base branch '${BRANCH}'; scanning with no project config and no ignore file"
           echo "ignore=/trusted/none" >> "$GITHUB_OUTPUT"
           exit 0
         fi
@@ -214,7 +217,7 @@ runs:
           copy "${PARENT}.tf-analyze-ignore.yaml" && IGNORE="/trusted/${PARENT}.tf-analyze-ignore.yaml"
         fi
         echo "ignore=$IGNORE" >> "$GITHUB_OUTPUT"
-        echo "::notice::tf-analyze: using .tf-analyze.yaml and .tf-analyze-ignore.yaml from '${BASE}', not from this PR (set trust-pr-config: true to change this)"
+        echo "::notice::tf-analyze: using .tf-analyze.yaml and .tf-analyze-ignore.yaml from '${BRANCH}', not from this PR (set trust-pr-config: true to change this)"
 
     - name: Build detect.py args
       id: args

@@ -54,14 +54,18 @@ def _repo(tmp_path: Path, base: dict[str, str], pr: dict[str, str]) -> Path:
         (repo / rel).write_text(text)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "--allow-empty", "-m", "base")
-    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    _git(repo, "remote", "add", "origin", str(origin))
+    _git(repo, "push", "-q", "origin", "main")
     for rel, text in pr.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text(text)
     return repo
 
 
-def _run_trusted(repo: Path, tmp_path: Path, target: str = ".") -> dict[str, str]:
+def _run_trusted(repo: Path, tmp_path: Path, target: str = ".",
+                 base_ref: str = "main") -> dict[str, str]:
     out = tmp_path / "gh_output"
     out.write_text("")
     runner_temp = tmp_path / "runner_temp"
@@ -71,7 +75,7 @@ def _run_trusted(repo: Path, tmp_path: Path, target: str = ".") -> dict[str, str
         env={
             **os.environ,
             "TFA_TARGET": target,
-            "TFA_BASE_REF": "main",
+            "TFA_BASE_REF": base_ref,
             "TFA_WORKSPACE": str(repo),
             "RUNNER_TEMP": str(runner_temp),
             "GITHUB_OUTPUT": str(out),
@@ -191,8 +195,7 @@ def test_subdirectory_target_and_rules_dir(tmp_path: Path) -> None:
 
 def test_unreadable_base_fails_closed(tmp_path: Path) -> None:
     repo = _repo(tmp_path, base={"main.tf": OPEN_SG}, pr={})
-    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
-    _git(repo, "remote", "add", "origin", str(tmp_path / "missing"))
+    _git(repo, "remote", "set-url", "origin", str(tmp_path / "missing"))
     outputs = _run_trusted(repo, tmp_path)
     assert "config" not in outputs and outputs["ignore"] == "/trusted/none"
 
@@ -228,3 +231,25 @@ def test_trusted_step_only_runs_on_untrusted_prs() -> None:
     assert ACTION["inputs"]["trust-pr-config"]["default"] == "false"
     scan = _step("Run tf-analyze (JSON)")["run"]
     assert '"${TFA_TRUSTED_DIR}:/trusted:ro"' in scan
+
+
+def test_a_tag_named_like_the_base_cannot_stand_in_for_it(tmp_path: Path) -> None:
+    """`origin/main` as a short name resolves to a tag of that name first."""
+    repo = _repo(tmp_path, base={"main.tf": OPEN_SG}, pr={})
+    (repo / ".tf-analyze.yaml").write_text("ignore_rules:\n  - SEC-AWS-SG-001\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "pr")
+    _git(repo, "tag", "origin/main")
+    outputs = _run_trusted(repo, tmp_path)
+    assert "config" not in outputs
+    assert "SEC-AWS-SG-001" in _rule_ids(_engine_args(outputs, repo))
+
+
+def test_merge_queue_base_ref_is_a_full_ref(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, base={"main.tf": OPEN_SG, ".tf-analyze.yaml": "ignore_paths: []\n"}, pr={})
+    outputs = _run_trusted(repo, tmp_path, base_ref="refs/heads/main")
+    assert outputs["config"] == "/trusted/.tf-analyze.yaml"
+    cond = _step("Use the base branch's tf-analyze config")["if"]
+    assert "merge_group" in cond
+    env = _step("Use the base branch's tf-analyze config")["env"]["TFA_BASE_REF"]
+    assert "github.event.merge_group.base_ref" in env
