@@ -6,7 +6,7 @@ Entry point: `detect:main`. Rules ship as the `tf_analyze_catalog` data package.
 
 ## Verify before pushing
 `main` requires the pytest matrix, the extension job, both docs-drift jobs, and
-the stub-age job — so those gate merge. Run them locally anyway (faster than a CI
+the stub-age job, and the changelog-fragment job — so those gate merge. Run them locally anyway (faster than a CI
 round-trip), and note the **`terragoat` snapshot gate is NOT required**, so its
 check can only be caught here:
 
@@ -18,9 +18,17 @@ check can only be caught here:
     python3 scripts/gen-cli-docs.py --check  # only if you touched a CLI flag
     python3 scripts/gen_rule_docs.py --check # only if you touched catalogue docs
     python3 scripts/check_terragoat_snapshot.py  # NOT gated by CI — run it here
+    python3 scripts/changelog.py check --base origin/main  # fragment present
 
 A new rule is a ~6-file PR (catalog YAML + fixture + terragoat trigger +
 2 READMEs + maybe a CI snapshot bump). See CONTRIBUTING.md for the full flow.
+
+## Changelog — never edit CHANGELOG.md in a PR
+Write the entry to `changelog.d/<branch-name>.md`: a `## Title` heading with
+no `Round N` and no date, then the entry. CI fails a PR that edits
+`CHANGELOG.md` directly or adds no fragment (label `no-changelog` to skip).
+`python3 scripts/changelog.py build` numbers and moves fragments; run it only
+when asked, in its own PR. Format: `changelog.d/README.md`.
 
 ## Hard invariants — violating these has already caused regressions
 - HCL has **no single-quoted strings**. Never treat `'` as a string delimiter.
