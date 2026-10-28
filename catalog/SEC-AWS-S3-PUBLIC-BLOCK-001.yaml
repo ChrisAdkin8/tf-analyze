@@ -1,5 +1,5 @@
 id: SEC-AWS-S3-PUBLIC-BLOCK-001
-title: "S3 bucket missing public access block"
+title: "S3 public access block missing or switched off"
 section: security
 default_urgency: HIGH
 blast_radius: single-resource
@@ -25,6 +25,58 @@ patterns:
     resource: aws_s3_bucket
     companion: aws_s3_bucket_public_access_block
     via: bucket
+    unless_repo_has: aws_s3_account_public_access_block
+    description: |
+      bucket with no `aws_s3_bucket_public_access_block` pointing at it,
+      and no account-level `aws_s3_account_public_access_block` in the scan
+  - kind: resource_arg
+    resource: aws_s3_bucket_public_access_block
+    arg: block_public_acls
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_bucket_public_access_block` with `block_public_acls` not `true` (it defaults to `false`)"
+  - kind: resource_arg
+    resource: aws_s3_bucket_public_access_block
+    arg: block_public_policy
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_bucket_public_access_block` with `block_public_policy` not `true` (it defaults to `false`)"
+  - kind: resource_arg
+    resource: aws_s3_bucket_public_access_block
+    arg: ignore_public_acls
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_bucket_public_access_block` with `ignore_public_acls` not `true` (it defaults to `false`)"
+  - kind: resource_arg
+    resource: aws_s3_bucket_public_access_block
+    arg: restrict_public_buckets
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_bucket_public_access_block` with `restrict_public_buckets` not `true` (it defaults to `false`)"
+  - kind: resource_arg
+    resource: aws_s3_account_public_access_block
+    arg: block_public_acls
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_account_public_access_block` with `block_public_acls` not `true` (it defaults to `false`)"
+  - kind: resource_arg
+    resource: aws_s3_account_public_access_block
+    arg: block_public_policy
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_account_public_access_block` with `block_public_policy` not `true` (it defaults to `false`)"
+  - kind: resource_arg
+    resource: aws_s3_account_public_access_block
+    arg: ignore_public_acls
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_account_public_access_block` with `ignore_public_acls` not `true` (it defaults to `false`)"
+  - kind: resource_arg
+    resource: aws_s3_account_public_access_block
+    arg: restrict_public_buckets
+    not_regex: "^true$"
+    fire_if_absent: true
+    description: "`aws_s3_account_public_access_block` with `restrict_public_buckets` not `true` (it defaults to `false`)"
 recommendation: |
   Add an `aws_s3_bucket_public_access_block` resource for every bucket:
 
@@ -40,6 +92,9 @@ recommendation: |
   Without this resource, S3 ACLs and bucket policies can inadvertently
   expose the bucket to the public. The four flags together enforce that
   no public grant can be applied, even if a policy mistake is made later.
+  Each flag defaults to `false`, so a block that leaves one out does not
+  set it. An `aws_s3_account_public_access_block` with all four flags
+  `true` covers every bucket in the account instead.
 verification: |
   `aws s3api get-public-access-block --bucket <name>`
   must show all four settings as `true`.
@@ -55,3 +110,4 @@ fix_disruption: none
 fixtures:
   - attack_graph_demo
   - aws_s3_no_public_block
+  - aws_s3_public_block_disabled
