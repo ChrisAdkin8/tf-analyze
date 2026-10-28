@@ -8,21 +8,45 @@ patterns:
   - kind: resource_missing_arg
     resource: aws_dynamodb_table
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: aws_dynamodb_table
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: aws_db_instance
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: aws_db_instance
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: aws_rds_cluster
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: aws_rds_cluster
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: aws_s3_bucket
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: aws_s3_bucket
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: aws_elasticache_cluster
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: aws_elasticache_cluster
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: aws_elasticache_replication_group
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: aws_elasticache_replication_group
+    path: lifecycle.prevent_destroy
+    not_equal: true
 owasp_iac:
   - "Deploy / Resource Decommissioning Process"
 mitre:

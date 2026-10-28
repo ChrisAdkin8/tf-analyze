@@ -42,10 +42,15 @@ keywords: "robustness, low, terraform, iac, gcp, mitre-T1485, cwe-693, nist-csf-
 ## What this checks
 
 1. **`resource_missing_arg`** on `google_storage_bucket` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-2. **`resource_missing_arg`** on `google_spanner_instance` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-3. **`resource_missing_arg`** on `google_spanner_database` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-4. **`resource_missing_arg`** on `google_sql_database_instance` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-5. **`resource_missing_arg`** on `google_compute_disk` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+2. **`hcl_attr`** on `google_storage_bucket` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+3. **`resource_missing_arg`** on `google_spanner_instance` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+4. **`hcl_attr`** on `google_spanner_instance` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+5. **`resource_missing_arg`** on `google_spanner_database` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+6. **`hcl_attr`** on `google_spanner_database` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+7. **`resource_missing_arg`** on `google_sql_database_instance` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+8. **`hcl_attr`** on `google_sql_database_instance` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+9. **`resource_missing_arg`** on `google_compute_disk` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+10. **`hcl_attr`** on `google_compute_disk` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
 
 ## Why it likely fired
 

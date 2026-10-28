@@ -38,7 +38,6 @@ from detect import (
     RESOURCE_START,
     VARIABLE_START,
     CHECK_START,
-    VALIDATION_BLOCK_RE,
     BOOL_COUNT_RE,
     COUNT_GUARD_RE,
     COUNT_ATTR_RE,
@@ -92,7 +91,9 @@ def _detect_variable_missing_validation(c: InFileCtx) -> list[dict]:
     for blk in c.variables:
         if not name_re.search(blk["groups"][0]):
             continue
-        if not VALIDATION_BLOCK_RE.search(blk["body"]):
+        # Top-level code only: a `validation {` in a comment or a heredoc
+        # (`description = <<EOT`) is not a validation block.
+        if not block_has_arg(blk["body"], "validation"):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
@@ -111,7 +112,9 @@ def _detect_check_block_missing_assert(c: InFileCtx) -> list[dict]:
     """
     out: list[dict] = []
     for cblk in find_blocks(c.text, CHECK_START):
-        if not re.search(r'(?m)^\s*assert\s*\{', cblk["body"]):
+        # A commented-out `/* assert { ... } */` asserts nothing.
+        code = mask_comments_and_heredocs(cblk["body"])
+        if not re.search(r'(?m)^\s*assert\s*\{', code):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
@@ -266,7 +269,8 @@ def _ignore_changes_items(body: str) -> list[str] | None:
     close_after = brace_walk(body, open_at, opens="[", closes="]")
     if close_after is None:
         return None
-    inner = body[open_at + 1:close_after - 1]
+    # Read the items from the code: `a, # b, c` lists one attribute.
+    inner = code[open_at + 1:close_after - 1]
     items: list[str] = []
     depth, start, i = 0, 0, 0
     while i < len(inner):

@@ -42,11 +42,17 @@ keywords: "robustness, low, terraform, iac, aws, mitre-T1485, cwe-693, nist-csf-
 ## What this checks
 
 1. **`resource_missing_arg`** on `aws_dynamodb_table` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-2. **`resource_missing_arg`** on `aws_db_instance` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-3. **`resource_missing_arg`** on `aws_rds_cluster` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-4. **`resource_missing_arg`** on `aws_s3_bucket` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-5. **`resource_missing_arg`** on `aws_elasticache_cluster` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-6. **`resource_missing_arg`** on `aws_elasticache_replication_group` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+2. **`hcl_attr`** on `aws_dynamodb_table` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+3. **`resource_missing_arg`** on `aws_db_instance` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+4. **`hcl_attr`** on `aws_db_instance` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+5. **`resource_missing_arg`** on `aws_rds_cluster` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+6. **`hcl_attr`** on `aws_rds_cluster` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+7. **`resource_missing_arg`** on `aws_s3_bucket` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+8. **`hcl_attr`** on `aws_s3_bucket` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+9. **`resource_missing_arg`** on `aws_elasticache_cluster` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+10. **`hcl_attr`** on `aws_elasticache_cluster` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+11. **`resource_missing_arg`** on `aws_elasticache_replication_group` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+12. **`hcl_attr`** on `aws_elasticache_replication_group` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
 
 ## Why it likely fired
 
