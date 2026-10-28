@@ -46,7 +46,9 @@ def _load_argparse() -> argparse.ArgumentParser:
 
     captured: dict = {}
 
-    class _Capture(Exception):
+    # BaseException, not Exception: detect.main() turns any Exception into
+    # a printed traceback and exit 2 (#103), which would swallow this.
+    class _Capture(BaseException):
         pass
 
     original_parse = argparse.ArgumentParser.parse_args
