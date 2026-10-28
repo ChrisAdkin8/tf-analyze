@@ -20,8 +20,8 @@ import re
 from pathlib import Path
 
 from _hcl import (
-    find_blocks, block_arg_value, brace_walk, mask_comments_and_heredocs,
-    strip_hcl_context,
+    _string_end, find_blocks, block_arg_value, brace_walk,
+    mask_comments_and_heredocs,
 )
 from _cross_resource import _GRAPH_CHECKS
 from detect import (
@@ -33,6 +33,21 @@ from detect import (
 )
 
 
+def _code_without_strings(text: str) -> str:
+    """``text`` with comments, heredoc bodies and string literals (with
+    any interpolation in them) blanked to spaces; newlines kept."""
+    code = mask_comments_and_heredocs(text)
+    out = list(code)
+    i = 0
+    while (i := code.find('"', i)) != -1:
+        end = _string_end(code, i)
+        for k in range(i, end):
+            if out[k] != "\n":
+                out[k] = " "
+        i = max(end, i + 1)
+    return "".join(out)
+
+
 @_register_corpus("backend_inconsistency")
 def _corpus_backend_inconsistency(c: CorpusCtx) -> list[dict]:
     """``backend_inconsistency`` — fire when the workspace declares two
@@ -41,7 +56,9 @@ def _corpus_backend_inconsistency(c: CorpusCtx) -> list[dict]:
     """
     backend_re = re.compile(r'^\s*backend\s+"([\w-]+)"\s*\{', re.MULTILINE)
     backends: list[tuple[str, str, int]] = []
-    for fp, text in c.all_files_text.items():
+    for fp, raw in c.all_files_text.items():
+        # A backend in a comment or heredoc is not configured.
+        text = mask_comments_and_heredocs(raw)
         for m in backend_re.finditer(text):
             btype = m.group(1)
             line = text.count("\n", 0, m.start()) + 1
@@ -136,7 +153,9 @@ def _corpus_provider_alias_unused(c: CorpusCtx) -> list[dict]:
     ref_re = re.compile(r'\b([\w-]+)\.([\w-]+)\b')
     refs: set[tuple[str, str]] = set()
     for text in c.all_files_text.values():
-        stripped = strip_hcl_context(text)
+        # A provider reference is a bare expression (`provider = aws.west`):
+        # "aws.west" in a string, comment or heredoc does not use the alias.
+        stripped = _code_without_strings(text)
         for m in ref_re.finditer(stripped):
             refs.add((m.group(1), m.group(2)))
     out: list[dict] = []
@@ -169,7 +188,8 @@ def _corpus_provider_alias_module_mismatch(c: CorpusCtx) -> list[dict]:
     out: list[dict] = []
     for fp, text in c.all_files_text.items():
         for mblk in find_blocks(text, MODULE_START):
-            pm = providers_block_re.search(mblk["body"])
+            # A commented-out `aws = aws.old` line is not passed.
+            pm = providers_block_re.search(mask_comments_and_heredocs(mblk["body"]))
             if not pm:
                 continue
             for em in entry_re.finditer(pm.group(1)):
@@ -222,7 +242,10 @@ def _corpus_submodule_version_missing(c: CorpusCtx) -> list[dict]:
     out: list[dict] = []
     for d, files in dirs_with_tf.items():
         has_req = any(
-            re.search(r'required_version\s*=', c.all_files_text[f])
+            re.search(
+                r'required_version\s*=',
+                mask_comments_and_heredocs(c.all_files_text[f]),
+            )
             for f in files
         )
         if not has_req:
@@ -245,7 +268,10 @@ def _corpus_providers_version_missing(c: CorpusCtx) -> list[dict]:
     rp_block_re = re.compile(r"required_providers\s*\{")
     entry_re = re.compile(r"(\w[\w-]*)\s*=\s*\{([^{}]+)\}", re.DOTALL)
     out: list[dict] = []
-    for fp, text in c.all_files_text.items():
+    for fp, raw in c.all_files_text.items():
+        # Commented-out entries, versions and whole `terraform {}` blocks
+        # are not configuration; masking keeps offsets and line numbers.
+        text = mask_comments_and_heredocs(raw)
         for tf_m in tf_block_re.finditer(text):
             tf_end_after = brace_walk(text, tf_m.end() - 1)
             if tf_end_after is None:
