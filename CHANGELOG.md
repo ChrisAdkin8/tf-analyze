@@ -20,6 +20,7 @@ Terragoat totals are unchanged.
   references or `true` / `false` are read as before. A condition with no
   known value is still not guessed.
 
+
 ## Round 79 — One resolver for variable and local values — 2026-10-28
 
 Findings change: values behind a chain of locals or a ternary are now
