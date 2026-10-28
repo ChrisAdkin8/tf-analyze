@@ -5,6 +5,25 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 73 — S3 rules read the setting, not just its presence — 2026-10-28
+
+Findings change: AWS terragoat 126 → 127. New rule: 354 in all.
+
+- **New `SEC-AWS-S3-PUBLIC-001` (HIGH)**: a bucket ACL that grants
+  everyone access — `public-read`, `public-read-write` or
+  `authenticated-read`, on `aws_s3_bucket_acl` or the legacy inline
+  `acl`, or a grant to the `AllUsers` / `AuthenticatedUsers` group.
+  Nothing caught a public bucket before.
+- **`SEC-AWS-S3-PUBLIC-BLOCK-001`** now also fires on a public access
+  block (bucket or account level) with any of its four flags `false` or
+  left out (they default to `false`); before, a block with every flag
+  off passed. An `aws_s3_account_public_access_block` now covers every
+  bucket, so buckets without their own block no longer each raise HIGH.
+- **`ROB-AWS-S3-001`** catches the legacy inline
+  `versioning { enabled = false }`, which passed because only the
+  block's presence was checked.
+- `resource_missing_companion` accepts `unless_repo_has`.
+
 ## Round 72 — A custom rule can't write Markdown into PR comments — 2026-10-28
 
 - **Rule titles**: a custom rule in a repo's `rules_dir` supplies its own

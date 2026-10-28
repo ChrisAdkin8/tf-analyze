@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**353 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**354 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -112,7 +112,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-UNUSED-002`](./ROB-UNUSED-002.md) | LOW | Declared output is never consumed by any caller |
 | [`ROB-VERSION-002`](./ROB-VERSION-002.md) | LOW | Submodule directory has no required_version |
 
-## security (194)
+## security (195)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -171,7 +171,8 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-RDS-002`](./SEC-AWS-RDS-002.md) | HIGH | RDS instance or Aurora cluster storage not encrypted |
 | [`SEC-AWS-REDSHIFT-001`](./SEC-AWS-REDSHIFT-001.md) | HIGH | Redshift cluster encryption disabled |
 | [`SEC-AWS-S3-001`](./SEC-AWS-S3-001.md) | HIGH | S3 bucket missing server-side encryption configuration |
-| [`SEC-AWS-S3-PUBLIC-BLOCK-001`](./SEC-AWS-S3-PUBLIC-BLOCK-001.md) | HIGH | S3 bucket missing public access block |
+| [`SEC-AWS-S3-PUBLIC-001`](./SEC-AWS-S3-PUBLIC-001.md) | HIGH | S3 bucket ACL grants access to everyone |
+| [`SEC-AWS-S3-PUBLIC-BLOCK-001`](./SEC-AWS-S3-PUBLIC-BLOCK-001.md) | HIGH | S3 public access block missing or switched off |
 | [`SEC-AWS-SG-001`](./SEC-AWS-SG-001.md) | HIGH | Security group allows ingress from 0.0.0.0/0 |
 | [`SEC-AWS-SNS-001`](./SEC-AWS-SNS-001.md) | HIGH | SNS topic missing KMS encryption |
 | [`SEC-AWS-SQS-001`](./SEC-AWS-SQS-001.md) | HIGH | SQS queue missing server-side encryption |

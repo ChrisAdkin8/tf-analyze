@@ -396,10 +396,14 @@ def _detect_resource_missing_companion(c: InFileCtx) -> list[dict]:
     a resource points at — e.g. a bucket that is some
     ``aws_s3_bucket_logging``'s ``target_bucket`` is a log destination and
     does not log its own access.
+
+    ``unless_repo_has: T`` (see `_repo_has`) skips the pattern when an
+    account-level resource stands in for every companion, e.g. an
+    ``aws_s3_account_public_access_block``.
     """
     pat = c.pat
     rt, ctype, via = pat.get("resource"), pat.get("companion"), pat.get("via")
-    if not (rt and ctype and via):
+    if not (rt and ctype and via) or _repo_has(pat, c.var_defaults):
         return []
     spec = {"resource": ctype, "via": via}
     exempt = pat.get("exempt_if_companion")
