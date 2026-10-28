@@ -34,9 +34,14 @@ owasp:
 # but operators sometimes set it deliberately to silence a different
 # scanner — this rule catches that anti-pattern.
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_namespace
-    regex: '"pod-security\.kubernetes\.io/enforce"\s*=\s*"privileged"'
+    # The label key contains dots, so the regex reads the whole `labels`
+    # map: entries are comma-separated in the parsed form and one per line
+    # in the text fallback, which also keeps comments (a commented-out
+    # line starts with `#`, so it can't match).
+    nested_path: metadata.labels
+    regex: '(?:^|[{,\n])\s*"pod-security\.kubernetes\.io/enforce"\s*=\s*"privileged"'
     description: |
       `kubernetes_namespace` has `pod-security.kubernetes.io/enforce`
       set to `privileged` — the weakest of the three PSA levels.

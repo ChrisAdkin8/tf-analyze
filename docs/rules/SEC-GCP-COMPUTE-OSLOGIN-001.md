@@ -41,7 +41,7 @@ keywords: "security, medium, terraform, iac, gcp, cis-4.1, mitre-T1078, cwe-287,
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_compute_instance` matching `/enable-oslogin\s*=\s*"FALSE"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_compute_instance` (`metadata.enable-oslogin`) matching `/^(?i:false)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_compute_instance.metadata.enable-oslogin = "FALSE"` falls
 back to project-wide SSH keys (or local `ssh-keys` metadata),
 which can't be governed by IAM. Centralised SSH governance via

@@ -41,10 +41,10 @@ keywords: "security, high, terraform, iac, azure, cis-5.1, mitre-T1040, mitre-T1
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_cdn_frontdoor_custom_domain` matching `/minimum_tls_version\s*=\s*"TLS10"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `azurerm_cdn_frontdoor_custom_domain` (`tls.minimum_tls_version`) matching `/^TLS10$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `azurerm_cdn_frontdoor_custom_domain.tls.minimum_tls_version = "TLS10"`.
 TLS 1.0 is deprecated by the IETF and forbidden by PCI-DSS v4.0.
-2. **`resource_body_contains`** on `azurerm_frontdoor` matching `/minimum_tls_version\s*=\s*"1\.0"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `azurerm_frontdoor` (`frontend_endpoint.custom_https_configuration.minimum_tls_version`) matching `/^1\.0$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Classic Front Door frontend_endpoint uses TLS 1.0
 
 ## Why it likely fired

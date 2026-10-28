@@ -38,18 +38,20 @@ owasp:
 # footguns — the chart's safety net silently rolls off and the cluster
 # operates outside the chart author's tested envelope.
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: helm_release
-    regex: '(?m)^\s*disable_webhooks\s*=\s*true\b'
+    arg: disable_webhooks
+    regex: '^true$'
     description: |
       `helm_release` sets `disable_webhooks = true`, bypassing pre-install
       and post-install admission webhooks. Charts often use webhooks
       to enforce field defaults, validate resource combinations, and
       stage TLS-cert generation — skipping them leaves the release
       in an unsafe interim state that the chart author never tested.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: helm_release
-    regex: '(?m)^\s*skip_crds\s*=\s*true\b'
+    arg: skip_crds
+    regex: '^true$'
     description: |
       `helm_release` sets `skip_crds = true`, bypassing the chart's
       CRD installation. Any subsequent resource that references those

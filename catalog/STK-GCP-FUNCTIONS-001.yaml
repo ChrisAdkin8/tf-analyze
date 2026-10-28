@@ -30,10 +30,6 @@ patterns:
     arg: build_config.runtime
     regex: '^(python37|python38|nodejs14|nodejs16|go116|go118|java11|dotnet3|ruby27)$'
     description: Cloud Functions v2 runtime out of support
-  - kind: resource_body_contains
-    resource: google_cloudfunctions2_function
-    regex: 'runtime\s*=\s*"(python37|python38|nodejs14|nodejs16|go116|go118|java11|dotnet3|ruby27)"'
-    description: Cloud Functions v2 runtime out of support (body match)
 recommendation: |
   Upgrade to a currently supported runtime. Google Cloud Functions
   supported runtimes (May 2026):

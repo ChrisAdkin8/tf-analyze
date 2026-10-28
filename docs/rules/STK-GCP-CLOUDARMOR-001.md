@@ -44,21 +44,21 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, mitre-T1190, cwe-770
 1. **`resource_missing_arg`** on `google_compute_security_policy` (`rule`) — _the resource is missing a required attribute (or nested attribute path)._
   `google_compute_security_policy` has no rules — equivalent to
 having no WAF attached. Defaults to allow-all.
-2. **`resource_body_contains`** on `google_compute_security_policy` matching `/action\s*=\s*"allow"\s*\n?\s*priority\s*=\s*2147483647/` — _the resource body matches a regex inside the block._
-  Policy only has the default `allow` rule at priority 2147483647 —
-every layer-7 attack (credential stuffing, scraping, basic DDoS)
-reaches the origin. Equivalent to SEC-AWS-WAF-002 (ALB+WAF without
-rate-based rule).
+2. **`resource_missing_arg`** on `google_compute_security_policy` (`rule.rate_limit_options`) — _the resource is missing a required attribute (or nested attribute path)._
+  No `rule` has `rate_limit_options` (a `throttle` or
+`rate_based_ban` rule) — every layer-7 attack (credential
+stuffing, scraping, basic DDoS) reaches the origin at full rate.
+Equivalent to SEC-AWS-WAF-002 (ALB+WAF without rate-based rule).
 
 ## Why it likely fired
 
 `google_compute_security_policy` has no rules — equivalent to
 having no WAF attached. Defaults to allow-all.
 
-Policy only has the default `allow` rule at priority 2147483647 —
-every layer-7 attack (credential stuffing, scraping, basic DDoS)
-reaches the origin. Equivalent to SEC-AWS-WAF-002 (ALB+WAF without
-rate-based rule).
+No `rule` has `rate_limit_options` (a `throttle` or
+`rate_based_ban` rule) — every layer-7 attack (credential
+stuffing, scraping, basic DDoS) reaches the origin at full rate.
+Equivalent to SEC-AWS-WAF-002 (ALB+WAF without rate-based rule).
 
 ## Adversarial scenario
 

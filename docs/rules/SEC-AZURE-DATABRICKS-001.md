@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, azure, cis-3.5, mitre-T1190, cwe-284,
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_databricks_workspace` matching `/no_public_ip\s*=\s*false/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `azurerm_databricks_workspace` (`custom_parameters.no_public_ip`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `azurerm_databricks_workspace.custom_parameters.no_public_ip = false`
 assigns Databricks worker nodes public IPs. The workspace control
 plane is reachable from the public internet.

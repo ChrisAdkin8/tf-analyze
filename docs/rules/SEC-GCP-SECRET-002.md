@@ -41,18 +41,24 @@ keywords: "security, medium, terraform, iac, gcp, mitre-T1552.001, cwe-311, d3-e
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_secret_manager_secret` matching `/replication\s*\{\s*auto\s*\{\s*\}\s*\}/` — _the resource body matches a regex inside the block._
-  `google_secret_manager_secret` uses `replication.auto`, which is
-encrypted with a Google-managed key. CMEK requires explicit
-`replication.user_managed` with `customer_managed_encryption.kms_key_name`
-per replica.
+1. **`resource_has_block`** on `google_secret_manager_secret` (`replication.auto`) — _the resource has the named nested block (or, with `empty: true`, an empty one)._
+  `google_secret_manager_secret` uses an empty `replication.auto {}`,
+which is encrypted with a Google-managed key. CMEK requires
+`customer_managed_encryption.kms_key_name` inside `auto`, or
+explicit `replication.user_managed` with one per replica.
+2. **`resource_arg`** on `google_secret_manager_secret` (`replication.automatic`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Same, in the pre-v5 provider form `replication { automatic = true }`
+— always a Google-managed key.
 
 ## Why it likely fired
 
-`google_secret_manager_secret` uses `replication.auto`, which is
-encrypted with a Google-managed key. CMEK requires explicit
-`replication.user_managed` with `customer_managed_encryption.kms_key_name`
-per replica.
+`google_secret_manager_secret` uses an empty `replication.auto {}`,
+which is encrypted with a Google-managed key. CMEK requires
+`customer_managed_encryption.kms_key_name` inside `auto`, or
+explicit `replication.user_managed` with one per replica.
+
+Same, in the pre-v5 provider form `replication { automatic = true }`
+— always a Google-managed key.
 
 ## Adversarial scenario
 

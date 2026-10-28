@@ -662,7 +662,10 @@ Added in Step 4:
     all ports. Escalation keys accept `urgency:` or the documented
     `new_urgency:`.
 20. **`resource_body_contains` is not being converted** (reverses §14 item
-    14's deferral). With comments and heredocs masked, the remaining risk
+    14's deferral). *Reversed again (Round 85): the rules were converted
+    to `resource_arg` / `resource_missing_arg` / the new
+    `resource_has_block`, each path checked against the provider schema;
+    only `SEC-K8S-SECRET-001` (literal values in the source) stays text.* With comments and heredocs masked, the remaining risk
     is low, while converting needs exact per-provider paths (e.g.
     `viewer_protocol_policy` lives in two CloudFront blocks) and a wrong
     path silently loses detection.

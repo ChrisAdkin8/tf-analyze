@@ -17,14 +17,56 @@ nist_800_53:
 slsa:
   - "deps"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_linux_web_app
-    regex: '(python_version|node_version|dotnet_version|java_version|php_version|ruby_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|2\.5|2\.6|2\.7|7\.[234]|8\.0|11)"'
-    description: Linux Web App uses an EOL runtime (Python 3.6-3.8, Node 10-16, Ruby 2.5-2.7, PHP 7.x/8.0, .NET 3.1-6.0, Java 8/11)
-  - kind: resource_body_contains
+    arg: site_config.application_stack.python_version
+    regex: '^3\.[678]$'
+    description: Linux Web App uses an EOL Python runtime (3.6-3.8)
+  - kind: resource_arg
+    resource: azurerm_linux_web_app
+    arg: site_config.application_stack.node_version
+    regex: '^~?(10|12|14|16)(-lts)?$'
+    description: Linux Web App uses an EOL Node.js runtime (10-16)
+  - kind: resource_arg
+    resource: azurerm_linux_web_app
+    arg: site_config.application_stack.dotnet_version
+    regex: '^v?(3\.1|5\.0|6\.0)$'
+    description: Linux Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+  - kind: resource_arg
+    resource: azurerm_linux_web_app
+    arg: site_config.application_stack.java_version
+    regex: '^(1\.8|8|11)$'
+    description: Linux Web App uses an EOL Java runtime (8, 11)
+  - kind: resource_arg
+    resource: azurerm_linux_web_app
+    arg: site_config.application_stack.php_version
+    regex: '^(7\.[234]|8\.0)$'
+    description: Linux Web App uses an EOL PHP runtime (7.x, 8.0)
+  - kind: resource_arg
+    resource: azurerm_linux_web_app
+    arg: site_config.application_stack.ruby_version
+    regex: '^2\.[567]$'
+    description: Linux Web App uses an EOL Ruby runtime (2.5-2.7)
+  - kind: resource_arg
     resource: azurerm_windows_web_app
-    regex: '(node_version|dotnet_version|java_version|php_version)\s*=\s*"(10|12|14|16|v3\.1|v5\.0|v6\.0|7\.[234]|8\.0|11)"'
-    description: Windows Web App uses an EOL runtime
+    arg: site_config.application_stack.node_version
+    regex: '^~?(10|12|14|16)(-lts)?$'
+    description: Windows Web App uses an EOL Node.js runtime (10-16)
+  - kind: resource_arg
+    resource: azurerm_windows_web_app
+    arg: site_config.application_stack.dotnet_version
+    regex: '^v?(3\.1|5\.0|6\.0)$'
+    description: Windows Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+  - kind: resource_arg
+    resource: azurerm_windows_web_app
+    arg: site_config.application_stack.java_version
+    regex: '^(1\.8|8|11)$'
+    description: Windows Web App uses an EOL Java runtime (8, 11)
+  - kind: resource_arg
+    resource: azurerm_windows_web_app
+    arg: site_config.application_stack.php_version
+    regex: '^(7\.[234]|8\.0)$'
+    description: Windows Web App uses an EOL PHP runtime (7.x, 8.0)
 recommendation: |
   Upgrade to a supported runtime. Azure App Service supported
   versions (May 2026):

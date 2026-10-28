@@ -30,12 +30,12 @@ owasp:
 owasp_iac:
   - "Develop and Distribute / Image Signing"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: helm_release
-    regex: '(?m)^\s*verify\s*=\s*false\b'
+    arg: verify
+    regex: '^false$'
     description: |
-      `helm_release` sets `verify = false` (or relies on the provider
-      default, which is off). Without chart signature verification a
+      `helm_release` sets `verify = false`. Without chart signature verification a
       compromised or typosquatted chart repository serves an attacker
       arbitrary Kubernetes manifests on `terraform apply`. The 2021
       Codecov compromise and the 2023 3CX supply-chain incident both

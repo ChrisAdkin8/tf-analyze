@@ -41,11 +41,11 @@ keywords: "security, high, terraform, iac, gcp, cis-2.8, mitre-T1562.008, cwe-77
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_logging_project_exclusion` matching `/logs/cloudaudit\.googleapis\.com/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_logging_project_exclusion` (`filter`) matching `/logs/cloudaudit\.googleapis\.com/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_logging_project_exclusion.filter` drops Cloud Audit Logs
 (admin activity, data access, system event). This blinds
 incident response and breaks SOC2 / PCI-DSS audit attestation.
-2. **`resource_body_contains`** on `google_logging_project_sink` matching `/exclusions\s*\{[^}]*"cloudaudit\.googleapis\.com/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `google_logging_project_sink` (`exclusions.filter`) matching `/cloudaudit\.googleapis\.com/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Project sink exclusion targets cloudaudit.googleapis.com
 
 ## Why it likely fired

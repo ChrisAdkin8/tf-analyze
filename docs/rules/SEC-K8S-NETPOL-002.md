@@ -41,20 +41,22 @@ keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1190, mitre-T1041, 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_network_policy` matching `/cidr\s*=\s*"0\.0\.0\.0/0"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_network_policy` (`spec.ingress.from.ip_block.cidr`) matching `/^0\.0\.0\.0/0$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_network_policy` whitelists `0.0.0.0/0` in an `ip_block`.
 Every IPv4 address — including the public internet — matches the
 rule. The 2018 Tesla / Kubernetes-dashboard cryptomining incident
 pivoted through exactly this shape: a "network policy is
 configured" cluster whose policy whitelisted the world.
-2. **`resource_body_contains`** on `kubernetes_network_policy` matching `/(?ms)^\s*egress\s*\{\s*\}/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `kubernetes_network_policy` (`spec.egress.to.ip_block.cidr`) matching `/^0\.0\.0\.0/0$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Same, for an egress `to.ip_block`.
+3. **`resource_has_block`** on `kubernetes_network_policy` (`spec.egress`) — _the resource has the named nested block (or, with `empty: true`, an empty one)._
   `kubernetes_network_policy` has an empty `egress { }` block. An
 empty rule in NetworkPolicy semantics is "allow all" — every
 egress destination is permitted from pods this policy selects.
 The cluster operator probably intended `egress { }` to mean
 "deny all egress", which is a common mistranslation from iptables
 mental models.
-3. **`resource_body_contains`** on `kubernetes_network_policy` matching `/(?ms)^\s*ingress\s*\{\s*\}/` — _the resource body matches a regex inside the block._
+4. **`resource_has_block`** on `kubernetes_network_policy` (`spec.ingress`) — _the resource has the named nested block (or, with `empty: true`, an empty one)._
   Same as above on the ingress side — `ingress { }` resolves to
 "allow all" inbound, defeating the purpose of a NetworkPolicy.
 
@@ -65,6 +67,8 @@ Every IPv4 address — including the public internet — matches the
 rule. The 2018 Tesla / Kubernetes-dashboard cryptomining incident
 pivoted through exactly this shape: a "network policy is
 configured" cluster whose policy whitelisted the world.
+
+Same, for an egress `to.ip_block`.
 
 `kubernetes_network_policy` has an empty `egress { }` block. An
 empty rule in NetworkPolicy semantics is "allow all" — every

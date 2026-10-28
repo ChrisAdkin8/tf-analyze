@@ -30,14 +30,15 @@ patterns:
     description: |
       `google_compute_security_policy` has no rules — equivalent to
       having no WAF attached. Defaults to allow-all.
-  - kind: resource_body_contains
+  - kind: resource_missing_arg
     resource: google_compute_security_policy
-    regex: 'action\s*=\s*"allow"\s*\n?\s*priority\s*=\s*2147483647'
+    nested_path: rule.rate_limit_options
+    instances: any
     description: |
-      Policy only has the default `allow` rule at priority 2147483647 —
-      every layer-7 attack (credential stuffing, scraping, basic DDoS)
-      reaches the origin. Equivalent to SEC-AWS-WAF-002 (ALB+WAF without
-      rate-based rule).
+      No `rule` has `rate_limit_options` (a `throttle` or
+      `rate_based_ban` rule) — every layer-7 attack (credential
+      stuffing, scraping, basic DDoS) reaches the origin at full rate.
+      Equivalent to SEC-AWS-WAF-002 (ALB+WAF without rate-based rule).
 recommendation: |
   Add a rate-based ban rule near the top of the policy:
 

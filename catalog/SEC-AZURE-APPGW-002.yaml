@@ -26,20 +26,36 @@ nist_800_53:
 csa_ccm:
   - "DSI-03"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_application_gateway
-    regex: 'min_protocol_version\s*=\s*"(TLSv1_0|TLSv1_1)"'
+    arg: ssl_policy.min_protocol_version
+    regex: '^TLSv1_[01]$'
     description: |
       Application Gateway `ssl_policy.min_protocol_version` permits
       TLS 1.0 or TLS 1.1. Both are deprecated by the IETF and forbidden
       by PCI-DSS v4.0 and FedRAMP. Modern HTTPS endpoints must require
       TLS 1.2 or higher.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_application_gateway
-    regex: 'policy_name\s*=\s*"AppGwSslPolicy20150501"'
+    arg: ssl_policy.policy_name
+    regex: '^AppGwSslPolicy20150501$'
     description: |
       Application Gateway uses the legacy predefined SSL policy
       `AppGwSslPolicy20150501`, which permits TLS 1.0 and weak ciphers.
+  - kind: resource_arg
+    resource: azurerm_application_gateway
+    arg: ssl_profile.ssl_policy.min_protocol_version
+    regex: '^TLSv1_[01]$'
+    description: |
+      An `ssl_profile` (per-listener TLS settings) has an `ssl_policy`
+      whose `min_protocol_version` permits TLS 1.0 or TLS 1.1.
+  - kind: resource_arg
+    resource: azurerm_application_gateway
+    arg: ssl_profile.ssl_policy.policy_name
+    regex: '^AppGwSslPolicy20150501$'
+    description: |
+      An `ssl_profile` uses the legacy predefined SSL policy
+      `AppGwSslPolicy20150501`.
 recommendation: |
   Set `min_protocol_version = "TLSv1_2"` (or `"TLSv1_3"` if supported by
   the App Gateway tier) and pin a modern predefined policy or a

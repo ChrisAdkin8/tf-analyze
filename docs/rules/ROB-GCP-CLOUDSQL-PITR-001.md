@@ -41,7 +41,7 @@ keywords: "robustness, medium, terraform, iac, gcp, cis-6.6, mitre-T1485, mitre-
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_sql_database_instance` matching `/point_in_time_recovery_enabled\s*=\s*false/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_sql_database_instance` (`settings.backup_configuration.point_in_time_recovery_enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_sql_database_instance.settings.backup_configuration.point_in_time_recovery_enabled`
 is `false`. Without PITR, recovery is limited to nightly snapshot
 granularity — any incident between snapshots loses up to 24h of

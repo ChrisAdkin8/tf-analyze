@@ -27,9 +27,10 @@ csa_ccm:
 owasp:
   - "K03"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_cluster_role_binding
-    regex: '(?ms)role_ref\s*\{[^}]*\bname\s*=\s*"cluster-admin"'
+    arg: role_ref.name
+    regex: '^cluster-admin$'
     description: |
       `kubernetes_cluster_role_binding` references the built-in
       `cluster-admin` ClusterRole. Any subject bound to this binding
@@ -37,26 +38,30 @@ patterns:
       every API across every namespace — equivalent to root on every
       node. Compromise of any pod or token bound through this binding
       yields full cluster takeover.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_role
-    regex: 'verbs\s*=\s*\[[^\]]*"\*"'
+    arg: rule.verbs
+    regex: '"\*"'
     description: |
       R30.5 extension — wildcard verbs (`verbs = ["*"]`). Same risk
       as cluster-admin at the namespace scope. NIST AC-6(7) +
       OWASP K03.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_cluster_role
-    regex: 'verbs\s*=\s*\[[^\]]*"\*"'
+    arg: rule.verbs
+    regex: '"\*"'
     description: cluster-wide wildcard verbs
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_role
-    regex: 'verbs\s*=\s*\[[^\]]*"(?:bind|escalate|impersonate)"'
+    arg: rule.verbs
+    regex: '"(?:bind|escalate|impersonate)"'
     description: |
       R30.5 extension — `bind` / `escalate` / `impersonate` verbs
       allow privilege escalation outside the role's normal scope.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_cluster_role_binding
-    regex: '(?ms)subject\s*\{[^}]*\bname\s*=\s*"system:authenticated"'
+    arg: subject.name
+    regex: '^system:authenticated$'
     description: |
       R30.5 extension — binding to `system:authenticated` includes
       every pod with a service-account token, which is effectively

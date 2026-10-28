@@ -17,9 +17,10 @@ nist_csf:
 nist_800_53:
   - "AC-2"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_compute_instance
-    regex: 'block-project-ssh-keys\s*=\s*"FALSE"'
+    arg: metadata.block-project-ssh-keys
+    regex: '^(?i:false)$'
     description: |
       `metadata.block-project-ssh-keys = "FALSE"` lets the instance be
       accessed via every project-wide SSH key, bypassing per-instance

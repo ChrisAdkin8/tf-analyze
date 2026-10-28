@@ -41,14 +41,20 @@ keywords: "security, high, terraform, iac, azure, cis-5.1, mitre-T1040, mitre-T1
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_application_gateway` matching `/min_protocol_version\s*=\s*"(TLSv1_0|TLSv1_1)"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `azurerm_application_gateway` (`ssl_policy.min_protocol_version`) matching `/^TLSv1_[01]$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Application Gateway `ssl_policy.min_protocol_version` permits
 TLS 1.0 or TLS 1.1. Both are deprecated by the IETF and forbidden
 by PCI-DSS v4.0 and FedRAMP. Modern HTTPS endpoints must require
 TLS 1.2 or higher.
-2. **`resource_body_contains`** on `azurerm_application_gateway` matching `/policy_name\s*=\s*"AppGwSslPolicy20150501"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `azurerm_application_gateway` (`ssl_policy.policy_name`) matching `/^AppGwSslPolicy20150501$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Application Gateway uses the legacy predefined SSL policy
 `AppGwSslPolicy20150501`, which permits TLS 1.0 and weak ciphers.
+3. **`resource_arg`** on `azurerm_application_gateway` (`ssl_profile.ssl_policy.min_protocol_version`) matching `/^TLSv1_[01]$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  An `ssl_profile` (per-listener TLS settings) has an `ssl_policy`
+whose `min_protocol_version` permits TLS 1.0 or TLS 1.1.
+4. **`resource_arg`** on `azurerm_application_gateway` (`ssl_profile.ssl_policy.policy_name`) matching `/^AppGwSslPolicy20150501$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  An `ssl_profile` uses the legacy predefined SSL policy
+`AppGwSslPolicy20150501`.
 
 ## Why it likely fired
 
@@ -59,6 +65,12 @@ TLS 1.2 or higher.
 
 Application Gateway uses the legacy predefined SSL policy
 `AppGwSslPolicy20150501`, which permits TLS 1.0 and weak ciphers.
+
+An `ssl_profile` (per-listener TLS settings) has an `ssl_policy`
+whose `min_protocol_version` permits TLS 1.0 or TLS 1.1.
+
+An `ssl_profile` uses the legacy predefined SSL policy
+`AppGwSslPolicy20150501`.
 
 ## Adversarial scenario
 

@@ -18,14 +18,23 @@ nist_800_53:
 csa_ccm:
   - "CEK-06"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: aws_cloudfront_distribution
-    regex: 'viewer_protocol_policy\s*=\s*"allow-all"'
+    arg: default_cache_behavior.viewer_protocol_policy
+    regex: '^allow-all$'
     description: |
-      A `default_cache_behavior` or `ordered_cache_behavior` block has
+      The `default_cache_behavior` block has
       `viewer_protocol_policy = "allow-all"`, which serves content over
       plain HTTP. Session cookies, API tokens, and credentials cross the
       network in cleartext between CloudFront and the viewer.
+  - kind: resource_arg
+    resource: aws_cloudfront_distribution
+    arg: ordered_cache_behavior.viewer_protocol_policy
+    regex: '^allow-all$'
+    description: |
+      An `ordered_cache_behavior` block has
+      `viewer_protocol_policy = "allow-all"` — the same cleartext
+      exposure for the paths that behaviour matches.
 recommendation: |
   Set `viewer_protocol_policy = "redirect-to-https"` (or `"https-only"`)
   in every cache-behavior block:

@@ -41,12 +41,16 @@ keywords: "stack, low, terraform, iac, azure, mitre-T1496, nist-csf-pr.pt-1"
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_kubernetes_cluster` matching `/(?:enable_auto_scaling|auto_scaling_enabled)\s*=\s*false/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `azurerm_kubernetes_cluster` (`default_node_pool.enable_auto_scaling`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `azurerm_kubernetes_cluster.default_node_pool.enable_auto_scaling = false`
 explicitly disables the cluster autoscaler. Fixed node count
 wastes capacity at low load and hits ceiling at high load.
-2. **`resource_body_contains`** on `azurerm_kubernetes_cluster_node_pool` matching `/(?:enable_auto_scaling|auto_scaling_enabled)\s*=\s*false/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `azurerm_kubernetes_cluster` (`default_node_pool.auto_scaling_enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Same, under the azurerm v4 name `auto_scaling_enabled`
+3. **`resource_arg`** on `azurerm_kubernetes_cluster_node_pool` (`enable_auto_scaling`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Standalone AKS node pool with auto-scaling disabled
+4. **`resource_arg`** on `azurerm_kubernetes_cluster_node_pool` (`auto_scaling_enabled`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Standalone AKS node pool with auto-scaling disabled (azurerm v4 name)
 
 ## Why it likely fired
 
@@ -54,7 +58,11 @@ wastes capacity at low load and hits ceiling at high load.
 explicitly disables the cluster autoscaler. Fixed node count
 wastes capacity at low load and hits ceiling at high load.
 
+Same, under the azurerm v4 name `auto_scaling_enabled`
+
 Standalone AKS node pool with auto-scaling disabled
+
+Standalone AKS node pool with auto-scaling disabled (azurerm v4 name)
 
 ## Adversarial scenario
 
