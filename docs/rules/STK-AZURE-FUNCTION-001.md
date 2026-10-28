@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-FUNCTION-001 — Azure Function App uses end-of-life runtime"
-description: "tf-analyze rule STK-AZURE-FUNCTION-001 (HIGH · stack): Azure Function App uses end-of-life runtime"
-keywords: "stack, high, terraform, iac, azure, mitre-T1190, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
+description: "tf-analyze rule STK-AZURE-FUNCTION-001 (MEDIUM · stack): Azure Function App uses end-of-life runtime"
+keywords: "stack, medium, terraform, iac, azure, mitre-T1190, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,41 +24,41 @@ keywords: "stack, high, terraform, iac, azure, mitre-T1190, mitre-T1195.002, cwe
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, MITRE T1190, MITRE T1195.002, CWE-1104, D3-SCA",
+  "keywords": "stack, medium, terraform, MITRE T1190, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-AZURE-FUNCTION-001 — Azure Function App uses end-of-life runtime
+# 💡 STK-AZURE-FUNCTION-001 — Azure Function App uses end-of-life runtime
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AZURE-FUNCTION-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-AZURE-FUNCTION-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-AZURE-FUNCTION-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Azure Function App uses end-of-life runtime.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Azure Function App uses end-of-life runtime.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 
 1. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.python_version`) matching `/^(3\.6|3\.7|3\.8)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App Python runtime out of support
-2. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/python_version\s*=\s*"(3\.6|3\.7|3\.8)"/` — _the resource body matches a regex inside the block._
-  Function App Python runtime out of support (regex body match)
-3. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/node_version\s*=\s*"(10|12|14|16)"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App Node.js runtime out of support
-4. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/dotnet_version\s*=\s*"(v3\.1|v5\.0|v6\.0)"/` — _the resource body matches a regex inside the block._
+3. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App .NET runtime out of support
-5. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/java_version\s*=\s*"(8|11)"/` — _the resource body matches a regex inside the block._
+4. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App Java runtime out of support
-6. **`resource_body_contains`** on `azurerm_windows_function_app` matching `/(python_version|node_version|dotnet_version|java_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|8|11)"/` — _the resource body matches a regex inside the block._
-  Windows Function App runtime out of support
+5. **`resource_arg`** on `azurerm_windows_function_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Function App Node.js runtime out of support
+6. **`resource_arg`** on `azurerm_windows_function_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Function App .NET runtime out of support
+7. **`resource_arg`** on `azurerm_windows_function_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Function App Java runtime out of support
 
 ## Why it likely fired
 
 Function App Python runtime out of support
-
-Function App Python runtime out of support (regex body match)
 
 Function App Node.js runtime out of support
 
@@ -66,7 +66,11 @@ Function App .NET runtime out of support
 
 Function App Java runtime out of support
 
-Windows Function App runtime out of support
+Windows Function App Node.js runtime out of support
+
+Windows Function App .NET runtime out of support
+
+Windows Function App Java runtime out of support
 
 ## Adversarial scenario
 
@@ -120,7 +124,6 @@ _Runtime upgrades may break source compatibility (e.g. removed/changed stdlib AP
 
 **MITRE ATT&CK**
   - [`T1190`](https://attack.mitre.org/techniques/T1190/)
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)

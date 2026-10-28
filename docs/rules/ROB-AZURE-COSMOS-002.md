@@ -1,7 +1,7 @@
 ---
 title: "ROB-AZURE-COSMOS-002 — Azure Cosmos DB automatic failover disabled"
 description: "tf-analyze rule ROB-AZURE-COSMOS-002 (MEDIUM · robustness): Azure Cosmos DB automatic failover disabled"
-keywords: "robustness, medium, terraform, iac, azure, mitre-T1485, nist-csf-pr.ip-4, nist-800-53-cp-10"
+keywords: "robustness, medium, terraform, iac, azure, nist-csf-pr.ip-4, nist-800-53-cp-10"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, azure, mitre-T1485, nist-csf-pr.i
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, MITRE T1485",
+  "keywords": "robustness, medium, terraform",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -107,9 +107,6 @@ must return `true`.
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **NIST CSF 2.0**
   - [`PR.IP-4`](https://www.nist.gov/cyberframework)

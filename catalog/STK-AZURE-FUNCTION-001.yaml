@@ -1,12 +1,11 @@
 id: STK-AZURE-FUNCTION-001
 title: "Azure Function App uses end-of-life runtime"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:
   - "T1190"
-  - "T1195.002"
 cwe:
   - "CWE-1104"
 d3fend:
@@ -25,26 +24,36 @@ patterns:
     arg: site_config.application_stack.python_version
     regex: '^(3\.6|3\.7|3\.8)$'
     description: Function App Python runtime out of support
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_linux_function_app
-    regex: 'python_version\s*=\s*"(3\.6|3\.7|3\.8)"'
-    description: Function App Python runtime out of support (regex body match)
-  - kind: resource_body_contains
-    resource: azurerm_linux_function_app
-    regex: 'node_version\s*=\s*"(10|12|14|16)"'
+    arg: site_config.application_stack.node_version
+    regex: '^~?(10|12|14|16)(-lts)?$'
     description: Function App Node.js runtime out of support
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_linux_function_app
-    regex: 'dotnet_version\s*=\s*"(v3\.1|v5\.0|v6\.0)"'
+    arg: site_config.application_stack.dotnet_version
+    regex: '^v?(3\.1|5\.0|6\.0)$'
     description: Function App .NET runtime out of support
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_linux_function_app
-    regex: 'java_version\s*=\s*"(8|11)"'
+    arg: site_config.application_stack.java_version
+    regex: '^(1\.8|8|11)$'
     description: Function App Java runtime out of support
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_windows_function_app
-    regex: '(python_version|node_version|dotnet_version|java_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|8|11)"'
-    description: Windows Function App runtime out of support
+    arg: site_config.application_stack.node_version
+    regex: '^~?(10|12|14|16)(-lts)?$'
+    description: Windows Function App Node.js runtime out of support
+  - kind: resource_arg
+    resource: azurerm_windows_function_app
+    arg: site_config.application_stack.dotnet_version
+    regex: '^v?(3\.1|5\.0|6\.0)$'
+    description: Windows Function App .NET runtime out of support
+  - kind: resource_arg
+    resource: azurerm_windows_function_app
+    arg: site_config.application_stack.java_version
+    regex: '^(1\.8|8|11)$'
+    description: Windows Function App Java runtime out of support
 recommendation: |
   Upgrade the runtime to a supported version. Current Azure Functions
   supported runtimes (May 2026):

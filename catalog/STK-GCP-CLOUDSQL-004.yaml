@@ -1,7 +1,7 @@
 id: STK-GCP-CLOUDSQL-004
 title: "Cloud SQL instance does not require SSL connections"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 applies_when:

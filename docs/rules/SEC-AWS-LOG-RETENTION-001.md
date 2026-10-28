@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-LOG-RETENTION-001 — Log bucket missing object_lock_configuration with retention >= 90 days"
-description: "tf-analyze rule SEC-AWS-LOG-RETENTION-001 (HIGH · security): Log bucket missing object_lock_configuration with retention >= 90 days"
-keywords: "security, high, terraform, iac, aws, cis-3.x, mitre-T1070.001, mitre-T1485, cwe-778, cwe-693, nist-csf-pr.pt-1, nist-800-53-au-11, csa-ccm-log-04"
+description: "tf-analyze rule SEC-AWS-LOG-RETENTION-001 (MEDIUM · security): Log bucket missing object_lock_configuration with retention >= 90 days"
+keywords: "security, medium, terraform, iac, aws, cis-3.x, mitre-T1070.001, mitre-T1485, cwe-778, cwe-693, nist-csf-pr.pt-1, nist-800-53-au-11, csa-ccm-log-04"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, aws, cis-3.x, mitre-T1070.001, mitre-
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 3.x, MITRE T1070.001, MITRE T1485, CWE-778, CWE-693",
+  "keywords": "security, medium, terraform, CIS 3.x, MITRE T1070.001, MITRE T1485, CWE-778, CWE-693",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AWS-LOG-RETENTION-001 — Log bucket missing object_lock_configuration with retention >= 90 days
+# 💡 SEC-AWS-LOG-RETENTION-001 — Log bucket missing object_lock_configuration with retention >= 90 days
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-LOG-RETENTION-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-LOG-RETENTION-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-LOG-RETENTION-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Log bucket missing object_lock_configuration with retention >= 90 days.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **Log bucket missing object_lock_configuration with retention >= 90 days.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

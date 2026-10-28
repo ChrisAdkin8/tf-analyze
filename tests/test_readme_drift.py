@@ -41,14 +41,17 @@ RULE_DOCS_DIR = REPO_ROOT / "docs" / "rules"
 
 
 def _active_entries() -> list[dict]:
-    """Load every catalog/*.yaml that isn't tagged status: deprecated."""
+    """Load every catalog/*.yaml with ``status: active``: the rules a scan
+    runs and ``--list-rules`` reports. Stubs (no patterns yet) and
+    deprecated rules don't count; counting stubs made the README claim
+    two more rules than the engine ships."""
     out: list[dict] = []
     for yml in CATALOG_DIR.glob("*.yaml"):
         try:
             d = yaml.safe_load(yml.read_text())
         except yaml.YAMLError:
             continue
-        if d.get("status") == "deprecated":
+        if d.get("status") != "active":
             continue
         out.append(d)
     return out
@@ -149,6 +152,26 @@ def test_readme_rules_badge_matches_catalog() -> None:
     assert label_n == live, (
         f"README rules badge says {label_n}, catalogue has {live} active rules. "
         f"Edit the badge near README.md line ~18 to match."
+    )
+
+
+def test_readme_rules_table_and_skill_total_match_catalog() -> None:
+    """The "Rules at a glance" table's grand total, the sum of its rows,
+    and SKILL.md's "Total: N active" all equal the active rule count.
+    They used to count the two stubs as rules."""
+    live = _active_rule_count()
+    text = _readme_text()
+    m = re.search(r"^\| \*\*Total\*\* \|.*\| \*\*(\d+)\*\* \|$", text, re.M)
+    assert m, "README.md 'Rules at a glance' table is missing its **Total** row"
+    assert int(m.group(1)) == live, (
+        f"README rules table total says {m.group(1)}, catalogue has {live} active rules"
+    )
+    table = text[text.index("### Rules at a glance"):m.end()]
+    rows = re.findall(r"^\| (?!\*\*Total)[^|]+\|.*\| \*\*(\d+)\*\* \|$", table, re.M)
+    assert sum(int(n) for n in rows) == live, "README rules table rows don't add up to the total"
+    s = re.search(r"\*\*Total: (\d+) active catalogue rules\*\*", (REPO_ROOT / "SKILL.md").read_text())
+    assert s and int(s.group(1)) == live, (
+        f"SKILL.md 'Total: N active catalogue rules' should say {live}"
     )
 
 

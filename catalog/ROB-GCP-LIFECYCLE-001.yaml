@@ -8,18 +8,38 @@ patterns:
   - kind: resource_missing_arg
     resource: google_storage_bucket
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: google_storage_bucket
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: google_spanner_instance
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: google_spanner_instance
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: google_spanner_database
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: google_spanner_database
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: google_sql_database_instance
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: google_sql_database_instance
+    path: lifecycle.prevent_destroy
+    not_equal: true
   - kind: resource_missing_arg
     resource: google_compute_disk
     nested_path: lifecycle.prevent_destroy
+  - kind: hcl_attr
+    resource: google_compute_disk
+    path: lifecycle.prevent_destroy
+    not_equal: true
 owasp_iac:
   - "Deploy / Resource Decommissioning Process"
 recommendation: |

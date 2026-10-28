@@ -13,7 +13,6 @@ soc2_cc:
   - "CC6.1"
 mitre:
   - "T1078.001"
-  - "T1078.004"
 cwe:
   - "CWE-269"
   - "CWE-732"
@@ -32,9 +31,10 @@ owasp:
 # subject is a broad system Group, which grants the bound role to
 # every member of that group.
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_role_binding
-    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:masters")'
+    arg: subject.name
+    regex: '^system:masters$'
     description: |
       `kubernetes_role_binding` has a subject `kind = "Group"` with
       `name = "system:masters"`. `system:masters` is a hard-coded
@@ -42,26 +42,29 @@ patterns:
       member is treated as cluster-admin regardless of which role
       this binding references. Used legitimately only by the bootstrap
       kubeconfig.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_cluster_role_binding
-    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:masters")'
+    arg: subject.name
+    regex: '^system:masters$'
     description: |
       Same as above, but at cluster scope. `kubernetes_cluster_role_binding`
       with `system:masters` as a subject grants the referenced role
       to every kubeconfig that asserts the `system:masters` group —
       typically the original bootstrap credential plus any cluster
       operator who copy-pasted that kubeconfig.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_role_binding
-    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:unauthenticated")'
+    arg: subject.name
+    regex: '^system:unauthenticated$'
     description: |
       Subject `Group: system:unauthenticated` grants the role to every
       request without a valid token. Effectively makes the role
       reachable by any pod that can reach the API server, including
       pods without service-account tokens mounted.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_cluster_role_binding
-    regex: '(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:unauthenticated")'
+    arg: subject.name
+    regex: '^system:unauthenticated$'
     description: |
       Same as above at cluster scope. The 2018 Tesla Kubernetes
       breach pivoted on an `system:unauthenticated`-readable dashboard

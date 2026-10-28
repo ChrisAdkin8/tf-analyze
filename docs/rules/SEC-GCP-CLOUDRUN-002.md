@@ -41,11 +41,11 @@ keywords: "security, critical, terraform, iac, gcp, cis-7.2, mitre-T1190, cwe-28
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_cloud_run_service_iam_member` matching `/member\s*=\s*"all(Users|AuthenticatedUsers)"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_cloud_run_service_iam_member` (`member`) matching `/^all(Authenticated)?Users$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_cloud_run_service_iam_member` binds the Cloud Run service
 to `allUsers` or `allAuthenticatedUsers`. The service is reachable
 by anyone on the internet.
-2. **`resource_body_contains`** on `google_cloud_run_v2_service_iam_member` matching `/member\s*=\s*"all(Users|AuthenticatedUsers)"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `google_cloud_run_v2_service_iam_member` (`member`) matching `/^all(Authenticated)?Users$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Cloud Run v2 IAM binding exposes service to allUsers/allAuthenticatedUsers
 
 ## Why it likely fired

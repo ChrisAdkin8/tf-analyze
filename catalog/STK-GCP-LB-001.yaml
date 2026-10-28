@@ -11,8 +11,7 @@ pci_dss:
 soc2_cc:
   - "CC7.2"
 mitre:
-  - "T1530"
-  - "T1190"
+  - "T1562.008"
 cwe:
   - "CWE-778"
 d3fend:
@@ -35,9 +34,10 @@ patterns:
       agent) are not exported to Cloud Logging, blinding incident
       response and DDoS forensics. The AWS equivalent is the ALB access
       log gap (SEC-AWS-ALB-001).
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_compute_backend_service
-    regex: 'log_config\s*\{[^}]*enable\s*=\s*false'
+    arg: log_config.enable
+    regex: '^false$'
     description: log_config block has enable = false (explicitly disabled)
 recommendation: |
   Enable backend service logging:

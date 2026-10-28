@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-LB-001 — GCP load balancer backend service has logging disabled"
 description: "tf-analyze rule STK-GCP-LB-001 (MEDIUM · stack): GCP load balancer backend service has logging disabled"
-keywords: "stack, medium, terraform, iac, gcp, cis-2.13, mitre-T1530, mitre-T1190, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-csf-pr.pt-1, nist-800-53-au-2, nist-800-53-au-12, csa-ccm-log-08"
+keywords: "stack, medium, terraform, iac, gcp, cis-2.13, mitre-T1562.008, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-csf-pr.pt-1, nist-800-53-au-2, nist-800-53-au-12, csa-ccm-log-08"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp, cis-2.13, mitre-T1530, mitre-T119
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, CIS 2.13, MITRE T1530, MITRE T1190, CWE-778, D3-IAA",
+  "keywords": "stack, medium, terraform, CIS 2.13, MITRE T1562.008, CWE-778, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -47,7 +47,7 @@ Load Balancer access logs (path, status, latency, source IP, user
 agent) are not exported to Cloud Logging, blinding incident
 response and DDoS forensics. The AWS equivalent is the ALB access
 log gap (SEC-AWS-ALB-001).
-2. **`resource_body_contains`** on `google_compute_backend_service` matching `/log_config\s*\{[^}]*enable\s*=\s*false/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `google_compute_backend_service` (`log_config.enable`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   log_config block has enable = false (explicitly disabled)
 
 ## Why it likely fired
@@ -117,8 +117,7 @@ resource "google_compute_backend_service" "example" {
   - `CC7.2`
 
 **MITRE ATT&CK**
-  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
-  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
 
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)

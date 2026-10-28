@@ -1,7 +1,7 @@
 id: SEC-GCP-GKE-DBENC-001
 title: "GKE cluster missing application-layer secrets encryption (etcd CMEK)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

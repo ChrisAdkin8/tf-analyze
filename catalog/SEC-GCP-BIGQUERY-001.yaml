@@ -24,24 +24,27 @@ nist_800_53:
 csa_ccm:
   - "IAM-09"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_bigquery_dataset
-    regex: 'special_group\s*=\s*"all(AuthenticatedUsers|Users)"'
+    arg: access.special_group
+    regex: '^all(Authenticated)?Users$'
     description: |
       `google_bigquery_dataset.access` grants `special_group = "allUsers"`
       or `special_group = "allAuthenticatedUsers"`. The dataset (and any
       view defined on top of it) is readable by anyone with a Google
       account — or even unauthenticated — depending on the role.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_bigquery_dataset_iam_binding
-    regex: 'members\s*=\s*\[[^\]]*"all(Users|AuthenticatedUsers)"'
+    nested_path: members
+    regex: '"all(Authenticated)?Users"'
     description: |
       `google_bigquery_dataset_iam_binding.members` includes `allUsers`
       or `allAuthenticatedUsers` — same public-data exposure via the
       newer IAM binding resource.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_bigquery_dataset_iam_member
-    regex: 'member\s*=\s*"all(Users|AuthenticatedUsers)"'
+    nested_path: member
+    regex: '^all(Authenticated)?Users$'
     description: BigQuery dataset IAM member is allUsers / allAuthenticatedUsers
 recommendation: |
   Replace the public grant with a specific group/user/service account:

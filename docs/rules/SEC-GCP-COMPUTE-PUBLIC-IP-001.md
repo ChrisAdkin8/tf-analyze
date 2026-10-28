@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-COMPUTE-PUBLIC-IP-001 — Compute instance has a public IP via access_config"
-description: "tf-analyze rule SEC-GCP-COMPUTE-PUBLIC-IP-001 (HIGH · security): Compute instance has a public IP via access_config"
-keywords: "security, high, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
+description: "tf-analyze rule SEC-GCP-COMPUTE-PUBLIC-IP-001 (MEDIUM · security): Compute instance has a public IP via access_config"
+keywords: "security, medium, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -24,33 +24,35 @@ keywords: "security, high, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284, d
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 4.9, MITRE T1190, CWE-284, D3-IAA",
+  "keywords": "security, medium, terraform, CIS 4.9, MITRE T1190, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-GCP-COMPUTE-PUBLIC-IP-001 — Compute instance has a public IP via access_config
+# 💡 SEC-GCP-COMPUTE-PUBLIC-IP-001 — Compute instance has a public IP via access_config
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-GCP-COMPUTE-PUBLIC-IP-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-GCP-COMPUTE-PUBLIC-IP-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-GCP-COMPUTE-PUBLIC-IP-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Compute instance has a public IP via access_config.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Compute instance has a public IP via access_config.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_compute_instance` matching `/(?<![\w])access_config\s*\{/` — _the resource body matches a regex inside the block._
-  A `google_compute_instance` body contains an `access_config {}`
-sub-block (always inside `network_interface`). Even an empty
+1. **`resource_has_block`** on `google_compute_instance` (`network_interface.access_config`) — _the resource has the named nested block (or, with `empty: true`, an empty one)._
+  A `google_compute_instance` `network_interface` has an
+`access_config {}` sub-block (also as a `dynamic` block; not
+`ipv6_access_config`, which is IPv6 egress). Even an empty
 `access_config` block requests an ephemeral public IP, exposing
 the VM directly to the internet.
 
 ## Why it likely fired
 
-A `google_compute_instance` body contains an `access_config {}`
-sub-block (always inside `network_interface`). Even an empty
+A `google_compute_instance` `network_interface` has an
+`access_config {}` sub-block (also as a `dynamic` block; not
+`ipv6_access_config`, which is IPv6 egress). Even an empty
 `access_config` block requests an ephemeral public IP, exposing
 the VM directly to the internet.
 

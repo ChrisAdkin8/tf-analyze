@@ -1,7 +1,7 @@
 ---
 title: "STK-AZURE-WEBAPP-RUNTIME-001 — Azure App Service Web App uses end-of-life runtime"
-description: "tf-analyze rule STK-AZURE-WEBAPP-RUNTIME-001 (HIGH · stack): Azure App Service Web App uses end-of-life runtime"
-keywords: "stack, high, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
+description: "tf-analyze rule STK-AZURE-WEBAPP-RUNTIME-001 (MEDIUM · stack): Azure App Service Web App uses end-of-life runtime"
+keywords: "stack, medium, terraform, iac, azure, mitre-T1190, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,33 +24,65 @@ keywords: "stack, high, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-sca
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, MITRE T1195.002, CWE-1104, D3-SCA",
+  "keywords": "stack, medium, terraform, MITRE T1190, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-AZURE-WEBAPP-RUNTIME-001 — Azure App Service Web App uses end-of-life runtime
+# 💡 STK-AZURE-WEBAPP-RUNTIME-001 — Azure App Service Web App uses end-of-life runtime
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-AZURE-WEBAPP-RUNTIME-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-AZURE-WEBAPP-RUNTIME-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-AZURE-WEBAPP-RUNTIME-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Azure App Service Web App uses end-of-life runtime.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Azure App Service Web App uses end-of-life runtime.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_linux_web_app` matching `/(python_version|node_version|dotnet_version|java_version|php_version|ruby_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|2\.5|2\.6|2\.7|7\.[234]|8\.0|11)"/` — _the resource body matches a regex inside the block._
-  Linux Web App uses an EOL runtime (Python 3.6-3.8, Node 10-16, Ruby 2.5-2.7, PHP 7.x/8.0, .NET 3.1-6.0, Java 8/11)
-2. **`resource_body_contains`** on `azurerm_windows_web_app` matching `/(node_version|dotnet_version|java_version|php_version)\s*=\s*"(10|12|14|16|v3\.1|v5\.0|v6\.0|7\.[234]|8\.0|11)"/` — _the resource body matches a regex inside the block._
-  Windows Web App uses an EOL runtime
+1. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.python_version`) matching `/^3\.[678]$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Python runtime (3.6-3.8)
+2. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Node.js runtime (10-16)
+3. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+4. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Java runtime (8, 11)
+5. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.php_version`) matching `/^(7\.[234]|8\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL PHP runtime (7.x, 8.0)
+6. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.ruby_version`) matching `/^2\.[567]$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Ruby runtime (2.5-2.7)
+7. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL Node.js runtime (10-16)
+8. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+9. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL Java runtime (8, 11)
+10. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.php_version`) matching `/^(7\.[234]|8\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL PHP runtime (7.x, 8.0)
 
 ## Why it likely fired
 
-Linux Web App uses an EOL runtime (Python 3.6-3.8, Node 10-16, Ruby 2.5-2.7, PHP 7.x/8.0, .NET 3.1-6.0, Java 8/11)
+Linux Web App uses an EOL Python runtime (3.6-3.8)
 
-Windows Web App uses an EOL runtime
+Linux Web App uses an EOL Node.js runtime (10-16)
+
+Linux Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+
+Linux Web App uses an EOL Java runtime (8, 11)
+
+Linux Web App uses an EOL PHP runtime (7.x, 8.0)
+
+Linux Web App uses an EOL Ruby runtime (2.5-2.7)
+
+Windows Web App uses an EOL Node.js runtime (10-16)
+
+Windows Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+
+Windows Web App uses an EOL Java runtime (8, 11)
+
+Windows Web App uses an EOL PHP runtime (7.x, 8.0)
 
 ## Adversarial scenario
 
@@ -96,7 +128,7 @@ must reference a currently-supported runtime.
 ## References
 
 **MITRE ATT&CK**
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
+  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
 
 **CWE**
   - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)

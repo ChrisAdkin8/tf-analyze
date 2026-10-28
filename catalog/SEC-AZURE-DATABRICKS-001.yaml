@@ -1,7 +1,7 @@
 id: SEC-AZURE-DATABRICKS-001
 title: "Azure Databricks workspace publicly accessible (no_public_ip = false)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 cis:
@@ -21,9 +21,10 @@ nist_csf:
 nist_800_53:
   - "SC-7"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_databricks_workspace
-    regex: 'no_public_ip\s*=\s*false'
+    arg: custom_parameters.no_public_ip
+    regex: '^false$'
     description: |
       `azurerm_databricks_workspace.custom_parameters.no_public_ip = false`
       assigns Databricks worker nodes public IPs. The workspace control

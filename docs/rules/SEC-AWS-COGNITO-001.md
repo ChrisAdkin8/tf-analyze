@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-COGNITO-001 — Cognito user pool MFA not enabled"
-description: "tf-analyze rule SEC-AWS-COGNITO-001 (HIGH · security): Cognito user pool MFA not enabled"
-keywords: "security, high, terraform, iac, aws, mitre-T1556.006, cwe-308, d3-mfa, nist-csf-pr.ac-7, nist-800-53-ia-2, nist-800-53-ia-2-1, csa-ccm-iam-12"
+description: "tf-analyze rule SEC-AWS-COGNITO-001 (MEDIUM · security): Cognito user pool MFA not enabled"
+keywords: "security, medium, terraform, iac, aws, mitre-T1556.006, cwe-308, d3-mfa, nist-csf-pr.ac-7, nist-800-53-ia-2, nist-800-53-ia-2-1, csa-ccm-iam-12"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, aws, mitre-T1556.006, cwe-308, d3-mfa
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1556.006, CWE-308, D3-MFA",
+  "keywords": "security, medium, terraform, MITRE T1556.006, CWE-308, D3-MFA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AWS-COGNITO-001 — Cognito user pool MFA not enabled
+# 💡 SEC-AWS-COGNITO-001 — Cognito user pool MFA not enabled
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-COGNITO-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-COGNITO-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-COGNITO-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Cognito user pool MFA not enabled.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Cognito user pool MFA not enabled.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 

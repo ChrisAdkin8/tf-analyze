@@ -18,18 +18,26 @@ Corpus handlers (6):
 """
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
 from _hcl import (
+    _mask_to_top_level,
     _string_end,
+    attach_tree_attrs,
     find_blocks,
+    mask_comments,
+    parse_tf,
+    resource_has_path,
+    resource_values_at,
     block_arg_value,
     block_has_arg,
     brace_walk,
     block_has_nested_path,
     mask_comments_and_heredocs,
 )
+from _tfjson import is_tf_source
 from detect import (
     InFileCtx,
     CorpusCtx,
@@ -39,11 +47,8 @@ from detect import (
     VARIABLE_START,
     CHECK_START,
     VALIDATION_BLOCK_RE,
-    BOOL_COUNT_RE,
     COUNT_GUARD_RE,
-    COUNT_ATTR_RE,
-    FOREACH_ATTR_RE,
-    _COUNT_NAME_RE,
+    _COUNT_NAME_LIKE_ATTRS,
     _FOREACH_SPLAT_RE,
     _FOREACH_COMPREHENSION_RE,
     _FOREACH_SAFE_SCOPES,
@@ -52,10 +57,139 @@ from detect import (
     _INTENT_FALSE_DEFAULT_RE,
     _INTENT_MUST_TRUE_RE,
     _INTENT_VALIDATION_RE,
-    _INTENT_PROD_TAG_RE,
     _INTENT_DEL_PROT_FALSE_RE,
     _INTENT_FORCE_DESTROY_TRUE_RE,
 )
+
+
+# ---- Shared helpers: values from the parse tree, guards over code ------
+
+def _corpus_resources(fp, text: str) -> list[dict]:
+    """The file's resource blocks with their parse-tree subtrees attached,
+    as `detect_in_file` gives in-file handlers (`attach_tree_attrs`).
+    Read-only for callers: one list serves every corpus handler."""
+    return _resources_with_attrs(is_tf_source(Path(fp)), text)
+
+
+@functools.lru_cache(maxsize=1024)
+def _resources_with_attrs(parse: bool, text: str) -> list[dict]:
+    tree = parse_tf(text)[0] if parse else None
+    return attach_tree_attrs(find_blocks(text, RESOURCE_START), tree)
+
+
+def _top_value(blk: dict, arg: str) -> str | None:
+    """The block's own top-level ``arg`` as HCL text — from the parse tree
+    when attached, else the regex fallback. Never an ``arg`` in a nested
+    or ``dynamic`` block, a comment, a string or a heredoc."""
+    if blk.get("attrs") is not None:
+        vals = resource_values_at(blk, arg)
+        return vals[0] if vals else None
+    return block_arg_value(blk["body"], arg)
+
+
+def _arg_line(blk: dict, arg: str) -> int:
+    """Line of the block's top-level ``arg =``; the block's line if not
+    found. Read from the block's own text: an in-file ``body`` has had its
+    dynamic blocks expanded, which moves lines."""
+    text = blk["block_text"]
+    open_at = text.index("{") + 1
+    m = re.search(
+        rf'(?m)^[ \t]*{re.escape(arg)}[ \t]*=', _mask_to_top_level(text[open_at:-1]),
+    )
+    if not m:
+        return blk["start_line"]
+    return blk["start_line"] + text.count("\n", 0, open_at + m.start())
+
+
+_BLOCK_HEADER_LINE_RE = re.compile(r'^\s*[\w-]+(?:\s+(?:"[^"\n]*"|[\w-]+))*\s*\{\s*$')
+
+
+def _interpolation_end(text: str, j: int) -> int:
+    """Index just past the ``${ ... }`` / ``%{ ... }`` starting at ``text[j]``."""
+    depth, k, n = 1, j + 2, len(text)
+    while k < n and depth:
+        ch = text[k]
+        if ch == '"':
+            k = _string_end(text, k)
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+        k += 1
+    return k
+
+
+def _blank_string_text(text: str) -> str:
+    """``text`` with the literal text of every double-quoted string blanked
+    (newlines kept), leaving ``${...}`` / ``%{...}`` interpolations as they
+    are. ``description = "see aws_instance.a[0].id"`` names a resource but
+    doesn't reference it; ``"${aws_instance.a[0].id}"`` does."""
+    out = list(text)
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != '"':
+            i += 1
+            continue
+        end = _string_end(text, i)
+        j = i + 1
+        while j < end - 1:
+            ch = text[j]
+            if ch in "$%" and text.startswith(ch * 2 + "{", j):
+                for k in range(j, j + 3):
+                    out[k] = " "
+                j += 3
+            elif ch in "$%" and text.startswith(ch + "{", j):
+                j = _interpolation_end(text, j)
+            else:
+                if ch != "\n":
+                    out[j] = " "
+                j += 1
+        i = end
+    return "".join(out)
+
+
+def _code_lines(text: str) -> tuple[list[str], list[str], list[int]]:
+    """``(refs, structure, depths)`` per line of ``text``: `refs` has the
+    comments and the literal text of strings blanked (``${...}`` kept, in
+    strings and heredocs — that's a real reference); `structure` also
+    blanks heredocs; `depths` is the ``([{`` nesting depth at the start of
+    each line, strings skipped."""
+    refs = _blank_string_text(mask_comments(text))
+    code = mask_comments_and_heredocs(text)
+    depths = [0]
+    depth, i, n = 0, 0, len(code)
+    while i < n:
+        ch = code[i]
+        if ch == '"':
+            i = _string_end(code, i)
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+        elif ch == "\n":
+            depths.append(depth)
+        i += 1
+    return refs.split("\n"), code.split("\n"), depths
+
+
+def _guard_context(structure: list[str], depths: list[int], idx: int) -> str:
+    """Line ``idx`` plus every earlier line that opens a bracket still
+    open at ``idx``, up to the enclosing block header: the code that can
+    guard a reference on line ``idx``. ``cond ? (\\n  x[0].id\\n) : null``
+    is guarded although the ``?`` is on another line."""
+    parts = [structure[idx]]
+    low = depths[idx]
+    for k in range(idx - 1, -1, -1):
+        if low == 0:
+            break
+        if depths[k] < low:
+            if _BLOCK_HEADER_LINE_RE.match(structure[k]):
+                break
+            parts.append(structure[k])
+            low = depths[k]
+    return "\n".join(parts)
 
 
 # ---- In-file handlers ---------------------------------------------------
@@ -92,7 +226,9 @@ def _detect_variable_missing_validation(c: InFileCtx) -> list[dict]:
     for blk in c.variables:
         if not name_re.search(blk["groups"][0]):
             continue
-        if not VALIDATION_BLOCK_RE.search(blk["body"]):
+        # Top-level code only: a `validation {` in a comment or a heredoc
+        # (`description = <<EOT`) is not a validation block.
+        if not block_has_arg(blk["body"], "validation"):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
@@ -111,7 +247,9 @@ def _detect_check_block_missing_assert(c: InFileCtx) -> list[dict]:
     """
     out: list[dict] = []
     for cblk in find_blocks(c.text, CHECK_START):
-        if not re.search(r'(?m)^\s*assert\s*\{', cblk["body"]):
+        # A commented-out `/* assert { ... } */` asserts nothing.
+        code = mask_comments_and_heredocs(cblk["body"])
+        if not re.search(r'(?m)^\s*assert\s*\{', code):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
@@ -156,6 +294,10 @@ def _detect_count_index_ref(c: InFileCtx) -> list[dict]:
     resources/modules that aren't guarded by a conditional (ternary,
     try(), length() > 0). Decrementing the count destroys the resource
     at index 0, so unguarded references will fail at apply time.
+
+    Comments are ignored, and a guard counts on the reference's line or
+    on any line that opens a bracket around it (`_guard_context`), so a
+    ternary split over lines is seen.
     """
     counted_names: set[str] = set()
     for blk in c.resources:
@@ -170,22 +312,23 @@ def _detect_count_index_ref(c: InFileCtx) -> list[dict]:
     idx_ref_re = re.compile(
         r'((?:[\w-]+\.[\w-]+(?:\.[\w-]+)?)\[0\]\.[\w-]+)'
     )
+    refs, structure, depths = _code_lines(c.text)
     out: list[dict] = []
-    for line_no, line_text in enumerate(c.text.splitlines(), 1):
+    for idx, line_text in enumerate(refs):
         stripped_line = line_text.lstrip()
-        if stripped_line.startswith(("#", "//", "resource ", "module ", "count ")):
+        if stripped_line.startswith(("resource ", "module ", "count ")):
             continue
         for m in idx_ref_re.finditer(line_text):
-            ref = m.group(1)
-            ref_parts = ref.split("[")[0]
-            if ref_parts in counted_names:
-                if not COUNT_GUARD_RE.search(line_text):
-                    out.append({
-                        "id": c.eid,
-                        "file": str(c.file_path),
-                        "line": line_no,
-                        "resource": ref_parts,
-                    })
+            ref_parts = m.group(1).split("[")[0]
+            if ref_parts in counted_names and not COUNT_GUARD_RE.search(
+                _guard_context(structure, depths, idx)
+            ):
+                out.append({
+                    "id": c.eid,
+                    "file": str(c.file_path),
+                    "line": idx + 1,
+                    "resource": ref_parts,
+                })
     return out
 
 
@@ -197,24 +340,34 @@ def _detect_count_index_in_name(c: InFileCtx) -> list[dict]:
     real infrastructure (Terraform can't even rebuild on a different
     slot because the external name embeds the old index). Companion to
     ROB-COUNTREF-001 (consumer-side guard).
+
+    Only the resource's own top-level name attributes and its ``Name``
+    tag count (read from the parse tree when there is one): not a nested
+    block's ``container_name`` or a commented-out line.
     """
     out: list[dict] = []
     for blk in c.resources:
         if not block_has_arg(blk["body"], "count"):
             continue
-        btype, bname = blk["groups"]
-        body = blk["body"]
-        m = _COUNT_NAME_RE.search(body)
-        if m:
-            preceding = body[:m.start()]
-            line_no = blk["start_line"] + preceding.count("\n")
-            out.append({
-                "id": c.eid,
-                "file": str(c.file_path),
-                "line": line_no,
-                "resource": f"{btype}.{bname}",
-            })
+        for attr in (*_COUNT_NAME_LIKE_ATTRS, "tags.Name"):
+            vals = resource_values_at(blk, attr)
+            if any(re.search(r'\bcount\.index\b', v) for v in vals):
+                btype, bname = blk["groups"]
+                out.append({
+                    "id": c.eid,
+                    "file": str(c.file_path),
+                    "line": _arg_line(blk, attr.split(".")[0]),
+                    "resource": f"{btype}.{bname}",
+                })
+                break
     return out
+
+
+def _is_bool_count(val: str | None) -> bool:
+    """``count = <expr> ? 1 : 0``, however it is spaced or parenthesised."""
+    if val is None:
+        return False
+    return bool(re.search(r'\?\s*1\s*:\s*0\s*\)*$', " ".join(val.split())))
 
 
 @_register_infile("count_bool_pattern")
@@ -222,11 +375,13 @@ def _detect_count_bool_pattern(c: InFileCtx) -> list[dict]:
     """``count_bool_pattern`` — detect ``count = <expr> ? 1 : 0`` on
     resources and modules. ROB-COUNTBOOL-001 flags the anti-pattern
     because changing the predicate destroys the resource instead of
-    leaving it in place.
+    leaving it in place. The block's own top-level ``count`` is read
+    (parse tree first), so a trailing comment or a ternary split over
+    lines still matches and a commented-out ``count`` does not.
     """
     out: list[dict] = []
     for blk in c.resources:
-        if BOOL_COUNT_RE.search(blk["body"]):
+        if _is_bool_count(_top_value(blk, "count")):
             btype, bname = blk["groups"]
             out.append({
                 "id": c.eid,
@@ -235,7 +390,7 @@ def _detect_count_bool_pattern(c: InFileCtx) -> list[dict]:
                 "resource": f"{btype}.{bname}",
             })
     for blk in c.modules:
-        if BOOL_COUNT_RE.search(blk["body"]):
+        if _is_bool_count(block_arg_value(blk["body"], "count")):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
@@ -266,7 +421,8 @@ def _ignore_changes_items(body: str) -> list[str] | None:
     close_after = brace_walk(body, open_at, opens="[", closes="]")
     if close_after is None:
         return None
-    inner = body[open_at + 1:close_after - 1]
+    # Read the items from the code: `a, # b, c` lists one attribute.
+    inner = code[open_at + 1:close_after - 1]
     items: list[str] = []
     depth, start, i = 0, 0, 0
     while i < len(inner):
@@ -331,18 +487,14 @@ def _corpus_foreach_over_list(c: CorpusCtx) -> list[dict]:
     """``foreach_over_list`` — fire when a resource uses ``for_each`` with
     a list literal or ``tolist(...)`` — the idiomatic fix is
     ``toset([...])``. A list-keyed for_each silently re-orders on
-    upstream changes; toset stabilises.
+    upstream changes; toset stabilises. Only the resource's own
+    ``for_each``: a ``dynamic`` block's ``for_each`` may be a list.
     """
-    list_rhs_re = re.compile(
-        r'(?m)^\s*for_each\s*=\s*(\[|tolist\(|toset\s*\(\s*\[)'
-    )
     out: list[dict] = []
     for fp, text in c.all_files_text.items():
-        for blk in find_blocks(text, RESOURCE_START):
-            m = list_rhs_re.search(blk["body"])
-            if m and m.group(1) != "toset ([":
-                if m.group(1).startswith("toset"):
-                    continue
+        for blk in _corpus_resources(fp, text):
+            val = _top_value(blk, "for_each")
+            if val is not None and re.match(r'\[|tolist\s*\(', val.lstrip()):
                 out.append({
                     "id": c.eid,
                     "file": str(fp),
@@ -357,18 +509,22 @@ def _corpus_foreach_keyset_unstable(c: CorpusCtx) -> list[dict]:
     """``foreach_keyset_unstable`` — fire when a ``for_each`` keyset is
     derived from another resource's attribute. Each plan that mutates
     the upstream resource set re-keys this one, forcing destroy/create
-    on every existing instance. Classic apply-flicker bug.
+    on every existing instance. Classic apply-flicker bug. Only the
+    resource's own ``for_each`` (not a ``dynamic`` block's) is read.
     """
     out: list[dict] = []
     for fp, text in c.all_files_text.items():
-        for blk in find_blocks(text, RESOURCE_START):
-            body = blk["body"]
+        for blk in _corpus_resources(fp, text):
+            val = _top_value(blk, "for_each")
+            if val is None:
+                continue
+            stmt = "for_each = " + " ".join(val.split())
             leading_ident: str | None = None
-            m = _FOREACH_SPLAT_RE.search(body)
+            m = _FOREACH_SPLAT_RE.search(stmt)
             if m:
                 leading_ident = m.group(1)
             else:
-                m2 = _FOREACH_COMPREHENSION_RE.search(body)
+                m2 = _FOREACH_COMPREHENSION_RE.search(stmt)
                 if m2:
                     leading_ident = m2.group(1)
             if not leading_ident or leading_ident in _FOREACH_SAFE_SCOPES:
@@ -391,13 +547,15 @@ def _corpus_foreach_keyset_unstable(c: CorpusCtx) -> list[dict]:
 def _corpus_count_length_unguarded(c: CorpusCtx) -> list[dict]:
     """``count_length_unguarded`` — resources declared with
     ``count = length(X)`` whose ``[N]`` / ``[count.index]`` references
-    elsewhere are not guarded by length/try/ternary.
+    elsewhere are not guarded by length/try/ternary. Only a resource's
+    own top-level ``count`` qualifies; comments are ignored, and a guard
+    on a line that opens a bracket around the reference counts.
     """
     counted: dict[str, int] = {}
-    length_count_re = re.compile(r'(?m)^\s*count\s*=\s*length\s*\(')
     for fp, text in c.all_files_text.items():
-        for blk in find_blocks(text, RESOURCE_START):
-            if length_count_re.search(blk["body"]):
+        for blk in _corpus_resources(fp, text):
+            val = _top_value(blk, "count")
+            if val is not None and re.match(r'\(*\s*length\s*\(', val.lstrip()):
                 key = f"{blk['groups'][0]}.{blk['groups'][1]}"
                 counted[key] = blk["start_line"]
     out: list[dict] = []
@@ -405,19 +563,21 @@ def _corpus_count_length_unguarded(c: CorpusCtx) -> list[dict]:
         return out
     idx_re = re.compile(r'([\w-]+\.[\w-]+)\[(\d+|count\.index)\]')
     for fp, text in c.all_files_text.items():
-        for i, line_text in enumerate(text.splitlines(), 1):
-            if "length(" in line_text or "try(" in line_text:
+        refs, structure, depths = _code_lines(text)
+        for idx, line_text in enumerate(refs):
+            hits = [m for m in idx_re.finditer(line_text) if m.group(1) in counted]
+            if not hits:
                 continue
-            if re.search(r'\?\s*', line_text):
+            guard = _guard_context(structure, depths, idx)
+            if "length(" in guard or "try(" in guard or "?" in guard:
                 continue
-            for m in idx_re.finditer(line_text):
-                if m.group(1) in counted:
-                    out.append({
-                        "id": c.eid,
-                        "file": str(fp),
-                        "line": i,
-                        "resource": m.group(1),
-                    })
+            for m in hits:
+                out.append({
+                    "id": c.eid,
+                    "file": str(fp),
+                    "line": idx + 1,
+                    "resource": m.group(1),
+                })
     return out
 
 
@@ -426,31 +586,62 @@ def _corpus_count_foreach_mix(c: CorpusCtx) -> list[dict]:
     """``count_foreach_mix`` — per-directory: does any file use ``count``
     AND ``for_each`` on different resources? Anti-pattern that makes
     module consumers deal with both splat and dynamic refs. Flags the
-    count users.
+    count users. Only a resource's own top-level ``count`` / ``for_each``
+    counts — not a nested block's ``count`` (Cloud Armor's
+    ``rate_limit_threshold``) or a ``dynamic`` block's ``for_each``.
     """
     per_dir: dict[str, dict[str, list[dict]]] = {}
     for fp, text in c.all_files_text.items():
         dirkey = str(Path(fp).parent)
         per_dir.setdefault(dirkey, {"count": [], "foreach": []})
-        for blk in find_blocks(text, RESOURCE_START):
-            if COUNT_ATTR_RE.search(blk["body"]):
-                per_dir[dirkey]["count"].append({
-                    "file": str(fp),
-                    "line": blk["start_line"],
-                    "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
-                })
-            if FOREACH_ATTR_RE.search(blk["body"]):
-                per_dir[dirkey]["foreach"].append({
-                    "file": str(fp),
-                    "line": blk["start_line"],
-                    "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
-                })
+        for blk in _corpus_resources(fp, text):
+            where = {
+                "file": str(fp),
+                "line": blk["start_line"],
+                "resource": f"{blk['groups'][0]}.{blk['groups'][1]}",
+            }
+            if resource_has_path(blk, "count"):
+                per_dir[dirkey]["count"].append(where)
+            if resource_has_path(blk, "for_each"):
+                per_dir[dirkey]["foreach"].append(where)
     out: list[dict] = []
     for dirkey, buckets in per_dir.items():
         if buckets["count"] and buckets["foreach"]:
             for f in buckets["count"]:
                 out.append({"id": c.eid, **f})
     return out
+
+
+# What counts as production. A folder or file name, or an `environment` /
+# `env` value, is split into words on `-` `_` `.` and spaces; it is
+# production when a word is prod / production / prd and no word says it
+# isn't (pre-prod, non-prod). A substring test took nonprod/, preprod/ and
+# products/ for production.
+_PROD_WORDS = frozenset({"prod", "production", "prd"})
+_NOT_PROD_WORDS = frozenset({"non", "pre", "not", "nonprod", "preprod", "nonproduction", "preproduction"})
+_ENV_LABEL_RE = re.compile(r'(?i)(?<![\w.])"?(?:environment|env)"?\s*[=:]\s*"([^"\n]*)"')
+
+
+def _is_prod_name(name: str) -> bool:
+    words = [w for w in re.split(r"[-_.\s]+", name.lower()) if w]
+    return any(w in _PROD_WORDS for w in words) and not any(w in _NOT_PROD_WORDS for w in words)
+
+
+def _path_is_prod(fp, target) -> bool:
+    """Whether a folder or the file name under the scan target names
+    production (folders above the target don't count)."""
+    path = Path(fp)
+    try:
+        path = path.resolve().relative_to(Path(target).resolve())
+    except (ValueError, OSError):
+        pass
+    return any(_is_prod_name(part) for part in path.with_suffix("").parts)
+
+
+def _labels_prod(body: str) -> bool:
+    """Whether the block sets ``environment`` / ``env`` (an argument or a
+    tag key) to a production value. Comments don't count."""
+    return any(_is_prod_name(m.group(1)) for m in _ENV_LABEL_RE.finditer(mask_comments(body)))
 
 
 @_register_corpus("prod_no_deletion_protection")
@@ -462,13 +653,13 @@ def _corpus_prod_no_deletion_protection(c: CorpusCtx) -> list[dict]:
     """
     out: list[dict] = []
     for fp, text in c.all_files_text.items():
-        path_is_prod = "prod" in str(fp).lower()
+        path_is_prod = _path_is_prod(fp, c.target)
         for blk in find_blocks(text, RESOURCE_START):
             btype, bname = blk["groups"]
             if btype not in _PROD_PROTECTED_TYPES:
                 continue
             body = blk["body"]
-            label_prod = bool(re.search(r'environment\s*=\s*"prod', body))
+            label_prod = _labels_prod(body)
             if not (path_is_prod or label_prod):
                 continue
             dp = block_arg_value(body, "deletion_protection")
@@ -523,8 +714,8 @@ def _corpus_intent_gap(c: CorpusCtx) -> list[dict]:
         for fp, ftext in c.all_files_text.items():
             for blk in find_blocks(ftext, RESOURCE_START):
                 btype, bname = blk["groups"]
-                if _INTENT_PROD_TAG_RE.search(blk["body"]):
-                    if _INTENT_DEL_PROT_FALSE_RE.search(blk["body"]):
+                if _labels_prod(blk["body"]):
+                    if _INTENT_DEL_PROT_FALSE_RE.search(mask_comments(blk["body"])):
                         out.append({
                             "id": c.eid,
                             "file": str(fp),
@@ -535,8 +726,8 @@ def _corpus_intent_gap(c: CorpusCtx) -> list[dict]:
         for fp, ftext in c.all_files_text.items():
             for blk in find_blocks(ftext, RESOURCE_START):
                 btype, bname = blk["groups"]
-                if _INTENT_PROD_TAG_RE.search(blk["body"]):
-                    if _INTENT_FORCE_DESTROY_TRUE_RE.search(blk["body"]):
+                if _labels_prod(blk["body"]):
+                    if _INTENT_FORCE_DESTROY_TRUE_RE.search(mask_comments(blk["body"])):
                         out.append({
                             "id": c.eid,
                             "file": str(fp),

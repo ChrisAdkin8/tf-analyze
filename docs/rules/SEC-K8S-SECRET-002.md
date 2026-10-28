@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-SECRET-002 — kubernetes_secret of type `kubernetes.io/dockerconfigjson` carries literal data (image-pull credentials in state)"
 description: "tf-analyze rule SEC-K8S-SECRET-002 (CRITICAL · security): kubernetes_secret of type `kubernetes.io/dockerconfigjson` carries literal data (image-pull crede…"
-keywords: "security, critical, terraform, iac, cis-5.4.1, mitre-T1552.001, mitre-T1525, mitre-T1195.002, cwe-798, cwe-312, nist-csf-pr.ds-1, nist-csf-id.sc-3, nist-800-53-ia-5, nist-800-53-sr-3, csa-ccm-ekm-04, csa-ccm-tvm-09"
+keywords: "security, critical, terraform, iac, cis-5.4.1, mitre-T1552.001, mitre-T1525, cwe-798, cwe-312, nist-csf-pr.ds-1, nist-csf-id.sc-3, nist-800-53-ia-5, nist-800-53-sr-3, csa-ccm-ekm-04, csa-ccm-tvm-09"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, cis-5.4.1, mitre-T1552.001, mitre
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 5.4.1, MITRE T1552.001, MITRE T1525, MITRE T1195.002, CWE-798, CWE-312",
+  "keywords": "security, critical, terraform, CIS 5.4.1, MITRE T1552.001, MITRE T1525, CWE-798, CWE-312",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -41,7 +41,7 @@ keywords: "security, critical, terraform, iac, cis-5.4.1, mitre-T1552.001, mitre
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_secret` matching `/(?ms)type\s*=\s*"kubernetes\.io/dockerconfigjson".*?\.dockerconfigjson"?\s*=/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_secret` (`data`) matching `/"\.dockerconfigjson"\s*=/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_secret` declares `type = "kubernetes.io/dockerconfigjson"`
 and carries a literal `.dockerconfigjson` payload in `data`. The
 payload is the base64-encoded contents of `~/.docker/config.json` —
@@ -49,8 +49,9 @@ i.e. registry username + password (or OAuth token) for every
 registry the workload pulls from. The 2024 Sisense breach and
 the 2023 CircleCI compromise both exfiltrated registry credentials
 from artefacts that operators thought were "encoded".
-2. **`resource_body_contains`** on `kubernetes_secret_v1` matching `/(?ms)type\s*=\s*"kubernetes\.io/dockerconfigjson".*?\.dockerconfigjson"?\s*=/` — _the resource body matches a regex inside the block._
-  API-versioned alias — same anti-pattern.
+2. **`resource_arg`** on `kubernetes_secret` (`binary_data`) matching `/"\.dockerconfigjson"\s*=/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Same, in `binary_data`. (Both patterns also cover
+`kubernetes_secret_v1`, like every `kubernetes_*` pattern.)
 
 ## Why it likely fired
 
@@ -62,7 +63,8 @@ registry the workload pulls from. The 2024 Sisense breach and
 the 2023 CircleCI compromise both exfiltrated registry credentials
 from artefacts that operators thought were "encoded".
 
-API-versioned alias — same anti-pattern.
+Same, in `binary_data`. (Both patterns also cover
+`kubernetes_secret_v1`, like every `kubernetes_*` pattern.)
 
 ## Adversarial scenario
 
@@ -166,7 +168,6 @@ should return empty. Better: run `terraform state pull | grep -c dockerconfigjso
 **MITRE ATT&CK**
   - [`T1552.001`](https://attack.mitre.org/techniques/T1552/001/)
   - [`T1525`](https://attack.mitre.org/techniques/T1525/)
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-798`](https://cwe.mitre.org/data/definitions/798.html)

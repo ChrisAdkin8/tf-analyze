@@ -1,7 +1,7 @@
 id: SEC-K8S-HELM-001
 title: "helm_release sets `service.type=LoadBalancer` (publicly exposed)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

@@ -1,7 +1,7 @@
 id: SEC-K8S-NETPOL-002
 title: "kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:
@@ -34,18 +34,25 @@ owasp:
 # effect makes this worse than no policy at all — observability
 # dashboards report "secured" while traffic flows unrestricted.
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_network_policy
-    regex: 'cidr\s*=\s*"0\.0\.0\.0/0"'
+    arg: spec.ingress.from.ip_block.cidr
+    regex: '^0\.0\.0\.0/0$'
     description: |
       `kubernetes_network_policy` whitelists `0.0.0.0/0` in an `ip_block`.
       Every IPv4 address — including the public internet — matches the
       rule. The 2018 Tesla / Kubernetes-dashboard cryptomining incident
       pivoted through exactly this shape: a "network policy is
       configured" cluster whose policy whitelisted the world.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_network_policy
-    regex: '(?ms)^\s*egress\s*\{\s*\}'
+    arg: spec.egress.to.ip_block.cidr
+    regex: '^0\.0\.0\.0/0$'
+    description: Same, for an egress `to.ip_block`.
+  - kind: resource_has_block
+    resource: kubernetes_network_policy
+    path: spec.egress
+    empty: true
     description: |
       `kubernetes_network_policy` has an empty `egress { }` block. An
       empty rule in NetworkPolicy semantics is "allow all" — every
@@ -53,9 +60,10 @@ patterns:
       The cluster operator probably intended `egress { }` to mean
       "deny all egress", which is a common mistranslation from iptables
       mental models.
-  - kind: resource_body_contains
+  - kind: resource_has_block
     resource: kubernetes_network_policy
-    regex: '(?ms)^\s*ingress\s*\{\s*\}'
+    path: spec.ingress
+    empty: true
     description: |
       Same as above on the ingress side — `ingress { }` resolves to
       "allow all" inbound, defeating the purpose of a NetworkPolicy.

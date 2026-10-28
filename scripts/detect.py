@@ -121,6 +121,7 @@ from _hcl import (
     strip_hcl_context,
     find_blocks,
     find_simple_blocks,
+    mask_comments,
     block_has_arg,
     block_arg_value,
     brace_walk,
@@ -132,6 +133,7 @@ from _hcl import (
     comments_only,
     normalise_attrs,
     resource_subtrees,
+    attach_tree_attrs,
     resource_values_at,
 )
 from _network import parse_literal as _net_parse_literal, resolve as _net_resolve
@@ -444,13 +446,20 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
     # provider declares default_tags is recorded under the synthetic key
     # __aws_default_tags__. Tag-related findings in that dir are then
-    # suppressed (the provider injects the tags downstream).
+    # suppressed (the provider injects the tags downstream). Which provider
+    # configurations carry them (`aws`, `aws.<alias>`) is kept under
+    # __aws_default_tags_providers__ so child modules inherit them below.
     for fp, text in all_files_text.items():
         for pblk in find_blocks(text, PROVIDER_START):
             # A real `default_tags` block, not the word in a comment or
             # string (`# TODO: add default_tags` silenced every AWS tag rule).
             if pblk["groups"][0] == "aws" and block_has_arg(pblk["body"], "default_tags"):
-                base.setdefault(str(Path(fp).parent), {})["__aws_default_tags__"] = "true"
+                ctx = base.setdefault(str(Path(fp).parent), {})
+                ctx["__aws_default_tags__"] = "true"
+                alias = (block_arg_value(pblk["body"], "alias") or "").strip().strip('"')
+                names = set(ctx.get("__aws_default_tags_providers__", "").split())
+                names.add(f"aws.{alias}" if alias else "aws")
+                ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
 
     # Resource types present anywhere in the scan, minus ones switched off
     # with `enabled = false`, for `unless_repo_has` (account-level settings
@@ -465,8 +474,9 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
         for dir_key in {str(Path(fp).parent) for fp in all_files_text}:
             base.setdefault(dir_key, {})["__repo_has__"] = " ".join(present)
 
-    # Module calls, in a stable order: (caller dir, child dir, inputs).
-    calls: list[tuple[str, str, dict[str, str]]] = []
+    # Module calls, in a stable order: (caller dir, child dir, inputs, the
+    # caller's provider configuration the child's default `aws` is).
+    calls: list[tuple[str, str, dict[str, str], str]] = []
     for fp in sorted(all_files_text, key=str):
         parent_dir = str(Path(fp).parent)
         for mblk in find_blocks(all_files_text[fp], MODULE_START):
@@ -477,11 +487,12 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
                 child_dir = str((Path(parent_dir) / source).resolve())
             except (OSError, ValueError):
                 continue
-            inputs = {
-                k: v for k, v in _top_level_assignments(mblk["body"]).items()
-                if k not in _MODULE_META_ARGS
-            }
-            calls.append((parent_dir, child_dir, inputs))
+            assigns = _top_level_assignments(mblk["body"])
+            inputs = {k: v for k, v in assigns.items() if k not in _MODULE_META_ARGS}
+            # A child uses the caller's default `aws` unless `providers = {
+            # aws = aws.<alias> }` passes another configuration.
+            m = re.search(r'(?<![\w.])aws\s*=\s*(aws(?:\.[\w-]+)?)\b', assigns.get("providers", ""))
+            calls.append((parent_dir, child_dir, inputs, m.group(1) if m else "aws"))
 
     contexts: dict[str, list[dict]] = {}
     in_progress: set[str] = set()
@@ -490,7 +501,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
         if d in contexts:
             return contexts[d]
         own = base.get(d, {})
-        incoming = [(p, inputs) for p, c, inputs in calls if c == d]
+        incoming = [(p, inputs, aws) for p, c, inputs, aws in calls if c == d]
         if d in in_progress:  # a call cycle: stop at this module's own values
             return [dict(own)]
         if not incoming:  # a root module
@@ -498,9 +509,15 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             return contexts[d]
         in_progress.add(d)
         found: list[dict] = []
-        for parent_dir, inputs in incoming:
+        for parent_dir, inputs, aws_provider in incoming:
             for parent_ctx in contexts_of(parent_dir):
                 ctx = dict(own)
+                # Provider default_tags reach the child's resources through
+                # the configuration it is given, so its tag rules see them.
+                if aws_provider in parent_ctx.get("__aws_default_tags_providers__", "").split():
+                    ctx["__aws_default_tags__"] = "true"
+                    names = set(ctx.get("__aws_default_tags_providers__", "").split()) | {"aws"}
+                    ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
                 for k, raw in inputs.items():
                     # Only literal values flow (after resolving the caller's
                     # own var./local. references); an unresolved expression
@@ -515,7 +532,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
         contexts[d] = found
         return found
 
-    for d in sorted(set(base) | {c for _, c, _ in calls}):
+    for d in sorted(set(base) | {c for _, c, _, _ in calls}):
         contexts_of(d)
     return contexts
 
@@ -793,19 +810,9 @@ def detect_in_file(
     # when the file did not parse, is not `.tf`, or the key is ambiguous
     # (seen twice by either side). Line numbers still come from
     # find_blocks (tasks/hcl-parser-migration.md §4.3, §4.5).
-    _tree = parse_tf(text)[0] if is_tf_source(file_path) else None
-    _subtrees = resource_subtrees(_tree)
-    _regex_keys: dict[tuple, int] = {}
-    for _blk in resources:
-        _k = tuple(_blk["groups"])
-        _regex_keys[_k] = _regex_keys.get(_k, 0) + 1
-    for _blk in resources:
-        _k = tuple(_blk["groups"])
-        _found = _subtrees.get(_k, [])
-        _blk["attrs"] = (
-            normalise_attrs(_found[0])
-            if len(_found) == 1 and _regex_keys[_k] == 1 else None
-        )
+    attach_tree_attrs(
+        resources, parse_tf(text)[0] if is_tf_source(file_path) else None,
+    )
     modules = find_blocks(text, MODULE_START)
     variables = find_blocks(text, VARIABLE_START)
 
@@ -943,19 +950,29 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
 
     # Pre-build per-directory variable reference index for unused detection
     # dir -> set of var names referenced as var.X in any .tf file in that dir
+    # Comments are not references; nor is a variable's mention of itself in
+    # its own block (a `validation` condition must name `var.X`, so every
+    # validated variable looked used). Heredoc text is kept: `${var.x}` in
+    # a `user_data` script is a real use.
     var_refs_by_dir: dict[str, set[str]] = {}
     for fp, text in all_files_text.items():
         dirkey = str(Path(fp).parent)
         if dirkey not in var_refs_by_dir:
             var_refs_by_dir[dirkey] = set()
-        for m in re.finditer(r'\bvar\.([\w-]+)', text):
-            var_refs_by_dir[dirkey].add(m.group(1))
+        code = mask_comments(text)
+        own = [
+            (b["start_pos"], b["end_pos"], b["groups"][0])
+            for b in find_blocks(text, VARIABLE_START)
+        ]
+        for m in re.finditer(r'\bvar\.([\w-]+)', code):
+            if not any(a <= m.start() < b and n == m.group(1) for a, b, n in own):
+                var_refs_by_dir[dirkey].add(m.group(1))
 
     # Pre-build output-consumption index for output_unused:
     # Find all module.X.output_name references across all files
     output_refs: set[tuple[str, str]] = set()  # (module_name, output_name)
     for fp, text in all_files_text.items():
-        for m in re.finditer(r'\bmodule\.([\w-]+)\.([\w-]+)', text):
+        for m in re.finditer(r'\bmodule\.([\w-]+)\.([\w-]+)', mask_comments(text)):
             output_refs.add((m.group(1), m.group(2)))
 
     # Pre-build module source -> module name mapping for output_unused
@@ -1259,9 +1276,6 @@ _INTENT_FALSE_DEFAULT_RE = re.compile(
 )
 _INTENT_MUST_TRUE_RE = re.compile(
     r'(?i)(must\s+be\s+true|required|enforced|mandatory)', re.IGNORECASE
-)
-_INTENT_PROD_TAG_RE = re.compile(
-    r'(?i)Environment\s*=\s*"?(prod|production)', re.IGNORECASE
 )
 _INTENT_DEL_PROT_FALSE_RE = re.compile(
     r'(?m)^\s*deletion_protection\s*=\s*false'
@@ -3532,7 +3546,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main():
+def _main():
     ap = _build_parser()
     args = ap.parse_args()
     _warn_deprecated_parser_switches(args)
@@ -3992,6 +4006,27 @@ import _handlers_robustness  # noqa: E402,F401  (R30.15 — 14 robustness handle
 import _handlers_modules  # noqa: E402,F401  (R30.15 — 7 module-lifecycle handlers)
 import _handlers_infra  # noqa: E402,F401  (R30.15 — 9 infra/backend/provider handlers)
 import _handlers_policy  # noqa: E402,F401  (policy-as-code DSL — kind: policy)
+
+
+
+def main():
+    """Console entry point (``tf-analyze`` / ``detect.py``).
+
+    Exit codes: 0 clean, 1 findings at or above ``--fail-on``, 2 an error.
+    Python exits 1 on an uncaught exception, so a crash used to read as
+    "findings found" to every CI gate; it now prints the traceback and
+    exits 2. ``SystemExit`` (the deliberate exits) passes through."""
+    try:
+        _main()
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        print("tf-analyze: internal error, exiting 2 (not a findings result). "
+              "Please report it with the traceback above.", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

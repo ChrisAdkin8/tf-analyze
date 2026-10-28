@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-CDN-001 — Azure CDN endpoint allows plain HTTP"
-description: "tf-analyze rule SEC-AZURE-CDN-001 (HIGH · security): Azure CDN endpoint allows plain HTTP"
-keywords: "security, high, terraform, iac, azure, cis-5.1, mitre-T1040, cwe-319, d3-et, nist-csf-pr.ds-2, nist-800-53-sc-8"
+description: "tf-analyze rule SEC-AZURE-CDN-001 (MEDIUM · security): Azure CDN endpoint allows plain HTTP"
+keywords: "security, medium, terraform, iac, azure, cis-5.1, mitre-T1040, cwe-319, d3-et, nist-csf-pr.ds-2, nist-800-53-sc-8"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, azure, cis-5.1, mitre-T1040, cwe-319,
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.1, MITRE T1040, CWE-319, D3-ET",
+  "keywords": "security, medium, terraform, CIS 5.1, MITRE T1040, CWE-319, D3-ET",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AZURE-CDN-001 — Azure CDN endpoint allows plain HTTP
+# 💡 SEC-AZURE-CDN-001 — Azure CDN endpoint allows plain HTTP
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AZURE-CDN-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AZURE-CDN-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AZURE-CDN-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Azure CDN endpoint allows plain HTTP.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Azure CDN endpoint allows plain HTTP.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 

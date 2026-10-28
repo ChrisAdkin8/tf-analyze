@@ -27,7 +27,8 @@ The minimum viable PR for a new rule:
    - `resource_missing_arg` if the check is "resource of type X lacks attribute Y".
    - `resource_present` / `data_source_present` if presence alone is the issue.
    - `hcl_attr` for nested-block attribute checks.
-   - `resource_body_contains` if you need a regex over the resource body but want to scope by type.
+   - `resource_has_block` if the check is "resource of type X has a (possibly empty) nested block at path P".
+   - `resource_body_contains` only when the check is genuinely about the source text (it doesn't resolve variables, and can match a lookalike in another block or string); say why in the pattern's `description`.
    - `grep` only if the above don't fit; it's the least precise.
    - `policy` for cross-resource / conditional / aggregate conditions authored as **data** — a predicate language, no Python. See [`docs/policy-dsl.md`](docs/policy-dsl.md). Prefer this over `graph_check` for most cross-resource rules.
    - `graph_check` for cross-resource conditions that need Python (register a function in `_GRAPH_CHECKS` in `scripts/_cross_resource.py`).
@@ -154,6 +155,24 @@ A version bump is not finished until:
 6. The new `.vsix` artefact is attached to the GitHub release (or noted as a follow-up if release is gated).
 
 Skipping any of (2)–(4) is a doc bug; skipping (5)–(6) is a release bug. Both are caught at review time.
+
+## Changelog
+
+Don't edit `CHANGELOG.md` in a PR. Add `changelog.d/<branch-name>.md`
+instead: a `## Title` heading (no round number, no date) and the entry
+text. Each PR writes its own file, so open PRs never conflict over the
+changelog. See [`changelog.d/README.md`](changelog.d/README.md) for the
+format.
+
+- `python3 scripts/changelog.py check` — fragments are well formed.
+- CI (`changelog fragment present`) fails a PR that adds no fragment or
+  edits `CHANGELOG.md` directly. Label the PR `no-changelog` when users
+  won't notice the change (CI tweaks, typo fixes).
+- `python3 scripts/changelog.py build` — numbers the rounds in the order
+  the fragments reached `main`, adds the date, moves them into
+  `CHANGELOG.md` and deletes them. Run it in its own PR, and always before
+  tagging a release: the release workflow refuses to run while fragments
+  are unbuilt.
 
 ## Testing conventions
 

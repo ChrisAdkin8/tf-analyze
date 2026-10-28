@@ -23,16 +23,18 @@ nist_800_53:
 csa_ccm:
   - "IAM-09"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_cloud_run_service_iam_member
-    regex: 'member\s*=\s*"all(Users|AuthenticatedUsers)"'
+    nested_path: member
+    regex: '^all(Authenticated)?Users$'
     description: |
       `google_cloud_run_service_iam_member` binds the Cloud Run service
       to `allUsers` or `allAuthenticatedUsers`. The service is reachable
       by anyone on the internet.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_cloud_run_v2_service_iam_member
-    regex: 'member\s*=\s*"all(Users|AuthenticatedUsers)"'
+    nested_path: member
+    regex: '^all(Authenticated)?Users$'
     description: Cloud Run v2 IAM binding exposes service to allUsers/allAuthenticatedUsers
 recommendation: |
   Replace the public binding with a specific identity (group, service

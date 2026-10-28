@@ -41,7 +41,7 @@ keywords: "security, medium, terraform, iac, cis-5.1.5, cis-5.1.6, mitre-T1528, 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_service_account` matching `/(?m)^\s*automount_service_account_token\s*=\s*true\b/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_service_account` (`automount_service_account_token`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_service_account` explicitly sets
 `automount_service_account_token = true`, projecting the SA's
 bearer token into every pod that mounts it. Compromise of any
@@ -52,7 +52,7 @@ token; the token is reusable cluster-wide until rotated.
 entirely. The Kubernetes default is `true`, so the omission is
 functionally equivalent to opting into automount — the SA
 token is projected into every pod that runs under this SA.
-3. **`resource_body_contains`** on `kubernetes_service_account_v1` matching `/(?m)^\s*automount_service_account_token\s*=\s*true\b/` — _the resource body matches a regex inside the block._
+3. **`resource_arg`** on `kubernetes_service_account_v1` (`automount_service_account_token`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_service_account_v1` — same anti-pattern in the
 API-versioned alias.
 

@@ -41,7 +41,7 @@ keywords: "robustness, medium, terraform, iac, azure, mitre-T1485, mitre-T1490, 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_cosmosdb_account` matching `/backup\s*\{[^}]*type\s*=\s*"Periodic"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `azurerm_cosmosdb_account` (`backup.type`) matching `/^Periodic$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `azurerm_cosmosdb_account.backup.type = "Periodic"` provides only
 24-48h granularity. Continuous backup with PITR gives 7- or 30-day
 restore window at any point in time — required for high-RPO

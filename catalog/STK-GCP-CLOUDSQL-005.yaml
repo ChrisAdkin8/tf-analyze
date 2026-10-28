@@ -1,12 +1,9 @@
 id: STK-GCP-CLOUDSQL-005
 title: "Cloud SQL instance uses end-of-life database version"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
-mitre:
-  - "T1190"
-  - "T1195.002"
 cwe:
   - "CWE-1104"
 d3fend:

@@ -19,15 +19,19 @@ nist_800_53:
 csa_ccm:
   - "IVS-04"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_sql_database_instance
-    regex: 'ipv4_enabled\s*=\s*true'
+    arg: settings.ip_configuration.ipv4_enabled
+    regex: '^true$'
+    fire_if_absent: true
     description: |
       `google_sql_database_instance.settings.ip_configuration.ipv4_enabled = true`
       assigns the instance a public IPv4 address. Even with
       `authorized_networks` set, this exposes the SQL endpoint outside
       the VPC perimeter — any network reachability mistake is now an
-      exfiltration path.
+      exfiltration path. Leaving it out counts too: the google provider
+      defaults `ipv4_enabled` to `true`, with or without a
+      `private_network`.
 recommendation: |
   Set `ipv4_enabled = false` and use Private Service Connect or a
   Private IP allocation:

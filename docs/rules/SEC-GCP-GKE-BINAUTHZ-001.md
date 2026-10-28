@@ -1,7 +1,7 @@
 ---
 title: "SEC-GCP-GKE-BINAUTHZ-001 — GKE cluster missing Binary Authorization"
-description: "tf-analyze rule SEC-GCP-GKE-BINAUTHZ-001 (HIGH · security): GKE cluster missing Binary Authorization"
-keywords: "security, high, terraform, iac, gcp, mitre-T1525, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-pr.ip-1, nist-800-53-cm-7, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
+description: "tf-analyze rule SEC-GCP-GKE-BINAUTHZ-001 (MEDIUM · security): GKE cluster missing Binary Authorization"
+keywords: "security, medium, terraform, iac, gcp, mitre-T1525, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-pr.ip-1, nist-800-53-cm-7, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, gcp, mitre-T1525, mitre-T1195.002, cw
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1525, MITRE T1195.002, CWE-1357, D3-SCA",
+  "keywords": "security, medium, terraform, MITRE T1525, MITRE T1195.002, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-GCP-GKE-BINAUTHZ-001 — GKE cluster missing Binary Authorization
+# 💡 SEC-GCP-GKE-BINAUTHZ-001 — GKE cluster missing Binary Authorization
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-GCP-GKE-BINAUTHZ-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-GCP-GKE-BINAUTHZ-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-GCP-GKE-BINAUTHZ-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **GKE cluster missing Binary Authorization.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+> **GKE cluster missing Binary Authorization.** This rule has `default_urgency: MEDIUM` and operates on a module blast radius. 
 
 ## What this checks
 

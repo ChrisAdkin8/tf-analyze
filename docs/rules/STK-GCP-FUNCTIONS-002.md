@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-FUNCTIONS-002 — GCP Cloud Function uses default service account"
-description: "tf-analyze rule STK-GCP-FUNCTIONS-002 (HIGH · stack): GCP Cloud Function uses default service account"
-keywords: "stack, high, terraform, iac, gcp, cis-1.4, mitre-T1078.004, cwe-250, cwe-272, d3-lam, nist-csf-pr.ac-4, nist-800-53-ac-6, csa-ccm-iam-09"
+description: "tf-analyze rule STK-GCP-FUNCTIONS-002 (MEDIUM · stack): GCP Cloud Function uses default service account"
+keywords: "stack, medium, terraform, iac, gcp, cis-1.4, mitre-T1078.004, cwe-250, cwe-272, d3-lam, nist-csf-pr.ac-4, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, gcp, cis-1.4, mitre-T1078.004, cwe-250, 
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 1.4, MITRE T1078.004, CWE-250, CWE-272, D3-LAM",
+  "keywords": "stack, medium, terraform, CIS 1.4, MITRE T1078.004, CWE-250, CWE-272, D3-LAM",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-GCP-FUNCTIONS-002 — GCP Cloud Function uses default service account
+# 💡 STK-GCP-FUNCTIONS-002 — GCP Cloud Function uses default service account
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-FUNCTIONS-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-FUNCTIONS-002" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-FUNCTIONS-002 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **GCP Cloud Function uses default service account.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+> **GCP Cloud Function uses default service account.** This rule has `default_urgency: MEDIUM` and operates on a module blast radius. 
 
 ## What this checks
 

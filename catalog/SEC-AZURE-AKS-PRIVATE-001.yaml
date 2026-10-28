@@ -1,7 +1,7 @@
 id: SEC-AZURE-AKS-PRIVATE-001
 title: "Azure AKS cluster API server publicly accessible (not a private cluster)"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 cis:

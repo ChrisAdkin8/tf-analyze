@@ -1,7 +1,7 @@
 ---
 title: "ROB-COUNTNAME-001 — Resource external name embeds count.index — renumber-risk on apply"
 description: "tf-analyze rule ROB-COUNTNAME-001 (MEDIUM · robustness): Resource external name embeds count.index — renumber-risk on apply"
-keywords: "robustness, medium, terraform, iac, mitre-T1485, cwe-1188, d3-cspp, nist-csf-pr.ip-3, nist-800-53-cm-6, nist-800-53-si-7, csa-ccm-ccc-04, slsa-source"
+keywords: "robustness, medium, terraform, iac, cwe-1188, d3-cspp, nist-csf-pr.ip-3, nist-800-53-cm-6, nist-800-53-si-7, csa-ccm-ccc-04, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, mitre-T1485, cwe-1188, d3-cspp, n
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, MITRE T1485, CWE-1188, D3-CSPP",
+  "keywords": "robustness, medium, terraform, CWE-1188, D3-CSPP",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -47,7 +47,7 @@ keywords: "robustness, medium, terraform, iac, mitre-T1485, cwe-1188, d3-cspp, n
 ``db_name``, ``instance_name``, ``cluster_identifier``,
 ``function_name``, ``topic_name``, ``queue_name``,
 ``table_name``, ``role_name``, ``user_name``,
-``repository_name``, ``key_name``) whose value interpolates
+``repository_name``, ``key_name``, or the ``Name`` tag) whose value interpolates
 ``${count.index}`` or ``count.index``. Changing ``count``
 from N to M (with M < N) destroys instance ``[M..N-1]``;
 reordering destroys-and-recreates every instance whose
@@ -62,7 +62,7 @@ Resource declares ``count = N`` AND has a name-like attribute
 ``db_name``, ``instance_name``, ``cluster_identifier``,
 ``function_name``, ``topic_name``, ``queue_name``,
 ``table_name``, ``role_name``, ``user_name``,
-``repository_name``, ``key_name``) whose value interpolates
+``repository_name``, ``key_name``, or the ``Name`` tag) whose value interpolates
 ``${count.index}`` or ``count.index``. Changing ``count``
 from N to M (with M < N) destroys instance ``[M..N-1]``;
 reordering destroys-and-recreates every instance whose
@@ -121,9 +121,6 @@ Confirm the migration target by running plan against the
 produce zero changes.
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **CWE**
   - [`CWE-1188`](https://cwe.mitre.org/data/definitions/1188.html)

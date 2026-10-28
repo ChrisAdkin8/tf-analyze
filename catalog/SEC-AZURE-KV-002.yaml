@@ -1,12 +1,12 @@
 id: SEC-AZURE-KV-002
 title: "Key Vault missing network ACL deny-by-default"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 cis:
   - "8.5"
 mitre:
-  - "T1530"
+  - "T1555.006"
   - "T1133"
 nist_csf:
   - "PR.DS-1"

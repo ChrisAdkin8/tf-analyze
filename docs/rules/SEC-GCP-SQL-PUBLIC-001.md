@@ -41,12 +41,14 @@ keywords: "security, high, terraform, iac, gcp, cis-6.6, mitre-T1190, cwe-284, d
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_sql_database_instance` matching `/ipv4_enabled\s*=\s*true/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_sql_database_instance` (`settings.ip_configuration.ipv4_enabled`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_sql_database_instance.settings.ip_configuration.ipv4_enabled = true`
 assigns the instance a public IPv4 address. Even with
 `authorized_networks` set, this exposes the SQL endpoint outside
 the VPC perimeter — any network reachability mistake is now an
-exfiltration path.
+exfiltration path. Leaving it out counts too: the google provider
+defaults `ipv4_enabled` to `true`, with or without a
+`private_network`.
 
 ## Why it likely fired
 
@@ -54,7 +56,9 @@ exfiltration path.
 assigns the instance a public IPv4 address. Even with
 `authorized_networks` set, this exposes the SQL endpoint outside
 the VPC perimeter — any network reachability mistake is now an
-exfiltration path.
+exfiltration path. Leaving it out counts too: the google provider
+defaults `ipv4_enabled` to `true`, with or without a
+`private_network`.
 
 ## Adversarial scenario
 

@@ -5,7 +5,7 @@ default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:
-  - "T1190"
+  - "T1562.008"
 cwe:
   - "CWE-284"
 d3fend:

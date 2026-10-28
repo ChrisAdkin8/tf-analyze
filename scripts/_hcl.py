@@ -338,6 +338,27 @@ def resource_subtrees(tree: dict | None) -> dict[tuple[str, str], list[dict]]:
     return out
 
 
+def attach_tree_attrs(blocks: list[dict], tree: dict | None) -> list[dict]:
+    """Give each resource block found by `find_blocks` its parsed subtree
+    as ``blk["attrs"]`` (dynamic blocks folded in), joined on (type, name).
+    ``attrs`` is None — callers then use the regex fallback — when there
+    is no tree or the key is ambiguous (seen twice by either side). Line
+    numbers still come from the regex blocks."""
+    subtrees = resource_subtrees(tree)
+    seen: dict[tuple, int] = {}
+    for blk in blocks:
+        key = tuple(blk["groups"])
+        seen[key] = seen.get(key, 0) + 1
+    for blk in blocks:
+        key = tuple(blk["groups"])
+        found = subtrees.get(key, [])
+        blk["attrs"] = (
+            normalise_attrs(found[0])
+            if len(found) == 1 and seen[key] == 1 else None
+        )
+    return blocks
+
+
 def attrs_has_path(attrs: dict, path: str, *, every: bool = True) -> bool:
     """Tree counterpart of `block_has_nested_path` (§4.4 rules 1–3).
 
@@ -582,14 +603,38 @@ def block_values_at(body: str, path: str) -> list[str]:
     if not rest:
         v = _top_level_arg_value(body, head)
         return [] if v is None else [v]
-    masked = _mask_to_top_level(body)
-    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
     out: list[str] = []
-    for m in opener.finditer(masked):
-        open_pos = m.end() - 1
-        close_pos = masked.find("}", open_pos + 1)
-        if close_pos >= 0:
-            out.extend(block_values_at(body[open_pos + 1:close_pos], rest))
+    for inst in _nested_instances(body, head):
+        out.extend(block_values_at(inst, rest))
+    return out
+
+
+def attrs_blocks_at(attrs: dict, path: str) -> list[dict]:
+    """Every nested-block instance (or object attribute) at ``path``,
+    walked like `attrs_values_at`, across all instances of repeated
+    blocks. Empty when the path is absent or ends at a plain value."""
+    head, _, rest = path.partition(".")
+    if not isinstance(attrs, dict) or head not in attrs:
+        return []
+    value = attrs[head]
+    instances = value if isinstance(value, list) else [value]
+    instances = [i for i in instances if isinstance(i, dict)]
+    if not rest:
+        return instances
+    out: list[dict] = []
+    for inst in instances:
+        out.extend(attrs_blocks_at(inst, rest))
+    return out
+
+
+def block_bodies_at(body: str, path: str) -> list[str]:
+    """Regex fallback for `attrs_blocks_at`: the body text of every
+    nested block (``head {``) or object attribute (``head = {``) at
+    ``path``, each segment looked up at the top level of its parent."""
+    head, _, rest = path.partition(".")
+    out: list[str] = []
+    for inst in _nested_instances(body, head):
+        out.extend(block_bodies_at(inst, rest) if rest else [inst])
     return out
 
 
@@ -606,6 +651,24 @@ def resource_values_at(blk: dict, path: str) -> list[str]:
         render_hcl(v) for v in attrs_values_at(attrs, path)
         if not _is_block_list(v)
     ]
+
+def resource_block_contents(blk: dict, path: str) -> list[bool]:
+    """One entry per instance of the nested block at ``path`` in a
+    resource block: whether that instance sets anything (an argument or
+    a nested block). ``egress {}`` gives ``[False]``; no ``egress`` at
+    all gives ``[]``. Uses the parse tree when attached, else the regex
+    fallback (comments do not count as content)."""
+    attrs = blk.get("attrs")
+    if attrs is not None:
+        return [
+            any(not (k.startswith("__") and k.endswith("__")) for k in inst)
+            for inst in attrs_blocks_at(attrs, path)
+        ]
+    return [
+        bool(mask_comments(inst).strip())
+        for inst in block_bodies_at(blk["body"], path)
+    ]
+
 
 def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
     """Presence check for a resource block found by `find_blocks`: uses
@@ -1290,6 +1353,10 @@ def mask_comments(body: str) -> str:
     return mask_comments_and_heredocs(body, heredocs=False)
 
 
+# Cached: every rule masks the same resource bodies, so without the cache
+# a scan re-walks each body once per rule (it lost its cache when the
+# `heredocs` option was added, and corpus scans got ~25% slower).
+@functools.lru_cache(maxsize=4096)
 def mask_comments_and_heredocs(body: str, *, heredocs: bool = True) -> str:
     """Return ``body`` with comments and heredoc bodies blanked to spaces
     (newlines kept, so offsets and line numbers line up). Ordinary string
@@ -1443,6 +1510,26 @@ def _first_arg_value(body: str, arg: str) -> str | None:
         coll_end = brace_walk(body, m.start(1), opens=open_ch, closes=_closer[open_ch])
         if coll_end is not None:
             return body[m.start(1):coll_end].strip()
+    # A bracket opened later on the line and closed on a later one — a
+    # function call such as `bucket = format(\n  "x-%d",\n  count.index)` —
+    # carries the value on to its closer, so the arguments are seen.
+    k, line_end = m.start(1), m.end(1)
+    while k < line_end:
+        ch = body[k]
+        if ch == '"':
+            k = _string_end(body, k)
+            continue
+        if ch == "#" or body.startswith(("//", "/*"), k):
+            break
+        if ch in _closer:
+            end = brace_walk(body, k, opens=ch, closes=_closer[ch])
+            if end is None:
+                break
+            if end > line_end:
+                return body[m.start(1):end].strip()
+            k = end
+            continue
+        k += 1
     # Strip a trailing comment — `#`, `//` or `/* */` — outside any
     # string. String-aware (`strip_hcl_context`), and HCL has no
     # single-quoted strings, so an apostrophe never starts one. (The
@@ -1452,6 +1539,23 @@ def _first_arg_value(body: str, arg: str) -> str | None:
     if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
         return val[1:-1]
     return val
+
+
+def _nested_instances(body: str, head: str) -> list[str]:
+    """The body text of every top-level ``head {`` block or ``head = {``
+    object attribute in ``body`` (comments, strings and nested brackets
+    are stepped over)."""
+    masked = _mask_to_top_level(body)
+    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
+    out: list[str] = []
+    for m in opener.finditer(masked):
+        open_pos = m.end() - 1
+        # Inside the top-level mask every nested bracket is blanked, so
+        # the next `}` is this construct's own closer.
+        close_pos = masked.find("}", open_pos + 1)
+        if close_pos >= 0:
+            out.append(body[open_pos + 1:close_pos])
+    return out
 
 
 def block_has_nested_path(body: str, path: str, *, every: bool = True) -> bool:
@@ -1469,17 +1573,7 @@ def block_has_nested_path(body: str, path: str, *, every: bool = True) -> bool:
     head, _, rest = path.partition(".")
     if not rest:
         return block_has_arg(body, head)
-    masked = _mask_to_top_level(body)
-    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
-    instances = []
-    for m in opener.finditer(masked):
-        open_pos = m.end() - 1
-        # Inside the top-level mask every nested bracket is blanked, so
-        # the next `}` is this construct's own closer.
-        close_pos = masked.find("}", open_pos + 1)
-        if close_pos < 0:
-            continue
-        instances.append(body[open_pos + 1:close_pos])
+    instances = _nested_instances(body, head)
     check = all if every else any
     return bool(instances) and check(
         block_has_nested_path(i, rest, every=every) for i in instances

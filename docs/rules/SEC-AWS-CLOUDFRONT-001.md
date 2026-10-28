@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CLOUDFRONT-001 — CloudFront distribution serves HTTP without redirect"
-description: "tf-analyze rule SEC-AWS-CLOUDFRONT-001 (HIGH · security): CloudFront distribution serves HTTP without redirect"
-keywords: "security, high, terraform, iac, aws, mitre-T1071.001, cwe-319, d3-ei, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, csa-ccm-cek-06"
+description: "tf-analyze rule SEC-AWS-CLOUDFRONT-001 (MEDIUM · security): CloudFront distribution serves HTTP without redirect"
+keywords: "security, medium, terraform, iac, aws, mitre-T1071.001, cwe-319, d3-ei, nist-csf-pr.ds-2, nist-800-53-sc-8, nist-800-53-sc-8-1, csa-ccm-cek-06"
 ---
 
 <script type="application/ld+json">
@@ -24,35 +24,43 @@ keywords: "security, high, terraform, iac, aws, mitre-T1071.001, cwe-319, d3-ei,
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1071.001, CWE-319, D3-EI",
+  "keywords": "security, medium, terraform, MITRE T1071.001, CWE-319, D3-EI",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AWS-CLOUDFRONT-001 — CloudFront distribution serves HTTP without redirect
+# 💡 SEC-AWS-CLOUDFRONT-001 — CloudFront distribution serves HTTP without redirect
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-CLOUDFRONT-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-CLOUDFRONT-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-CLOUDFRONT-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **CloudFront distribution serves HTTP without redirect.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **CloudFront distribution serves HTTP without redirect.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `aws_cloudfront_distribution` matching `/viewer_protocol_policy\s*=\s*"allow-all"/` — _the resource body matches a regex inside the block._
-  A `default_cache_behavior` or `ordered_cache_behavior` block has
+1. **`resource_arg`** on `aws_cloudfront_distribution` (`default_cache_behavior.viewer_protocol_policy`) matching `/^allow-all$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  The `default_cache_behavior` block has
 `viewer_protocol_policy = "allow-all"`, which serves content over
 plain HTTP. Session cookies, API tokens, and credentials cross the
 network in cleartext between CloudFront and the viewer.
+2. **`resource_arg`** on `aws_cloudfront_distribution` (`ordered_cache_behavior.viewer_protocol_policy`) matching `/^allow-all$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  An `ordered_cache_behavior` block has
+`viewer_protocol_policy = "allow-all"` — the same cleartext
+exposure for the paths that behaviour matches.
 
 ## Why it likely fired
 
-A `default_cache_behavior` or `ordered_cache_behavior` block has
+The `default_cache_behavior` block has
 `viewer_protocol_policy = "allow-all"`, which serves content over
 plain HTTP. Session cookies, API tokens, and credentials cross the
 network in cleartext between CloudFront and the viewer.
+
+An `ordered_cache_behavior` block has
+`viewer_protocol_policy = "allow-all"` — the same cleartext
+exposure for the paths that behaviour matches.
 
 ## Adversarial scenario
 

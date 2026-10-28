@@ -1,7 +1,7 @@
 id: STK-AZURE-NSG-FLOWLOG-001
 title: "Azure NSG missing flow log resource"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 cis:
   - "6.5"

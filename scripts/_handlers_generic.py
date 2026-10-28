@@ -30,6 +30,7 @@ from _hcl import (
     block_arg_value,
     block_has_arg,
     block_has_nested_path,
+    resource_block_contents,
     resource_has_path,
     resource_values_at,
     mask_comments,
@@ -454,6 +455,37 @@ def _detect_resource_body_contains(c: InFileCtx) -> list[dict]:
         if btype != rt:
             continue
         if regex.search(mask_comments_and_heredocs(blk["body"])):
+            out.append({
+                "id": c.eid,
+                "file": str(c.file_path),
+                "line": blk["start_line"],
+                "resource": f"{btype}.{bname}",
+            })
+    return out
+
+
+@_register_infile("resource_has_block")
+def _detect_resource_has_block(c: InFileCtx) -> list[dict]:
+    """``resource_has_block`` — fire on every resource of the named type
+    that has a nested block (or object attribute) at the dotted ``path``,
+    e.g. ``network_interface.access_config``. With ``empty: true`` only an
+    instance that sets nothing counts (``egress {}``). Read from the parse
+    tree (``dynamic`` blocks folded in), else the regex fallback; any one
+    instance is enough. Skips ``count = 0`` resources.
+    """
+    pat = c.pat
+    rt, path = pat.get("resource"), pat.get("path")
+    if not (rt and path):
+        return []
+    want_empty = bool(pat.get("empty"))
+    out: list[dict] = []
+    for blk in c.resources:
+        btype, bname = blk["groups"]
+        if btype != rt or _resource_is_count_zero(blk["body"], c.var_defaults):
+            continue
+        contents = resource_block_contents(blk, path)
+        hit = not all(contents) if want_empty else bool(contents)
+        if hit:
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),

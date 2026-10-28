@@ -1,7 +1,7 @@
 id: STK-AZURE-RECOVERY-001
 title: "Azure Recovery Services Vault missing soft-delete protection"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 cis:

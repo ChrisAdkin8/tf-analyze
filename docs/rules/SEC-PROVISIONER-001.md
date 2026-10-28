@@ -1,7 +1,7 @@
 ---
 title: "SEC-PROVISIONER-001 — Provisioner block used for shell execution"
-description: "tf-analyze rule SEC-PROVISIONER-001 (HIGH · security): Provisioner block used for shell execution"
-keywords: "security, high, terraform, iac, mitre-T1059, cwe-78, nist-csf-pr.pt-3, nist-800-53-si-10, csa-ccm-ccc-05, slsa-build"
+description: "tf-analyze rule SEC-PROVISIONER-001 (MEDIUM · security): Provisioner block used for shell execution"
+keywords: "security, medium, terraform, iac, mitre-T1059, cwe-78, nist-csf-pr.pt-3, nist-800-53-si-10, csa-ccm-ccc-05, slsa-build"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, mitre-T1059, cwe-78, nist-csf-pr.pt-3
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, MITRE T1059, CWE-78",
+  "keywords": "security, medium, terraform, MITRE T1059, CWE-78",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-PROVISIONER-001 — Provisioner block used for shell execution
+# 💡 SEC-PROVISIONER-001 — Provisioner block used for shell execution
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-PROVISIONER-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-PROVISIONER-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-PROVISIONER-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Provisioner block used for shell execution.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Provisioner block used for shell execution.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 

@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-RBAC-001 — Azure role assignment scope is subscription-wide"
-description: "tf-analyze rule SEC-AZURE-RBAC-001 (HIGH · security): Azure role assignment scope is subscription-wide"
-keywords: "security, high, terraform, iac, azure, cis-1.21, mitre-T1078.004, cwe-269, d3-pa, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
+description: "tf-analyze rule SEC-AZURE-RBAC-001 (MEDIUM · security): Azure role assignment scope is subscription-wide"
+keywords: "security, medium, terraform, iac, azure, cis-1.21, mitre-T1078.004, cwe-269, d3-pa, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "security, high, terraform, iac, azure, cis-1.21, mitre-T1078.004, cwe
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 1.21, MITRE T1078.004, CWE-269, D3-PA",
+  "keywords": "security, medium, terraform, CIS 1.21, MITRE T1078.004, CWE-269, D3-PA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AZURE-RBAC-001 — Azure role assignment scope is subscription-wide
+# 💡 SEC-AZURE-RBAC-001 — Azure role assignment scope is subscription-wide
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AZURE-RBAC-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AZURE-RBAC-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AZURE-RBAC-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Azure role assignment scope is subscription-wide.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **Azure role assignment scope is subscription-wide.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

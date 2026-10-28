@@ -41,7 +41,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, cwe-770, nist-csf-pr
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_cloud_run_v2_service` matching `/max_instance_request_concurrency\s*=\s*(0|10[0-9]{2,}|[2-9][0-9]{3,})\b/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_cloud_run_v2_service` (`template.max_instance_request_concurrency`) matching `/^(0|100[1-9]|10[1-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-9][0-9]{4,})$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Cloud Run v2 service has `max_instance_request_concurrency` at 0
 (unbounded) or above the safe default of 1000. A single bad
 revision can exhaust upstream capacity (DB, downstream APIs).

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-NODEPOOL-001 — GKE node pool missing shielded-instance hardening"
-description: "tf-analyze rule STK-GCP-GKE-NODEPOOL-001 (HIGH · stack): GKE node pool missing shielded-instance hardening"
-keywords: "stack, high, terraform, iac, gcp, cis-6.5.5, mitre-T1542.003, cwe-1278, d3-psh, nist-csf-pr.pt-3, nist-800-53-si-7, csa-ccm-ivs-03"
+description: "tf-analyze rule STK-GCP-GKE-NODEPOOL-001 (MEDIUM · stack): GKE node pool missing shielded-instance hardening"
+keywords: "stack, medium, terraform, iac, gcp, cis-6.5.5, mitre-T1542.003, cwe-1278, d3-psh, nist-csf-pr.pt-3, nist-800-53-si-7, csa-ccm-ivs-03"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, gcp, cis-6.5.5, mitre-T1542.003, cwe-127
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 6.5.5, MITRE T1542.003, CWE-1278, D3-PSH",
+  "keywords": "stack, medium, terraform, CIS 6.5.5, MITRE T1542.003, CWE-1278, D3-PSH",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-GCP-GKE-NODEPOOL-001 — GKE node pool missing shielded-instance hardening
+# 💡 STK-GCP-GKE-NODEPOOL-001 — GKE node pool missing shielded-instance hardening
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-GKE-NODEPOOL-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-GKE-NODEPOOL-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-GKE-NODEPOOL-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **GKE node pool missing shielded-instance hardening.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **GKE node pool missing shielded-instance hardening.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

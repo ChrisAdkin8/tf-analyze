@@ -1,7 +1,7 @@
 id: STK-GCP-GKE-002
 title: "GKE cluster missing Workload Identity"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 cis:

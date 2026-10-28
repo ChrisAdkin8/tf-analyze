@@ -1,11 +1,11 @@
 id: STK-AZURE-AKS-VERSION-001
 title: "Azure AKS cluster on end-of-life Kubernetes version"
 section: stack
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 mitre:
-  - "T1195.002"
+  - "T1190"
 cwe:
   - "CWE-1104"
 d3fend:

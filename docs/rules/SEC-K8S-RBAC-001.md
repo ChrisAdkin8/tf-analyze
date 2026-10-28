@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-RBAC-001 — ClusterRoleBinding grants cluster-admin OR uses wildcard verbs / system:authenticated"
 description: "tf-analyze rule SEC-K8S-RBAC-001 (CRITICAL · security): ClusterRoleBinding grants cluster-admin OR uses wildcard verbs / system:authenticated"
-keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.3, mitre-T1078.004, mitre-T1098.001, cwe-269, cwe-732, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
+keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.3, mitre-T1078, mitre-T1098.001, cwe-269, cwe-732, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.3, mitre-T1078
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 5.1.1, CIS 5.1.3, MITRE T1078.004, MITRE T1098.001, CWE-269, CWE-732",
+  "keywords": "security, critical, terraform, CIS 5.1.1, CIS 5.1.3, MITRE T1078, MITRE T1098.001, CWE-269, CWE-732",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -41,23 +41,26 @@ keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.3, mitre-T1078
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/(?ms)role_ref\s*\{[^}]*\bname\s*=\s*"cluster-admin"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_cluster_role_binding` (`role_ref.name`) matching `/^cluster-admin$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_cluster_role_binding` references the built-in
 `cluster-admin` ClusterRole. Any subject bound to this binding
 (ServiceAccount, User, Group) has full unrestricted access to
 every API across every namespace — equivalent to root on every
 node. Compromise of any pod or token bound through this binding
 yields full cluster takeover.
-2. **`resource_body_contains`** on `kubernetes_role` matching `/verbs\s*=\s*\[[^\]]*"\*"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `kubernetes_role` (`rule.verbs`) matching `/"\*"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   R30.5 extension — wildcard verbs (`verbs = ["*"]`). Same risk
 as cluster-admin at the namespace scope. NIST AC-6(7) +
 OWASP K03.
-3. **`resource_body_contains`** on `kubernetes_cluster_role` matching `/verbs\s*=\s*\[[^\]]*"\*"/` — _the resource body matches a regex inside the block._
+3. **`resource_arg`** on `kubernetes_cluster_role` (`rule.verbs`) matching `/"\*"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   cluster-wide wildcard verbs
-4. **`resource_body_contains`** on `kubernetes_role` matching `/verbs\s*=\s*\[[^\]]*"(?:bind|escalate|impersonate)"/` — _the resource body matches a regex inside the block._
+4. **`resource_arg`** on `kubernetes_role` (`rule.verbs`) matching `/"(?:bind|escalate|impersonate)"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   R30.5 extension — `bind` / `escalate` / `impersonate` verbs
 allow privilege escalation outside the role's normal scope.
-5. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/(?ms)subject\s*\{[^}]*\bname\s*=\s*"system:authenticated"/` — _the resource body matches a regex inside the block._
+5. **`resource_arg`** on `kubernetes_cluster_role` (`rule.verbs`) matching `/"(?:bind|escalate|impersonate)"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `bind` / `escalate` / `impersonate` on a ClusterRole: the same
+escalation as on a Role, but across every namespace.
+6. **`resource_arg`** on `kubernetes_cluster_role_binding` (`subject.name`) matching `/^system:authenticated$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   R30.5 extension — binding to `system:authenticated` includes
 every pod with a service-account token, which is effectively
 every pod in the cluster. Same effect as binding to "everyone".
@@ -79,6 +82,9 @@ cluster-wide wildcard verbs
 
 R30.5 extension — `bind` / `escalate` / `impersonate` verbs
 allow privilege escalation outside the role's normal scope.
+
+`bind` / `escalate` / `impersonate` on a ClusterRole: the same
+escalation as on a Role, but across every namespace.
 
 R30.5 extension — binding to `system:authenticated` includes
 every pod with a service-account token, which is effectively
@@ -160,7 +166,7 @@ should not include any ServiceAccount in a workload namespace.
   - `CC6.1`
 
 **MITRE ATT&CK**
-  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
+  - [`T1078`](https://attack.mitre.org/techniques/T1078/)
   - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
 
 **CWE**

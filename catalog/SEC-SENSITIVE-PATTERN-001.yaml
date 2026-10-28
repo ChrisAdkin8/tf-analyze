@@ -1,7 +1,7 @@
 id: SEC-SENSITIVE-PATTERN-001
 title: "Credential-shaped variable not marked sensitive=true"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: module
 status: active
 mitre:

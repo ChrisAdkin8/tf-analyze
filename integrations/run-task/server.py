@@ -35,7 +35,7 @@ import tempfile
 from hashlib import sha512
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 try:
     from fastapi import BackgroundTasks, FastAPI, Request, HTTPException
@@ -79,6 +79,16 @@ ALLOWED_HOSTS = _DEFAULT_ALLOWED_HOSTS | {
     for h in os.environ.get("TFA_RUN_TASK_ALLOWED_HOSTS", "").split(",")
     if h.strip()
 }
+# HCP answers the plan-json request with a 307 to a short-lived signed URL on
+# its archivist host; Terraform Enterprise redirects to itself. That one hop
+# is followed, but only to an allow-listed host: these plus any declared in
+# TFA_RUN_TASK_ALLOWED_REDIRECT_HOSTS.
+REDIRECT_HOSTS = ALLOWED_HOSTS | {"archivist.terraform.io"} | {
+    h.strip().lower()
+    for h in os.environ.get("TFA_RUN_TASK_ALLOWED_REDIRECT_HOSTS", "").split(",")
+    if h.strip()
+}
+_REDIRECT_CODES = {301, 302, 303, 307, 308}
 MAX_PLAN_BYTES = int(os.environ.get("TFA_RUN_TASK_MAX_PLAN_BYTES", str(50 * 1024 * 1024)))
 
 # Optional compliance-framework gating. When set the engine renders a
@@ -158,7 +168,7 @@ def _addr_is_public(ip: str) -> bool:
         return False
 
 
-def _validate_outbound_url(url: str, what: str) -> None:
+def _validate_outbound_url(url: str, what: str, hosts: set[str] | None = None) -> None:
     """Reject a request-supplied URL that isn't an allow-listed HCP/TFE HTTPS
     endpoint resolving to a public address. Raises ``HTTPException(400)``.
 
@@ -172,10 +182,11 @@ def _validate_outbound_url(url: str, what: str) -> None:
     if parts.scheme != "https":
         raise HTTPException(status_code=400, detail=f"{what} must be https")
     host = (parts.hostname or "").lower()
-    if host not in ALLOWED_HOSTS:
+    allowed = ALLOWED_HOSTS if hosts is None else hosts
+    if host not in allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"{what} host {host!r} not in allow-list {sorted(ALLOWED_HOSTS)}",
+            detail=f"{what} host {host!r} not in allow-list {sorted(allowed)}",
         )
     try:
         infos = socket.getaddrinfo(host, parts.port or 443)
@@ -425,6 +436,25 @@ def _process_run_task(plan_url: str, callback_url: str, access_token: str) -> No
         plan_resp = requests.get(
             plan_url, headers=headers, timeout=30, allow_redirects=False, stream=True,
         )
+        # A successful plan-json request is a 307 to a signed download URL.
+        # Follow that one hop after checking it like the request's own URLs;
+        # the signed URL carries its own authorisation, so the bearer token
+        # goes along only when the host is unchanged.
+        if plan_resp.status_code in _REDIRECT_CODES:
+            location = urljoin(plan_url, plan_resp.headers.get("Location", ""))
+            plan_resp.close()
+            try:
+                _validate_outbound_url(location, "plan-json redirect", REDIRECT_HOSTS)
+            except HTTPException as exc:
+                LOG.error("plan download redirect refused: %s", exc.detail)
+                _callback(callback_url, headers,
+                          _failed_result(f"tf-analyze: plan-json redirect refused ({exc.detail})"))
+                return
+            same_host = (urlsplit(location).hostname or "").lower() == (urlsplit(plan_url).hostname or "").lower()
+            plan_resp = requests.get(
+                location, headers=headers if same_host else {}, timeout=30,
+                allow_redirects=False, stream=True,
+            )
         if plan_resp.status_code != 200:
             LOG.error("plan download failed: %s", plan_resp.status_code)
             _callback(callback_url, headers,

@@ -1,7 +1,7 @@
 id: SEC-AWS-LB-LISTENER-002
 title: "Load balancer HTTPS listener allows TLS < 1.2"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: environment
 status: active
 mitre:

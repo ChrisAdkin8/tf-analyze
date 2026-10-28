@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-GKE-RELEASE-001 — GKE cluster on STATIC release channel (no auto-upgrade)"
 description: "tf-analyze rule STK-GCP-GKE-RELEASE-001 (MEDIUM · stack): GKE cluster on STATIC release channel (no auto-upgrade)"
-keywords: "stack, medium, terraform, iac, gcp, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
+keywords: "stack, medium, terraform, iac, gcp, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1195.002, cwe-1104, d3-sca
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1195.002, CWE-1104, D3-SCA",
+  "keywords": "stack, medium, terraform, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -41,7 +41,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1195.002, cwe-1104, d3-sca
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_container_cluster` matching `/release_channel\s*\{[^}]*channel\s*=\s*"UNSPECIFIED"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_container_cluster` (`release_channel.channel`) matching `/^UNSPECIFIED$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_container_cluster.release_channel.channel = "UNSPECIFIED"`
 pins the cluster to the static (no-channel) release stream, which
 disables auto-upgrade. The control plane drifts onto unsupported
@@ -96,9 +96,6 @@ must return `RAPID`, `REGULAR`, or `STABLE` (not `UNSPECIFIED`).
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)

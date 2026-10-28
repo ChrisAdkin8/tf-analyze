@@ -21,9 +21,10 @@ nist_800_53:
 csa_ccm:
   - "IAM-04"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_compute_instance
-    regex: 'enable-oslogin\s*=\s*"FALSE"'
+    arg: metadata.enable-oslogin
+    regex: '^(?i:false)$'
     description: |
       `google_compute_instance.metadata.enable-oslogin = "FALSE"` falls
       back to project-wide SSH keys (or local `ssh-keys` metadata),

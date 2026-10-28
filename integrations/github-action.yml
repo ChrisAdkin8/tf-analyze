@@ -2,6 +2,10 @@ name: tf-analyze
 
 on:
   pull_request:
+    # `edited` re-runs the scan when the PR's base branch changes: the
+    # config below comes from the base, so a pass against one base must not
+    # stand once the PR targets another.
+    types: [opened, synchronize, reopened, edited]
     paths:
       - "**/*.tf"
       - "**/*.tfvars"
@@ -53,6 +57,53 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+
+      # A pull request could otherwise switch off its own scan: the engine
+      # reads `.tf-analyze.yaml` (rules_dir, ignore_paths) and
+      # `.tf-analyze-ignore.yaml` from the checkout, i.e. from the PR. Put
+      # the base branch's copies (and its rules_dir) in their place. Inline
+      # `# tf-analyze:ignore` comments are still honoured; they show in the
+      # diff. Works with any engine `ref`, old releases included.
+      - name: Use the base branch's tf-analyze config
+        if: github.event_name == 'pull_request'
+        env:
+          TFA_BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Fetch into a ref of our own: a short name like `origin/main` would
+          # resolve to a tag of that name first, and tags can come from a PR.
+          BASE=refs/tf-analyze/base
+          rm -f .tf-analyze.yaml .tf-analyze-ignore.yaml
+          if ! git fetch --no-tags --depth=1 origin "+refs/heads/${TFA_BASE_REF}:${BASE}"; then
+            echo "::warning::tf-analyze: cannot read base branch '${TFA_BASE_REF}'; scanning with no project config and no ignore file"
+            exit 0
+          fi
+          for f in .tf-analyze.yaml .tf-analyze-ignore.yaml; do
+            git show "${BASE}:$f" > "$f" 2>/dev/null || rm -f "$f"
+          done
+          if [ -f .tf-analyze.yaml ]; then
+            RULES_DIR="$(sed -n 's/^rules_dir:[[:space:]]*//p' .tf-analyze.yaml \
+              | sed 's/[[:space:]]#.*//; s/^["'"'"']//; s/["'"'"'][[:space:]]*$//; s/[[:space:]]*$//' | head -1)"
+            RULES_DIR="${RULES_DIR%/}"
+            case "$RULES_DIR" in
+              ""|/*|..|../*|*/..|*/../*) ;;
+              *)
+                # The PR controls the checkout: a symlink anywhere on this path
+                # would point the rm and the extract outside it.
+                P=""
+                IFS=/ read -ra PARTS <<< "$RULES_DIR"
+                for C in "${PARTS[@]}"; do
+                  P="${P:+$P/}$C"
+                  if [ -L "$P" ]; then
+                    echo "::error::tf-analyze: '$P' in rules_dir is a symlink in this PR; refusing to scan"
+                    exit 1
+                  fi
+                done
+                rm -rf -- "$RULES_DIR"
+                git archive "$BASE" -- "$RULES_DIR" 2>/dev/null | tar -x 2>/dev/null || true
+                ;;
+            esac
+          fi
+          echo "::notice::tf-analyze: using .tf-analyze.yaml and .tf-analyze-ignore.yaml from '${TFA_BASE_REF}', not from this PR"
 
       # Inputs reach the shell through `env:`, never a template expression
       # in `run:`, so an input value can't inject shell.
@@ -192,6 +243,23 @@ jobs:
             }
             const URGENCY_EMOJI = { CRITICAL: '🚨', HIGH: '⚠️', MEDIUM: '💡', LOW: 'ℹ️' };
 
+            // Catalogue text into a comment the bot posts, made inert: escape
+            // link / HTML / character-reference syntax and break @mentions and
+            // autolinks outside code spans (same as the engine's _md_text).
+            // A suggestion fence is one backtick longer than any run in the fix.
+            const mdText = (s) => {
+              const t = String(s ?? '').replace(/[\r\n]+/g, ' ');
+              const esc = (x) => x.replace(/[\\\[\]<>&]/g, '\\$&').replace(/@/g, '@\u200b')
+                .replace(/(https?):(?=\/\/)/gi, '$1:\u200b').replace(/\bwww\./gi, (m) => m.slice(0, 3) + '\u200b.');
+              let out = '', last = 0;
+              for (const m of t.matchAll(/(?<!`)(`+)(?!`)[\s\S]+?(?<!`)\1(?!`)/g)) {
+                out += esc(t.slice(last, m.index)) + m[0];
+                last = m.index + m[0].length;
+              }
+              return (out + esc(t.slice(last))).replace(/^(\s*)#/, '$1\\#');
+            };
+            const fence = (body) => '`'.repeat(Math.max(3, ...[...String(body).matchAll(/`+/g)].map((m) => m[0].length + 1)));
+
             // Deduplicate: one comment per (file, line) using highest-urgency finding
             const byLocation = new Map();
             for (const f of findings) {
@@ -209,13 +277,13 @@ jobs:
               const emoji = URGENCY_EMOJI[finding.urgency] ?? '•';
               const disruption = finding.fix_disruption ? ` · Disruption: \`${finding.fix_disruption}\`` : '';
               const body = [
-                `${emoji} **[${finding.id}]** — ${finding.title}`,
+                `${emoji} **[${finding.id}]** — ${mdText(finding.title)}`,
                 '',
                 `> Urgency: \`${finding.urgency}\`${disruption}`,
                 '',
-                '```suggestion',
+                `${fence(finding.fix_hcl)}suggestion`,
                 finding.fix_hcl.trimEnd(),
-                '```',
+                fence(finding.fix_hcl),
               ].join('\n');
               try {
                 await github.rest.pulls.createReviewComment({

@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-MIG-001 — GCP managed instance group missing auto-healing"
 description: "tf-analyze rule STK-GCP-MIG-001 (MEDIUM · stack): GCP managed instance group missing auto-healing"
-keywords: "stack, medium, terraform, iac, gcp, mitre-T1485, nist-csf-pr.ip-1, nist-800-53-cp-10"
+keywords: "stack, medium, terraform, iac, gcp, nist-csf-pr.ip-1, nist-800-53-cp-10"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1485, nist-csf-pr.ip-1, ni
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1485",
+  "keywords": "stack, medium, terraform",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -108,9 +108,6 @@ non-empty health-check URL.
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1485`](https://attack.mitre.org/techniques/T1485/)
 
 **NIST CSF 2.0**
   - [`PR.IP-1`](https://www.nist.gov/cyberframework)

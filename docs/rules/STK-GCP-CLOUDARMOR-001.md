@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDARMOR-001 — GCP Cloud Armor security policy missing rate-based rule"
 description: "tf-analyze rule STK-GCP-CLOUDARMOR-001 (MEDIUM · stack): GCP Cloud Armor security policy missing rate-based rule"
-keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, mitre-T1190, cwe-770, cwe-799, d3-waf, nist-csf-pr.pt-4, nist-800-53-sc-5, nist-800-53-si-4, csa-ccm-ais-04"
+keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, cwe-770, cwe-799, d3-waf, nist-csf-pr.pt-4, nist-800-53-sc-5, nist-800-53-si-4, csa-ccm-ais-04"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, mitre-T1190, cwe-770
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1498, MITRE T1190, CWE-770, CWE-799, D3-WAF",
+  "keywords": "stack, medium, terraform, MITRE T1498, CWE-770, CWE-799, D3-WAF",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -44,21 +44,21 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1498, mitre-T1190, cwe-770
 1. **`resource_missing_arg`** on `google_compute_security_policy` (`rule`) — _the resource is missing a required attribute (or nested attribute path)._
   `google_compute_security_policy` has no rules — equivalent to
 having no WAF attached. Defaults to allow-all.
-2. **`resource_body_contains`** on `google_compute_security_policy` matching `/action\s*=\s*"allow"\s*\n?\s*priority\s*=\s*2147483647/` — _the resource body matches a regex inside the block._
-  Policy only has the default `allow` rule at priority 2147483647 —
-every layer-7 attack (credential stuffing, scraping, basic DDoS)
-reaches the origin. Equivalent to SEC-AWS-WAF-002 (ALB+WAF without
-rate-based rule).
+2. **`resource_missing_arg`** on `google_compute_security_policy` (`rule.rate_limit_options`) — _the resource is missing a required attribute (or nested attribute path)._
+  No `rule` has `rate_limit_options` (a `throttle` or
+`rate_based_ban` rule) — every layer-7 attack (credential
+stuffing, scraping, basic DDoS) reaches the origin at full rate.
+Equivalent to SEC-AWS-WAF-002 (ALB+WAF without rate-based rule).
 
 ## Why it likely fired
 
 `google_compute_security_policy` has no rules — equivalent to
 having no WAF attached. Defaults to allow-all.
 
-Policy only has the default `allow` rule at priority 2147483647 —
-every layer-7 attack (credential stuffing, scraping, basic DDoS)
-reaches the origin. Equivalent to SEC-AWS-WAF-002 (ALB+WAF without
-rate-based rule).
+No `rule` has `rate_limit_options` (a `throttle` or
+`rate_based_ban` rule) — every layer-7 attack (credential
+stuffing, scraping, basic DDoS) reaches the origin at full rate.
+Equivalent to SEC-AWS-WAF-002 (ALB+WAF without rate-based rule).
 
 ## Adversarial scenario
 
@@ -150,7 +150,6 @@ least one rate-based rule.
 
 **MITRE ATT&CK**
   - [`T1498`](https://attack.mitre.org/techniques/T1498/)
-  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
 
 **CWE**
   - [`CWE-770`](https://cwe.mitre.org/data/definitions/770.html)

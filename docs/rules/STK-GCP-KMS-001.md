@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-KMS-001 — KMS crypto key missing rotation period"
-description: "tf-analyze rule STK-GCP-KMS-001 (HIGH · stack): KMS crypto key missing rotation period"
-keywords: "stack, high, terraform, iac, gcp, cis-1.10, mitre-T1098.001, mitre-T1552.001, d3-ch, nist-csf-pr.ac-1, nist-800-53-sc-12, csa-ccm-cek-09"
+description: "tf-analyze rule STK-GCP-KMS-001 (MEDIUM · stack): KMS crypto key missing rotation period"
+keywords: "stack, medium, terraform, iac, gcp, cis-1.10, mitre-T1098.001, mitre-T1552.001, d3-ch, nist-csf-pr.ac-1, nist-800-53-sc-12, csa-ccm-cek-09"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "stack, high, terraform, iac, gcp, cis-1.10, mitre-T1098.001, mitre-T1
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, high, terraform, CIS 1.10, MITRE T1098.001, MITRE T1552.001, D3-CH",
+  "keywords": "stack, medium, terraform, CIS 1.10, MITRE T1098.001, MITRE T1552.001, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ STK-GCP-KMS-001 — KMS crypto key missing rotation period
+# 💡 STK-GCP-KMS-001 — KMS crypto key missing rotation period
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: stack](https://img.shields.io/badge/section-stack-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/STK-GCP-KMS-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=STK-GCP-KMS-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add STK-GCP-KMS-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **KMS crypto key missing rotation period.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **KMS crypto key missing rotation period.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 

@@ -1,7 +1,7 @@
 id: SEC-GCP-COMPUTE-PUBLIC-IP-001
 title: "Compute instance has a public IP via access_config"
 section: security
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 cis:
@@ -19,13 +19,13 @@ nist_800_53:
 csa_ccm:
   - "IVS-04"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_has_block
     resource: google_compute_instance
-    # Not `ipv6_access_config` (IPv6 egress, not a public IPv4 address).
-    regex: '(?<![\w])access_config\s*\{'
+    path: network_interface.access_config
     description: |
-      A `google_compute_instance` body contains an `access_config {}`
-      sub-block (always inside `network_interface`). Even an empty
+      A `google_compute_instance` `network_interface` has an
+      `access_config {}` sub-block (also as a `dynamic` block; not
+      `ipv6_access_config`, which is IPv6 egress). Even an empty
       `access_config` block requests an ephemeral public IP, exposing
       the VM directly to the internet.
 recommendation: |

@@ -33,6 +33,7 @@
 #   - STK-AZURE-SQL-001    HIGH    Deprecated MySQL/PostgreSQL single-server resource
 #   - STK-AZURE-DB-001     HIGH    MySQL/PostgreSQL server missing SSL enforcement
 #   - SEC-AZURE-ACR-001    HIGH    Container Registry admin account enabled
+#   - STK-AZURE-FUNCTION-001 HIGH  Function App on an end-of-life runtime (dotnet 3.1)
 #
 # Fix summary: pin every runtime to a non-deprecated version and
 # subscribe to the deprecation calendar; pin AKS to N-1 at most;

@@ -100,7 +100,7 @@ A rule is bot-eligible when:
 2. Its `fix_disruption` is `≤ max-disruption` input (default `none`).
 3. The detection produced a file + line anchor for the patch.
 
-Today that's roughly **174 of 354 active rules**. Each fix the bot
+Today that's roughly **174 of 352 active rules**. Each fix the bot
 applies is documented at the
 [per-rule docs site](rules/) so reviewers can read the rationale before
 approving.

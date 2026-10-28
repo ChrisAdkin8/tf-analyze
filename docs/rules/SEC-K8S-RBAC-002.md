@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-RBAC-002 — RoleBinding / ClusterRoleBinding subject targets a broad system Group"
 description: "tf-analyze rule SEC-K8S-RBAC-002 (CRITICAL · security): RoleBinding / ClusterRoleBinding subject targets a broad system Group"
-keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.5, mitre-T1078.001, mitre-T1078.004, cwe-269, cwe-732, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
+keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.5, mitre-T1078.001, cwe-269, cwe-732, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.5, mitre-T1078
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, critical, terraform, CIS 5.1.1, CIS 5.1.5, MITRE T1078.001, MITRE T1078.004, CWE-269, CWE-732",
+  "keywords": "security, critical, terraform, CIS 5.1.1, CIS 5.1.5, MITRE T1078.001, CWE-269, CWE-732",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -41,25 +41,25 @@ keywords: "security, critical, terraform, iac, cis-5.1.1, cis-5.1.5, mitre-T1078
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_role_binding` matching `/(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:masters")/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_role_binding` (`subject.name`) matching `/^system:masters$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_role_binding` has a subject `kind = "Group"` with
 `name = "system:masters"`. `system:masters` is a hard-coded
 group in kube-apiserver that bypasses RBAC entirely — every
 member is treated as cluster-admin regardless of which role
 this binding references. Used legitimately only by the bootstrap
 kubeconfig.
-2. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:masters")/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `kubernetes_cluster_role_binding` (`subject.name`) matching `/^system:masters$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Same as above, but at cluster scope. `kubernetes_cluster_role_binding`
 with `system:masters` as a subject grants the referenced role
 to every kubeconfig that asserts the `system:masters` group —
 typically the original bootstrap credential plus any cluster
 operator who copy-pasted that kubeconfig.
-3. **`resource_body_contains`** on `kubernetes_role_binding` matching `/(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:unauthenticated")/` — _the resource body matches a regex inside the block._
+3. **`resource_arg`** on `kubernetes_role_binding` (`subject.name`) matching `/^system:unauthenticated$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Subject `Group: system:unauthenticated` grants the role to every
 request without a valid token. Effectively makes the role
 reachable by any pod that can reach the API server, including
 pods without service-account tokens mounted.
-4. **`resource_body_contains`** on `kubernetes_cluster_role_binding` matching `/(?ms)subject\s*\{(?=[^}]*\bkind\s*=\s*"Group")(?=[^}]*\bname\s*=\s*"system:unauthenticated")/` — _the resource body matches a regex inside the block._
+4. **`resource_arg`** on `kubernetes_cluster_role_binding` (`subject.name`) matching `/^system:unauthenticated$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Same as above at cluster scope. The 2018 Tesla Kubernetes
 breach pivoted on an `system:unauthenticated`-readable dashboard
 ClusterRoleBinding; the same anti-pattern is still common in
@@ -166,7 +166,6 @@ should not list any binding outside `kube-system`.
 
 **MITRE ATT&CK**
   - [`T1078.001`](https://attack.mitre.org/techniques/T1078/001/)
-  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
 
 **CWE**
   - [`CWE-269`](https://cwe.mitre.org/data/definitions/269.html)

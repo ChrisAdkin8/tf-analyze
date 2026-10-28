@@ -1,7 +1,7 @@
 ---
 title: "SEC-K8S-NETPOL-002 — kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)"
-description: "tf-analyze rule SEC-K8S-NETPOL-002 (HIGH · security): kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)"
-keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1190, mitre-T1041, cwe-284, cwe-1188, nist-csf-pr.ac-5, nist-800-53-sc-7, nist-800-53-ac-4, csa-ccm-ivs-06, csa-ccm-ivs-09"
+description: "tf-analyze rule SEC-K8S-NETPOL-002 (MEDIUM · security): kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)"
+keywords: "security, medium, terraform, iac, cis-5.3.2, mitre-T1190, mitre-T1041, cwe-284, cwe-1188, nist-csf-pr.ac-5, nist-800-53-sc-7, nist-800-53-ac-4, csa-ccm-ivs-06, csa-ccm-ivs-09"
 ---
 
 <script type="application/ld+json">
@@ -24,37 +24,39 @@ keywords: "security, high, terraform, iac, cis-5.3.2, mitre-T1190, mitre-T1041, 
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 5.3.2, MITRE T1190, MITRE T1041, CWE-284, CWE-1188",
+  "keywords": "security, medium, terraform, CIS 5.3.2, MITRE T1190, MITRE T1041, CWE-284, CWE-1188",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-K8S-NETPOL-002 — kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)
+# 💡 SEC-K8S-NETPOL-002 — kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule)
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-NETPOL-002" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-K8S-NETPOL-002" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-K8S-NETPOL-002 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule).** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule).** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_network_policy` matching `/cidr\s*=\s*"0\.0\.0\.0/0"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_network_policy` (`spec.ingress.from.ip_block.cidr`) matching `/^0\.0\.0\.0/0$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_network_policy` whitelists `0.0.0.0/0` in an `ip_block`.
 Every IPv4 address — including the public internet — matches the
 rule. The 2018 Tesla / Kubernetes-dashboard cryptomining incident
 pivoted through exactly this shape: a "network policy is
 configured" cluster whose policy whitelisted the world.
-2. **`resource_body_contains`** on `kubernetes_network_policy` matching `/(?ms)^\s*egress\s*\{\s*\}/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `kubernetes_network_policy` (`spec.egress.to.ip_block.cidr`) matching `/^0\.0\.0\.0/0$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Same, for an egress `to.ip_block`.
+3. **`resource_has_block`** on `kubernetes_network_policy` (`spec.egress`) — _the resource has the named nested block (or, with `empty: true`, an empty one)._
   `kubernetes_network_policy` has an empty `egress { }` block. An
 empty rule in NetworkPolicy semantics is "allow all" — every
 egress destination is permitted from pods this policy selects.
 The cluster operator probably intended `egress { }` to mean
 "deny all egress", which is a common mistranslation from iptables
 mental models.
-3. **`resource_body_contains`** on `kubernetes_network_policy` matching `/(?ms)^\s*ingress\s*\{\s*\}/` — _the resource body matches a regex inside the block._
+4. **`resource_has_block`** on `kubernetes_network_policy` (`spec.ingress`) — _the resource has the named nested block (or, with `empty: true`, an empty one)._
   Same as above on the ingress side — `ingress { }` resolves to
 "allow all" inbound, defeating the purpose of a NetworkPolicy.
 
@@ -65,6 +67,8 @@ Every IPv4 address — including the public internet — matches the
 rule. The 2018 Tesla / Kubernetes-dashboard cryptomining incident
 pivoted through exactly this shape: a "network policy is
 configured" cluster whose policy whitelisted the world.
+
+Same, for an egress `to.ip_block`.
 
 `kubernetes_network_policy` has an empty `egress { }` block. An
 empty rule in NetworkPolicy semantics is "allow all" — every

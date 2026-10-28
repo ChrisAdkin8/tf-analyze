@@ -8,18 +8,16 @@ patterns:
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     code_only: true  # ignore comments and heredoc text
-    file_glob: "**/versions.tf"
+    file_glob: "**/*.tf"
     regex: 'required_version\s*=\s*"[~>=\s]*0\.'
   - kind: grep
     text_scan: "Terraform structure outside resource attributes (module source, version constraints, lifecycle, data / provisioner blocks) - no structured kind for it yet"
     code_only: true  # ignore comments and heredoc text
-    file_glob: "**/versions.tf"
+    file_glob: "**/*.tf"
     # (?![0-9]): "1.1" must not match the start of "1.10"+
     regex: 'required_version\s*=\s*"[~>=\s]*1\.[0-5](?![0-9])'
 owasp_iac:
   - "Develop and Distribute / Version Control Discipline"
-mitre:
-  - "T1195.002"
 cwe:
   - "CWE-1357"
 d3fend:
@@ -46,7 +44,7 @@ verification: |
   CI should pin the same version via `setup-terraform`.
 fix_hcl: |
   terraform {
-    required_version = ">= 1.5.0, < 2.0.0"
+    required_version = ">= 1.6.0, < 2.0.0"
   }
 fix_disruption: none
 fixtures:

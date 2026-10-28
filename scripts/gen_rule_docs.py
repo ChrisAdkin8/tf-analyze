@@ -72,6 +72,7 @@ KIND_EXPLAINER = {
     "resource_absent": "the corpus is missing a resource type we expected to find given other resources present",
     "resource_missing_companion": "no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)",
     "resource_body_contains": "the resource body matches a regex inside the block",
+    "resource_has_block": "the resource has the named nested block (or, with `empty: true`, an empty one)",
     "hcl_attr": "an attribute value differs from the expected literal",
     "iam_policy_analysis": "a `data \"aws_iam_policy_document\"` Allow statement matches the listed check",
     "iam_json_policy_analysis": "an inline `policy = jsonencode({...})` Allow statement matches the listed check",

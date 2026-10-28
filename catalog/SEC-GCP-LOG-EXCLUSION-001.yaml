@@ -25,16 +25,18 @@ nist_800_53:
 csa_ccm:
   - "LOG-08"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_logging_project_exclusion
+    nested_path: filter
     regex: 'logs/cloudaudit\.googleapis\.com'
     description: |
       `google_logging_project_exclusion.filter` drops Cloud Audit Logs
       (admin activity, data access, system event). This blinds
       incident response and breaks SOC2 / PCI-DSS audit attestation.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_logging_project_sink
-    regex: 'exclusions\s*\{[^}]*"cloudaudit\.googleapis\.com'
+    nested_path: exclusions.filter
+    regex: 'cloudaudit\.googleapis\.com'
     description: Project sink exclusion targets cloudaudit.googleapis.com
 recommendation: |
   Cloud Audit Logs must always reach the long-term sink. Move broad

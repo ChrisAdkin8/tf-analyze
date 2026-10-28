@@ -41,7 +41,7 @@ keywords: "stack, low, terraform, iac, gcp, cis-3.4, mitre-T1583.002, cwe-327, d
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_dns_managed_zone` matching `/algorithm\s*=\s*"rsasha1"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_dns_managed_zone` (`dnssec_config.default_key_specs.algorithm`) matching `/^rsasha1$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_dns_managed_zone.dnssec_config.default_key_specs.algorithm = "rsasha1"`.
 RSASHA1 is deprecated by RFC 8624 and NIST SP 800-57; modern DNS
 resolvers may downgrade or refuse to validate signatures.

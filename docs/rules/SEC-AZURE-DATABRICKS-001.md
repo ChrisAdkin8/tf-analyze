@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-DATABRICKS-001 — Azure Databricks workspace publicly accessible (no_public_ip = false)"
-description: "tf-analyze rule SEC-AZURE-DATABRICKS-001 (HIGH · security): Azure Databricks workspace publicly accessible (no_public_ip = false)"
-keywords: "security, high, terraform, iac, azure, cis-3.5, mitre-T1190, cwe-284, d3-nta, nist-csf-pr.ac-5, nist-800-53-sc-7"
+description: "tf-analyze rule SEC-AZURE-DATABRICKS-001 (MEDIUM · security): Azure Databricks workspace publicly accessible (no_public_ip = false)"
+keywords: "security, medium, terraform, iac, azure, cis-3.5, mitre-T1190, cwe-284, d3-nta, nist-csf-pr.ac-5, nist-800-53-sc-7"
 ---
 
 <script type="application/ld+json">
@@ -24,24 +24,24 @@ keywords: "security, high, terraform, iac, azure, cis-3.5, mitre-T1190, cwe-284,
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 3.5, MITRE T1190, CWE-284, D3-NTA",
+  "keywords": "security, medium, terraform, CIS 3.5, MITRE T1190, CWE-284, D3-NTA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AZURE-DATABRICKS-001 — Azure Databricks workspace publicly accessible (no_public_ip = false)
+# 💡 SEC-AZURE-DATABRICKS-001 — Azure Databricks workspace publicly accessible (no_public_ip = false)
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AZURE-DATABRICKS-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AZURE-DATABRICKS-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AZURE-DATABRICKS-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Azure Databricks workspace publicly accessible (no_public_ip = false).** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+> **Azure Databricks workspace publicly accessible (no_public_ip = false).** This rule has `default_urgency: MEDIUM` and operates on a module blast radius. 
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_databricks_workspace` matching `/no_public_ip\s*=\s*false/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `azurerm_databricks_workspace` (`custom_parameters.no_public_ip`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `azurerm_databricks_workspace.custom_parameters.no_public_ip = false`
 assigns Databricks worker nodes public IPs. The workspace control
 plane is reachable from the public internet.
