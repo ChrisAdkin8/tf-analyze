@@ -35,9 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CompliancePanel = void 0;
 const vscode = __importStar(require("vscode"));
-const fs = __importStar(require("fs"));
-const os = __importStar(require("os"));
-const path = __importStar(require("path"));
+const safeWrite_1 = require("./safeWrite");
 const scriptResolver_1 = require("./scriptResolver");
 const iframeBridge_1 = require("./iframeBridge");
 const engineRunner_1 = require("./engineRunner");
@@ -176,9 +174,8 @@ class CompliancePanel {
             return;
         const wsName = vscode.workspace.workspaceFolders?.[0]?.name ?? 'workspace';
         const safe = wsName.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const file = path.join(os.tmpdir(), `tf-analyze-${safe}-compliance-${this._framework}-${Date.now()}.html`);
         try {
-            fs.writeFileSync(file, this._lastHtml, 'utf8');
+            const file = (0, safeWrite_1.writePrivateTempFile)(`tf-analyze-${safe}-compliance-${this._framework}.html`, this._lastHtml);
             await vscode.env.openExternal(vscode.Uri.file(file));
         }
         catch (e) {

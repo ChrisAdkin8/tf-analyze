@@ -5,6 +5,20 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 82 — The VS Code extension doesn't write through symlinks — 2026-10-28
+
+- **Baseline and ignore list**: suppressing a finding wrote
+  `.tf-analyze-baseline.json`, and "ignore workspace-wide" wrote
+  `.tf-analyze.yaml`, with `fs.writeFileSync`, which follows a symlink. A
+  cloned repo could commit `.tf-analyze-baseline.json -> ../../.bashrc` and
+  have that file overwritten with JSON. Both now go through
+  `writeFileNoFollow`: a symlink or non-file at the path is refused, and the
+  new content is written to a fresh sibling file and renamed into place, so
+  a link swapped in mid-write is replaced rather than followed.
+- **Report temp files**: "open in browser" wrote the HTML report to a
+  guessable name in the shared temp folder. It now goes in a new private
+  `mkdtemp` folder.
+
 ## Round 73 — S3 rules read the setting, not just its presence — 2026-10-28
 
 Findings change: AWS terragoat 126 → 127. New rule: 354 in all.
