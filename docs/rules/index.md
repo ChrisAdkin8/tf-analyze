@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**353 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**354 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -61,25 +61,15 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 
 | Rule | Urgency | Title |
 |------|---------|-------|
-| [`ROB-AWS-BACKEND-001`](./ROB-AWS-BACKEND-001.md) | HIGH | Terraform S3 backend missing state locking |
-| [`ROB-AWS-DDB-001`](./ROB-AWS-DDB-001.md) | HIGH | DynamoDB table missing deletion protection |
-| [`ROB-AWS-LIFECYCLE-001`](./ROB-AWS-LIFECYCLE-001.md) | HIGH | Stateful AWS resource missing lifecycle.prevent_destroy |
-| [`ROB-AWS-LIFECYCLE-002`](./ROB-AWS-LIFECYCLE-002.md) | HIGH | S3 bucket has force_destroy enabled |
-| [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) | HIGH | RDS instance or Aurora cluster backup retention disabled |
-| [`ROB-AWS-RDS-002`](./ROB-AWS-RDS-002.md) | HIGH | RDS instance or Aurora cluster skips final snapshot on deletion |
-| [`ROB-AWS-RDS-003`](./ROB-AWS-RDS-003.md) | HIGH | RDS instance or Aurora cluster missing deletion protection |
-| [`ROB-AZURE-LIFECYCLE-001`](./ROB-AZURE-LIFECYCLE-001.md) | HIGH | Stateful Azure resource missing lifecycle.prevent_destroy |
-| [`ROB-COUNTNAME-001`](./ROB-COUNTNAME-001.md) | HIGH | Resource external name embeds count.index — renumber-risk on apply |
-| [`ROB-COUNTREF-002`](./ROB-COUNTREF-002.md) | HIGH | Unguarded indexed reference to count = length(...) resource |
-| [`ROB-DRIFT-001`](./ROB-DRIFT-001.md) | HIGH | Resource uses ignore_changes = all |
-| [`ROB-FOREACH-002`](./ROB-FOREACH-002.md) | HIGH | for_each keyset is derived from another resource's attributes (apply-flicker) |
-| [`ROB-GCP-LIFECYCLE-001`](./ROB-GCP-LIFECYCLE-001.md) | HIGH | Stateful resource missing lifecycle.prevent_destroy |
-| [`ROB-GCP-LIFECYCLE-002`](./ROB-GCP-LIFECYCLE-002.md) | HIGH | Stateful resource has force_destroy=true |
-| [`ROB-PROVIDER-ALIAS-001`](./ROB-PROVIDER-ALIAS-001.md) | HIGH | Module references provider alias that is not declared |
-| [`ROB-VERSION-003`](./ROB-VERSION-003.md) | HIGH | required_providers entry missing version constraint |
 | [`ROB-AWS-ALB-001`](./ROB-AWS-ALB-001.md) | MEDIUM | Load balancer deletion protection disabled |
+| [`ROB-AWS-BACKEND-001`](./ROB-AWS-BACKEND-001.md) | MEDIUM | Terraform S3 backend missing state locking |
 | [`ROB-AWS-BACKUP-001`](./ROB-AWS-BACKUP-001.md) | MEDIUM | No AWS Backup plan defined |
+| [`ROB-AWS-DDB-001`](./ROB-AWS-DDB-001.md) | MEDIUM | DynamoDB table missing deletion protection |
 | [`ROB-AWS-DDB-002`](./ROB-AWS-DDB-002.md) | MEDIUM | DynamoDB table missing point-in-time recovery |
+| [`ROB-AWS-LIFECYCLE-002`](./ROB-AWS-LIFECYCLE-002.md) | MEDIUM | S3 bucket has force_destroy enabled |
+| [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) | MEDIUM | RDS instance backup retention disabled |
+| [`ROB-AWS-RDS-002`](./ROB-AWS-RDS-002.md) | MEDIUM | RDS instance or Aurora cluster skips final snapshot on deletion |
+| [`ROB-AWS-RDS-003`](./ROB-AWS-RDS-003.md) | MEDIUM | RDS instance or Aurora cluster missing deletion protection |
 | [`ROB-AWS-REDSHIFT-001`](./ROB-AWS-REDSHIFT-001.md) | MEDIUM | Redshift cluster has no automated snapshot retention |
 | [`ROB-AWS-S3-001`](./ROB-AWS-S3-001.md) | MEDIUM | S3 bucket versioning disabled or suspended |
 | [`ROB-AWS-SECRETSMANAGER-001`](./ROB-AWS-SECRETSMANAGER-001.md) | MEDIUM | Secrets Manager secret has no automatic rotation configured |
@@ -91,20 +81,30 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-AZURE-VMSS-001`](./ROB-AZURE-VMSS-001.md) | MEDIUM | Azure VM Scale Set missing automatic instance repair |
 | [`ROB-BACKEND-001`](./ROB-BACKEND-001.md) | MEDIUM | Inconsistent backend configuration across root modules |
 | [`ROB-CHECK-001`](./ROB-CHECK-001.md) | MEDIUM | TF 1.5+ check block missing assert |
+| [`ROB-COUNTNAME-001`](./ROB-COUNTNAME-001.md) | MEDIUM | Resource external name embeds count.index — renumber-risk on apply |
 | [`ROB-COUNTREF-001`](./ROB-COUNTREF-001.md) | MEDIUM | Unguarded reference to count-conditional resource |
+| [`ROB-COUNTREF-002`](./ROB-COUNTREF-002.md) | MEDIUM | Unguarded indexed reference to count = length(...) resource |
+| [`ROB-DRIFT-001`](./ROB-DRIFT-001.md) | MEDIUM | Resource uses ignore_changes = all |
 | [`ROB-DRIFT-002`](./ROB-DRIFT-002.md) | MEDIUM | ignore_changes hides too much (wildcard, or tags-wide on a tagged resource) |
 | [`ROB-FOREACH-001`](./ROB-FOREACH-001.md) | MEDIUM | for_each over list instead of map/set |
+| [`ROB-FOREACH-002`](./ROB-FOREACH-002.md) | MEDIUM | for_each keyset is derived from another resource's attributes (apply-flicker) |
 | [`ROB-GCP-CLOUDSQL-PITR-001`](./ROB-GCP-CLOUDSQL-PITR-001.md) | MEDIUM | Cloud SQL instance missing point-in-time recovery |
 | [`ROB-GCP-DISK-SNAP-001`](./ROB-GCP-DISK-SNAP-001.md) | MEDIUM | GCP Compute disk missing snapshot schedule |
 | [`ROB-GCP-FILESTORE-001`](./ROB-GCP-FILESTORE-001.md) | MEDIUM | GCP Filestore instance missing backup configuration |
+| [`ROB-GCP-LIFECYCLE-002`](./ROB-GCP-LIFECYCLE-002.md) | MEDIUM | Stateful resource has force_destroy=true |
 | [`ROB-PRECONDITION-001`](./ROB-PRECONDITION-001.md) | MEDIUM | Precondition or postcondition missing error_message |
+| [`ROB-PROVIDER-ALIAS-001`](./ROB-PROVIDER-ALIAS-001.md) | MEDIUM | Module references provider alias that is not declared |
 | [`ROB-REMOTESTATE-001`](./ROB-REMOTESTATE-001.md) | MEDIUM | terraform_remote_state data source couples modules implicitly |
 | [`ROB-VALIDATION-001`](./ROB-VALIDATION-001.md) | MEDIUM | Variable accepts dangerous input without validation block |
 | [`ROB-VALIDATION-002`](./ROB-VALIDATION-002.md) | MEDIUM | Variable typed as bare any |
 | [`ROB-VERSION-001`](./ROB-VERSION-001.md) | MEDIUM | required_version floor too old for skill assumptions |
+| [`ROB-VERSION-003`](./ROB-VERSION-003.md) | MEDIUM | required_providers entry missing version constraint |
+| [`ROB-AWS-LIFECYCLE-001`](./ROB-AWS-LIFECYCLE-001.md) | LOW | Stateful AWS resource missing lifecycle.prevent_destroy |
+| [`ROB-AZURE-LIFECYCLE-001`](./ROB-AZURE-LIFECYCLE-001.md) | LOW | Stateful Azure resource missing lifecycle.prevent_destroy |
 | [`ROB-COUNT-001`](./ROB-COUNT-001.md) | LOW | Boolean count pattern instead of for_each |
 | [`ROB-COUNT-002`](./ROB-COUNT-002.md) | LOW | Module mixes count-based and for_each-based resources |
 | [`ROB-DRIFT-003`](./ROB-DRIFT-003.md) | LOW | ignore_changes lists too many attributes (drift-disable by attrition) |
+| [`ROB-GCP-LIFECYCLE-001`](./ROB-GCP-LIFECYCLE-001.md) | LOW | Stateful resource missing lifecycle.prevent_destroy |
 | [`ROB-MOVED-001`](./ROB-MOVED-001.md) | LOW | Stale moved block may need cleanup |
 | [`ROB-PROVIDER-ALIAS-002`](./ROB-PROVIDER-ALIAS-002.md) | LOW | Provider alias declared but never referenced |
 | [`ROB-REMOVED-001`](./ROB-REMOVED-001.md) | LOW | Stale removed block may need cleanup |
@@ -112,7 +112,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-UNUSED-002`](./ROB-UNUSED-002.md) | LOW | Declared output is never consumed by any caller |
 | [`ROB-VERSION-002`](./ROB-VERSION-002.md) | LOW | Submodule directory has no required_version |
 
-## security (194)
+## security (195)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -170,8 +170,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-RDS-001`](./SEC-AWS-RDS-001.md) | HIGH | RDS instance or Aurora cluster publicly accessible |
 | [`SEC-AWS-RDS-002`](./SEC-AWS-RDS-002.md) | HIGH | RDS instance or Aurora cluster storage not encrypted |
 | [`SEC-AWS-REDSHIFT-001`](./SEC-AWS-REDSHIFT-001.md) | HIGH | Redshift cluster encryption disabled |
-| [`SEC-AWS-S3-001`](./SEC-AWS-S3-001.md) | HIGH | S3 bucket missing server-side encryption configuration |
-| [`SEC-AWS-S3-PUBLIC-BLOCK-001`](./SEC-AWS-S3-PUBLIC-BLOCK-001.md) | HIGH | S3 bucket missing public access block |
+| [`SEC-AWS-S3-PUBLIC-001`](./SEC-AWS-S3-PUBLIC-001.md) | HIGH | S3 bucket ACL grants access to everyone |
 | [`SEC-AWS-SG-001`](./SEC-AWS-SG-001.md) | HIGH | Security group allows ingress from 0.0.0.0/0 |
 | [`SEC-AWS-SNS-001`](./SEC-AWS-SNS-001.md) | HIGH | SNS topic missing KMS encryption |
 | [`SEC-AWS-SQS-001`](./SEC-AWS-SQS-001.md) | HIGH | SQS queue missing server-side encryption |
@@ -260,6 +259,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-KINESIS-001`](./SEC-AWS-KINESIS-001.md) | MEDIUM | Kinesis Data Stream not encrypted with KMS |
 | [`SEC-AWS-MSK-002`](./SEC-AWS-MSK-002.md) | MEDIUM | MSK cluster does not use CMK for encryption at rest |
 | [`SEC-AWS-S3-LOGGING-001`](./SEC-AWS-S3-LOGGING-001.md) | MEDIUM | S3 bucket missing server access logging |
+| [`SEC-AWS-S3-PUBLIC-BLOCK-001`](./SEC-AWS-S3-PUBLIC-BLOCK-001.md) | MEDIUM | S3 public access block missing or switched off |
 | [`SEC-AWS-SECRETSMANAGER-001`](./SEC-AWS-SECRETSMANAGER-001.md) | MEDIUM | Secrets Manager secret uses AWS-managed key (no CMK) |
 | [`SEC-AWS-SECURITYHUB-001`](./SEC-AWS-SECURITYHUB-001.md) | MEDIUM | Security Hub not enabled |
 | [`SEC-AWS-WAF-001`](./SEC-AWS-WAF-001.md) | MEDIUM | WAFv2 web ACL missing logging configuration |
@@ -305,6 +305,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-LOG-CROSS-ACCOUNT-001`](./SEC-LOG-CROSS-ACCOUNT-001.md) | MEDIUM | Audit log destination is in the same AWS account (no cross-account isolation) |
 | [`SEC-PROVIDER-001`](./SEC-PROVIDER-001.md) | MEDIUM | Provider version constraint missing upper bound |
 | [`SEC-USERDATA-002`](./SEC-USERDATA-002.md) | MEDIUM | user_data passes a sensitive var unencoded (base64encode missing) |
+| [`SEC-AWS-S3-001`](./SEC-AWS-S3-001.md) | LOW | S3 bucket missing server-side encryption configuration |
 | [`SEC-AWS-SSM-001`](./SEC-AWS-SSM-001.md) | LOW | SSM parameter not stored as SecureString |
 | [`SEC-AZURE-BASTION-001`](./SEC-AZURE-BASTION-001.md) | LOW | Azure Bastion host using Basic SKU (no shareable links, no RBAC) |
 | [`SEC-AZURE-PRIVATE-DNS-001`](./SEC-AZURE-PRIVATE-DNS-001.md) | LOW | Azure Private DNS zone missing virtual network link |
@@ -337,8 +338,6 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-AZURE-VM-IMG-EOL-001`](./STK-AZURE-VM-IMG-EOL-001.md) | HIGH | Azure virtual machine using end-of-life OS image |
 | [`STK-AZURE-WEBAPP-RUNTIME-001`](./STK-AZURE-WEBAPP-RUNTIME-001.md) | HIGH | Azure App Service Web App uses end-of-life runtime |
 | [`STK-GCP-BIGQUERY-001`](./STK-GCP-BIGQUERY-001.md) | HIGH | BigQuery dataset missing default CMEK |
-| [`STK-GCP-CLOUDSQL-001`](./STK-GCP-CLOUDSQL-001.md) | HIGH | Cloud SQL instance missing backup_configuration |
-| [`STK-GCP-CLOUDSQL-003`](./STK-GCP-CLOUDSQL-003.md) | HIGH | Cloud SQL instance missing deletion protection |
 | [`STK-GCP-CLOUDSQL-004`](./STK-GCP-CLOUDSQL-004.md) | HIGH | Cloud SQL instance does not require SSL connections |
 | [`STK-GCP-CLOUDSQL-005`](./STK-GCP-CLOUDSQL-005.md) | HIGH | Cloud SQL instance uses end-of-life database version |
 | [`STK-GCP-COMPOSER-001`](./STK-GCP-COMPOSER-001.md) | HIGH | GCP Composer (Airflow) environment not private |
@@ -381,6 +380,8 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`STK-GCP-CLOUDARMOR-001`](./STK-GCP-CLOUDARMOR-001.md) | MEDIUM | GCP Cloud Armor security policy missing rate-based rule |
 | [`STK-GCP-CLOUDBUILD-001`](./STK-GCP-CLOUDBUILD-001.md) | MEDIUM | GCP Cloud Build trigger missing manual approval |
 | [`STK-GCP-CLOUDRUN-001`](./STK-GCP-CLOUDRUN-001.md) | MEDIUM | GCP Cloud Run service has unbounded container concurrency |
+| [`STK-GCP-CLOUDSQL-001`](./STK-GCP-CLOUDSQL-001.md) | MEDIUM | Cloud SQL instance missing backup_configuration |
+| [`STK-GCP-CLOUDSQL-003`](./STK-GCP-CLOUDSQL-003.md) | MEDIUM | Cloud SQL instance missing deletion protection |
 | [`STK-GCP-CLOUDSQL-IAMAUTH-001`](./STK-GCP-CLOUDSQL-IAMAUTH-001.md) | MEDIUM | Cloud SQL instance not using IAM authentication |
 | [`STK-GCP-DATAFLOW-001`](./STK-GCP-DATAFLOW-001.md) | MEDIUM | GCP Dataflow job exposes workers to public IPs |
 | [`STK-GCP-GKE-RELEASE-001`](./STK-GCP-GKE-RELEASE-001.md) | MEDIUM | GKE cluster on STATIC release channel (no auto-upgrade) |

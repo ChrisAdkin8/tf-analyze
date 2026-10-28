@@ -284,9 +284,11 @@ def parse_tf(text: str) -> tuple[dict | None, str | None]:
 def normalise_attrs(body: dict) -> dict:
     """Return a copy of a resource/block subtree with every
     ``dynamic "X" { content { ... } }`` folded in as a plain ``X`` block,
-    recursively — the tree counterpart of `_expand_dynamic_blocks`. The
-    ``for_each`` value is dropped: values that come from it
-    (``${X.value}``) are unknown at parse time."""
+    recursively — the tree counterpart of `_expand_dynamic_blocks`.
+    Values that come from ``for_each`` (``${X.value}``) are unknown at
+    parse time, so the block is folded in once; it keeps its ``for_each``
+    and iterator name under ``__for_each__`` / ``__iterator__`` for
+    callers that can evaluate them (`_network.expand_dynamic`)."""
     out: dict = {}
     dynamic = body.get("dynamic")
     for k, v in body.items():
@@ -304,11 +306,18 @@ def normalise_attrs(body: dict) -> dict:
         for name, spec in item.items():
             if not isinstance(spec, dict):
                 continue
+            iterator = spec.get("iterator") or name
+            if isinstance(iterator, str):
+                iterator = single_interpolation(iterator) or iterator
             for content in spec.get("content") or []:
                 if isinstance(content, dict):
+                    folded = normalise_attrs(content)
+                    if "for_each" in spec:
+                        folded["__for_each__"] = spec["for_each"]
+                        folded["__iterator__"] = iterator
                     out.setdefault(name, [])
                     if isinstance(out[name], list):
-                        out[name].append(normalise_attrs(content))
+                        out[name].append(folded)
     return out
 
 
@@ -1273,7 +1282,15 @@ def _mask_to_top_level(body: str) -> str:
 
 
 @functools.lru_cache(maxsize=4096)
-def mask_comments_and_heredocs(body: str) -> str:
+def mask_comments(body: str) -> str:
+    """`mask_comments_and_heredocs` without blanking heredocs: comments
+    go, heredoc text stays (and a ``#`` inside it, such as a script's
+    ``#!/bin/bash``, is not taken for a comment). For rules that read
+    scripts or documents in heredocs, such as ``user_data``."""
+    return mask_comments_and_heredocs(body, heredocs=False)
+
+
+def mask_comments_and_heredocs(body: str, *, heredocs: bool = True) -> str:
     """Return ``body`` with comments and heredoc bodies blanked to spaces
     (newlines kept, so offsets and line numbers line up). Ordinary string
     literals are kept — regexes over a body commonly match quoted values
@@ -1311,7 +1328,8 @@ def mask_comments_and_heredocs(body: str) -> str:
             term = re.compile(rf'(?m)^[ \t]*{re.escape(m.group(1))}[ \t]*\r?$')
             t = term.search(body, m.end())
             j = n if t is None else t.end()
-            blank(i, j)
+            if heredocs:
+                blank(i, j)
             i = j
         else:
             i += 1

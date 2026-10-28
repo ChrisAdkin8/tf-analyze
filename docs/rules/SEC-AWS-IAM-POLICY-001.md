@@ -45,12 +45,16 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-2
   A statement inside `data "aws_iam_policy_document"` grants `actions = ["*"]`.
 Effective grant is "any AWS API call against any resource selected
 by this policy" — the canonical privilege-escalation foothold.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-POLICY-005, not by this rule.
 
 ## Why it likely fired
 
 A statement inside `data "aws_iam_policy_document"` grants `actions = ["*"]`.
 Effective grant is "any AWS API call against any resource selected
 by this policy" — the canonical privilege-escalation foothold.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-POLICY-005, not by this rule.
 
 ## Adversarial scenario
 

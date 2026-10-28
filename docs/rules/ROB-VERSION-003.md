@@ -1,7 +1,7 @@
 ---
 title: "ROB-VERSION-003 — required_providers entry missing version constraint"
-description: "tf-analyze rule ROB-VERSION-003 (HIGH · robustness): required_providers entry missing version constraint"
-keywords: "robustness, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-cm-2, nist-800-53-sr-3, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l2, slsa-deps"
+description: "tf-analyze rule ROB-VERSION-003 (MEDIUM · robustness): required_providers entry missing version constraint"
+keywords: "robustness, medium, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-cm-2, nist-800-53-sr-3, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l2, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "robustness, high, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, 
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
+  "keywords": "robustness, medium, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ ROB-VERSION-003 — required_providers entry missing version constraint
+# 💡 ROB-VERSION-003 — required_providers entry missing version constraint
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-VERSION-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-VERSION-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-VERSION-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **required_providers entry missing version constraint.** This rule has `default_urgency: HIGH` and operates on a environment blast radius. 
+> **required_providers entry missing version constraint.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 

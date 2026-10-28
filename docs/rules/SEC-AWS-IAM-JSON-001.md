@@ -48,6 +48,8 @@ keywords: "security, high, terraform, iac, aws, cis-1.16, mitre-T1078.004, cwe-2
 `Action: "*"`. The principal bound to this policy can perform
 any AWS API call against the scoped resources — the canonical
 privilege-escalation foothold.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-JSON-003, not by this rule.
 
 ## Why it likely fired
 
@@ -57,6 +59,8 @@ An inline `policy = jsonencode({...})` on `aws_iam_policy`,
 `Action: "*"`. The principal bound to this policy can perform
 any AWS API call against the scoped resources — the canonical
 privilege-escalation foothold.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-JSON-003, not by this rule.
 
 ## Adversarial scenario
 

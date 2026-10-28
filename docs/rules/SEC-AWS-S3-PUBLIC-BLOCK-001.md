@@ -1,14 +1,14 @@
 ---
-title: "SEC-AWS-S3-PUBLIC-BLOCK-001 — S3 bucket missing public access block"
-description: "tf-analyze rule SEC-AWS-S3-PUBLIC-BLOCK-001 (HIGH · security): S3 bucket missing public access block"
-keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530, cwe-732, cwe-284, nist-csf-pr.ac-3, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-sc-7, csa-ccm-iam-09, csa-ccm-ivs-04"
+title: "SEC-AWS-S3-PUBLIC-BLOCK-001 — S3 public access block missing or switched off"
+description: "tf-analyze rule SEC-AWS-S3-PUBLIC-BLOCK-001 (MEDIUM · security): S3 public access block missing or switched off"
+keywords: "security, medium, terraform, iac, aws, cis-2.1.5.1, mitre-T1530, cwe-732, cwe-284, nist-csf-pr.ac-3, nist-csf-pr.ac-4, nist-800-53-ac-3, nist-800-53-sc-7, csa-ccm-iam-09, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "SEC-AWS-S3-PUBLIC-BLOCK-001 \u2014 S3 bucket missing public access block",
+  "headline": "SEC-AWS-S3-PUBLIC-BLOCK-001 \u2014 S3 public access block missing or switched off",
   "description": "Add an `aws_s3_bucket_public_access_block` resource for every bucket:",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-AWS-S3-PUBLIC-BLOCK-001/",
   "mainEntityOfPage": {
@@ -24,28 +24,63 @@ keywords: "security, high, terraform, iac, aws, cis-2.1.5.1, mitre-T1530, cwe-73
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, high, terraform, CIS 2.1.5.1, MITRE T1530, CWE-732, CWE-284",
+  "keywords": "security, medium, terraform, CIS 2.1.5.1, MITRE T1530, CWE-732, CWE-284",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ SEC-AWS-S3-PUBLIC-BLOCK-001 — S3 bucket missing public access block
+# 💡 SEC-AWS-S3-PUBLIC-BLOCK-001 — S3 public access block missing or switched off
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-AWS-S3-PUBLIC-BLOCK-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-AWS-S3-PUBLIC-BLOCK-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-AWS-S3-PUBLIC-BLOCK-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **S3 bucket missing public access block.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **S3 public access block missing or switched off.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 
 1. **`resource_missing_companion`** on `aws_s3_bucket` — _no companion resource in the same module points at this resource (e.g. a bucket without its own public access block)._
+  bucket with no `aws_s3_bucket_public_access_block` pointing at it,
+and no account-level `aws_s3_account_public_access_block` in the scan
+2. **`resource_arg`** on `aws_s3_bucket_public_access_block` (`block_public_acls`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_bucket_public_access_block` with `block_public_acls` not `true` (it defaults to `false`)
+3. **`resource_arg`** on `aws_s3_bucket_public_access_block` (`block_public_policy`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_bucket_public_access_block` with `block_public_policy` not `true` (it defaults to `false`)
+4. **`resource_arg`** on `aws_s3_bucket_public_access_block` (`ignore_public_acls`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_bucket_public_access_block` with `ignore_public_acls` not `true` (it defaults to `false`)
+5. **`resource_arg`** on `aws_s3_bucket_public_access_block` (`restrict_public_buckets`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_bucket_public_access_block` with `restrict_public_buckets` not `true` (it defaults to `false`)
+6. **`resource_arg`** on `aws_s3_account_public_access_block` (`block_public_acls`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_account_public_access_block` with `block_public_acls` not `true` (it defaults to `false`)
+7. **`resource_arg`** on `aws_s3_account_public_access_block` (`block_public_policy`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_account_public_access_block` with `block_public_policy` not `true` (it defaults to `false`)
+8. **`resource_arg`** on `aws_s3_account_public_access_block` (`ignore_public_acls`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_account_public_access_block` with `ignore_public_acls` not `true` (it defaults to `false`)
+9. **`resource_arg`** on `aws_s3_account_public_access_block` (`restrict_public_buckets`) — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `aws_s3_account_public_access_block` with `restrict_public_buckets` not `true` (it defaults to `false`)
 
 ## Why it likely fired
 
-Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
+bucket with no `aws_s3_bucket_public_access_block` pointing at it,
+and no account-level `aws_s3_account_public_access_block` in the scan
+
+`aws_s3_bucket_public_access_block` with `block_public_acls` not `true` (it defaults to `false`)
+
+`aws_s3_bucket_public_access_block` with `block_public_policy` not `true` (it defaults to `false`)
+
+`aws_s3_bucket_public_access_block` with `ignore_public_acls` not `true` (it defaults to `false`)
+
+`aws_s3_bucket_public_access_block` with `restrict_public_buckets` not `true` (it defaults to `false`)
+
+`aws_s3_account_public_access_block` with `block_public_acls` not `true` (it defaults to `false`)
+
+`aws_s3_account_public_access_block` with `block_public_policy` not `true` (it defaults to `false`)
+
+`aws_s3_account_public_access_block` with `ignore_public_acls` not `true` (it defaults to `false`)
+
+`aws_s3_account_public_access_block` with `restrict_public_buckets` not `true` (it defaults to `false`)
 
 ## Adversarial scenario
 
@@ -69,6 +104,9 @@ Add an `aws_s3_bucket_public_access_block` resource for every bucket:
 Without this resource, S3 ACLs and bucket policies can inadvertently
 expose the bucket to the public. The four flags together enforce that
 no public grant can be applied, even if a policy mistake is made later.
+Each flag defaults to `false`, so a block that leaves one out does not
+set it. An `aws_s3_account_public_access_block` with all four flags
+`true` covers every bucket in the account instead.
 
 ## Suggested fix (`fix_hcl`)
 

@@ -31,6 +31,7 @@ patterns:
     text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     file_glob: "**/*.tf"
     regex: '"token\.actions\.githubusercontent\.com:sub"\s*=\s*"(?:\*|repo:\*|repo:[^"/]+/\*|repo:[^"]*:ref:refs/heads/\*)"'
+    code_only: true
     description: |
       A GitHub OIDC IAM-role trust policy whose `sub` claim is
       `repo:*`, `repo:<org>/*`, or `:ref:refs/heads/*` lets any
@@ -42,6 +43,7 @@ patterns:
     text_scan: "matches JSON policy or container-definition documents (strings, heredocs, jsonencode) - left to the IAM / JSON analysers by the parser migration"
     file_glob: "**/*.tf"
     regex: '"token\.actions\.githubusercontent\.com:sub"\s*=\s*"\*"'
+    code_only: true
     description: bare wildcard `sub`
 recommendation: |
   Pin the `sub` claim to the exact repo + branch (or environment)

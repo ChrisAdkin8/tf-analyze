@@ -48,6 +48,8 @@ string) on aws_iam_policy / aws_iam_role_policy / aws_iam_user_policy
 `Resource: "*"`. Deny statements and read-only Describe* / List*
 actions (often not resource-scopable) do not count. The
 `aws_iam_policy_document` form is SEC-AWS-IAM-POLICY-003.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-JSON-003, not by this rule.
 
 ## Why it likely fired
 
@@ -57,6 +59,8 @@ string) on aws_iam_policy / aws_iam_role_policy / aws_iam_user_policy
 `Resource: "*"`. Deny statements and read-only Describe* / List*
 actions (often not resource-scopable) do not count. The
 `aws_iam_policy_document` form is SEC-AWS-IAM-POLICY-003.
+A statement with both `*` action and `*` resource is reported
+once, as SEC-AWS-IAM-JSON-003, not by this rule.
 
 ## Adversarial scenario
 

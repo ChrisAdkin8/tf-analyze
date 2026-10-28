@@ -210,6 +210,8 @@ def load_yaml(text: str) -> dict:
 
 # ---- Schema validation --------------------------------------------------
 
+_RULE_ID_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+")
+
 def validate_catalog_entry(data: dict, source: str) -> list[str]:
     """Return a list of human-readable schema errors. Empty list = valid.
 
@@ -485,6 +487,13 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
                     )
     fid = data.get("id")
     fname = Path(source).stem
+    # Ids are printed in PR comments, SARIF and HTML; a custom rule from a
+    # scanned repo must not smuggle Markdown or HTML in through its id.
+    if fid and not _RULE_ID_RE.fullmatch(str(fid)):
+        errs.append(
+            f"{source}: id '{fid}' must be upper-case letters and digits "
+            f"in dash-separated parts (e.g. CUSTOM-ACME-001)"
+        )
     if fid and fid != fname:
         errs.append(
             f"{source}: id '{fid}' does not match filename stem '{fname}'"

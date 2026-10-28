@@ -20,9 +20,9 @@
 #     TTL would have shrunk the blast radius to near zero.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-IAM-001      HIGH  IAM policy with wildcard resource
-#                                (the pattern below also triggers it
-#                                because the inline policy is `*`/`*`)
+#   - SEC-AWS-IAM-JSON-003 CRITICAL  inline policy with Action and
+#                                    Resource `*` (one finding, not also
+#                                    the wildcard-action / -resource rules)
 #   - SEC-AWS-COGNITO-001  HIGH  Cognito user pool MFA not configured
 #
 # Fix summary: replace human IAM users with SSO + role assumption;

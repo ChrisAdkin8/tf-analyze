@@ -1,7 +1,7 @@
 id: ROB-AWS-BACKEND-001
 title: "Terraform S3 backend missing state locking"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: infrastructure-wide
 status: active
 patterns:
