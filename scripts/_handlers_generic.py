@@ -32,6 +32,7 @@ from _hcl import (
     block_has_nested_path,
     resource_has_path,
     resource_values_at,
+    mask_comments,
     mask_comments_and_heredocs,
     brace_walk,
     strip_hcl_context,
@@ -567,6 +568,18 @@ def _detect_removed_block_present(c: InFileCtx) -> list[dict]:
     return out
 
 
+_LINE_COMMENT_RE = re.compile(r"(?m)^[ \t]*#.*$")
+
+
+def _without_comments(c: InFileCtx) -> str:
+    """The file with comments blanked: HCL-aware for Terraform sources
+    (heredoc text kept), whole ``#`` comment lines for anything else
+    (workflow YAML, shell)."""
+    if c.file_path.name.endswith((".tf", ".tf.json", ".tfvars")):
+        return mask_comments(c.text)
+    return _LINE_COMMENT_RE.sub("", c.text)
+
+
 @_register_infile("grep")
 def _detect_grep(c: InFileCtx) -> list[dict]:
     """``grep`` — the most-used pattern kind. Match a regex against
@@ -575,7 +588,8 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
     * ``scope == "resource_body"`` — search only inside resource
       bodies, optionally filtered by resource type via ``resource``.
       Honours ``count = 0`` so resources definitely not created are
-      skipped.
+      skipped. Comments are blanked first; heredoc text (``user_data``
+      scripts) is kept.
     * default — search the full file. ``code_only: true`` first blanks
       comments and heredoc bodies (HCL-aware); ``hcl_context: true``
       blanks comments only (older stripper, keeps heredoc text). Both
@@ -615,7 +629,9 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
             ) from e
         if not matched:
             return []
-    if not_regex_grep is not None and not_regex_grep.search(c.text):
+    # A commented-out line can't switch a rule off (`# environment: prod`
+    # in a workflow silenced SEC-CICD-001), nor, below, switch one on.
+    if not_regex_grep is not None and not_regex_grep.search(_without_comments(c)):
         return []
     scope = pat.get("scope", "")
     out: list[dict] = []
@@ -627,7 +643,7 @@ def _detect_grep(c: InFileCtx) -> list[dict]:
                 continue
             if _resource_is_count_zero(blk["body"], c.var_defaults):
                 continue
-            if regex.search(blk["body"]):
+            if regex.search(mask_comments(blk["body"])):
                 out.append({
                     "id": c.eid,
                     "file": str(c.file_path),

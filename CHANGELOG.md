@@ -5,6 +5,22 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 78 — `grep` rules don't read commented-out code — 2026-10-28
+
+Findings change: fewer false alarms on commented-out code, and one
+missed CI/CD problem now caught.
+
+- **`scope: resource_body`** greps (`SEC-USERDATA-001`) blank comments
+  before searching, so `# user_data = "curl … | bash"` no longer fires.
+  Heredoc text is still searched (a `user_data` script lives there), and
+  a `#` inside a heredoc or string is not taken for a comment.
+- **Whole-file greps over Terraform code** (`SEC-AWS-IAM-OIDC-001`,
+  `SEC-LOG-CROSS-ACCOUNT-001`, `SEC-PROVISIONER-002`) now set
+  `code_only: true`. The secret-scanning greps still read comments: a
+  secret in a comment is still a leak.
+- **`not_regex`** is tested with comments removed, so a commented-out
+  `# environment: production` no longer silences `SEC-CICD-001`.
+
 ## Round 77 — A secure module passes `--fail-on HIGH` — 2026-10-28
 
 Severity change only: no finding appears or disappears. 20 rules move

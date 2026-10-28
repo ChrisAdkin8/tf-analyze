@@ -1180,7 +1180,15 @@ def _mask_to_top_level(body: str) -> str:
 
 
 @functools.lru_cache(maxsize=4096)
-def mask_comments_and_heredocs(body: str) -> str:
+def mask_comments(body: str) -> str:
+    """`mask_comments_and_heredocs` without blanking heredocs: comments
+    go, heredoc text stays (and a ``#`` inside it, such as a script's
+    ``#!/bin/bash``, is not taken for a comment). For rules that read
+    scripts or documents in heredocs, such as ``user_data``."""
+    return mask_comments_and_heredocs(body, heredocs=False)
+
+
+def mask_comments_and_heredocs(body: str, *, heredocs: bool = True) -> str:
     """Return ``body`` with comments and heredoc bodies blanked to spaces
     (newlines kept, so offsets and line numbers line up). Ordinary string
     literals are kept — regexes over a body commonly match quoted values
@@ -1218,7 +1226,8 @@ def mask_comments_and_heredocs(body: str) -> str:
             term = re.compile(rf'(?m)^[ \t]*{re.escape(m.group(1))}[ \t]*\r?$')
             t = term.search(body, m.end())
             j = n if t is None else t.end()
-            blank(i, j)
+            if heredocs:
+                blank(i, j)
             i = j
         else:
             i += 1
