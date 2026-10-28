@@ -21,18 +21,13 @@ patterns:
     resource: google_compute_instance
     arg: metadata.block-project-ssh-keys
     regex: '^(?i:false)$'
+    fire_if_absent: true
     description: |
       `metadata.block-project-ssh-keys = "FALSE"` lets the instance be
       accessed via every project-wide SSH key, bypassing per-instance
       IAM. Combined with stale project keys, this is a common lateral-
-      movement vector.
-  - kind: resource_missing_arg
-    resource: google_compute_instance
-    arg: metadata
-    description: |
-      `google_compute_instance` has no `metadata` block, so
-      `block-project-ssh-keys` defaults to FALSE — any project-wide SSH
-      key can log in.
+      movement vector. Leaving the key (or the whole `metadata`) out
+      allows project keys as well, so it counts too.
 recommendation: |
   Block project-wide SSH keys per instance:
 
