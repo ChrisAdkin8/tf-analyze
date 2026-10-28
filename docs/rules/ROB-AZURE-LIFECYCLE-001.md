@@ -42,12 +42,19 @@ keywords: "robustness, low, terraform, iac, azure, mitre-T1485, cwe-693, nist-cs
 ## What this checks
 
 1. **`resource_missing_arg`** on `azurerm_mssql_database` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-2. **`resource_missing_arg`** on `azurerm_sql_database` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-3. **`resource_missing_arg`** on `azurerm_postgresql_server` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-4. **`resource_missing_arg`** on `azurerm_postgresql_flexible_server` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-5. **`resource_missing_arg`** on `azurerm_mysql_server` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-6. **`resource_missing_arg`** on `azurerm_storage_account` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
-7. **`resource_missing_arg`** on `azurerm_key_vault` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+2. **`hcl_attr`** on `azurerm_mssql_database` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+3. **`resource_missing_arg`** on `azurerm_sql_database` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+4. **`hcl_attr`** on `azurerm_sql_database` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+5. **`resource_missing_arg`** on `azurerm_postgresql_server` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+6. **`hcl_attr`** on `azurerm_postgresql_server` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+7. **`resource_missing_arg`** on `azurerm_postgresql_flexible_server` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+8. **`hcl_attr`** on `azurerm_postgresql_flexible_server` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+9. **`resource_missing_arg`** on `azurerm_mysql_server` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+10. **`hcl_attr`** on `azurerm_mysql_server` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+11. **`resource_missing_arg`** on `azurerm_storage_account` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+12. **`hcl_attr`** on `azurerm_storage_account` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
+13. **`resource_missing_arg`** on `azurerm_key_vault` (`lifecycle.prevent_destroy`) — _the resource is missing a required attribute (or nested attribute path)._
+14. **`hcl_attr`** on `azurerm_key_vault` (`lifecycle.prevent_destroy`) not equal to `True` — _an attribute value differs from the expected literal._
 
 ## Why it likely fired
 
