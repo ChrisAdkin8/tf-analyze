@@ -34,11 +34,13 @@ def _ids(tmp_path: Path, text: str) -> list[str]:
     return [f["id"] for f in json.loads(out.stdout)["findings"]]
 
 
-@pytest.fixture
-def real_parser(monkeypatch):
-    # Multi-line values are only read whole from the parse tree; the
-    # forced-fallback CI job would route this through the text path.
-    monkeypatch.delenv("TF_ANALYZE_TEST_FORCE_FALLBACK", raising=False)
+@pytest.fixture(params=["tree", "fallback"])
+def both_paths(request, monkeypatch):
+    # The parse tree and the text fallback must agree.
+    if request.param == "fallback":
+        monkeypatch.setenv("TF_ANALYZE_TEST_FORCE_FALLBACK", "1")
+    else:
+        monkeypatch.delenv("TF_ANALYZE_TEST_FORCE_FALLBACK", raising=False)
 
 
 COUNTED = 'resource "aws_instance" "a" {\n  count = 2\n}\n'
@@ -91,6 +93,16 @@ def test_countref_unguarded_still_fires(tmp_path) -> None:
     assert "ROB-COUNTREF-001" in _ids(tmp_path, text)
 
 
+def test_countref_ignores_a_name_in_plain_string_text(tmp_path, both_paths) -> None:
+    text = COUNTED + 'output "o" {\n  value       = 1\n  description = "see aws_instance.a[0].id"\n}\n'
+    assert "ROB-COUNTREF-001" not in _ids(tmp_path, text)
+
+
+def test_countref_still_reads_interpolations(tmp_path, both_paths) -> None:
+    text = COUNTED + 'output "o" {\n  value = "id: ${aws_instance.a[0].id}"\n}\n'
+    assert "ROB-COUNTREF-001" in _ids(tmp_path, text)
+
+
 # ---- ROB-COUNTNAME-001 (count_index_in_name) ---------------------------------
 
 
@@ -105,7 +117,7 @@ def test_countname_ignores_commented_name(tmp_path) -> None:
     assert "ROB-COUNTNAME-001" not in _ids(tmp_path, text)
 
 
-def test_countname_multiline_name(tmp_path, real_parser) -> None:
+def test_countname_multiline_name(tmp_path, both_paths) -> None:
     text = (
         'resource "aws_s3_bucket" "b" {\n'
         "  count = 2\n"
