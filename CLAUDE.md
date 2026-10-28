@@ -6,7 +6,7 @@ Entry point: `detect:main`. Rules ship as the `tf_analyze_catalog` data package.
 
 ## Verify before pushing
 `main` requires the pytest matrix, the extension job, both docs-drift jobs, and
-the stub-age job — so those gate merge. Run them locally anyway (faster than a CI
+the stub-age job, and the changelog-fragment job — so those gate merge. Run them locally anyway (faster than a CI
 round-trip), and note the **`terragoat` snapshot gate is NOT required**, so its
 check can only be caught here:
 
