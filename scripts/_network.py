@@ -33,6 +33,7 @@ from _hcl import (
     _is_block_list,
     _mask_to_top_level,
     _top_level_arg_value,
+    resolve_value_text,
     single_interpolation,
 )
 
@@ -135,9 +136,10 @@ def parse_literal(text: str):
 
 
 def resolve(value, var_defaults: dict, _depth: int = 0):
-    """Resolve a plain ``var.X`` / ``local.X`` reference (bare or as a
-    single ``${...}``) to its default, recursively and element-wise for
-    lists. Anything unresolvable is returned unchanged."""
+    """Resolve a value through `_hcl.resolve_value_text` (``var.X`` /
+    ``local.X`` chains, bare or as one ``${...}``, and ``cond ? a : b``
+    folding) and parse the result, element-wise for lists. Anything
+    unresolvable is returned unchanged."""
     if isinstance(value, list):
         out: list = []
         for v in value:
@@ -146,15 +148,10 @@ def resolve(value, var_defaults: dict, _depth: int = 0):
         return out
     if not isinstance(value, str) or _depth > 4:
         return value
-    expr = single_interpolation(value)
-    m = _REF_RE.match((expr if expr is not None else value).strip())
-    if not m:
+    text = resolve_value_text(value, var_defaults)
+    if text == value:
         return value
-    key = m.group(2) if m.group(1) == "var" else "__local__" + m.group(2)
-    raw = var_defaults.get(key)
-    if raw is None:
-        return value
-    return resolve(parse_literal(raw), var_defaults, _depth + 1)
+    return resolve(parse_literal(text), var_defaults, _depth + 1)
 
 
 def _as_list(value) -> list:

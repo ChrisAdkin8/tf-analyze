@@ -110,6 +110,7 @@ from _versions import (
 # `_cross_resource.py` could import it cleanly without a circular
 # import back through `detect`.
 from _hcl import (
+    resolve_value_text,
     _LINE_COMMENT_RE,
     _BLOCK_COMMENT_RE,
     _DYNAMIC_BLOCK_START_RE,
@@ -192,12 +193,6 @@ COUNT_ATTR_RE = re.compile(r'(?m)^\s*count\s*=')
 FOREACH_ATTR_RE = re.compile(r'(?m)^\s*for_each\s*=')
 VALIDATION_BLOCK_RE = re.compile(r'(?m)^\s*validation\s*\{')
 VAR_REF_RE = re.compile(r'\bvar\.([\w-]+)\b')
-# Matches when the entire (stripped) attribute value is a plain var.X reference.
-_VAR_PLAIN_REF_RE = re.compile(r'^var\.([\w-]+)$')
-_LOCAL_PLAIN_REF_RE = re.compile(r'^local\.([\w-]+)$')
-# Ternary `<cond> ? <a> : <b>` — only used for constant folding when <cond>
-# resolves to a known boolean. Captures cond, then-branch, else-branch.
-_TERNARY_RE = re.compile(r'^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$')
 MODULE_REF_RE = re.compile(r'\bmodule\.([\w-]+)\.([\w-]+)')
 INLINE_IGNORE_RE = re.compile(r'#\s*tf-analyze:ignore\s+([\w-]+)')
 BOOL_COUNT_RE = re.compile(
@@ -331,37 +326,11 @@ def _collect_extra_files(
 
 
 def _resolve_var_ref(val: str, var_defaults: dict) -> str:
-    """Resolve plain `var.X` / `local.X` references to their known values,
-    plus simple ternary constant folding `<bool-ref> ? <a> : <b>`.
-
-    Only substitutes when the entire value is a single reference — compound
-    expressions like `var.x == true` are left unchanged.  Data-source
-    references (data.X.Y) are intentionally NOT resolved.
-    """
-    stripped = val.strip()
-    m = _VAR_PLAIN_REF_RE.match(stripped)
-    if m:
-        resolved = var_defaults.get(m.group(1))
-        if resolved is not None:
-            return resolved
-    m = _LOCAL_PLAIN_REF_RE.match(stripped)
-    if m:
-        resolved = var_defaults.get("__local__" + m.group(1))
-        if resolved is not None:
-            return resolved
-    # Ternary constant folding: `var.x ? "a" : "b"` resolves when var.x has
-    # a known boolean default. Other forms left unchanged.
-    m = _TERNARY_RE.match(stripped)
-    if m:
-        cond, then_b, else_b = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
-        cond_resolved = _resolve_var_ref(cond, var_defaults)
-        cond_norm = cond_resolved.strip().strip('"').strip("'").lower()
-        if cond_norm == "true":
-            return _resolve_var_ref(then_b.strip('"').strip("'"), var_defaults)
-        if cond_norm == "false":
-            return _resolve_var_ref(else_b.strip('"').strip("'"), var_defaults)
-    return val
-
+    """Resolve plain `var.X` / `local.X` references (following chains) and
+    fold `<bool> ? <a> : <b>`; see `_hcl.resolve_value_text`. Compound
+    expressions (`var.x == true`) and data-source references are left
+    unchanged."""
+    return resolve_value_text(val, var_defaults)
 
 _TOP_LEVEL_ASSIGN_RE = re.compile(r'(?m)^[ \t]*([\w-]+)[ \t]*=(?!=)')
 # Variable-definition files Terraform loads automatically, in precedence
