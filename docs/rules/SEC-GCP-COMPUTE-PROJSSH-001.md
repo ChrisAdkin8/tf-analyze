@@ -41,7 +41,7 @@ keywords: "security, medium, terraform, iac, gcp, cis-4.3, mitre-T1078, cwe-287,
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_compute_instance` matching `/block-project-ssh-keys\s*=\s*"FALSE"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_compute_instance` (`metadata.block-project-ssh-keys`) matching `/^(?i:false)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `metadata.block-project-ssh-keys = "FALSE"` lets the instance be
 accessed via every project-wide SSH key, bypassing per-instance
 IAM. Combined with stale project keys, this is a common lateral-

@@ -41,7 +41,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1195.002, cwe-1104, d3-sca
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_container_cluster` matching `/release_channel\s*\{[^}]*channel\s*=\s*"UNSPECIFIED"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_container_cluster` (`release_channel.channel`) matching `/^UNSPECIFIED$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_container_cluster.release_channel.channel = "UNSPECIFIED"`
 pins the cluster to the static (no-channel) release stream, which
 disables auto-upgrade. The control plane drifts onto unsupported

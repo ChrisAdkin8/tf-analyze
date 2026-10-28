@@ -603,14 +603,38 @@ def block_values_at(body: str, path: str) -> list[str]:
     if not rest:
         v = _top_level_arg_value(body, head)
         return [] if v is None else [v]
-    masked = _mask_to_top_level(body)
-    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
     out: list[str] = []
-    for m in opener.finditer(masked):
-        open_pos = m.end() - 1
-        close_pos = masked.find("}", open_pos + 1)
-        if close_pos >= 0:
-            out.extend(block_values_at(body[open_pos + 1:close_pos], rest))
+    for inst in _nested_instances(body, head):
+        out.extend(block_values_at(inst, rest))
+    return out
+
+
+def attrs_blocks_at(attrs: dict, path: str) -> list[dict]:
+    """Every nested-block instance (or object attribute) at ``path``,
+    walked like `attrs_values_at`, across all instances of repeated
+    blocks. Empty when the path is absent or ends at a plain value."""
+    head, _, rest = path.partition(".")
+    if not isinstance(attrs, dict) or head not in attrs:
+        return []
+    value = attrs[head]
+    instances = value if isinstance(value, list) else [value]
+    instances = [i for i in instances if isinstance(i, dict)]
+    if not rest:
+        return instances
+    out: list[dict] = []
+    for inst in instances:
+        out.extend(attrs_blocks_at(inst, rest))
+    return out
+
+
+def block_bodies_at(body: str, path: str) -> list[str]:
+    """Regex fallback for `attrs_blocks_at`: the body text of every
+    nested block (``head {``) or object attribute (``head = {``) at
+    ``path``, each segment looked up at the top level of its parent."""
+    head, _, rest = path.partition(".")
+    out: list[str] = []
+    for inst in _nested_instances(body, head):
+        out.extend(block_bodies_at(inst, rest) if rest else [inst])
     return out
 
 
@@ -627,6 +651,24 @@ def resource_values_at(blk: dict, path: str) -> list[str]:
         render_hcl(v) for v in attrs_values_at(attrs, path)
         if not _is_block_list(v)
     ]
+
+def resource_block_contents(blk: dict, path: str) -> list[bool]:
+    """One entry per instance of the nested block at ``path`` in a
+    resource block: whether that instance sets anything (an argument or
+    a nested block). ``egress {}`` gives ``[False]``; no ``egress`` at
+    all gives ``[]``. Uses the parse tree when attached, else the regex
+    fallback (comments do not count as content)."""
+    attrs = blk.get("attrs")
+    if attrs is not None:
+        return [
+            any(not (k.startswith("__") and k.endswith("__")) for k in inst)
+            for inst in attrs_blocks_at(attrs, path)
+        ]
+    return [
+        bool(mask_comments(inst).strip())
+        for inst in block_bodies_at(blk["body"], path)
+    ]
+
 
 def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
     """Presence check for a resource block found by `find_blocks`: uses
@@ -1475,6 +1517,23 @@ def _first_arg_value(body: str, arg: str) -> str | None:
     return val
 
 
+def _nested_instances(body: str, head: str) -> list[str]:
+    """The body text of every top-level ``head {`` block or ``head = {``
+    object attribute in ``body`` (comments, strings and nested brackets
+    are stepped over)."""
+    masked = _mask_to_top_level(body)
+    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
+    out: list[str] = []
+    for m in opener.finditer(masked):
+        open_pos = m.end() - 1
+        # Inside the top-level mask every nested bracket is blanked, so
+        # the next `}` is this construct's own closer.
+        close_pos = masked.find("}", open_pos + 1)
+        if close_pos >= 0:
+            out.append(body[open_pos + 1:close_pos])
+    return out
+
+
 def block_has_nested_path(body: str, path: str, *, every: bool = True) -> bool:
     """Check if a nested HCL path like `settings.backup_configuration.enabled` is set.
 
@@ -1490,17 +1549,7 @@ def block_has_nested_path(body: str, path: str, *, every: bool = True) -> bool:
     head, _, rest = path.partition(".")
     if not rest:
         return block_has_arg(body, head)
-    masked = _mask_to_top_level(body)
-    opener = re.compile(rf'(?m)^[ \t]*{re.escape(head)}[ \t]*(?:=[ \t]*)?\{{')
-    instances = []
-    for m in opener.finditer(masked):
-        open_pos = m.end() - 1
-        # Inside the top-level mask every nested bracket is blanked, so
-        # the next `}` is this construct's own closer.
-        close_pos = masked.find("}", open_pos + 1)
-        if close_pos < 0:
-            continue
-        instances.append(body[open_pos + 1:close_pos])
+    instances = _nested_instances(body, head)
     check = all if every else any
     return bool(instances) and check(
         block_has_nested_path(i, rest, every=every) for i in instances

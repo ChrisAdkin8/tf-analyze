@@ -41,7 +41,7 @@ keywords: "security, critical, terraform, iac, cis-5.4.1, mitre-T1552.001, mitre
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_secret` matching `/(?ms)type\s*=\s*"kubernetes\.io/dockerconfigjson".*?\.dockerconfigjson"?\s*=/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_secret` (`data`) matching `/"\.dockerconfigjson"\s*=/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_secret` declares `type = "kubernetes.io/dockerconfigjson"`
 and carries a literal `.dockerconfigjson` payload in `data`. The
 payload is the base64-encoded contents of `~/.docker/config.json` —
@@ -49,8 +49,9 @@ i.e. registry username + password (or OAuth token) for every
 registry the workload pulls from. The 2024 Sisense breach and
 the 2023 CircleCI compromise both exfiltrated registry credentials
 from artefacts that operators thought were "encoded".
-2. **`resource_body_contains`** on `kubernetes_secret_v1` matching `/(?ms)type\s*=\s*"kubernetes\.io/dockerconfigjson".*?\.dockerconfigjson"?\s*=/` — _the resource body matches a regex inside the block._
-  API-versioned alias — same anti-pattern.
+2. **`resource_arg`** on `kubernetes_secret` (`binary_data`) matching `/"\.dockerconfigjson"\s*=/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Same, in `binary_data`. (Both patterns also cover
+`kubernetes_secret_v1`, like every `kubernetes_*` pattern.)
 
 ## Why it likely fired
 
@@ -62,7 +63,8 @@ registry the workload pulls from. The 2024 Sisense breach and
 the 2023 CircleCI compromise both exfiltrated registry credentials
 from artefacts that operators thought were "encoded".
 
-API-versioned alias — same anti-pattern.
+Same, in `binary_data`. (Both patterns also cover
+`kubernetes_secret_v1`, like every `kubernetes_*` pattern.)
 
 ## Adversarial scenario
 

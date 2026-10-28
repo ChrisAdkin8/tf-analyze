@@ -35,9 +35,10 @@ patterns:
       agent) are not exported to Cloud Logging, blinding incident
       response and DDoS forensics. The AWS equivalent is the ALB access
       log gap (SEC-AWS-ALB-001).
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_compute_backend_service
-    regex: 'log_config\s*\{[^}]*enable\s*=\s*false'
+    arg: log_config.enable
+    regex: '^false$'
     description: log_config block has enable = false (explicitly disabled)
 recommendation: |
   Enable backend service logging:

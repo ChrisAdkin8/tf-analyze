@@ -34,9 +34,10 @@ owasp:
 # call the API, by setting `automount = false` on the SA and
 # opt-in at the Pod spec via `automountServiceAccountToken: true`.
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_service_account
-    regex: '(?m)^\s*automount_service_account_token\s*=\s*true\b'
+    arg: automount_service_account_token
+    regex: '^true$'
     description: |
       `kubernetes_service_account` explicitly sets
       `automount_service_account_token = true`, projecting the SA's
@@ -51,9 +52,10 @@ patterns:
       entirely. The Kubernetes default is `true`, so the omission is
       functionally equivalent to opting into automount — the SA
       token is projected into every pod that runs under this SA.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: kubernetes_service_account_v1
-    regex: '(?m)^\s*automount_service_account_token\s*=\s*true\b'
+    arg: automount_service_account_token
+    regex: '^true$'
     description: |
       `kubernetes_service_account_v1` — same anti-pattern in the
       API-versioned alias.

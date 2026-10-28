@@ -163,6 +163,8 @@ Per-file kinds (run inside `detect_in_file`):
 | `data_source_present` | Any `data` block of the named type triggers the finding (e.g. `vault_kv_secret_v2`) |
 | `grep` | A regex against the raw file body — last resort, use sparingly |
 | `hcl_attr` | A specific HCL nested-block attribute path (e.g., `lifecycle.prevent_destroy`) |
+| `resource_has_block` | A `resource` block that has a nested block (or object attribute) at the dotted `path`, e.g. `network_interface.access_config`; any one instance is enough, and `dynamic` blocks count. With `empty: true`, only an instance that sets nothing (`egress {}`). Read from the parse tree (or the text fallback); `count = 0` resources are skipped. |
+| `resource_body_contains` | A regex over the resource body text (comments and heredocs blanked). Only for checks that are really about text — prefer `resource_arg` / `resource_has_block`, which resolve variables and can't match a lookalike in another block or string; say in the pattern's `description` why it stays textual. |
 | `high_entropy_string` | A string literal whose Shannon entropy marks it as a probable hardcoded secret (token / access key), regardless of the argument name — complements the name-based `grep` secret rules. Optional fields: `min_length` (20), `max_length` (100), `min_entropy` (4.0). |
 | `moved_block_present` | TF 1.5+ `moved` block — flagged for cleanup once apply has run |
 | `removed_block_present` | TF 1.7+ `removed` block — flagged for cleanup once destroy has run |

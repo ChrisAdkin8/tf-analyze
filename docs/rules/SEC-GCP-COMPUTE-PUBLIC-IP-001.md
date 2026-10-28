@@ -41,16 +41,18 @@ keywords: "security, medium, terraform, iac, gcp, cis-4.9, mitre-T1190, cwe-284,
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_compute_instance` matching `/(?<![\w])access_config\s*\{/` — _the resource body matches a regex inside the block._
-  A `google_compute_instance` body contains an `access_config {}`
-sub-block (always inside `network_interface`). Even an empty
+1. **`resource_has_block`** on `google_compute_instance` (`network_interface.access_config`) — _the resource has the named nested block (or, with `empty: true`, an empty one)._
+  A `google_compute_instance` `network_interface` has an
+`access_config {}` sub-block (also as a `dynamic` block; not
+`ipv6_access_config`, which is IPv6 egress). Even an empty
 `access_config` block requests an ephemeral public IP, exposing
 the VM directly to the internet.
 
 ## Why it likely fired
 
-A `google_compute_instance` body contains an `access_config {}`
-sub-block (always inside `network_interface`). Even an empty
+A `google_compute_instance` `network_interface` has an
+`access_config {}` sub-block (also as a `dynamic` block; not
+`ipv6_access_config`, which is IPv6 egress). Even an empty
 `access_config` block requests an ephemeral public IP, exposing
 the VM directly to the internet.
 

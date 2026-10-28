@@ -17,9 +17,10 @@ nist_800_53:
 slsa:
   - "deps"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_container_cluster
-    regex: 'release_channel\s*\{[^}]*channel\s*=\s*"UNSPECIFIED"'
+    arg: release_channel.channel
+    regex: '^UNSPECIFIED$'
     description: |
       `google_container_cluster.release_channel.channel = "UNSPECIFIED"`
       pins the cluster to the static (no-channel) release stream, which

@@ -47,7 +47,10 @@ map with a literal string value. The value is base64-encoded but
 not encrypted — it sits verbatim in the .tf source and the
 Terraform state file. A value taken from a variable or data source
 (`var.db_password`) is not reported here: the source tree no longer
-holds it (it is still in state).
+holds it (it is still in state). Stays a text match on purpose: the
+question is how the value is written in the source (a quoted
+literal, also inside `jsonencode(...)`), which the parsed value
+no longer shows, and in plan / state mode every value is literal.
 2. **`resource_body_contains`** on `kubernetes_secret` matching `/(?ms)^\s*data\s*\{(?:[^}"]|"\$\{[^"]*"|"(?!\$\{)[^"]*"(?=\s*[=,)]))*?=\s*"(?!\$\{)/` — _the resource body matches a regex inside the block._
   Same as above for the block form (`data { foo = "..." }`). Quoted
 keys (`".dockerconfigjson" = "..."`) and quoted function
@@ -60,7 +63,10 @@ map with a literal string value. The value is base64-encoded but
 not encrypted — it sits verbatim in the .tf source and the
 Terraform state file. A value taken from a variable or data source
 (`var.db_password`) is not reported here: the source tree no longer
-holds it (it is still in state).
+holds it (it is still in state). Stays a text match on purpose: the
+question is how the value is written in the source (a quoted
+literal, also inside `jsonencode(...)`), which the parsed value
+no longer shows, and in plan / state mode every value is literal.
 
 Same as above for the block form (`data { foo = "..." }`). Quoted
 keys (`".dockerconfigjson" = "..."`) and quoted function

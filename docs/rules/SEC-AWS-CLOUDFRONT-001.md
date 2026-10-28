@@ -41,18 +41,26 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1071.001, cwe-319, d3-e
 
 ## What this checks
 
-1. **`resource_body_contains`** on `aws_cloudfront_distribution` matching `/viewer_protocol_policy\s*=\s*"allow-all"/` — _the resource body matches a regex inside the block._
-  A `default_cache_behavior` or `ordered_cache_behavior` block has
+1. **`resource_arg`** on `aws_cloudfront_distribution` (`default_cache_behavior.viewer_protocol_policy`) matching `/^allow-all$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  The `default_cache_behavior` block has
 `viewer_protocol_policy = "allow-all"`, which serves content over
 plain HTTP. Session cookies, API tokens, and credentials cross the
 network in cleartext between CloudFront and the viewer.
+2. **`resource_arg`** on `aws_cloudfront_distribution` (`ordered_cache_behavior.viewer_protocol_policy`) matching `/^allow-all$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  An `ordered_cache_behavior` block has
+`viewer_protocol_policy = "allow-all"` — the same cleartext
+exposure for the paths that behaviour matches.
 
 ## Why it likely fired
 
-A `default_cache_behavior` or `ordered_cache_behavior` block has
+The `default_cache_behavior` block has
 `viewer_protocol_policy = "allow-all"`, which serves content over
 plain HTTP. Session cookies, API tokens, and credentials cross the
 network in cleartext between CloudFront and the viewer.
+
+An `ordered_cache_behavior` block has
+`viewer_protocol_policy = "allow-all"` — the same cleartext
+exposure for the paths that behaviour matches.
 
 ## Adversarial scenario
 

@@ -41,16 +41,16 @@ keywords: "security, critical, terraform, iac, gcp, cis-7.1, mitre-T1530, cwe-28
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_bigquery_dataset` matching `/special_group\s*=\s*"all(AuthenticatedUsers|Users)"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_bigquery_dataset` (`access.special_group`) matching `/^all(Authenticated)?Users$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_bigquery_dataset.access` grants `special_group = "allUsers"`
 or `special_group = "allAuthenticatedUsers"`. The dataset (and any
 view defined on top of it) is readable by anyone with a Google
 account — or even unauthenticated — depending on the role.
-2. **`resource_body_contains`** on `google_bigquery_dataset_iam_binding` matching `/members\s*=\s*\[[^\]]*"all(Users|AuthenticatedUsers)"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `google_bigquery_dataset_iam_binding` (`members`) matching `/"all(Authenticated)?Users"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_bigquery_dataset_iam_binding.members` includes `allUsers`
 or `allAuthenticatedUsers` — same public-data exposure via the
 newer IAM binding resource.
-3. **`resource_body_contains`** on `google_bigquery_dataset_iam_member` matching `/member\s*=\s*"all(Users|AuthenticatedUsers)"/` — _the resource body matches a regex inside the block._
+3. **`resource_arg`** on `google_bigquery_dataset_iam_member` (`member`) matching `/^all(Authenticated)?Users$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   BigQuery dataset IAM member is allUsers / allAuthenticatedUsers
 
 ## Why it likely fired

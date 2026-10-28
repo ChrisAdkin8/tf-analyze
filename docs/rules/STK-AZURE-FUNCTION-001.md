@@ -43,22 +43,22 @@ keywords: "stack, medium, terraform, iac, azure, mitre-T1190, mitre-T1195.002, c
 
 1. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.python_version`) matching `/^(3\.6|3\.7|3\.8)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App Python runtime out of support
-2. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/python_version\s*=\s*"(3\.6|3\.7|3\.8)"/` — _the resource body matches a regex inside the block._
-  Function App Python runtime out of support (regex body match)
-3. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/node_version\s*=\s*"(10|12|14|16)"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App Node.js runtime out of support
-4. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/dotnet_version\s*=\s*"(v3\.1|v5\.0|v6\.0)"/` — _the resource body matches a regex inside the block._
+3. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App .NET runtime out of support
-5. **`resource_body_contains`** on `azurerm_linux_function_app` matching `/java_version\s*=\s*"(8|11)"/` — _the resource body matches a regex inside the block._
+4. **`resource_arg`** on `azurerm_linux_function_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Function App Java runtime out of support
-6. **`resource_body_contains`** on `azurerm_windows_function_app` matching `/(python_version|node_version|dotnet_version|java_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|8|11)"/` — _the resource body matches a regex inside the block._
-  Windows Function App runtime out of support
+5. **`resource_arg`** on `azurerm_windows_function_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Function App Node.js runtime out of support
+6. **`resource_arg`** on `azurerm_windows_function_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Function App .NET runtime out of support
+7. **`resource_arg`** on `azurerm_windows_function_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Function App Java runtime out of support
 
 ## Why it likely fired
 
 Function App Python runtime out of support
-
-Function App Python runtime out of support (regex body match)
 
 Function App Node.js runtime out of support
 
@@ -66,7 +66,11 @@ Function App .NET runtime out of support
 
 Function App Java runtime out of support
 
-Windows Function App runtime out of support
+Windows Function App Node.js runtime out of support
+
+Windows Function App .NET runtime out of support
+
+Windows Function App Java runtime out of support
 
 ## Adversarial scenario
 

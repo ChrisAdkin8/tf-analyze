@@ -129,6 +129,7 @@ The most useful kinds for custom rules:
 | `resource_present`    | A resource of this type exists at all                                 |
 | `resource_absent`     | NO resource of this type exists in the corpus                         |
 | `hcl_attr`            | A resource attribute equals (or doesn't equal) a specific value       |
+| `resource_has_block`  | A resource has nested block `path` (`empty: true`: an empty one, e.g. `egress {}`) |
 | `grep`                | Plain-text regex search (each pattern records why in `text_scan:`). `code_only: true` ignores comments and heredoc text (use it for rules about Terraform structure); `hcl_context: true` ignores comments only (use it when heredoc text matters, e.g. secrets) |
 | `firewall_open_port`  | An inbound allow rule open to the internet (`0.0.0.0/0`, `::/0`; Azure `*` / `Internet`), optionally only on `ports:` — `resource:` one of `aws_security_group`, `aws_security_group_rule`, `aws_vpc_security_group_ingress_rule`, `azurerm_network_security_group`, `azurerm_network_security_rule`, `google_compute_firewall` (default). Egress / deny / outbound rules never match; `var.X` sources are resolved |
 | `iam_policy_analysis` | Walk `data.aws_iam_policy_document` statements (see below)            |
@@ -166,7 +167,9 @@ The most useful kinds for custom rules:
   matches; `fire_if_absent: true` also fires if any copy lacks the value.
 - `resource_body_contains` regexes don't see comments or heredoc bodies,
   so commented-out code and inline scripts / policy documents can't
-  match. Ordinary quoted strings are still searched.
+  match. Ordinary quoted strings are still searched, and variables are
+  not resolved — prefer `resource_arg` unless the check is really about
+  how the source text is written.
 
 These rules are evaluated on the parsed HCL tree, or — for a file the
 parser can't read — by a text fallback that follows the same rules.

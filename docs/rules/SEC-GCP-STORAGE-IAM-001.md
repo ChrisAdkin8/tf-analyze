@@ -41,12 +41,12 @@ keywords: "security, critical, terraform, iac, gcp, cis-5.1, mitre-T1530, cwe-28
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_storage_bucket_iam_member` matching `/member\s*=\s*"all(Users|AuthenticatedUsers)"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_storage_bucket_iam_member` (`member`) matching `/^all(Authenticated)?Users$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_storage_bucket_iam_member` binds the bucket to `allUsers`
 or `allAuthenticatedUsers`. Bucket contents become world-readable
 (or writable, depending on the role). The equivalent of
 `SEC-AWS-S3-PUBLIC-BLOCK-001`.
-2. **`resource_body_contains`** on `google_storage_bucket_iam_binding` matching `/members\s*=\s*\[[^\]]*"all(Users|AuthenticatedUsers)"/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `google_storage_bucket_iam_binding` (`members`) matching `/"all(Authenticated)?Users"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   GCS bucket IAM binding includes allUsers / allAuthenticatedUsers
 
 ## Why it likely fired

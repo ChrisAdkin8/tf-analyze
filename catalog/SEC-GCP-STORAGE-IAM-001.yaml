@@ -23,17 +23,19 @@ nist_800_53:
 csa_ccm:
   - "IAM-09"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_storage_bucket_iam_member
-    regex: 'member\s*=\s*"all(Users|AuthenticatedUsers)"'
+    nested_path: member
+    regex: '^all(Authenticated)?Users$'
     description: |
       `google_storage_bucket_iam_member` binds the bucket to `allUsers`
       or `allAuthenticatedUsers`. Bucket contents become world-readable
       (or writable, depending on the role). The equivalent of
       `SEC-AWS-S3-PUBLIC-BLOCK-001`.
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_storage_bucket_iam_binding
-    regex: 'members\s*=\s*\[[^\]]*"all(Users|AuthenticatedUsers)"'
+    nested_path: members
+    regex: '"all(Authenticated)?Users"'
     description: GCS bucket IAM binding includes allUsers / allAuthenticatedUsers
 recommendation: |
   Replace the public principal with an authenticated identity:

@@ -228,7 +228,9 @@ def test_hcl_attr_any_instance_differs(tmp_path, path_mode) -> None:
 # ---- resource_body_contains ignores comments and heredocs --------------------
 
 def test_body_contains_ignores_comments_and_heredocs(tmp_path, path_mode) -> None:
-    entry = _only("SEC-AWS-CLOUDFRONT-001", kind="resource_body_contains")
+    entry = {"id": "TEST-BODY-001", "default_urgency": "LOW", "patterns": [
+        {"kind": "resource_body_contains", "resource": "aws_cloudfront_distribution",
+         "regex": r'viewer_protocol_policy\s*=\s*"allow-all"'}]}
     base = 'resource "aws_cloudfront_distribution" "d" {\n%s\n}\n'
     assert _fires(base % '  viewer_protocol_policy = "allow-all"', entry, tmp_path)
     assert not _fires(base % '  # viewer_protocol_policy = "allow-all"', entry, tmp_path)

@@ -20,9 +20,10 @@ nist_800_53:
 csa_ccm:
   - "BCR-08"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: azurerm_cosmosdb_account
-    regex: 'backup\s*\{[^}]*type\s*=\s*"Periodic"'
+    arg: backup.type
+    regex: '^Periodic$'
     description: |
       `azurerm_cosmosdb_account.backup.type = "Periodic"` provides only
       24-48h granularity. Continuous backup with PITR gives 7- or 30-day

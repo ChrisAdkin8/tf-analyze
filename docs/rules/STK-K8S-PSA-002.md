@@ -41,7 +41,7 @@ keywords: "stack, medium, terraform, iac, cis-5.2.1, mitre-T1611, cwe-250, cwe-2
 
 ## What this checks
 
-1. **`resource_body_contains`** on `kubernetes_namespace` matching `/"pod-security\.kubernetes\.io/enforce"\s*=\s*"privileged"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `kubernetes_namespace` (`metadata.labels`) matching `/(?:^|[{,\n])\s*"pod-security\.kubernetes\.io/enforce"\s*=\s*"privileged"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `kubernetes_namespace` has `pod-security.kubernetes.io/enforce`
 set to `privileged` — the weakest of the three PSA levels.
 Every PodSecurityPolicy-equivalent violation is permitted in

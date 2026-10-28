@@ -45,16 +45,12 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe
   Cloud Functions v1 runtime out of support
 2. **`resource_arg`** on `google_cloudfunctions2_function` (`build_config.runtime`) matching `/^(python37|python38|nodejs14|nodejs16|go116|go118|java11|dotnet3|ruby27)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Cloud Functions v2 runtime out of support
-3. **`resource_body_contains`** on `google_cloudfunctions2_function` matching `/runtime\s*=\s*"(python37|python38|nodejs14|nodejs16|go116|go118|java11|dotnet3|ruby27)"/` — _the resource body matches a regex inside the block._
-  Cloud Functions v2 runtime out of support (body match)
 
 ## Why it likely fired
 
 Cloud Functions v1 runtime out of support
 
 Cloud Functions v2 runtime out of support
-
-Cloud Functions v2 runtime out of support (body match)
 
 ## Adversarial scenario
 

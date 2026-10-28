@@ -27,7 +27,8 @@ The minimum viable PR for a new rule:
    - `resource_missing_arg` if the check is "resource of type X lacks attribute Y".
    - `resource_present` / `data_source_present` if presence alone is the issue.
    - `hcl_attr` for nested-block attribute checks.
-   - `resource_body_contains` if you need a regex over the resource body but want to scope by type.
+   - `resource_has_block` if the check is "resource of type X has a (possibly empty) nested block at path P".
+   - `resource_body_contains` only when the check is genuinely about the source text (it doesn't resolve variables, and can match a lookalike in another block or string); say why in the pattern's `description`.
    - `grep` only if the above don't fit; it's the least precise.
    - `policy` for cross-resource / conditional / aggregate conditions authored as **data** — a predicate language, no Python. See [`docs/policy-dsl.md`](docs/policy-dsl.md). Prefer this over `graph_check` for most cross-resource rules.
    - `graph_check` for cross-resource conditions that need Python (register a function in `_GRAPH_CHECKS` in `scripts/_cross_resource.py`).

@@ -24,9 +24,10 @@ nist_800_53:
 csa_ccm:
   - "BCR-08"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_sql_database_instance
-    regex: 'point_in_time_recovery_enabled\s*=\s*false'
+    arg: settings.backup_configuration.point_in_time_recovery_enabled
+    regex: '^false$'
     description: |
       `google_sql_database_instance.settings.backup_configuration.point_in_time_recovery_enabled`
       is `false`. Without PITR, recovery is limited to nightly snapshot

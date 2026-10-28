@@ -41,16 +41,48 @@ keywords: "stack, medium, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-s
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_linux_web_app` matching `/(python_version|node_version|dotnet_version|java_version|php_version|ruby_version)\s*=\s*"(3\.[678]|10|12|14|16|v3\.1|v5\.0|v6\.0|2\.5|2\.6|2\.7|7\.[234]|8\.0|11)"/` — _the resource body matches a regex inside the block._
-  Linux Web App uses an EOL runtime (Python 3.6-3.8, Node 10-16, Ruby 2.5-2.7, PHP 7.x/8.0, .NET 3.1-6.0, Java 8/11)
-2. **`resource_body_contains`** on `azurerm_windows_web_app` matching `/(node_version|dotnet_version|java_version|php_version)\s*=\s*"(10|12|14|16|v3\.1|v5\.0|v6\.0|7\.[234]|8\.0|11)"/` — _the resource body matches a regex inside the block._
-  Windows Web App uses an EOL runtime
+1. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.python_version`) matching `/^3\.[678]$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Python runtime (3.6-3.8)
+2. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Node.js runtime (10-16)
+3. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+4. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Java runtime (8, 11)
+5. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.php_version`) matching `/^(7\.[234]|8\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL PHP runtime (7.x, 8.0)
+6. **`resource_arg`** on `azurerm_linux_web_app` (`site_config.application_stack.ruby_version`) matching `/^2\.[567]$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Linux Web App uses an EOL Ruby runtime (2.5-2.7)
+7. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.node_version`) matching `/^~?(10|12|14|16)(-lts)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL Node.js runtime (10-16)
+8. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.dotnet_version`) matching `/^v?(3\.1|5\.0|6\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+9. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.java_version`) matching `/^(1\.8|8|11)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL Java runtime (8, 11)
+10. **`resource_arg`** on `azurerm_windows_web_app` (`site_config.application_stack.php_version`) matching `/^(7\.[234]|8\.0)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Web App uses an EOL PHP runtime (7.x, 8.0)
 
 ## Why it likely fired
 
-Linux Web App uses an EOL runtime (Python 3.6-3.8, Node 10-16, Ruby 2.5-2.7, PHP 7.x/8.0, .NET 3.1-6.0, Java 8/11)
+Linux Web App uses an EOL Python runtime (3.6-3.8)
 
-Windows Web App uses an EOL runtime
+Linux Web App uses an EOL Node.js runtime (10-16)
+
+Linux Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+
+Linux Web App uses an EOL Java runtime (8, 11)
+
+Linux Web App uses an EOL PHP runtime (7.x, 8.0)
+
+Linux Web App uses an EOL Ruby runtime (2.5-2.7)
+
+Windows Web App uses an EOL Node.js runtime (10-16)
+
+Windows Web App uses an EOL .NET runtime (3.1, 5.0, 6.0)
+
+Windows Web App uses an EOL Java runtime (8, 11)
+
+Windows Web App uses an EOL PHP runtime (7.x, 8.0)
 
 ## Adversarial scenario
 

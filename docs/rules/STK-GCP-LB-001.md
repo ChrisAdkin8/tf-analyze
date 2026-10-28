@@ -47,7 +47,7 @@ Load Balancer access logs (path, status, latency, source IP, user
 agent) are not exported to Cloud Logging, blinding incident
 response and DDoS forensics. The AWS equivalent is the ALB access
 log gap (SEC-AWS-ALB-001).
-2. **`resource_body_contains`** on `google_compute_backend_service` matching `/log_config\s*\{[^}]*enable\s*=\s*false/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `google_compute_backend_service` (`log_config.enable`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   log_config block has enable = false (explicitly disabled)
 
 ## Why it likely fired

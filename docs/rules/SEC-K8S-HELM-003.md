@@ -41,9 +41,8 @@ keywords: "security, medium, terraform, iac, cis-5.3.1, mitre-T1195.002, mitre-T
 
 ## What this checks
 
-1. **`resource_body_contains`** on `helm_release` matching `/(?m)^\s*verify\s*=\s*false\b/` — _the resource body matches a regex inside the block._
-  `helm_release` sets `verify = false` (or relies on the provider
-default, which is off). Without chart signature verification a
+1. **`resource_arg`** on `helm_release` (`verify`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `helm_release` sets `verify = false`. Without chart signature verification a
 compromised or typosquatted chart repository serves an attacker
 arbitrary Kubernetes manifests on `terraform apply`. The 2021
 Codecov compromise and the 2023 3CX supply-chain incident both
@@ -59,8 +58,7 @@ and the next apply pulls it silently.
 
 ## Why it likely fired
 
-`helm_release` sets `verify = false` (or relies on the provider
-default, which is off). Without chart signature verification a
+`helm_release` sets `verify = false`. Without chart signature verification a
 compromised or typosquatted chart repository serves an attacker
 arbitrary Kubernetes manifests on `terraform apply`. The 2021
 Codecov compromise and the 2023 3CX supply-chain incident both

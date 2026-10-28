@@ -541,7 +541,7 @@ def _load_project_config(target: Path) -> dict:
 # `kubernetes_type_aliases`). Absence kinds handle aliases themselves.
 _PER_RESOURCE_KINDS = frozenset({
     "resource_arg", "resource_missing_arg", "resource_present",
-    "resource_body_contains", "hcl_attr",
+    "resource_body_contains", "resource_has_block", "hcl_attr",
 })
 
 

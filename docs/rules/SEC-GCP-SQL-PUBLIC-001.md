@@ -41,7 +41,7 @@ keywords: "security, high, terraform, iac, gcp, cis-6.6, mitre-T1190, cwe-284, d
 
 ## What this checks
 
-1. **`resource_body_contains`** on `google_sql_database_instance` matching `/ipv4_enabled\s*=\s*true/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `google_sql_database_instance` (`settings.ip_configuration.ipv4_enabled`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `google_sql_database_instance.settings.ip_configuration.ipv4_enabled = true`
 assigns the instance a public IPv4 address. Even with
 `authorized_networks` set, this exposes the SQL endpoint outside

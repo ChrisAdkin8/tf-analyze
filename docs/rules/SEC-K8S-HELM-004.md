@@ -41,13 +41,13 @@ keywords: "security, medium, terraform, iac, cis-5.2.4, mitre-T1562.001, mitre-T
 
 ## What this checks
 
-1. **`resource_body_contains`** on `helm_release` matching `/(?m)^\s*disable_webhooks\s*=\s*true\b/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `helm_release` (`disable_webhooks`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `helm_release` sets `disable_webhooks = true`, bypassing pre-install
 and post-install admission webhooks. Charts often use webhooks
 to enforce field defaults, validate resource combinations, and
 stage TLS-cert generation — skipping them leaves the release
 in an unsafe interim state that the chart author never tested.
-2. **`resource_body_contains`** on `helm_release` matching `/(?m)^\s*skip_crds\s*=\s*true\b/` — _the resource body matches a regex inside the block._
+2. **`resource_arg`** on `helm_release` (`skip_crds`) matching `/^true$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `helm_release` sets `skip_crds = true`, bypassing the chart's
 CRD installation. Any subsequent resource that references those
 CRDs (e.g. a CertManager `Certificate` or an Istio `VirtualService`)

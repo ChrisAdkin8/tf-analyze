@@ -19,9 +19,10 @@ nist_csf:
 nist_800_53:
   - "SC-13"
 patterns:
-  - kind: resource_body_contains
+  - kind: resource_arg
     resource: google_dns_managed_zone
-    regex: 'algorithm\s*=\s*"rsasha1"'
+    arg: dnssec_config.default_key_specs.algorithm
+    regex: '^rsasha1$'
     description: |
       `google_dns_managed_zone.dnssec_config.default_key_specs.algorithm = "rsasha1"`.
       RSASHA1 is deprecated by RFC 8624 and NIST SP 800-57; modern DNS

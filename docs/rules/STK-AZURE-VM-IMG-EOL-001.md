@@ -41,13 +41,14 @@ keywords: "stack, medium, terraform, iac, azure, mitre-T1195.002, cwe-1104, d3-s
 
 ## What this checks
 
-1. **`resource_body_contains`** on `azurerm_linux_virtual_machine` matching `/offer\s*=\s*"(UbuntuServer|0001-com-ubuntu-server-(focal|bionic|xenial))"/` — _the resource body matches a regex inside the block._
+1. **`resource_arg`** on `azurerm_linux_virtual_machine` (`source_image_reference.offer`) matching `/^(UbuntuServer|0001-com-ubuntu-server-(focal|bionic|xenial))$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   `azurerm_linux_virtual_machine.source_image_reference.offer`
 points at an EOL Ubuntu LTS image (Bionic 18.04, Xenial 16.04,
 or the deprecated `UbuntuServer` SKU family). Standard support
 ended; only ESM tier (paid) receives security patches.
-2. **`resource_body_contains`** on `azurerm_windows_virtual_machine` matching `/sku\s*=\s*"(2012-Datacenter|2016-Datacenter|2008-R2-SP1)"/` — _the resource body matches a regex inside the block._
-  Windows Server 2008-R2 / 2012 / 2012-R2 are out of mainstream support
+2. **`resource_arg`** on `azurerm_windows_virtual_machine` (`source_image_reference.sku`) matching `/^(2008-R2-SP1|2012-(R2-)?Datacenter|2016-Datacenter)(-.+)?$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Windows Server 2008 R2 / 2012 / 2012 R2 / 2016 are out of mainstream
+support (any SKU variant, e.g. `2012-R2-Datacenter-gensecond`)
 
 ## Why it likely fired
 
@@ -56,7 +57,8 @@ points at an EOL Ubuntu LTS image (Bionic 18.04, Xenial 16.04,
 or the deprecated `UbuntuServer` SKU family). Standard support
 ended; only ESM tier (paid) receives security patches.
 
-Windows Server 2008-R2 / 2012 / 2012-R2 are out of mainstream support
+Windows Server 2008 R2 / 2012 / 2012 R2 / 2016 are out of mainstream
+support (any SKU variant, e.g. `2012-R2-Datacenter-gensecond`)
 
 ## Adversarial scenario
 
