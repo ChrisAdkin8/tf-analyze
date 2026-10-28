@@ -110,7 +110,7 @@ was created.
 
 See also rules in the `ROB-AWS-RDS-*` family:
 
-- [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) — RDS instance or Aurora cluster backup retention disabled
+- [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) — RDS instance backup retention disabled
 - [`ROB-AWS-RDS-003`](./ROB-AWS-RDS-003.md) — RDS instance or Aurora cluster missing deletion protection
 
 ---
