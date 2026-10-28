@@ -5,6 +5,21 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 76 — One IAM statement, one finding — 2026-10-28
+
+Findings change: AWS terragoat 127 → 123.
+
+- A statement with both `Action = "*"` and `Resource = "*"` raised three
+  findings — wildcard action, wildcard resource, and both — which
+  tripled the count and the score hit for one problem. It is now
+  reported once, by `SEC-AWS-IAM-JSON-003` (inline JSON) or
+  `SEC-AWS-IAM-POLICY-005` (`aws_iam_policy_document`), both CRITICAL.
+  `SEC-AWS-IAM-JSON-001` / `SEC-AWS-IAM-001` and
+  `SEC-AWS-IAM-POLICY-001` / `-003` cover statements with only one of
+  the two wildcards. If you turn off the "both" rules with
+  `ignore_rules`, turn off the single-wildcard rules too or expect
+  admin statements to go unreported.
+
 ## Round 75 — RDS rules follow what the AWS provider sends — 2026-10-28
 
 Findings change: fewer RDS false alarms.
