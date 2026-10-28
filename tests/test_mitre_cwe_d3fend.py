@@ -44,10 +44,11 @@ class TestCatalogCoverage:
 
     def test_mitre_coverage_above_floor(self, active_rules: list[dict]) -> None:
         mapped = sum(1 for d in active_rules if d.get("mitre"))
-        # Tightened to within ~5pts of the current ~80% (was a slack 60%,
-        # which let a regression of >40 rules pass silently).
+        # Within ~5pts of the current ~74% (was 75% against ~80% before the
+        # ATT&CK precision review dropped loose tags; see
+        # tests/test_mitre_precision.py). Was a slack 60% before that.
         pct = 100 * mapped / len(active_rules)
-        assert pct >= 75, f"MITRE coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
+        assert pct >= 69, f"MITRE coverage regressed to {pct:.0f}% ({mapped}/{len(active_rules)})"
 
     def test_cwe_coverage_above_floor(self, active_rules: list[dict]) -> None:
         mapped = sum(1 for d in active_rules if d.get("cwe"))

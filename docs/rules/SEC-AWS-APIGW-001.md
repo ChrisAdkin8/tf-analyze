@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-APIGW-001 — API Gateway stage missing access log destination"
 description: "tf-analyze rule SEC-AWS-APIGW-001 (MEDIUM · security): API Gateway stage missing access log destination"
-keywords: "security, medium, terraform, iac, aws, mitre-T1190, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
+keywords: "security, medium, terraform, iac, aws, mitre-T1562.008, cwe-284, d3-iaa, nist-csf-pr.ac-3, nist-800-53-sc-7, csa-ccm-ivs-04"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1190, cwe-284, d3-iaa, 
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1190, CWE-284, D3-IAA",
+  "keywords": "security, medium, terraform, MITRE T1562.008, CWE-284, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -110,7 +110,7 @@ must return a non-null CloudWatch log group ARN.
 ## References
 
 **MITRE ATT&CK**
-  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
 
 **CWE**
   - [`CWE-284`](https://cwe.mitre.org/data/definitions/284.html)

@@ -93,6 +93,8 @@ MITRE_TECHNIQUE_INFO: dict[str, tuple[str, list[str]]] = {
     "T1552.007":  ("Unsecured Credentials: Container API",                          ["Credential Access"]),
     "T1557":      ("Adversary-in-the-Middle",                                       ["Credential Access", "Collection"]),
     "T1567":      ("Exfiltration Over Web Service",                                 ["Exfiltration"]),
+    # ---- ATT&CK precision review (2026-10-28) ----
+    "T1555.006":  ("Credentials from Password Stores: Cloud Secrets Management Stores", ["Credential Access"]),
 }
 
 

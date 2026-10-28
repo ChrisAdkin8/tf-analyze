@@ -1,7 +1,7 @@
 ---
 title: "STK-GCP-CLOUDSQL-005 — Cloud SQL instance uses end-of-life database version"
 description: "tf-analyze rule STK-GCP-CLOUDSQL-005 (MEDIUM · stack): Cloud SQL instance uses end-of-life database version"
-keywords: "stack, medium, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
+keywords: "stack, medium, terraform, iac, gcp, cwe-1104, d3-sca, nist-csf-id.sc-2, nist-800-53-sr-4, csa-ccm-ais-07, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "stack, medium, terraform, iac, gcp, mitre-T1190, mitre-T1195.002, cwe
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "stack, medium, terraform, MITRE T1190, MITRE T1195.002, CWE-1104, D3-SCA",
+  "keywords": "stack, medium, terraform, CWE-1104, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "stack",
   "isAccessibleForFree": true
@@ -91,10 +91,6 @@ must return a supported, non-EOL version string.
 ```
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1190`](https://attack.mitre.org/techniques/T1190/)
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-1104`](https://cwe.mitre.org/data/definitions/1104.html)

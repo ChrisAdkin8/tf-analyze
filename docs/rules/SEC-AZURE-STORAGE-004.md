@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-STORAGE-004 — Azure storage account missing diagnostic logging"
 description: "tf-analyze rule SEC-AZURE-STORAGE-004 (MEDIUM · security): Azure storage account missing diagnostic logging"
-keywords: "security, medium, terraform, iac, azure, cis-3.11, mitre-T1530, mitre-T1213, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-csf-pr.pt-1, nist-800-53-au-2, nist-800-53-au-12, csa-ccm-log-08"
+keywords: "security, medium, terraform, iac, azure, cis-3.11, mitre-T1562.008, mitre-T1213, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-csf-pr.pt-1, nist-800-53-au-2, nist-800-53-au-12, csa-ccm-log-08"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure, cis-3.11, mitre-T1530, mitre
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, CIS 3.11, MITRE T1530, MITRE T1213, CWE-778, D3-IAA",
+  "keywords": "security, medium, terraform, CIS 3.11, MITRE T1562.008, MITRE T1213, CWE-778, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -113,7 +113,7 @@ return at least one configuration with `StorageRead`, `StorageWrite`, and
   - `CC7.2`
 
 **MITRE ATT&CK**
-  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
   - [`T1213`](https://attack.mitre.org/techniques/T1213/)
 
 **CWE**

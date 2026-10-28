@@ -6,7 +6,6 @@ blast_radius: environment
 status: active
 mitre:
   - "T1562.008"
-  - "T1530"
 cwe:
   - "CWE-778"
   - "CWE-223"
