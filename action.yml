@@ -422,10 +422,18 @@ runs:
         # can use it verbatim — keeps the rendered shape in the engine
         # rather than duplicating it in JS here.
         run_scan pr-summary "${{ github.workspace }}/tf-analyze-pr-summary.md" tf-analyze-pr-summary-stderr.txt
+        # The engine's stderr names repo files, and a PR controls those names:
+        # a path holding a newline could start a log line with `::error::`,
+        # `::add-mask::` or `::stop-commands::` and forge annotations or hide
+        # later output. Stop command processing while it prints, under a token
+        # nobody can guess.
+        LOG_TOKEN="tfa-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
         for f in tf-analyze-json-stderr.txt tf-analyze-sarif-stderr.txt tf-analyze-html-stderr.txt tf-analyze-pr-summary-stderr.txt; do
           if [ -s "$f" ]; then
             echo "::group::$f"
+            echo "::stop-commands::${LOG_TOKEN}"
             cat "$f"
+            echo "::${LOG_TOKEN}::"
             echo "::endgroup::"
           fi
         done

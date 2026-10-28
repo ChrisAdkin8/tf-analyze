@@ -97,7 +97,12 @@ jobs:
             --apply-fixes apply \
             --apply-fixes-max-disruption "$max_disruption" \
             2> /tmp/apply.stderr || true
+          # Repo file names appear in this output; don't let one run a
+          # workflow command (`::error::`, `::add-mask::`, ...).
+          LOG_TOKEN="tfa-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::${LOG_TOKEN}"
           cat /tmp/apply.stderr
+          echo "::${LOG_TOKEN}::"
           # The apply-fixes diagnostic line ("# apply-fixes: would apply N
           # fix(es) across M file(s)") tells us how many actually landed.
           # Capture for the PR body.
@@ -123,7 +128,12 @@ jobs:
             --scan-json /tmp/scan-before.json \
             --apply-summary /tmp/apply-summary.txt \
             --output /tmp/pr-body.md
+          # Repo file names appear in this output; don't let one run a
+          # workflow command (`::error::`, `::add-mask::`, ...).
+          LOG_TOKEN="tfa-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::stop-commands::${LOG_TOKEN}"
           cat /tmp/pr-body.md
+          echo "::${LOG_TOKEN}::"
 
       - name: Open or update PR
         if: steps.diff.outputs.changed == 'true'
