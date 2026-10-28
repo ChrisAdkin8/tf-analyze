@@ -21,6 +21,21 @@ missed CI/CD problem now caught.
 - **`not_regex`** is tested with comments removed, so a commented-out
   `# environment: production` no longer silences `SEC-CICD-001`.
 
+## Round 71 — A pull request can't switch off its own scan — 2026-10-28
+
+- **Base-branch config on PRs**: on `pull_request`,
+  `pull_request_target` and `merge_group` events the GitHub Action now reads
+  `.tf-analyze.yaml`, `.tf-analyze-ignore.yaml` and the custom rules in
+  `rules_dir` from the PR's base branch. Before, a PR could add
+  `ignore_rules: [SEC-AWS-SG-001]` and its own CRITICAL finding vanished.
+  Settings already merged still apply. Inline `tf-analyze:ignore`
+  comments are still honoured, as they show in the PR diff. If the base
+  branch can't be read, the scan runs with no project config and no
+  ignore file. New input `trust-pr-config: true` restores the old
+  behaviour.
+- **`--ignore-file PATH`**: new engine flag to read suppressions from a
+  given file instead of looking in the target and its parent.
+
 ## Round 70 — `--apply-fixes` never leaves a file worse than it found it — 2026-10-27
 
 - **Multi-line values**: replacing a value that spans several lines (a
