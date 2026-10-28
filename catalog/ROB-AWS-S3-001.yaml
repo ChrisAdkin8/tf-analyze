@@ -21,6 +21,11 @@ patterns:
     arg: versioning_configuration.status
     regex: "^(Disabled|Suspended)$"
     description: S3 bucket versioning disabled or suspended
+  - kind: resource_arg
+    resource: aws_s3_bucket
+    arg: versioning.enabled
+    regex: "^false$"
+    description: legacy inline `versioning { enabled = false }` (pre-v4 provider)
   - kind: resource_missing_arg
     resource: aws_s3_bucket
     arg: versioning
@@ -57,3 +62,4 @@ fix_disruption: none
 fixtures:
   - attack_graph_demo
   - aws_s3_no_versioning
+  - aws_s3_versioning_disabled_inline
