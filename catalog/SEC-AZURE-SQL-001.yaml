@@ -5,8 +5,6 @@ default_urgency: MEDIUM
 blast_radius: module
 cis:
   - "4.1.2"
-mitre:
-  - "T1530"
 cwe:
   - "CWE-311"
 d3fend:

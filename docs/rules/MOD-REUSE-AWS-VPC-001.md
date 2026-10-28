@@ -1,7 +1,7 @@
 ---
 title: "MOD-REUSE-AWS-VPC-001 — Hand-rolled VPC scaffolding could be replaced by terraform-aws-modules/vpc/aws"
 description: "tf-analyze rule MOD-REUSE-AWS-VPC-001 (INFO · module-reuse): Hand-rolled VPC scaffolding could be replaced by terraform-aws-modules/vpc/aws"
-keywords: "module-reuse, info, terraform, iac, aws, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-800-53-sa-15, csa-ccm-ais-04, slsa-deps"
+keywords: "module-reuse, info, terraform, iac, aws, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-800-53-sa-15, csa-ccm-ais-04, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "module-reuse, info, terraform, iac, aws, mitre-T1195.002, cwe-1357, d
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "module-reuse, info, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
+  "keywords": "module-reuse, info, terraform, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "module-reuse",
   "isAccessibleForFree": true
@@ -99,9 +99,6 @@ equivalent. Use `moved` blocks to map old `aws_vpc.<x>` /
 counterparts so no real network is destroyed and recreated.
 
 ## References
-
-**MITRE ATT&CK**
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)

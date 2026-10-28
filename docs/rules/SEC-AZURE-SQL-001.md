@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-SQL-001 — Azure SQL Server has no Azure AD administrator configured"
 description: "tf-analyze rule SEC-AZURE-SQL-001 (MEDIUM · security): Azure SQL Server has no Azure AD administrator configured"
-keywords: "security, medium, terraform, iac, azure, cis-4.1.2, mitre-T1530, cwe-311, d3-ear, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
+keywords: "security, medium, terraform, iac, azure, cis-4.1.2, cwe-311, d3-ear, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure, cis-4.1.2, mitre-T1530, cwe-
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, CIS 4.1.2, MITRE T1530, CWE-311, D3-EAR",
+  "keywords": "security, medium, terraform, CIS 4.1.2, CWE-311, D3-EAR",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -98,9 +98,6 @@ The command should return a non-empty list.
 
 **CIS Benchmark**
   - `CIS 4.1.2`
-
-**MITRE ATT&CK**
-  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
 
 **CWE**
   - [`CWE-311`](https://cwe.mitre.org/data/definitions/311.html)

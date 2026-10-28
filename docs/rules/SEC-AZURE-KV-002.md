@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-KV-002 — Key Vault missing network ACL deny-by-default"
 description: "tf-analyze rule SEC-AZURE-KV-002 (MEDIUM · security): Key Vault missing network ACL deny-by-default"
-keywords: "security, medium, terraform, iac, azure, cis-8.5, mitre-T1530, mitre-T1133, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
+keywords: "security, medium, terraform, iac, azure, cis-8.5, mitre-T1555.006, mitre-T1133, nist-csf-pr.ds-1, nist-800-53-sc-13, nist-800-53-sc-28, csa-ccm-cek-03"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure, cis-8.5, mitre-T1530, mitre-
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, CIS 8.5, MITRE T1530, MITRE T1133",
+  "keywords": "security, medium, terraform, CIS 8.5, MITRE T1555.006, MITRE T1133",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -116,7 +116,7 @@ must return `"Deny"`.
   - `CIS 8.5`
 
 **MITRE ATT&CK**
-  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+  - [`T1555.006`](https://attack.mitre.org/techniques/T1555/006/)
   - [`T1133`](https://attack.mitre.org/techniques/T1133/)
 
 **NIST CSF 2.0**
