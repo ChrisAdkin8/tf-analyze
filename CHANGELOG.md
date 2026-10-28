@@ -23,6 +23,58 @@ Findings change: fewer RDS false alarms.
 - **`suppress_if`** accepts a list; the finding is skipped when any entry
   holds (static, plan and state modes).
 
+## Round 74 — Firewall rules see dynamic blocks and the default security group — 2026-10-28
+
+Findings change: some firewall rules now fire where they did not.
+Terragoat totals are unchanged.
+
+- **`dynamic` blocks**: a `dynamic "ingress"` (AWS), `dynamic
+  "security_rule"` (Azure) or `dynamic "allow"` (GCP) block was folded
+  in once with its `ingress.value.*` references unresolved, so SSH open
+  to the world through a variable-driven list passed. When `for_each`
+  is a literal list or map, or a `var.` / `local.` with a default, each
+  instance is now checked with its values filled in (named `iterator`s
+  too). An unknown `for_each` is not guessed.
+- **`aws_default_security_group`**: now checked by `SEC-AWS-SG-001`; a
+  default group with an `ingress` open to 0.0.0.0/0 or ::/0 passed.
+
+## Round 73 — S3 rules read the setting, not just its presence — 2026-10-28
+
+Findings change: AWS terragoat 126 → 127. New rule: 354 in all.
+
+- **New `SEC-AWS-S3-PUBLIC-001` (HIGH)**: a bucket ACL that grants
+  everyone access — `public-read`, `public-read-write` or
+  `authenticated-read`, on `aws_s3_bucket_acl` or the legacy inline
+  `acl`, or a grant to the `AllUsers` / `AuthenticatedUsers` group.
+  Nothing caught a public bucket before.
+- **`SEC-AWS-S3-PUBLIC-BLOCK-001`** now also fires on a public access
+  block (bucket or account level) with any of its four flags `false` or
+  left out (they default to `false`); before, a block with every flag
+  off passed. An `aws_s3_account_public_access_block` now covers every
+  bucket, so buckets without their own block no longer each raise HIGH.
+- **`ROB-AWS-S3-001`** catches the legacy inline
+  `versioning { enabled = false }`, which passed because only the
+  block's presence was checked.
+- `resource_missing_companion` accepts `unless_repo_has`.
+
+## Round 72 — A custom rule can't write Markdown into PR comments — 2026-10-28
+
+- **Rule titles**: a custom rule in a repo's `rules_dir` supplies its own
+  title, which went into the PR summary and the inline review comments
+  as-is. A title could add a link, an image, raw HTML or an `@mention`
+  to a comment the bot account posts. Outside code spans, titles now
+  have `\ [ ] < >` escaped, mentions and bare links broken with a
+  zero-width space, and a leading `#` escaped. Built-in titles render
+  as before.
+- **Fix blocks**: a `fix_hcl` containing a ```` ``` ```` line closed the
+  `hcl` / `suggestion` block early, so the text after it (for example
+  `## All checks passed - safe to merge`) rendered as Markdown. Fences
+  are now longer than any backtick run inside the fix.
+- **pr-review mode**: a `CUSTOM-` rule's recommendation is shown as plain
+  text.
+- **Rule ids**: an id must be upper-case letters and digits in
+  dash-separated parts (`CUSTOM-ACME-001`); ids are printed as-is.
+
 ## Round 71 — A pull request can't switch off its own scan — 2026-10-28
 
 - **Base-branch config on PRs**: on `pull_request`,
