@@ -42,11 +42,11 @@ keywords: "ops, high, terraform, iac, cis-2.3, mitre-T1485"
 ## What this checks
 
 1. **`prod_no_deletion_protection`** — _a `prod_no_deletion_protection` pattern._
-  A resource in a prod path (or with environment=prod label) is missing deletion_protection=true on a type that supports it
+  A resource under a production folder or file (a word prod / production / prd, not pre-prod or non-prod), or labelled environment / env = a production value, is missing deletion_protection=true on a type that supports it
 
 ## Why it likely fired
 
-A resource in a prod path (or with environment=prod label) is missing deletion_protection=true on a type that supports it
+A resource under a production folder or file (a word prod / production / prd, not pre-prod or non-prod), or labelled environment / env = a production value, is missing deletion_protection=true on a type that supports it
 
 ## Adversarial scenario
 
@@ -61,8 +61,11 @@ against accidental `terraform destroy`. Add `deletion_protection = true`
 (or `prevent_destroy = true` in a `lifecycle {}` block if the type doesn't
 expose `deletion_protection`).
 
-Scope of the check: path containing `prod`, or `labels = { environment =
-"prod" }` on the resource. Dev/staging environments are excluded by design.
+Scope of the check: a folder or file name under the scan target whose
+words include `prod`, `production` or `prd` (so `prod/`, `envs/prod-eu/`;
+not `nonprod/`, `pre-prod/` or `products/`), or `labels = { environment =
+"prod" }` (or `env`) on the resource. Dev/staging environments are
+excluded by design.
 
 ## Suggested fix (`fix_hcl`)
 
