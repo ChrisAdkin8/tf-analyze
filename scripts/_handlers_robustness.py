@@ -57,7 +57,6 @@ from detect import (
     _INTENT_FALSE_DEFAULT_RE,
     _INTENT_MUST_TRUE_RE,
     _INTENT_VALIDATION_RE,
-    _INTENT_PROD_TAG_RE,
     _INTENT_DEL_PROT_FALSE_RE,
     _INTENT_FORCE_DESTROY_TRUE_RE,
 )
@@ -567,6 +566,38 @@ def _corpus_count_foreach_mix(c: CorpusCtx) -> list[dict]:
     return out
 
 
+# What counts as production. A folder or file name, or an `environment` /
+# `env` value, is split into words on `-` `_` `.` and spaces; it is
+# production when a word is prod / production / prd and no word says it
+# isn't (pre-prod, non-prod). A substring test took nonprod/, preprod/ and
+# products/ for production.
+_PROD_WORDS = frozenset({"prod", "production", "prd"})
+_NOT_PROD_WORDS = frozenset({"non", "pre", "not", "nonprod", "preprod", "nonproduction", "preproduction"})
+_ENV_LABEL_RE = re.compile(r'(?i)(?<![\w.])"?(?:environment|env)"?\s*[=:]\s*"([^"\n]*)"')
+
+
+def _is_prod_name(name: str) -> bool:
+    words = [w for w in re.split(r"[-_.\s]+", name.lower()) if w]
+    return any(w in _PROD_WORDS for w in words) and not any(w in _NOT_PROD_WORDS for w in words)
+
+
+def _path_is_prod(fp, target) -> bool:
+    """Whether a folder or the file name under the scan target names
+    production (folders above the target don't count)."""
+    path = Path(fp)
+    try:
+        path = path.resolve().relative_to(Path(target).resolve())
+    except (ValueError, OSError):
+        pass
+    return any(_is_prod_name(part) for part in path.with_suffix("").parts)
+
+
+def _labels_prod(body: str) -> bool:
+    """Whether the block sets ``environment`` / ``env`` (an argument or a
+    tag key) to a production value. Comments don't count."""
+    return any(_is_prod_name(m.group(1)) for m in _ENV_LABEL_RE.finditer(mask_comments(body)))
+
+
 @_register_corpus("prod_no_deletion_protection")
 def _corpus_prod_no_deletion_protection(c: CorpusCtx) -> list[dict]:
     """``prod_no_deletion_protection`` — heuristic: resources in a path
@@ -576,13 +607,13 @@ def _corpus_prod_no_deletion_protection(c: CorpusCtx) -> list[dict]:
     """
     out: list[dict] = []
     for fp, text in c.all_files_text.items():
-        path_is_prod = "prod" in str(fp).lower()
+        path_is_prod = _path_is_prod(fp, c.target)
         for blk in find_blocks(text, RESOURCE_START):
             btype, bname = blk["groups"]
             if btype not in _PROD_PROTECTED_TYPES:
                 continue
             body = blk["body"]
-            label_prod = bool(re.search(r'environment\s*=\s*"prod', body))
+            label_prod = _labels_prod(body)
             if not (path_is_prod or label_prod):
                 continue
             dp = block_arg_value(body, "deletion_protection")
@@ -637,8 +668,8 @@ def _corpus_intent_gap(c: CorpusCtx) -> list[dict]:
         for fp, ftext in c.all_files_text.items():
             for blk in find_blocks(ftext, RESOURCE_START):
                 btype, bname = blk["groups"]
-                if _INTENT_PROD_TAG_RE.search(blk["body"]):
-                    if _INTENT_DEL_PROT_FALSE_RE.search(blk["body"]):
+                if _labels_prod(blk["body"]):
+                    if _INTENT_DEL_PROT_FALSE_RE.search(mask_comments(blk["body"])):
                         out.append({
                             "id": c.eid,
                             "file": str(fp),
@@ -649,8 +680,8 @@ def _corpus_intent_gap(c: CorpusCtx) -> list[dict]:
         for fp, ftext in c.all_files_text.items():
             for blk in find_blocks(ftext, RESOURCE_START):
                 btype, bname = blk["groups"]
-                if _INTENT_PROD_TAG_RE.search(blk["body"]):
-                    if _INTENT_FORCE_DESTROY_TRUE_RE.search(blk["body"]):
+                if _labels_prod(blk["body"]):
+                    if _INTENT_FORCE_DESTROY_TRUE_RE.search(mask_comments(blk["body"])):
                         out.append({
                             "id": c.eid,
                             "file": str(fp),

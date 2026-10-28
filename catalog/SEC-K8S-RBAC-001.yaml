@@ -59,6 +59,13 @@ patterns:
       R30.5 extension — `bind` / `escalate` / `impersonate` verbs
       allow privilege escalation outside the role's normal scope.
   - kind: resource_arg
+    resource: kubernetes_cluster_role
+    arg: rule.verbs
+    regex: '"(?:bind|escalate|impersonate)"'
+    description: |
+      `bind` / `escalate` / `impersonate` on a ClusterRole: the same
+      escalation as on a Role, but across every namespace.
+  - kind: resource_arg
     resource: kubernetes_cluster_role_binding
     arg: subject.name
     regex: '^system:authenticated$'
