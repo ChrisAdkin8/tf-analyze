@@ -5,6 +5,21 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 74 — Firewall rules see dynamic blocks and the default security group — 2026-10-28
+
+Findings change: some firewall rules now fire where they did not.
+Terragoat totals are unchanged.
+
+- **`dynamic` blocks**: a `dynamic "ingress"` (AWS), `dynamic
+  "security_rule"` (Azure) or `dynamic "allow"` (GCP) block was folded
+  in once with its `ingress.value.*` references unresolved, so SSH open
+  to the world through a variable-driven list passed. When `for_each`
+  is a literal list or map, or a `var.` / `local.` with a default, each
+  instance is now checked with its values filled in (named `iterator`s
+  too). An unknown `for_each` is not guessed.
+- **`aws_default_security_group`**: now checked by `SEC-AWS-SG-001`; a
+  default group with an `ingress` open to 0.0.0.0/0 or ::/0 passed.
+
 ## Round 73 — S3 rules read the setting, not just its presence — 2026-10-28
 
 Findings change: AWS terragoat 126 → 127. New rule: 354 in all.

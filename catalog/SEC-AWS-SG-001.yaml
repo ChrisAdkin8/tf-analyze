@@ -22,6 +22,9 @@ patterns:
       security group `ingress` block (or `ingress = [{...}]`) open to
       0.0.0.0/0 or ::/0 — egress rules are not checked
   - kind: firewall_open_port
+    resource: aws_default_security_group
+    description: "`aws_default_security_group` (the VPC's default group) with an `ingress` block open to 0.0.0.0/0 or ::/0"
+  - kind: firewall_open_port
     resource: aws_security_group_rule
     description: standalone `aws_security_group_rule` with `type = "ingress"` open to 0.0.0.0/0 or ::/0
   - kind: firewall_open_port
@@ -38,6 +41,7 @@ verification: |
 fixtures:
   - attack_graph_demo
   - aws_sg_open
+  - aws_sg_dynamic_and_default
 test_template: |
   run "sg_no_open_ingress_{rule_id}" {
     command = plan
