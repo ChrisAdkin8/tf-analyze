@@ -121,6 +121,7 @@ from _hcl import (
     strip_hcl_context,
     find_blocks,
     find_simple_blocks,
+    mask_comments,
     block_has_arg,
     block_arg_value,
     brace_walk,
@@ -132,7 +133,6 @@ from _hcl import (
     comments_only,
     normalise_attrs,
     resource_subtrees,
-    mask_comments,
     resource_values_at,
 )
 from _network import parse_literal as _net_parse_literal, resolve as _net_resolve
