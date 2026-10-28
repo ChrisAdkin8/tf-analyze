@@ -1,7 +1,7 @@
 ---
 title: "ROB-PROVIDER-ALIAS-001 — Module references provider alias that is not declared"
-description: "tf-analyze rule ROB-PROVIDER-ALIAS-001 (HIGH · robustness): Module references provider alias that is not declared"
-keywords: "robustness, high, terraform, iac, slsa-source"
+description: "tf-analyze rule ROB-PROVIDER-ALIAS-001 (MEDIUM · robustness): Module references provider alias that is not declared"
+keywords: "robustness, medium, terraform, iac, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "robustness, high, terraform, iac, slsa-source"
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform",
+  "keywords": "robustness, medium, terraform",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ ROB-PROVIDER-ALIAS-001 — Module references provider alias that is not declared
+# 💡 ROB-PROVIDER-ALIAS-001 — Module references provider alias that is not declared
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: module](https://img.shields.io/badge/blast%20radius-module-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-PROVIDER-ALIAS-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-PROVIDER-ALIAS-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-PROVIDER-ALIAS-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Module references provider alias that is not declared.** This rule has `default_urgency: HIGH` and operates on a module blast radius. 
+> **Module references provider alias that is not declared.** This rule has `default_urgency: MEDIUM` and operates on a module blast radius. 
 
 ## What this checks
 

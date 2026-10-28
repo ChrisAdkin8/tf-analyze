@@ -1,7 +1,7 @@
 id: ROB-AWS-RDS-003
 title: "RDS instance or Aurora cluster missing deletion protection"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

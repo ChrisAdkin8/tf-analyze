@@ -1,7 +1,7 @@
 id: ROB-AWS-RDS-001
 title: "RDS instance backup retention disabled"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

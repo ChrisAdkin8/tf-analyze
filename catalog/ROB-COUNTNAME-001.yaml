@@ -1,7 +1,7 @@
 id: ROB-COUNTNAME-001
 title: "Resource external name embeds count.index — renumber-risk on apply"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 mitre:
