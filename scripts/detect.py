@@ -1413,9 +1413,9 @@ from _baseline import (
 )
 
 
-def load_suppressions(target: Path) -> tuple[dict, dict]:
+def load_suppressions(target: Path, ignore_file: Path | None = None) -> tuple[dict, dict]:
     """Public shim — passes detect.py's YAML loader to _baseline."""
-    return _baseline_load_suppressions(target, load_yaml=load_yaml)
+    return _baseline_load_suppressions(target, load_yaml=load_yaml, ignore_file=ignore_file)
 
 
 def load_inline_suppressions(text: str) -> dict[int, set[str]]:
@@ -2535,7 +2535,9 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     global_suppressions: dict = {}
     expired_suppressions: dict = {}
     if not args.no_suppress:
-        global_suppressions, expired_suppressions = load_suppressions(target)
+        global_suppressions, expired_suppressions = load_suppressions(
+            target, Path(args.ignore_file) if args.ignore_file else None
+        )
         if expired_suppressions:
             print(
                 f"# {len(expired_suppressions)} suppression(s) expired; "
@@ -3114,6 +3116,17 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
             "Disable all suppression (show every finding). Default: "
             "suppressions from .tf-analyze-ignore.yaml + inline "
             "`# tf-analyze:ignore <ID>` comments are applied."
+        ),
+    )
+    ap.add_argument(
+        "--ignore-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Read suppressions from PATH instead of looking for "
+            ".tf-analyze-ignore.yaml in the target and its parent. A missing "
+            "PATH means no file suppressions. CI uses this to apply the base "
+            "branch's ignore file rather than the pull request's."
         ),
     )
     ap.add_argument(

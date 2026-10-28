@@ -55,6 +55,19 @@ inputs:
   compliance-framework:
     description: 'Optional compliance framework for the gap report (cis, pci_dss, soc2, owasp_iac, all). Empty = disabled. When set, the engine runs the compliance gap report and the PR comment gains a collapsible compliance section.'
     default: ''
+  trust-pr-config:
+    description: |
+      On pull_request, pull_request_target and merge_group events the
+      scanned files come from the PR, so the PR
+      could edit `.tf-analyze.yaml` (ignore_rules / ignore_paths / rules_dir)
+      or `.tf-analyze-ignore.yaml` to switch the gate off. By default
+      (`false`) the action reads both files, and the custom rules they point
+      at, from the PR's base branch instead: settings already merged still
+      apply, the PR's changes to them do not. Inline `tf-analyze:ignore`
+      comments are still honoured, because they show in the PR diff. Set
+      `true` to use the PR's own copies. Other events (push, schedule, …)
+      use the checked-out files.
+    default: 'false'
   ref:
     description: 'Shorthand for pinning the engine image tag. Accepts both `v0.2.3` (matches GitHub release URLs / CHANGELOG / marketplace listing) and `0.2.3` (matches the docker tag emitted by `docker/metadata-action`); the leading `v` is stripped when followed by a digit. Non-semver refs like `main` or `latest` pass through untouched. Mutually exclusive with an explicit `image:`.'
     default: ''
@@ -148,6 +161,64 @@ runs:
         # `release/*`, etc.
         echo "diff-base=origin/${TFA_BASE_REF}" >> "$GITHUB_OUTPUT"
 
+    # A PR must not be able to switch off the gate that checks it. Copy the
+    # base branch's config, ignore file and custom rules into a folder the
+    # PR can't touch; the scan mounts it read-only and uses those copies.
+    # If the base branch can't be read, fail closed: no project config and
+    # no file suppressions.
+    - name: Use the base branch's tf-analyze config
+      id: trusted
+      if: >-
+        (github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+         || github.event_name == 'merge_group')
+        && inputs.trust-pr-config != 'true'
+      shell: bash
+      env:
+        TFA_TARGET: ${{ inputs.target }}
+        # A merge queue run scans the PR merged onto its target branch.
+        TFA_BASE_REF: ${{ github.base_ref || github.event.merge_group.base_ref }}
+        TFA_WORKSPACE: ${{ github.workspace }}
+      run: |
+        DIR="${RUNNER_TEMP}/tf-analyze-trusted"
+        rm -rf "$DIR" && mkdir -p "$DIR"
+        echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+        BRANCH="${TFA_BASE_REF#refs/heads/}"
+        # Fetch into a ref of our own: a short name like `origin/main` would
+        # resolve to a tag of that name first, and tags can come from a PR.
+        BASE="refs/tf-analyze/base"
+        cd "$TFA_WORKSPACE"
+        if [ -z "$BRANCH" ] || ! git fetch --no-tags --depth=1 origin "+refs/heads/${BRANCH}:${BASE}" >/dev/null 2>&1; then
+          echo "::warning::tf-analyze: cannot read base branch '${BRANCH}'; scanning with no project config and no ignore file"
+          echo "ignore=/trusted/none" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        T="${TFA_TARGET#./}"; T="${T%/}"
+        [ "$T" = "." ] && T=""
+        PREFIX="${T:+$T/}"
+        # Copy one repo path from the base branch; succeeds only if it exists there.
+        copy() {
+          mkdir -p "$DIR/$(dirname "$1")"
+          git show "${BASE}:$1" > "$DIR/$1" 2>/dev/null || { rm -f "$DIR/$1"; return 1; }
+        }
+        if copy "${PREFIX}.tf-analyze.yaml"; then
+          echo "config=/trusted/${PREFIX}.tf-analyze.yaml" >> "$GITHUB_OUTPUT"
+          RULES_DIR="$(sed -n 's/^rules_dir:[[:space:]]*//p' "$DIR/${PREFIX}.tf-analyze.yaml" \
+            | sed 's/[[:space:]]#.*//; s/^["'"'"']//; s/["'"'"'][[:space:]]*$//; s/[[:space:]]*$//' | head -1)"
+          if [ -n "$RULES_DIR" ]; then
+            git archive "$BASE" -- "${PREFIX}${RULES_DIR%/}" 2>/dev/null | tar -x -C "$DIR" 2>/dev/null || true
+          fi
+        fi
+        # Same lookup as the engine: the target folder, then its parent.
+        IGNORE="/trusted/none"
+        if copy "${PREFIX}.tf-analyze-ignore.yaml"; then
+          IGNORE="/trusted/${PREFIX}.tf-analyze-ignore.yaml"
+        elif [ -n "$T" ]; then
+          PARENT="$(dirname "$T")"; [ "$PARENT" = "." ] && PARENT="" || PARENT="$PARENT/"
+          copy "${PARENT}.tf-analyze-ignore.yaml" && IGNORE="/trusted/${PARENT}.tf-analyze-ignore.yaml"
+        fi
+        echo "ignore=$IGNORE" >> "$GITHUB_OUTPUT"
+        echo "::notice::tf-analyze: using .tf-analyze.yaml and .tf-analyze-ignore.yaml from '${BRANCH}', not from this PR (set trust-pr-config: true to change this)"
+
     - name: Build detect.py args
       id: args
       shell: bash
@@ -168,8 +239,20 @@ runs:
         TFA_EXTRA_ARGS: ${{ inputs.extra-args }}
         TFA_FAIL_ON: ${{ inputs.fail-on }}
         TFA_COMPLIANCE_FW: ${{ inputs.compliance-framework }}
+        TFA_TRUSTED_DIR: ${{ steps.trusted.outputs.dir }}
+        TFA_TRUSTED_CONFIG: ${{ steps.trusted.outputs.config }}
+        TFA_TRUSTED_IGNORE: ${{ steps.trusted.outputs.ignore }}
       run: |
         ARGS=(--target "/workspace/${TFA_TARGET}" --mode "${TFA_MODE_OUT}")
+        # Set only on PRs (see the step above): use the base branch's copies.
+        if [ -n "${TFA_TRUSTED_DIR}" ]; then
+          if [ -n "${TFA_TRUSTED_CONFIG}" ]; then
+            ARGS+=(--config "${TFA_TRUSTED_CONFIG}")
+          else
+            ARGS+=(--no-project-config)
+          fi
+          ARGS+=(--ignore-file "${TFA_TRUSTED_IGNORE}")
+        fi
         # Issue #19 hardening — when the "Ensure diff base is available"
         # step ran (PR event + mode=diff), it set `diff-base` to the
         # explicit `origin/<base_ref>` ref. Pass it through so the engine
@@ -301,7 +384,12 @@ runs:
       shell: bash
       env:
         TFA_IMAGE: ${{ steps.pull_image.outputs.image }}
+        TFA_TRUSTED_DIR: ${{ steps.trusted.outputs.dir }}
       run: |
+        MOUNTS=(-v "${{ github.workspace }}:/workspace")
+        if [ -n "${TFA_TRUSTED_DIR}" ]; then
+          MOUNTS+=(-v "${TFA_TRUSTED_DIR}:/trusted:ro")
+        fi
         BASE_ARGS=()
         while IFS= read -r line; do BASE_ARGS+=("$line"); done < /tmp/tf-analyze-base-args
         # Round-5 audit fix #12 — capture each scan's exit code
@@ -313,7 +401,7 @@ runs:
         # the workflow status reflects reality.
         run_scan() {
           local fmt="$1" out="$2" err="$3"
-          docker run --rm -v "${{ github.workspace }}:/workspace" \
+          docker run --rm "${MOUNTS[@]}" \
             "${TFA_IMAGE}" \
             "${BASE_ARGS[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
             > "$out" 2>"$err"
