@@ -38,6 +38,7 @@ from detect import (
     RESOURCE_START,
     VARIABLE_START,
     CHECK_START,
+    VALIDATION_BLOCK_RE,
     BOOL_COUNT_RE,
     COUNT_GUARD_RE,
     COUNT_ATTR_RE,
