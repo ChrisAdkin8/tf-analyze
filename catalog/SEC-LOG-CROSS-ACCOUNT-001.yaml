@@ -29,6 +29,7 @@ patterns:
     text_scan: "stub rule (inactive) - not yet reviewed for a structured rewrite"
     file_glob: "**/*.tf"
     regex: 'cloudtrail.*\bs3_bucket_name\s*=\s*"(?!arn:aws:s3:::audit-logs-)[^"]*"'
+    code_only: true
     description: |
       Audit logs (CloudTrail / VPC Flow Logs / GuardDuty) should ship
       to a bucket in a *different* AWS account dedicated to security

@@ -27,6 +27,7 @@ patterns:
     text_scan: "matches shell-script text inside user_data / provisioner command strings"
     file_glob: "**/*.tf"
     regex: 'command\s*=\s*"[^"]*curl[^"]*\|\s*(?:bash|sh|zsh)'
+    code_only: true
     description: |
       `curl URL | bash` (or `| sh`) inside a provisioner downloads
       and executes whatever the URL serves at apply time. No

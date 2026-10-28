@@ -1,7 +1,7 @@
 id: ROB-GCP-LIFECYCLE-002
 title: "Stateful resource has force_destroy=true"
 section: robustness
-default_urgency: HIGH
+default_urgency: MEDIUM
 blast_radius: single-resource
 status: active
 patterns:

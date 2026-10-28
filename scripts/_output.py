@@ -216,8 +216,9 @@ def _md_text(s: object) -> str:
     Custom rules from a scanned repo's ``rules_dir`` supply their own
     title, so the text may try to add links, images, raw HTML, mentions
     or a heading to a comment the bot account posts. Outside code spans
-    this escapes ``\\ [ ] < >``, breaks ``@mentions`` and bare
-    ``http(s)://`` / ``www.`` autolinks with a zero-width space, and
+    this escapes ``\\ [ ] < > &`` (``&`` so a character reference
+    like ``&#64;`` can't spell what the rest removes), breaks
+    ``@mentions`` and bare ``http(s)://`` / ``www.`` autolinks with a zero-width space, and
     escapes a leading ``#``. Code spans pass through unchanged, so
     built-in titles like ``Missing `deletion_protection` `` render as
     before. Newlines are folded: a title is one line. Table cells
@@ -225,7 +226,7 @@ def _md_text(s: object) -> str:
     text = re.sub(r"[\r\n]+", " ", str(s))
 
     def esc(chunk: str) -> str:
-        chunk = re.sub(r"([\\\[\]<>])", r"\\\1", chunk)
+        chunk = re.sub(r"([\\\[\]<>&])", r"\\\1", chunk)
         chunk = chunk.replace("@", "@\u200b")
         chunk = re.sub(r"(?i)(https?):(?=//)", "\\1:\u200b", chunk)
         return re.sub(r"(?i)\bwww\.", lambda m: m.group(0)[:3] + "\u200b.", chunk)

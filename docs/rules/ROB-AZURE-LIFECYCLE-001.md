@@ -1,7 +1,7 @@
 ---
 title: "ROB-AZURE-LIFECYCLE-001 — Stateful Azure resource missing lifecycle.prevent_destroy"
-description: "tf-analyze rule ROB-AZURE-LIFECYCLE-001 (HIGH · robustness): Stateful Azure resource missing lifecycle.prevent_destroy"
-keywords: "robustness, high, terraform, iac, azure, mitre-T1485, cwe-693, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
+description: "tf-analyze rule ROB-AZURE-LIFECYCLE-001 (LOW · robustness): Stateful Azure resource missing lifecycle.prevent_destroy"
+keywords: "robustness, low, terraform, iac, azure, mitre-T1485, cwe-693, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "robustness, high, terraform, iac, azure, mitre-T1485, cwe-693, nist-c
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform, MITRE T1485, CWE-693",
+  "keywords": "robustness, low, terraform, MITRE T1485, CWE-693",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ ROB-AZURE-LIFECYCLE-001 — Stateful Azure resource missing lifecycle.prevent_destroy
+# ℹ️ ROB-AZURE-LIFECYCLE-001 — Stateful Azure resource missing lifecycle.prevent_destroy
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![LOW](https://img.shields.io/badge/LOW-95a5a6?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-AZURE-LIFECYCLE-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-AZURE-LIFECYCLE-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-AZURE-LIFECYCLE-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **Stateful Azure resource missing lifecycle.prevent_destroy.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **Stateful Azure resource missing lifecycle.prevent_destroy.** This rule has `default_urgency: LOW` and operates on a single resource blast radius. 
 
 ## What this checks
 

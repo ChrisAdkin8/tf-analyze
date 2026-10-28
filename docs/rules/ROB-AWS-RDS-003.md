@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-RDS-003 — RDS instance or Aurora cluster missing deletion protection"
-description: "tf-analyze rule ROB-AWS-RDS-003 (HIGH · robustness): RDS instance or Aurora cluster missing deletion protection"
-keywords: "robustness, high, terraform, iac, aws, mitre-T1485, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
+description: "tf-analyze rule ROB-AWS-RDS-003 (MEDIUM · robustness): RDS instance or Aurora cluster missing deletion protection"
+keywords: "robustness, medium, terraform, iac, aws, mitre-T1485, nist-csf-pr.ip-4, nist-800-53-cm-3, csa-ccm-bcr-08"
 ---
 
 <script type="application/ld+json">
@@ -24,20 +24,20 @@ keywords: "robustness, high, terraform, iac, aws, mitre-T1485, nist-csf-pr.ip-4,
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, high, terraform, MITRE T1485",
+  "keywords": "robustness, medium, terraform, MITRE T1485",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
 }
 </script>
 
-# ⚠️ ROB-AWS-RDS-003 — RDS instance or Aurora cluster missing deletion protection
+# 💡 ROB-AWS-RDS-003 — RDS instance or Aurora cluster missing deletion protection
 
-![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
+![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-AWS-RDS-003" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-AWS-RDS-003" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-AWS-RDS-003 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **RDS instance or Aurora cluster missing deletion protection.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **RDS instance or Aurora cluster missing deletion protection.** This rule has `default_urgency: MEDIUM` and operates on a single resource blast radius. 
 
 ## What this checks
 
@@ -131,7 +131,7 @@ must return `true`.
 
 See also rules in the `ROB-AWS-RDS-*` family:
 
-- [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) — RDS instance or Aurora cluster backup retention disabled
+- [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) — RDS instance backup retention disabled
 - [`ROB-AWS-RDS-002`](./ROB-AWS-RDS-002.md) — RDS instance or Aurora cluster skips final snapshot on deletion
 
 ---

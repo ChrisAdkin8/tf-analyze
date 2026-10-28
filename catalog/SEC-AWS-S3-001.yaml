@@ -1,7 +1,7 @@
 id: SEC-AWS-S3-001
 title: "S3 bucket missing server-side encryption configuration"
 section: security
-default_urgency: HIGH
+default_urgency: LOW
 blast_radius: single-resource
 cis:
   - "2.1.1"
