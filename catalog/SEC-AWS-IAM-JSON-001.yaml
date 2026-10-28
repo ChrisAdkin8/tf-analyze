@@ -22,6 +22,8 @@ patterns:
       `Action: "*"`. The principal bound to this policy can perform
       any AWS API call against the scoped resources — the canonical
       privilege-escalation foothold.
+      A statement with both `*` action and `*` resource is reported
+      once, as SEC-AWS-IAM-JSON-003, not by this rule.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:

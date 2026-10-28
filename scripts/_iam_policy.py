@@ -65,10 +65,12 @@ class Statement:
         wild_resource = "*" in self.resources and not (
             actions and all(_READ_ONLY_LIST_ACTION.match(a) for a in actions)
         )
+        # A statement with both wildcards is one problem, reported once by
+        # `wildcard_action_and_resource`, not three times.
         if check == "wildcard_action":
-            return wild_action
+            return wild_action and not wild_resource
         if check == "wildcard_resource":
-            return wild_resource
+            return wild_resource and not wild_action
         if check == "wildcard_action_and_resource":
             return wild_action and wild_resource
         if check == "wildcard_action_iam":

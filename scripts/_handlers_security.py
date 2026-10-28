@@ -96,8 +96,10 @@ def _detect_iam_policy_analysis(c: InFileCtx) -> list[dict]:
     The pattern's ``check`` field selects what to look for inside an
     Allow statement:
 
-    * ``wildcard_action`` — actions list contains ``"*"``
-    * ``wildcard_resource`` — resources list contains ``"*"``
+    * ``wildcard_action`` — actions list contains ``"*"`` (with a
+      non-wildcard resource)
+    * ``wildcard_resource`` — resources list contains ``"*"`` (with a
+      non-wildcard action; both wildcards are one finding, below)
     * ``public_principal`` — principals ``identifiers = ["*"]``
     * ``wildcard_action_iam`` — any ``iam:*`` action (privesc class)
     * ``wildcard_action_and_resource`` — both action and resource ``"*"``
@@ -167,9 +169,10 @@ def _legacy_policy_document(
                 has_public_principal = True
                 break
         triggered = False
-        if check == "wildcard_action" and has_wild_action:
+        # Both wildcards: reported once, by wildcard_action_and_resource.
+        if check == "wildcard_action" and has_wild_action and not has_wild_resource:
             triggered = True
-        elif check == "wildcard_resource" and has_wild_resource:
+        elif check == "wildcard_resource" and has_wild_resource and not has_wild_action:
             triggered = True
         elif check == "public_principal" and has_public_principal:
             triggered = True

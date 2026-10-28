@@ -19,7 +19,7 @@
 #     all public-S3 incidents.
 #
 # Expected tf-analyze findings:
-#   - SEC-AWS-IAM-001  HIGH   IAM policy with wildcard resource
+#   - SEC-AWS-IAM-POLICY-005  CRITICAL  IAM policy document with actions and resources `*`
 #   - SEC-AWS-S3-001   HIGH   S3 bucket missing server-side encryption
 #                             (note: this is the existing AWS rule;
 #                             public_access_block detection is a
