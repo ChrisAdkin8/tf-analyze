@@ -42,21 +42,31 @@ keywords: "security, high, terraform, iac, aws, cis-2.3.1, nist-csf-pr.ds-1, nis
 ## What this checks
 
 1. **`resource_missing_arg`** on `aws_db_instance` (`storage_encrypted`) — _the resource is missing a required attribute (or nested attribute path)._
-  RDS instance missing storage_encrypted (defaults to false)
+  RDS instance missing storage_encrypted (defaults to false). Skipped
+for read replicas and snapshot restores, which take their encryption
+from the source.
 2. **`resource_arg`** on `aws_db_instance` (`storage_encrypted`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   RDS instance with storage_encrypted = false
 3. **`resource_missing_arg`** on `aws_rds_cluster` (`storage_encrypted`) — _the resource is missing a required attribute (or nested attribute path)._
-  Aurora cluster missing storage_encrypted (defaults to false)
+  Aurora cluster missing storage_encrypted (defaults to false for
+provisioned clusters). Skipped for Aurora Serverless v1
+(`engine_mode = "serverless"`, always encrypted), snapshot restores
+and cross-region replicas, which take their encryption from the source.
 4. **`resource_arg`** on `aws_rds_cluster` (`storage_encrypted`) matching `/^false$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Aurora cluster with storage_encrypted = false
 
 ## Why it likely fired
 
-RDS instance missing storage_encrypted (defaults to false)
+RDS instance missing storage_encrypted (defaults to false). Skipped
+for read replicas and snapshot restores, which take their encryption
+from the source.
 
 RDS instance with storage_encrypted = false
 
-Aurora cluster missing storage_encrypted (defaults to false)
+Aurora cluster missing storage_encrypted (defaults to false for
+provisioned clusters). Skipped for Aurora Serverless v1
+(`engine_mode = "serverless"`, always encrypted), snapshot restores
+and cross-region replicas, which take their encryption from the source.
 
 Aurora cluster with storage_encrypted = false
 

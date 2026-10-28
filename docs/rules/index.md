@@ -65,7 +65,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-AWS-DDB-001`](./ROB-AWS-DDB-001.md) | HIGH | DynamoDB table missing deletion protection |
 | [`ROB-AWS-LIFECYCLE-001`](./ROB-AWS-LIFECYCLE-001.md) | HIGH | Stateful AWS resource missing lifecycle.prevent_destroy |
 | [`ROB-AWS-LIFECYCLE-002`](./ROB-AWS-LIFECYCLE-002.md) | HIGH | S3 bucket has force_destroy enabled |
-| [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) | HIGH | RDS instance or Aurora cluster backup retention disabled |
+| [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) | HIGH | RDS instance backup retention disabled |
 | [`ROB-AWS-RDS-002`](./ROB-AWS-RDS-002.md) | HIGH | RDS instance or Aurora cluster skips final snapshot on deletion |
 | [`ROB-AWS-RDS-003`](./ROB-AWS-RDS-003.md) | HIGH | RDS instance or Aurora cluster missing deletion protection |
 | [`ROB-AZURE-LIFECYCLE-001`](./ROB-AZURE-LIFECYCLE-001.md) | HIGH | Stateful Azure resource missing lifecycle.prevent_destroy |

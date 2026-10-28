@@ -117,12 +117,15 @@ def _name_selected(pat: dict, blk: dict) -> bool:
     return True
 
 
-def _suppressed_by(spec: dict | None, blk: dict, var_defaults: dict) -> bool:
+def _suppressed_by(spec: dict | list | None, blk: dict, var_defaults: dict) -> bool:
     """Whether ``suppress_if: {arg, equals | regex}`` holds for a resource:
     a value of `arg` (variables resolved; may be a dotted path such as
     ``default_action.type``, where any instance counts) equals the
     literal, case-insensitively, or matches the regex. Read from the
-    parse tree, so `terraform fmt` alignment does not matter."""
+    parse tree, so `terraform fmt` alignment does not matter. A list of
+    such mappings holds when any one of them does."""
+    if isinstance(spec, list):
+        return any(_suppressed_by(s, blk, var_defaults) for s in spec if isinstance(s, dict))
     if not spec or not spec.get("arg"):
         return False
     want = str(spec.get("equals", "")).lower().strip("\"'")

@@ -5,6 +5,24 @@ Self-test fixture counts are cumulative.
 
 ---
 
+## Round 75 — RDS rules follow what the AWS provider sends — 2026-10-28
+
+Findings change: fewer RDS false alarms.
+
+- **`ROB-AWS-RDS-001`** no longer flags Aurora clusters. The provider
+  omits an unset (or `0`) `backup_retention_period` for
+  `aws_rds_cluster`, so AWS's 1-day default applies, and Aurora can't
+  turn backups off. `aws_db_instance` is still flagged: there the
+  provider sends `0`. Read replicas (`replicate_source_db`) are skipped.
+  Its Terraform test template checked `deletion_protection`; it now
+  checks `backup_retention_period > 0`.
+- **`SEC-AWS-RDS-002`** skips a missing `storage_encrypted` on read
+  replicas and snapshot restores (encryption comes from the source),
+  on Aurora Serverless v1 (always encrypted) and on cross-region
+  replica clusters. An explicit `storage_encrypted = false` still fires.
+- **`suppress_if`** accepts a list; the finding is skipped when any entry
+  holds (static, plan and state modes).
+
 ## Round 70 — `--apply-fixes` never leaves a file worse than it found it — 2026-10-27
 
 - **Multi-line values**: replacing a value that spans several lines (a

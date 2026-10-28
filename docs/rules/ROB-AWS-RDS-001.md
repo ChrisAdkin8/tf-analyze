@@ -1,6 +1,6 @@
 ---
-title: "ROB-AWS-RDS-001 — RDS instance or Aurora cluster backup retention disabled"
-description: "tf-analyze rule ROB-AWS-RDS-001 (HIGH · robustness): RDS instance or Aurora cluster backup retention disabled"
+title: "ROB-AWS-RDS-001 — RDS instance backup retention disabled"
+description: "tf-analyze rule ROB-AWS-RDS-001 (HIGH · robustness): RDS instance backup retention disabled"
 keywords: "robustness, high, terraform, iac, aws, mitre-T1490, nist-csf-rc.rp-1, nist-800-53-cp-9, csa-ccm-bcr-08"
 ---
 
@@ -8,7 +8,7 @@ keywords: "robustness, high, terraform, iac, aws, mitre-T1490, nist-csf-rc.rp-1,
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "ROB-AWS-RDS-001 \u2014 RDS instance or Aurora cluster backup retention disabled",
+  "headline": "ROB-AWS-RDS-001 \u2014 RDS instance backup retention disabled",
   "description": "Set `backup_retention_period` to at least `7` (days) on every\n`aws_db_instance`. For production databases, use `30` or more and also\nset `delete_automated_backups = false` so that automated backups survive\nan accidental instance deletion. W",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/ROB-AWS-RDS-001/",
   "mainEntityOfPage": {
@@ -31,34 +31,36 @@ keywords: "robustness, high, terraform, iac, aws, mitre-T1490, nist-csf-rc.rp-1,
 }
 </script>
 
-# ⚠️ ROB-AWS-RDS-001 — RDS instance or Aurora cluster backup retention disabled
+# ⚠️ ROB-AWS-RDS-001 — RDS instance backup retention disabled
 
 ![HIGH](https://img.shields.io/badge/HIGH-e67e22?style=flat-square) ![Section: robustness](https://img.shields.io/badge/section-robustness-blue?style=flat-square) ![Blast radius: single-resource](https://img.shields.io/badge/blast%20radius-single--resource-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/ROB-AWS-RDS-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=ROB-AWS-RDS-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add ROB-AWS-RDS-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **RDS instance or Aurora cluster backup retention disabled.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
+> **RDS instance backup retention disabled.** This rule has `default_urgency: HIGH` and operates on a single resource blast radius. 
 
 ## What this checks
 
 1. **`resource_arg`** on `aws_db_instance` (`backup_retention_period`) matching `/^0$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   RDS instance with backup_retention_period = 0 (backups disabled)
 2. **`resource_missing_arg`** on `aws_db_instance` (`backup_retention_period`) — _the resource is missing a required attribute (or nested attribute path)._
-  RDS instance missing backup_retention_period (defaults to 0 for non-replica)
-3. **`resource_arg`** on `aws_rds_cluster` (`backup_retention_period`) matching `/^0$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-  Aurora cluster with backup_retention_period = 0 (backups disabled)
-4. **`resource_missing_arg`** on `aws_rds_cluster` (`backup_retention_period`) — _the resource is missing a required attribute (or nested attribute path)._
-  Aurora cluster missing backup_retention_period (defaults to 1 but should be explicit)
+  RDS instance without backup_retention_period: the AWS provider then
+sends 0 on create, so automated backups are off. Read replicas
+(`replicate_source_db`) are skipped; they are backed up through
+their source. Aurora clusters are not checked: the provider leaves
+the setting to AWS, whose default is 1 day, and Aurora can't turn
+backups off.
 
 ## Why it likely fired
 
 RDS instance with backup_retention_period = 0 (backups disabled)
 
-RDS instance missing backup_retention_period (defaults to 0 for non-replica)
-
-Aurora cluster with backup_retention_period = 0 (backups disabled)
-
-Aurora cluster missing backup_retention_period (defaults to 1 but should be explicit)
+RDS instance without backup_retention_period: the AWS provider then
+sends 0 on create, so automated backups are off. Read replicas
+(`replicate_source_db`) are skipped; they are backed up through
+their source. Aurora clusters are not checked: the provider leaves
+the setting to AWS, whose default is 1 day, and Aurora can't turn
+backups off.
 
 ## Adversarial scenario
 
