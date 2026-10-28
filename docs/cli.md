@@ -164,6 +164,10 @@ Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. 
 
 Exit with code 1 if any .tf file could not be parsed and was scanned in the less precise regex fallback mode
 
+### `--ignore-file`
+
+Read suppressions from PATH instead of looking for .tf-analyze-ignore.yaml in the target and its parent. A missing PATH means no file suppressions. CI uses this to apply the base branch's ignore file rather than the pull request's.
+
 ### `--mitre-tactic`
 
 Restrict --format mitre output to one ATT&CK tactic (e.g. 'Initial Access', 'Defense Evasion'). Case-insensitive; hyphens and underscores accepted as separators ('initial-access' is equivalent).
