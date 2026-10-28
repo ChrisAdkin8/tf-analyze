@@ -44,15 +44,19 @@ keywords: "security, high, terraform, iac, aws, cis-5.2, cis-5.3, nist-csf-pr.ac
 1. **`firewall_open_port`** on `aws_security_group` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
   security group `ingress` block (or `ingress = [{...}]`) open to
 0.0.0.0/0 or ::/0 — egress rules are not checked
-2. **`firewall_open_port`** on `aws_security_group_rule` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+2. **`firewall_open_port`** on `aws_default_security_group` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+  `aws_default_security_group` (the VPC's default group) with an `ingress` block open to 0.0.0.0/0 or ::/0
+3. **`firewall_open_port`** on `aws_security_group_rule` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
   standalone `aws_security_group_rule` with `type = "ingress"` open to 0.0.0.0/0 or ::/0
-3. **`firewall_open_port`** on `aws_vpc_security_group_ingress_rule` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
+4. **`firewall_open_port`** on `aws_vpc_security_group_ingress_rule` — _a `google_compute_firewall` allows the named port from `0.0.0.0/0`._
   `aws_vpc_security_group_ingress_rule` with `cidr_ipv4 = 0.0.0.0/0` or `cidr_ipv6 = ::/0`
 
 ## Why it likely fired
 
 security group `ingress` block (or `ingress = [{...}]`) open to
 0.0.0.0/0 or ::/0 — egress rules are not checked
+
+`aws_default_security_group` (the VPC's default group) with an `ingress` block open to 0.0.0.0/0 or ::/0
 
 standalone `aws_security_group_rule` with `type = "ingress"` open to 0.0.0.0/0 or ::/0
 

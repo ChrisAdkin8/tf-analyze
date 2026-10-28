@@ -131,7 +131,7 @@ must return `true`.
 
 See also rules in the `ROB-AWS-RDS-*` family:
 
-- [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) — RDS instance or Aurora cluster backup retention disabled
+- [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) — RDS instance backup retention disabled
 - [`ROB-AWS-RDS-002`](./ROB-AWS-RDS-002.md) — RDS instance or Aurora cluster skips final snapshot on deletion
 
 ---

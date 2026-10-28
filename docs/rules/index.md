@@ -6,7 +6,7 @@ title: tf-analyze rule reference
 
 Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](https://github.com/ChrisAdkin8/tf-analyze/tree/main/catalog)).
 
-**353 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
+**354 rules** across 9 sections. Click any rule ID for the full description, remediation, and verification.
 
 ---
 
@@ -67,7 +67,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-AWS-DDB-001`](./ROB-AWS-DDB-001.md) | MEDIUM | DynamoDB table missing deletion protection |
 | [`ROB-AWS-DDB-002`](./ROB-AWS-DDB-002.md) | MEDIUM | DynamoDB table missing point-in-time recovery |
 | [`ROB-AWS-LIFECYCLE-002`](./ROB-AWS-LIFECYCLE-002.md) | MEDIUM | S3 bucket has force_destroy enabled |
-| [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) | MEDIUM | RDS instance or Aurora cluster backup retention disabled |
+| [`ROB-AWS-RDS-001`](./ROB-AWS-RDS-001.md) | MEDIUM | RDS instance backup retention disabled |
 | [`ROB-AWS-RDS-002`](./ROB-AWS-RDS-002.md) | MEDIUM | RDS instance or Aurora cluster skips final snapshot on deletion |
 | [`ROB-AWS-RDS-003`](./ROB-AWS-RDS-003.md) | MEDIUM | RDS instance or Aurora cluster missing deletion protection |
 | [`ROB-AWS-REDSHIFT-001`](./ROB-AWS-REDSHIFT-001.md) | MEDIUM | Redshift cluster has no automated snapshot retention |
@@ -112,7 +112,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`ROB-UNUSED-002`](./ROB-UNUSED-002.md) | LOW | Declared output is never consumed by any caller |
 | [`ROB-VERSION-002`](./ROB-VERSION-002.md) | LOW | Submodule directory has no required_version |
 
-## security (194)
+## security (195)
 
 | Rule | Urgency | Title |
 |------|---------|-------|
@@ -170,6 +170,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-RDS-001`](./SEC-AWS-RDS-001.md) | HIGH | RDS instance or Aurora cluster publicly accessible |
 | [`SEC-AWS-RDS-002`](./SEC-AWS-RDS-002.md) | HIGH | RDS instance or Aurora cluster storage not encrypted |
 | [`SEC-AWS-REDSHIFT-001`](./SEC-AWS-REDSHIFT-001.md) | HIGH | Redshift cluster encryption disabled |
+| [`SEC-AWS-S3-PUBLIC-001`](./SEC-AWS-S3-PUBLIC-001.md) | HIGH | S3 bucket ACL grants access to everyone |
 | [`SEC-AWS-SG-001`](./SEC-AWS-SG-001.md) | HIGH | Security group allows ingress from 0.0.0.0/0 |
 | [`SEC-AWS-SNS-001`](./SEC-AWS-SNS-001.md) | HIGH | SNS topic missing KMS encryption |
 | [`SEC-AWS-SQS-001`](./SEC-AWS-SQS-001.md) | HIGH | SQS queue missing server-side encryption |
@@ -258,7 +259,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-KINESIS-001`](./SEC-AWS-KINESIS-001.md) | MEDIUM | Kinesis Data Stream not encrypted with KMS |
 | [`SEC-AWS-MSK-002`](./SEC-AWS-MSK-002.md) | MEDIUM | MSK cluster does not use CMK for encryption at rest |
 | [`SEC-AWS-S3-LOGGING-001`](./SEC-AWS-S3-LOGGING-001.md) | MEDIUM | S3 bucket missing server access logging |
-| [`SEC-AWS-S3-PUBLIC-BLOCK-001`](./SEC-AWS-S3-PUBLIC-BLOCK-001.md) | MEDIUM | S3 bucket missing public access block |
+| [`SEC-AWS-S3-PUBLIC-BLOCK-001`](./SEC-AWS-S3-PUBLIC-BLOCK-001.md) | MEDIUM | S3 public access block missing or switched off |
 | [`SEC-AWS-SECRETSMANAGER-001`](./SEC-AWS-SECRETSMANAGER-001.md) | MEDIUM | Secrets Manager secret uses AWS-managed key (no CMK) |
 | [`SEC-AWS-SECURITYHUB-001`](./SEC-AWS-SECURITYHUB-001.md) | MEDIUM | Security Hub not enabled |
 | [`SEC-AWS-WAF-001`](./SEC-AWS-WAF-001.md) | MEDIUM | WAFv2 web ACL missing logging configuration |

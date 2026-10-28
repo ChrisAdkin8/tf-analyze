@@ -1332,6 +1332,8 @@ from _output import (
     _render_mitre,
     _append_attack_graph_block,
     _render_pr_summary,
+    _md_text,
+    _md_fence,
     _render_compliance_text,
     _render_compliance_html,
     _compliance_to_oscal,
@@ -1877,8 +1879,12 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
         title = entry.get("title", f["id"])
         urgency = _effective_urgency(f, entry)
         recommendation = (entry.get("recommendation") or "").strip()
+        # A CUSTOM- rule comes from the scanned repo's rules_dir, so its
+        # Markdown is untrusted: show its recommendation as plain text.
+        if recommendation and str(f["id"]).startswith("CUSTOM-"):
+            recommendation = "\n".join(_md_fence(recommendation, "text"))
         body_lines = [
-            f"**[tf-analyze] {f['id']}** — {title}",
+            f"**[tf-analyze] {f['id']}** — {_md_text(title)}",
             f"",
             f"**Urgency:** {urgency}",
             f"",
@@ -1886,7 +1892,7 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
         ]
         fix_hcl = (entry.get("fix_hcl") or "").strip()
         if fix_hcl:
-            body_lines += ["", "```suggestion", fix_hcl, "```"]
+            body_lines += ["", *_md_fence(fix_hcl, "suggestion")]
         disruption = entry.get("fix_disruption", "")
         if disruption:
             labels = {

@@ -58,7 +58,9 @@ ADMIN_FMT_STYLE = """resource "aws_iam_policy" "p" {
 
 def test_terraform_fmt_style_without_commas(tmp_path) -> None:
     ids = _ids(tmp_path, ADMIN_FMT_STYLE)
-    assert {"SEC-AWS-IAM-JSON-001", "SEC-AWS-IAM-JSON-003"} <= ids
+    assert "SEC-AWS-IAM-JSON-003" in ids
+    # One statement, one problem: not also "wildcard action" / "wildcard resource".
+    assert not {"SEC-AWS-IAM-JSON-001", "SEC-AWS-IAM-001"} & ids
 
 
 def test_reference_in_another_statement_does_not_hide_the_policy(tmp_path) -> None:
@@ -94,7 +96,7 @@ def test_inline_policy_block_on_a_role(tmp_path) -> None:
 }
 """
     ids = _ids(tmp_path, text)
-    assert {"SEC-AWS-IAM-JSON-001", "SEC-AWS-IAM-JSON-003"} <= ids
+    assert "SEC-AWS-IAM-JSON-003" in ids and "SEC-AWS-IAM-JSON-001" not in ids
     assert "SEC-AWS-IAM-002" not in ids  # trust policy: a service principal
 
 
@@ -246,3 +248,31 @@ def test_fallback_converter_reads_fmt_style() -> None:
     assert st.actions == ["s3:GetObject", "*"]
     assert st.resources == ["${aws_s3_bucket.b.arn}"]
     assert st.principals == ["*"]
+
+
+def _doc(actions: str, resources: str) -> str:
+    return (f'data "aws_iam_policy_document" "d" {{\n  statement {{\n'
+            f"    actions   = {actions}\n    resources = {resources}\n  }}\n}}\n")
+
+
+def _inline(action: str, resource: str) -> str:
+    return ('resource "aws_iam_policy" "p" {\n  policy = jsonencode({\n'
+            f'    Statement = [{{ Effect = "Allow", Action = {action}, Resource = {resource} }}]\n'
+            "  })\n}\n")
+
+
+WILDCARD_IDS = {"SEC-AWS-IAM-001", "SEC-AWS-IAM-JSON-001", "SEC-AWS-IAM-JSON-003",
+                "SEC-AWS-IAM-POLICY-001", "SEC-AWS-IAM-POLICY-003", "SEC-AWS-IAM-POLICY-005"}
+
+
+def test_one_wildcard_statement_is_one_finding(tmp_path) -> None:
+    assert _ids(tmp_path, _doc('["*"]', '["*"]')) & WILDCARD_IDS == {"SEC-AWS-IAM-POLICY-005"}
+    assert _ids(tmp_path, _inline('"*"', '"*"')) & WILDCARD_IDS == {"SEC-AWS-IAM-JSON-003"}
+
+
+def test_a_single_wildcard_is_still_reported(tmp_path) -> None:
+    arn = '["arn:aws:s3:::b/*"]'
+    assert _ids(tmp_path, _doc('["*"]', arn)) & WILDCARD_IDS == {"SEC-AWS-IAM-POLICY-001"}
+    assert _ids(tmp_path, _doc('["s3:PutObject"]', '["*"]')) & WILDCARD_IDS == {"SEC-AWS-IAM-POLICY-003"}
+    assert _ids(tmp_path, _inline('"*"', '"arn:aws:s3:::b/*"')) & WILDCARD_IDS == {"SEC-AWS-IAM-JSON-001"}
+    assert _ids(tmp_path, _inline('"s3:PutObject"', '"*"')) & WILDCARD_IDS == {"SEC-AWS-IAM-001"}

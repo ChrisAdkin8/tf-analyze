@@ -38,18 +38,18 @@ You should see at least one instance of each of:
 
 | Domain | Rule IDs |
 |---|---|
-| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-APIGW-001`, `SEC-AWS-CLOUDFRONT-001/002`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-COGNITO-001`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-001/002`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
+| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-APIGW-001`, `SEC-AWS-CLOUDFRONT-001/002`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-COGNITO-001`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-002/003`, `SEC-AWS-IAM-JSON-003`, `SEC-AWS-IAM-POLICY-005`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
 | ROB | `ROB-AWS-BACKEND-001`, `ROB-AWS-LIFECYCLE-001/002`, `ROB-AWS-RDS-001/002/003`, `ROB-AWS-S3-001`, `ROB-VERSION-001/003` |
 | STK | `STK-AWS-ECS-001`, `STK-AWS-EKS-001/002/003/004/005`, `STK-AWS-LAMBDA-001/002/003`, `STK-AWS-LAUNCH-TEMPLATE-001`, `STK-AWS-RDS-004`, `STK-AWS-ROUTE53-001` |
 | OPS/COST/MOD | `OPS-AWS-TAGS-001`, `COST-AWS-RISK-001`, `MOD-PIN-001`, `CI-TEST-001` |
 
-`SEC-AWS-ECR-002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `STK-AWS-EKS-004`, `STK-AWS-ROUTE53-001` are corpus-level `resource_absent` rules — they fire once per scan of this directory, not per file.
+`SEC-AWS-ECR-002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `STK-AWS-EKS-004`, `STK-AWS-ROUTE53-001` are corpus-level `resource_absent` rules — they fire once per scan of this directory, not per file.
 
 ## OWASP → AWS control mapping
 
 ### A01 — Broken Access Control
 
-The single largest source of AWS data leaks. The corpus demonstrates three shapes: the IAM wildcard policy (`SEC-AWS-IAM-001`), the missing public-access block on S3 (`SEC-AWS-S3-PUBLIC-BLOCK-001`), and the wildcard `Principal` in an assume-role policy (`SEC-AWS-IAM-002`).
+The single largest source of AWS data leaks. The corpus demonstrates three shapes: the IAM wildcard policy (`SEC-AWS-IAM-POLICY-005`), the missing public-access block on S3 (`SEC-AWS-S3-PUBLIC-BLOCK-001`) next to a `public-read` bucket ACL (`SEC-AWS-S3-PUBLIC-001`), and the wildcard `Principal` in an assume-role policy (`SEC-AWS-IAM-002`).
 
 ### A02 — Cryptographic Failures
 

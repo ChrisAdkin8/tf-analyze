@@ -20,6 +20,8 @@ patterns:
       `resources = ["*"]`. Combined with any non-trivial action set,
       this lets the principal touch every matching resource in the
       account, not just the ones it owns.
+      A statement with both `*` action and `*` resource is reported
+      once, as SEC-AWS-IAM-POLICY-005, not by this rule.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:
