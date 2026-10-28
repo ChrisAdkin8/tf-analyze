@@ -1,0 +1,28 @@
+name: changelog
+
+# Its own workflow (not a ci.yml job) so adding or removing the
+# `no-changelog` label re-runs the check.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  fragment:
+    name: changelog fragment present
+    # A job skipped by `if` still satisfies a required status check.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # check --base diffs against the base commit
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Fragments are well formed; PR adds one and leaves CHANGELOG.md alone
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/changelog.py check --base "$BASE_SHA"
