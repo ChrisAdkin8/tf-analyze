@@ -1,7 +1,7 @@
 ---
 title: "SEC-AWS-CWL-001 — CloudWatch log group not encrypted with KMS CMK"
 description: "tf-analyze rule SEC-AWS-CWL-001 (MEDIUM · security): CloudWatch log group not encrypted with KMS CMK"
-keywords: "security, medium, terraform, iac, aws, mitre-T1562.008, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
+keywords: "security, medium, terraform, iac, aws, cwe-778, d3-faa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-02"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, aws, mitre-T1562.008, cwe-778, d3-f
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1562.008, CWE-778, D3-FAA",
+  "keywords": "security, medium, terraform, CWE-778, D3-FAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -105,9 +105,6 @@ must return a KMS key ARN for every group.
 
 **OWASP IaC Cheat Sheet**
   - [`Runtime / Comprehensive Logging Enablement`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
-
-**MITRE ATT&CK**
-  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
 
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)

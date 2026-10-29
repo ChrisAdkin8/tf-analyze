@@ -57,7 +57,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 # future round of patcher work.
 ROUNDTRIP_CASES: list[tuple[str, str]] = [
     ("OPS-AWS-CWL-001",    "aws_cwl_no_retention"),    # resource_missing_arg flat insertion
-    ("OPS-GCP-LABELS-001", "missing_labels"),          # resource_missing_arg, GCP family
+    ("SEC-GCP-BUCKET-001", "public_bucket"),           # resource_missing_arg, GCP family
 ]
 
 

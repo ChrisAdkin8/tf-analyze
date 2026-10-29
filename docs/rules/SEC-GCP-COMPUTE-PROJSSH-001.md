@@ -45,22 +45,16 @@ keywords: "security, medium, terraform, iac, gcp, cis-4.3, mitre-T1078, cwe-287,
   `metadata.block-project-ssh-keys = "FALSE"` lets the instance be
 accessed via every project-wide SSH key, bypassing per-instance
 IAM. Combined with stale project keys, this is a common lateral-
-movement vector.
-2. **`resource_missing_arg`** on `google_compute_instance` (`metadata`) — _the resource is missing a required attribute (or nested attribute path)._
-  `google_compute_instance` has no `metadata` block, so
-`block-project-ssh-keys` defaults to FALSE — any project-wide SSH
-key can log in.
+movement vector. Leaving the key (or the whole `metadata`) out
+allows project keys as well, so it counts too.
 
 ## Why it likely fired
 
 `metadata.block-project-ssh-keys = "FALSE"` lets the instance be
 accessed via every project-wide SSH key, bypassing per-instance
 IAM. Combined with stale project keys, this is a common lateral-
-movement vector.
-
-`google_compute_instance` has no `metadata` block, so
-`block-project-ssh-keys` defaults to FALSE — any project-wide SSH
-key can log in.
+movement vector. Leaving the key (or the whole `metadata`) out
+allows project keys as well, so it counts too.
 
 ## Adversarial scenario
 

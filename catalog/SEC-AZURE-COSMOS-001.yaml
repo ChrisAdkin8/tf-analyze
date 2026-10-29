@@ -30,11 +30,14 @@ patterns:
     resource: azurerm_cosmosdb_account
     arg: public_network_access_enabled
     regex: '^true$'
+    fire_if_absent: true
     description: |
       `azurerm_cosmosdb_account` has `public_network_access_enabled = true`,
       exposing the Cosmos endpoint to the public internet. Even with
       strong authentication, public exposure widens the attack surface
-      (credential stuffing, key leaks, network-layer scanning).
+      (credential stuffing, key leaks, network-layer scanning). Leaving
+      the argument out counts too: the azurerm provider defaults it to
+      `true`.
 recommendation: |
   Set `public_network_access_enabled = false` and reach the account via a
   private endpoint. Add `is_virtual_network_filter_enabled = true` and

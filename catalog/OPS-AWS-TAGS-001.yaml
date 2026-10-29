@@ -64,6 +64,8 @@ fix_hcl: |
     }
   }
 fix_disruption: none
+# The tag / label values are examples; a person picks the real ones.
+fix_hcl_example: true
 fixtures:
   - aws_resource_no_tags
 test_template: |

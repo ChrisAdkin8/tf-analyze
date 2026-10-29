@@ -19,7 +19,7 @@
 ![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Rules: 352](https://img.shields.io/badge/rules-352-brightgreen)
 ![fix_hcl: 93%](https://img.shields.io/badge/fix__hcl-93%25-brightgreen)
-![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-80%25%20%2F%2068%25%20%2F%2047%25-brightgreen)
+![MITRE / CWE / D3FEND](https://img.shields.io/badge/MITRE%20%2F%20CWE%20%2F%20D3FEND-74%25%20%2F%2068%25%20%2F%2047%25-brightgreen)
 ![CISA KEV: integrated](https://img.shields.io/badge/CISA%20KEV-integrated-orange)
 [![Rule docs](https://img.shields.io/badge/rule%20docs-354%20pages-brightgreen?logo=github)](https://chrisadkin8.github.io/tf-analyze/rules/)
 

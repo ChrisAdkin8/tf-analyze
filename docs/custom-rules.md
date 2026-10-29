@@ -112,11 +112,16 @@ fields:
 | `verification`    | string       | How to verify the fix                              |
 
 Optional fields: `cis`, `pci_dss`, `soc2_cc`, `owasp_iac`, `mitre`,
-`fix_hcl`, `fix_disruption`, `fixtures`, `test_template`, `related`,
+`fix_hcl`, `fix_disruption`, `fix_hcl_example`, `fixtures`, `test_template`, `related`,
 `status`. The `owasp_iac` field maps the rule to the [OWASP IaC
 Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html);
 each entry is `<Section> / <Item label>` with section ∈ `{Develop and
 Distribute, Deploy, Runtime}`.
+
+Set `fix_hcl_example: true` when the `fix_hcl` snippet holds example
+values a person has to replace, such as tag owners or project names.
+The snippet is still shown in reports and PR comments, but
+`--apply-fixes` (and so the auto-remediation bot) never pastes it.
 
 ## Pattern kinds
 

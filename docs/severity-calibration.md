@@ -227,6 +227,18 @@ IP still needs `authorized_networks` or the IAM proxy; kept HIGH to match
 `SEC-AWS-RDS-001`), the IMDS rules (an SSRF bug is a prerequisite), and
 `SEC-AZURE-ACR-001`.
 
+### Cloud defaults the sweep relies on
+
+Checked against each provider's own documentation on 2026-10-28. If one of
+these changes, revisit the rule next to it.
+
+| Rule | Default | Source |
+|---|---|---|
+| SEC-AWS-SQS-001 | New queues are encrypted with SSE-SQS by default (October 2022; queues created through non-TLS endpoints excepted) | [AWS announcement](https://aws.amazon.com/about-aws/whats-new/2022/10/amazon-sqs-announces-server-side-encryption-ssq-managed-sse-sqs-default/) |
+| STK-AWS-EKS-003 | EKS envelope-encrypts all Kubernetes API data with an AWS-owned KMS key on 1.28+ | [EKS user guide](https://docs.aws.amazon.com/eks/latest/userguide/envelope-encryption.html) |
+| SEC-AZURE-MONITOR-001 | The activity log is kept 90 days without a diagnostic setting | [Azure Monitor activity log](https://learn.microsoft.com/en-us/azure/azure-monitor/platform/activity-log) |
+| SEC-GCP-LOGGING-001 | Admin Activity audit logs are always written and can't be disabled or excluded | [Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit) |
+
 ## Standing decisions (no change, but documented)
 
 | Rule ID                       | Urgency  | Why                                                                                            |

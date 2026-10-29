@@ -1,7 +1,7 @@
 ---
 title: "ROB-VERSION-002 — Submodule directory has no required_version"
 description: "tf-analyze rule ROB-VERSION-002 (LOW · robustness): Submodule directory has no required_version"
-keywords: "robustness, low, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-cm-2, nist-800-53-sr-3, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l1, slsa-source"
+keywords: "robustness, low, terraform, iac, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-cm-2, nist-800-53-sr-3, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l1, slsa-source"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, low, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, n
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, low, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
+  "keywords": "robustness, low, terraform, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -88,9 +88,6 @@ in isolation) — it should enforce the new constraint.
 
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Version Control Discipline`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
-
-**MITRE ATT&CK**
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)
