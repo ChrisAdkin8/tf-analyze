@@ -1,13 +1,18 @@
 """Performance regression test: single-process scan of the full fixture
-corpus must finish in <5s. Catches O(n^2) regressions silently slipping
+corpus must finish in <8s. Catches O(n^2) regressions silently slipping
 into pattern matching or attack-graph construction.
 
 Skip with TF_ANALYZE_SKIP_PERF=1 (CI runners with noisy scheduling).
 
 The scan is timed up to PERF_ATTEMPTS times and passes on the first run
-under budget. A shared CI runner sometimes stalls one run (5.06s against
-the 5s budget on #104, where the same scan takes ~1.2s on a laptop); an
-O(n^2) regression is slow every time.
+under budget. A shared CI runner sometimes stalls one run; an O(n^2)
+regression is slow every time.
+
+The budget was 5s. Rules that read the parse tree instead of grepping
+(#98-#101) made the scan ~11% slower (1.34s -> 1.49s on a laptop), and
+the py3.10 CI job, ~3.7x slower than a laptop, then took 5.4-5.6s on
+every run. 8s leaves ~45% headroom there; a quadratic blow-up is many
+times slower, not 45%.
 """
 from __future__ import annotations
 
@@ -26,7 +31,7 @@ REPO_ROOT = Path(__file__).parent.parent
 FIXTURES_DIR = REPO_ROOT / "fixtures"
 CATALOG_DIR = REPO_ROOT / "catalog"
 
-PERF_BUDGET_SECONDS = 5.0
+PERF_BUDGET_SECONDS = 8.0
 PERF_ATTEMPTS = 3
 
 
@@ -34,12 +39,12 @@ PERF_ATTEMPTS = 3
     os.environ.get("TF_ANALYZE_SKIP_PERF") == "1",
     reason="Performance test skipped (TF_ANALYZE_SKIP_PERF=1)",
 )
-def test_corpus_scan_under_5s() -> None:
+def test_corpus_scan_within_budget() -> None:
     """Walk every fixture directory in-process and scan its .tf files.
 
     This is intentionally NOT a subprocess test — we measure raw Python
-    work, not interpreter-startup overhead. CI machines see ~2-3s; the
-    5s budget gives headroom for slower laptops without making the
+    work, not interpreter-startup overhead. CI machines see ~4-5.5s; the
+    8s budget gives headroom for slower runners without making the
     threshold meaningless.
     """
     entries = detect.load_catalog(CATALOG_DIR)
