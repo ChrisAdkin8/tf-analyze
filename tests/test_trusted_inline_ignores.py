@@ -991,3 +991,97 @@ def test_full_sha_is_accepted(tmp_path: Path) -> None:
     ).stdout.strip()
     _, report = _scan(repo, ref=sha)
     assert _count(report) == 0
+
+
+# ---- multi-line values: lists, calls and heredocs anchor as a whole ------------
+
+MULTILINE_LIST = """locals {
+  # tf-analyze:ignore SEC-SECRETS-001
+  keys = ["AKIAIOSFODNN7EXAMPLE",
+    "harmless",
+  ]
+}
+"""
+
+
+def test_multiline_list_changed_in_pr_drops_the_ignore(tmp_path: Path) -> None:
+    secret = "SEC-SECRETS-001"
+    # Sanity: the finding is on the list's first line, which the ignore covers.
+    repo = _repo(tmp_path, {"main.tf": MULTILINE_LIST}, {})
+    _, report = _scan(repo, "--fail-on", "CRITICAL")
+    assert _count(report, secret) == 0
+    # The PR edits the list's later lines; the accepted ignore no longer fits.
+    (repo / "main.tf").write_text(MULTILINE_LIST.replace('"harmless"', '"0.0.0.0/0"'))
+    proc, report = _scan(repo, "--fail-on", "CRITICAL")
+    assert _count(report, secret) == 1
+    assert proc.returncode == 1
+    assert len(report["summary"]["inline_ignores_dropped"]) == 1
+
+
+def test_multiline_list_unchanged_but_shifted_keeps_the_ignore(tmp_path: Path) -> None:
+    pr = 'variable "a" {}\n\n' + MULTILINE_LIST.replace(
+        '    "harmless",', '      "harmless",'
+    )
+    repo = _repo(tmp_path, {"main.tf": MULTILINE_LIST}, {"main.tf": pr})
+    proc, report = _scan(repo, "--fail-on", "CRITICAL")
+    assert _count(report, "SEC-SECRETS-001") == 0
+    assert "inline_ignores_dropped" not in report["summary"]
+
+
+HEREDOC = """resource "aws_iam_policy" "p" {
+  name = "p"
+  # tf-analyze:ignore SEC-X-1
+  policy = <<-EOF
+    {"Statement": [{"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"}]}
+  EOF
+  description = "d"
+}
+"""
+
+
+def test_heredoc_changed_in_pr_drops_the_ignore(tmp_path: Path) -> None:
+    pr = HEREDOC.replace('"s3:GetObject"', '"*"')
+    repo = _repo(tmp_path, {"main.tf": HEREDOC}, {"main.tf": pr})
+    _, report = _scan(repo)
+    dropped = report["summary"]["inline_ignores_dropped"]
+    assert [(d["line"], d["id"]) for d in dropped] == [(3, "SEC-X-1")]
+    # Unchanged but shifted: kept.
+    (repo / "main.tf").write_text("\n\n" + HEREDOC)
+    _, report = _scan(repo)
+    assert "inline_ignores_dropped" not in report["summary"]
+
+
+@pytest.mark.parametrize(
+    ("text", "anchor"),
+    [
+        # A list: through its closing bracket, not past it.
+        ('# tf-analyze:ignore X\nc = [\n  "a",\n]\nnext = 1\n', 'c = [ "a", ]'),
+        # A call spanning lines.
+        (
+            "# tf-analyze:ignore X\np = jsonencode(\n  { a = 1 }\n)\nnext = 1\n",
+            "p = jsonencode( { a = 1 } )",
+        ),
+        # A heredoc, through its terminator line; a `#` in it is text.
+        (
+            "# tf-analyze:ignore X\nu = <<EOF\n#!/bin/sh\necho ]\nEOF\nnext = 1\n",
+            "u = <<EOF #!/bin/sh echo ] EOF",
+        ),
+        (
+            "# tf-analyze:ignore X\nu = <<-EOT\n  x\n  EOT\nnext = 1\n",
+            "u = <<-EOT x EOT",
+        ),
+        # The `]` that would close it is inside a string: the list runs on.
+        (
+            '# tf-analyze:ignore X\nfoo = [ "]",\n  "b" ]\nnext = 1\n',
+            'foo = [ "]", "b" ]',
+        ),
+        # Balanced on one line: just that line.
+        ('# tf-analyze:ignore X\nfoo = ["a"]\nnext = 1\n', 'foo = ["a"]'),
+        # A bracket in a comment doesn't open anything.
+        ("# tf-analyze:ignore X\nfoo = 1 /* [ */\nnext = 1\n", "foo = 1"),
+        # Never closes: fall back to the one line.
+        ('# tf-analyze:ignore X\nfoo = [\n  "a",\n', "foo = ["),
+    ],
+)
+def test_expression_anchor_unit(text: str, anchor: str) -> None:
+    assert _markers(text)[0].anchor == anchor

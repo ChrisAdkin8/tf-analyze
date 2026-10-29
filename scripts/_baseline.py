@@ -170,10 +170,12 @@ def inline_ignore_markers(
     The *anchor* is the code the ignore covers, comments left out and
     whitespace normalised. The covered line is the marker's own line if
     it has code, else (``standalone``) the next line that has code. If
-    the covered line opens a block (its code ends in ``{``), the anchor
-    is the whole block, so any change inside it drops a trusted ignore
-    on the block (a finding reported on a ``resource`` line covers the
-    whole resource). Otherwise it is that one line. It does not depend
+    the covered line leaves a ``{``, ``[`` or ``(`` open, or starts a
+    heredoc, the anchor runs to the end of that expression (a block, a
+    multi-line list or call, through a heredoc's terminator line), so any
+    change inside it drops a trusted ignore on it: a finding reported on
+    a ``resource`` line covers the whole resource, one on
+    ``cidr_blocks = [`` the whole list. Otherwise it is that one line. It does not depend
     on line numbers, so lines added or removed elsewhere in the file
     leave it unchanged (see :func:`trusted_inline_markers`).
     """
@@ -191,16 +193,11 @@ def inline_ignore_markers(
     def code(i: int) -> str:
         return " ".join(raw_code(i).split())
 
-    def block_anchor(i: int) -> str:
-        line = raw_code(i)
-        if not line.rstrip().endswith("{"):
-            return code(i)
-        from _hcl import brace_walk  # local: keep this module light
-
-        end = brace_walk(text, offsets[i] + line.rstrip().rfind("{"))
+    def span_anchor(i: int) -> str:
+        end = _expression_end(text, offsets[i], offsets[i] + len(lines[i]))
         if end is None:
             return code(i)
-        last = max(k for k in range(i, len(lines)) if offsets[k] < end)
+        last = max(k for k in range(i, len(lines)) if offsets[k] <= end)
         return " ".join(" ".join(code(k) for k in range(i, last + 1)).split())
 
     markers: list[InlineMarker] = []
@@ -212,9 +209,61 @@ def inline_ignore_markers(
         covered = i
         while covered < len(lines) and not code(covered):
             covered += 1
-        anchor = block_anchor(covered) if covered < len(lines) else ""
+        anchor = span_anchor(covered) if covered < len(lines) else ""
         markers.append(InlineMarker(i + 1, m.group(1), anchor, standalone))
     return markers
+
+
+# A heredoc opener. HCL's identifier is bare; a quoted one is accepted too,
+# so the anchor errs towards covering more.
+_HEREDOC_OPEN_RE = re.compile(r'<<-?[ \t]*(["\']?)([A-Za-z_][\w-]*)\1[ \t]*\r?\n')
+
+
+def _expression_end(text: str, start: int, line_end: int) -> int | None:
+    """End offset of the expression that starts on the line
+    ``text[start:line_end]``: the first newline at or after ``line_end``
+    with no ``{`` / ``[`` / ``(`` left open and no heredoc unfinished.
+    Comments, strings (with their interpolations) and heredoc bodies are
+    stepped over, so a bracket inside them doesn't count. ``None`` when
+    the expression never closes (fall back to one line)."""
+    from _hcl import _string_end  # local: keep this module light
+
+    n = len(text)
+    depth = 0
+    i = start
+    while i < n:
+        ch = text[i]
+        if ch == "\n":
+            if depth <= 0 and i >= line_end:
+                return i
+            i += 1
+        elif ch == "#" or text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            if j < 0:
+                return None
+            i = j + 2
+        elif ch == '"':
+            i = _string_end(text, i)
+        elif ch == "<" and (m := _HEREDOC_OPEN_RE.match(text, i)):
+            term = re.compile(rf"(?m)^[ \t]*{re.escape(m.group(2))}[ \t]*\r?$")
+            t = term.search(text, m.end())
+            if t is None:
+                return None
+            i = t.end()
+            if i >= n and depth <= 0:
+                return n
+        elif ch in "{[(":
+            depth += 1
+            i += 1
+        elif ch in "}])":
+            depth -= 1
+            i += 1
+        else:
+            i += 1
+    return n if depth <= 0 else None
 
 
 def markers_to_suppressions(markers: list[InlineMarker]) -> dict[int, set[str]]:

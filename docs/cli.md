@@ -170,7 +170,7 @@ Read suppressions from PATH instead of looking for .tf-analyze-ignore.yaml in th
 
 ### `--inline-ignores-from`
 
-Honour an inline `# tf-analyze:ignore <ID>` comment only if the file at git REF has the same ignore on the same code (matched by content, not line number). The code is the line the comment covers or, when that line opens a block (ends in `{`), the whole block, so any change inside the block drops the ignore. Ignores added since REF, and all ignores in files new since REF, are not honoured. REF is a full ref name (refs/heads/main) or a commit SHA. If REF cannot be read, no inline ignores are. CI uses this so a pull request cannot silence its own findings.
+Honour an inline `# tf-analyze:ignore <ID>` comment only if the file at git REF has the same ignore on the same code (matched by content, not line number). The code is the line the comment covers or, when that line leaves a `{`, `[` or `(` open or starts a heredoc, the whole block, list, call or heredoc, so any change inside it drops the ignore. Ignores added since REF, and all ignores in files new since REF, are not honoured. REF is a full ref name (refs/heads/main) or a commit SHA. If REF cannot be read, no inline ignores are. CI uses this so a pull request cannot silence its own findings.
 
 ### `--mitre-tactic`
 

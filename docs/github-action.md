@@ -108,10 +108,12 @@ change them for those runs, edit the fallback after `||` in the file.
   honours an inline ignore only if the base branch has the same ignore
   on the same code. Matching is by the code, not the line number, so
   lines added elsewhere don't break it. The code is the line the ignore
-  covers; if that line opens a block (a `resource ... {` line, where
-  findings such as SEC-AWS-SG-001 are reported), it is the whole block,
-  so a PR that changes anything inside an ignored block (say, widens its
-  ports) loses the ignore until the change is merged. An ignore the PR
+  covers; if that line leaves a `{`, `[` or `(` open or starts a heredoc
+  (a `resource ... {` line, where findings such as SEC-AWS-SG-001 are
+  reported, a multi-line `cidr_blocks = [` list, a `jsonencode(` call, a
+  `<<EOF` policy), it is the whole block, list, call or heredoc, so a PR
+  that changes anything inside it (say, widens a port range or adds
+  `0.0.0.0/0`) loses the ignore until the change is merged. An ignore the PR
   adds, or moves onto other code, or puts in a new file, is not honoured until the PR
   is merged; the finding shows, and the summary lists the ignore under
   `inline_ignores_dropped`. If the base branch can't be read, no inline

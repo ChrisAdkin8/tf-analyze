@@ -4,8 +4,10 @@
   `# tf-analyze:ignore <ID>` is honoured only if the file at git `REF`
   has an ignore for the same rule on the same code. The match is by the
   code the comment covers (its own line if that has code, else the next
-  line of code; the whole block when that line opens one, so any change
-  inside an ignored `resource` drops the ignore), comments left out and
+  line of code; the whole block, list, call or heredoc when that line
+  leaves a `{`, `[` or `(` open or starts a heredoc, so any change inside
+  an ignored `resource`, multi-line list or policy drops the ignore),
+  comments left out and
   whitespace normalised, not by line number, so lines added elsewhere in
   the file don't break it. It counts copies: if `REF` has the ignore on N
   identical lines, at most N are honoured. A file that `REF` doesn't have
