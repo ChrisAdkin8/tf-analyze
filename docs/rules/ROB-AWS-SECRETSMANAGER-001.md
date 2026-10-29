@@ -1,7 +1,7 @@
 ---
 title: "ROB-AWS-SECRETSMANAGER-001 — Secrets Manager secret has no automatic rotation configured"
 description: "tf-analyze rule ROB-AWS-SECRETSMANAGER-001 (MEDIUM · robustness): Secrets Manager secret has no automatic rotation configured"
-keywords: "robustness, medium, terraform, iac, aws, mitre-T1078.004, mitre-T1098.001, d3-ch, nist-csf-pr.ac-1, nist-800-53-ia-5"
+keywords: "robustness, medium, terraform, iac, aws, mitre-T1098.001, d3-ch, nist-csf-pr.ac-1, nist-800-53-ia-5"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, aws, mitre-T1078.004, mitre-T1098
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, MITRE T1078.004, MITRE T1098.001, D3-CH",
+  "keywords": "robustness, medium, terraform, MITRE T1098.001, D3-CH",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -110,7 +110,6 @@ must return `true`.
   - [`Develop and Distribute / Secrets Storage Management`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
 
 **MITRE ATT&CK**
-  - [`T1078.004`](https://attack.mitre.org/techniques/T1078/004/)
   - [`T1098.001`](https://attack.mitre.org/techniques/T1098/001/)
 
 **MITRE D3FEND**

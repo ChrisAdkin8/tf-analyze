@@ -11,6 +11,11 @@ Manifest curation principles:
     than help. A rule that arguably maps to 3 ATT&CK techniques and
     obviously to 1 should list the 1.
   * Prefer the most-specific sub-technique (T1078.004 over T1078).
+  * Tag a technique only when the rule finds a condition that directly
+    enables it, or fails to stop it. Advice-only rules (MOD-REUSE-*),
+    "behind latest" / EOL / deprecation checks and availability rules
+    carry no ATT&CK tag; T1195 is for mutable or unverified dependencies.
+    tests/test_mitre_precision.py pins this and caps rules per technique.
   * D3FEND mappings are derived from the rule's MITRE tags via D3FEND's
     own ATT&CK ↔ D3FEND mapping; entries here are the curated subset.
 
@@ -50,7 +55,7 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "SEC-AWS-LB-LISTENER-001":     ["T1071.001"],
     "SEC-AWS-CLOUDFRONT-001":      ["T1071.001"],
     "SEC-AWS-CLOUDFRONT-002":      ["T1071.001"],
-    "SEC-AWS-APIGW-001":           ["T1190"],
+    "SEC-AWS-APIGW-001":           ["T1562.008"],
     "SEC-AWS-COGNITO-002":         ["T1190"],
     "SEC-AZURE-NSG-001":           ["T1190", "T1133"],
     "SEC-GCP-FW-001":              ["T1190", "T1133"],
@@ -61,7 +66,6 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "SEC-AWS-CLOUDTRAIL-001":      ["T1562.008"],
     "SEC-AWS-CLOUDTRAIL-002":      ["T1562.008"],
     "SEC-AWS-VPC-FLOWLOGS-001":    ["T1562.008"],
-    "SEC-AWS-CWL-001":             ["T1562.008"],
     "SEC-AWS-S3-LOGGING-001":      ["T1562.008"],
     "SEC-AWS-GUARDDUTY-001":       ["T1562.001"],
     "SEC-AWS-SECURITYHUB-001":     ["T1562.001"],
@@ -79,9 +83,8 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "SEC-AWS-REDSHIFT-001":        ["T1530"],
     "SEC-AWS-KINESIS-001":         ["T1530"],
     "SEC-AWS-NEPTUNE-001":         ["T1530"],
-    "SEC-AZURE-SQL-001":           ["T1530"],
-    "SEC-AZURE-KV-001":            ["T1530"],
-    "SEC-AZURE-KV-002":            ["T1530", "T1133"],
+    "SEC-AZURE-KV-001":            ["T1485"],
+    "SEC-AZURE-KV-002":            ["T1555.006", "T1133"],
     "SEC-GCP-CMEK-001":            ["T1530"],
 
     # IMDSv2 / container / metadata
@@ -105,17 +108,12 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
 
     # Module / supply-chain (was 0/3 module-reuse + several MOD- gaps)
     "MOD-PIN-001":                 ["T1195.002"],
-    "MOD-STALE-001":               ["T1195.002"],
-    "MOD-REUSE-AWS-VPC-001":       ["T1195.002"],
-    "MOD-REUSE-AZURE-AKS-001":     ["T1195.002"],
-    "MOD-REUSE-GCP-NETWORK-001":   ["T1195.002"],
 
     # Cost — relevant to crypto-mining via expensive resources (T1496 Resource Hijacking)
     "COST-AWS-RISK-001":           ["T1496"],
     "COST-GCP-RISK-001":           ["T1496"],
 
     # Ops — logging-retention / deletion-protection
-    "OPS-AWS-CWL-001":             ["T1562.008"],
     "OPS-ENV-001":                 ["T1485"],
 
     # Robustness — drift / Defense Evasion family
@@ -124,7 +122,6 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "ROB-DRIFT-003":               ["T1562.001"],
 
     # Robustness — data destruction (deletion-protection / lifecycle / force_destroy)
-    "ROB-AWS-ALB-001":             ["T1485"],
     "ROB-AWS-DDB-001":             ["T1485"],
     "ROB-AWS-LIFECYCLE-001":       ["T1485"],
     "ROB-AWS-LIFECYCLE-002":       ["T1485"],
@@ -144,11 +141,9 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "ROB-AZURE-STORAGE-001":       ["T1485", "T1490"],
 
     # Robustness — credential rotation
-    "ROB-AWS-SECRETSMANAGER-001":  ["T1078.004", "T1098.001"],
+    "ROB-AWS-SECRETSMANAGER-001":  ["T1098.001"],
 
     # Robustness — provider-version supply chain
-    "ROB-VERSION-001":             ["T1195.002"],
-    "ROB-VERSION-002":             ["T1195.002"],
     "ROB-VERSION-003":             ["T1195.002"],
 
     # ── Azure — was 5/34, sweep target ~20 ────────────────────
@@ -157,7 +152,6 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "SEC-AZURE-AKS-002":           ["T1133", "T1611"],
     "SEC-AZURE-EVENTHUB-001":      ["T1530"],
     "SEC-AZURE-KV-003":            ["T1098.001"],
-    "SEC-AZURE-MI-001":            ["T1078.004"],
     "SEC-AZURE-RBAC-001":          ["T1078.004"],
     "SEC-AZURE-REDIS-001":         ["T1040", "T1071.001"],
     "SEC-AZURE-SERVICEBUS-001":    ["T1530"],
@@ -172,7 +166,6 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "STK-AZURE-AKS-005":           ["T1190", "T1133"],
     "STK-AZURE-DB-001":            ["T1040"],
     "STK-AZURE-NSG-FLOWLOG-001":   ["T1562.008"],
-    "STK-AZURE-SQL-001":           ["T1195.002"],
     "STK-AZURE-SQL-TDE-001":       ["T1530"],
     "STK-AZURE-STORAGE-001":       ["T1490"],
 
@@ -202,10 +195,8 @@ MITRE_MAPPINGS: dict[str, list[str]] = {
     "STK-GCP-CLOUDSQL-001":        ["T1490"],
     "STK-GCP-CLOUDSQL-003":        ["T1485"],
     "STK-GCP-CLOUDSQL-004":        ["T1040"],
-    "STK-GCP-CLOUDSQL-005":        ["T1190", "T1195.002"],
-    "STK-GCP-DEPRECATION-001":     ["T1195.002"],
     "STK-GCP-DNS-001":             ["T1583.002"],
-    "STK-GCP-GCS-LOGGING-001":     ["T1530", "T1562.008"],
+    "STK-GCP-GCS-LOGGING-001":     ["T1530"],
     "STK-GCP-GKE-001":             ["T1190"],
     "STK-GCP-GKE-002":             ["T1078.004"],
     "STK-GCP-GKE-003":             ["T1552.001"],

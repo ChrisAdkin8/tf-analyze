@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-VM-DIAG-001 — Azure virtual machine missing boot diagnostics"
 description: "tf-analyze rule SEC-AZURE-VM-DIAG-001 (MEDIUM · security): Azure virtual machine missing boot diagnostics"
-keywords: "security, medium, terraform, iac, azure, mitre-T1562.008, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-800-53-au-2"
+keywords: "security, medium, terraform, iac, azure, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-800-53-au-2"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure, mitre-T1562.008, cwe-778, d3
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1562.008, CWE-778, D3-IAA",
+  "keywords": "security, medium, terraform, CWE-778, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -107,9 +107,6 @@ serial output (not "boot diagnostics is not enabled").
 
 **SOC 2 Trust Services Criteria**
   - `CC7.2`
-
-**MITRE ATT&CK**
-  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
 
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)

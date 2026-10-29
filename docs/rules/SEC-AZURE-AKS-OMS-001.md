@@ -1,7 +1,7 @@
 ---
 title: "SEC-AZURE-AKS-OMS-001 — Azure AKS cluster missing Container Insights (OMS agent)"
 description: "tf-analyze rule SEC-AZURE-AKS-OMS-001 (MEDIUM · security): Azure AKS cluster missing Container Insights (OMS agent)"
-keywords: "security, medium, terraform, iac, azure, mitre-T1530, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-08"
+keywords: "security, medium, terraform, iac, azure, mitre-T1562.008, cwe-778, d3-iaa, nist-csf-de.cm-1, nist-800-53-au-2, csa-ccm-log-08"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "security, medium, terraform, iac, azure, mitre-T1530, cwe-778, d3-iaa
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "security, medium, terraform, MITRE T1530, CWE-778, D3-IAA",
+  "keywords": "security, medium, terraform, MITRE T1562.008, CWE-778, D3-IAA",
   "proficiencyLevel": "Expert",
   "articleSection": "security",
   "isAccessibleForFree": true
@@ -102,7 +102,7 @@ must return `true`.
   - `CC7.2`
 
 **MITRE ATT&CK**
-  - [`T1530`](https://attack.mitre.org/techniques/T1530/)
+  - [`T1562.008`](https://attack.mitre.org/techniques/T1562/008/)
 
 **CWE**
   - [`CWE-778`](https://cwe.mitre.org/data/definitions/778.html)

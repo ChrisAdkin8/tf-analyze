@@ -1,7 +1,7 @@
 ---
 title: "ROB-VERSION-001 — required_version floor too old for skill assumptions"
 description: "tf-analyze rule ROB-VERSION-001 (MEDIUM · robustness): required_version floor too old for skill assumptions"
-keywords: "robustness, medium, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-cm-2, nist-800-53-sr-3, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l2, slsa-deps"
+keywords: "robustness, medium, terraform, iac, cwe-1357, d3-sca, nist-csf-id.sc-2, nist-csf-pr.ip-1, nist-800-53-cm-2, nist-800-53-sr-3, csa-ccm-sta-04, csa-ccm-ccc-05, slsa-l2, slsa-deps"
 ---
 
 <script type="application/ld+json">
@@ -24,7 +24,7 @@ keywords: "robustness, medium, terraform, iac, mitre-T1195.002, cwe-1357, d3-sca
     "name": "tf-analyze",
     "url": "https://chrisadkin8.github.io/tf-analyze"
   },
-  "keywords": "robustness, medium, terraform, MITRE T1195.002, CWE-1357, D3-SCA",
+  "keywords": "robustness, medium, terraform, CWE-1357, D3-SCA",
   "proficiencyLevel": "Expert",
   "articleSection": "robustness",
   "isAccessibleForFree": true
@@ -80,9 +80,6 @@ CI should pin the same version via `setup-terraform`.
 
 **OWASP IaC Cheat Sheet**
   - [`Develop and Distribute / Version Control Discipline`](https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html)
-
-**MITRE ATT&CK**
-  - [`T1195.002`](https://attack.mitre.org/techniques/T1195/002/)
 
 **CWE**
   - [`CWE-1357`](https://cwe.mitre.org/data/definitions/1357.html)

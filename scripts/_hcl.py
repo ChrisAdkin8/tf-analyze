@@ -1353,6 +1353,10 @@ def mask_comments(body: str) -> str:
     return mask_comments_and_heredocs(body, heredocs=False)
 
 
+# Cached: every rule masks the same resource bodies, so without the cache
+# a scan re-walks each body once per rule (it lost its cache when the
+# `heredocs` option was added, and corpus scans got ~25% slower).
+@functools.lru_cache(maxsize=4096)
 def mask_comments_and_heredocs(body: str, *, heredocs: bool = True) -> str:
     """Return ``body`` with comments and heredoc bodies blanked to spaces
     (newlines kept, so offsets and line numbers line up). Ordinary string
@@ -1506,6 +1510,26 @@ def _first_arg_value(body: str, arg: str) -> str | None:
         coll_end = brace_walk(body, m.start(1), opens=open_ch, closes=_closer[open_ch])
         if coll_end is not None:
             return body[m.start(1):coll_end].strip()
+    # A bracket opened later on the line and closed on a later one — a
+    # function call such as `bucket = format(\n  "x-%d",\n  count.index)` —
+    # carries the value on to its closer, so the arguments are seen.
+    k, line_end = m.start(1), m.end(1)
+    while k < line_end:
+        ch = body[k]
+        if ch == '"':
+            k = _string_end(body, k)
+            continue
+        if ch == "#" or body.startswith(("//", "/*"), k):
+            break
+        if ch in _closer:
+            end = brace_walk(body, k, opens=ch, closes=_closer[ch])
+            if end is None:
+                break
+            if end > line_end:
+                return body[m.start(1):end].strip()
+            k = end
+            continue
+        k += 1
     # Strip a trailing comment — `#`, `//` or `/* */` — outside any
     # string. String-aware (`strip_hcl_context`), and HCL has no
     # single-quoted strings, so an apostrophe never starts one. (The

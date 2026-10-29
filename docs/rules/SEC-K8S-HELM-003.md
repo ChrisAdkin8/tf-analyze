@@ -48,6 +48,9 @@ arbitrary Kubernetes manifests on `terraform apply`. The 2021
 Codecov compromise and the 2023 3CX supply-chain incident both
 pivoted through unsigned build-time artefacts; helm charts are
 the equivalent surface for cluster workloads.
+Only an explicit `false` fires: `verify` defaults to false, but most
+public charts ship no provenance file, so `verify = true` would fail
+their install and an absent-check would fire on nearly every release.
 2. **`resource_missing_arg`** on `helm_release` (`version`) — _the resource is missing a required attribute (or nested attribute path)._
   `helm_release` omits `version` entirely. The chart resolves to
 the repository's *current* latest tag on every `terraform apply`,
@@ -64,6 +67,9 @@ arbitrary Kubernetes manifests on `terraform apply`. The 2021
 Codecov compromise and the 2023 3CX supply-chain incident both
 pivoted through unsigned build-time artefacts; helm charts are
 the equivalent surface for cluster workloads.
+Only an explicit `false` fires: `verify` defaults to false, but most
+public charts ship no provenance file, so `verify = true` would fail
+their install and an absent-check would fire on nearly every release.
 
 `helm_release` omits `version` entirely. The chart resolves to
 the repository's *current* latest tag on every `terraform apply`,
