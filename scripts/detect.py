@@ -3141,7 +3141,7 @@ def _add_mode_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--diff-base",
         default=None,
-        help="Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files.",
+        help="Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files, plus every .tf file in the folder of a changed .tfvars, a changed file declaring variable / locals, or a deleted file.",
     )
     ap.add_argument(
         "--state-json",
