@@ -169,7 +169,10 @@ jobs:
             --mode "$MODE" \
             --format json \
             "${EXTRA_ARGS[@]}" \
-            > "$OUT/tf-analyze-findings.json" 2>"$OUT/tf-analyze-stderr.txt" || true
+            > "$OUT/tf-analyze-findings.json" 2>"$OUT/tf-analyze-stderr.txt" \
+            || JSON_RC=$?
+          # Exit 2+ is a crash: fail on it below, whatever the JSON holds.
+          export JSON_RC="${JSON_RC:-0}"
 
           # Engine-rendered PR summary (R28.1) — score+grade emoji,
           # top-3 findings, top fix, attack-graph block when --attack-graph
@@ -204,6 +207,9 @@ jobs:
           # Determine exit code based on fail-on threshold.
           python3 -c "
           import json, os, sys
+          if int(os.environ.get('JSON_RC') or 0) >= 2:
+              print('::error::tf-analyze: the JSON scan crashed (exit ' + os.environ['JSON_RC'] + '); see tf-analyze-stderr.txt', file=sys.stderr)
+              sys.exit(1)
           d = json.load(open(os.path.join(os.environ['OUT'], 'tf-analyze-findings.json')))
           findings = d.get('findings', d if isinstance(d, list) else [])
           rank = {'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1, 'INFO': 0}

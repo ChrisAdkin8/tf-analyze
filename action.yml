@@ -473,6 +473,12 @@ runs:
             "${TFA_IMAGE}" \
             "${BASE_ARGS[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
             > "$out" 2>"$err" || rc=$?
+          # The gate step needs the JSON scan's own verdict: a gate passed
+          # in extra-args (--fail-on, --fail-on-parse-error, ...) exits 1
+          # with a report the gate's own rebuild would pass.
+          if [ "$fmt" = "json" ]; then
+            echo "json-rc=$rc" >> "$GITHUB_OUTPUT"
+          fi
           if [ "$rc" -ge 2 ]; then
             echo "::error::tf-analyze: $fmt scan crashed (exit $rc). See $3 in the log below for the engine traceback."
           fi
@@ -814,9 +820,25 @@ runs:
       env:
         TFA_FAIL_ON: ${{ inputs.fail-on }}
         TFA_JSON_REPORT: ${{ steps.scan.outputs.json-report-path }}
+        TFA_JSON_RC: ${{ steps.scan.outputs.json-rc }}
       run: |
         python3 - <<'PY'
         import json, sys, os
+        # The JSON scan's exit code. 2+ is a crash: whatever report exists
+        # is not a result. 1 is the engine's own gate tripping, which only
+        # happens for a gate flag passed in extra-args (the action itself
+        # passes none); rebuilding the verdict from the JSON would drop
+        # that stricter gate. Empty = the scan step never ran.
+        rc = os.environ.get("TFA_JSON_RC", "")
+        if not rc.isdigit():
+            print("::error::tf-analyze: the scan did not run (no exit code recorded); nothing was checked.", file=sys.stderr)
+            sys.exit(1)
+        if int(rc) >= 2:
+            print(f"::error::tf-analyze: the JSON scan crashed (exit {rc}); see tf-analyze-json-stderr.txt in the scan step's log.", file=sys.stderr)
+            sys.exit(1)
+        if int(rc) == 1:
+            print("::error::tf-analyze: the engine's own gate failed the scan (exit 1) — a gate flag in `extra-args` (e.g. --fail-on, --fail-on-parse-error) tripped; see the scan step's log.", file=sys.stderr)
+            sys.exit(1)
         # A missing or malformed report (the scan never ran or crashed)
         # raises here and fails the step: no report is not a pass.
         with open(os.environ["TFA_JSON_REPORT"]) as f:

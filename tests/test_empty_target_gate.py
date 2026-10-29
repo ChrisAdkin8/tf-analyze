@@ -80,6 +80,7 @@ def _gate(tmp_path: Path, report: dict) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
         "TFA_JSON_REPORT": str(tmp_path / "tf-analyze-findings.json"),
+        "TFA_JSON_RC": "0",
         "TFA_FAIL_ON": "HIGH",
     }
     return subprocess.run(

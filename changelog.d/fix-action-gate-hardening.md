@@ -29,6 +29,13 @@
   `--fail-on` in `extra-args`) or 2 (a crash) ended it at the first
   scan: no crash annotation, no SARIF / HTML / PR summary, no engine
   stderr in the log, and no `score` / `grade` / count outputs.
+- **A gate flag in `extra-args` is honoured**: the Action rebuilt its
+  verdict from the JSON report, so `--fail-on LOW` or
+  `--fail-on-parse-error` passed in `extra-args` made the engine exit 1
+  and the Action pass anyway. The scan step records the JSON scan's exit
+  code (`json-rc`); the gate fails on 1 (naming `extra-args`) and on a
+  crash (2+). The `integrations/github-action.yml` template fails on a
+  crashed JSON scan the same way.
 - **The gate fails on a report that has no findings list** (neither
   `findings` nor `by_target`) instead of passing it.
 - **`mode: plan`** was accepted by the Action but isn't an engine mode,

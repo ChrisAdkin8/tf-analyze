@@ -57,14 +57,20 @@ def _detect(*args: str) -> subprocess.CompletedProcess:
 
 
 def _gate(
-    tmp_path: Path, report, fail_on: str = "CRITICAL"
+    tmp_path: Path, report, fail_on: str = "CRITICAL", json_rc: str = "0"
 ) -> subprocess.CompletedProcess:
-    """Run the action's "Apply fail-on threshold" step on `report`."""
+    """Run the action's "Apply fail-on threshold" step on `report`, with
+    `json_rc` as the JSON scan's recorded exit code."""
     path = tmp_path / "report.json"
     path.write_text(report if isinstance(report, str) else json.dumps(report))
     return subprocess.run(
         [*GH_BASH, _step("Apply fail-on threshold")["run"]],
-        env={**os.environ, "TFA_FAIL_ON": fail_on, "TFA_JSON_REPORT": str(path)},
+        env={
+            **os.environ,
+            "TFA_FAIL_ON": fail_on,
+            "TFA_JSON_REPORT": str(path),
+            "TFA_JSON_RC": json_rc,
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -566,7 +572,12 @@ def test_scan_writes_reports_outside_the_workspace(tmp_path: Path) -> None:
     # The gate reads it too, and fails on the CRITICAL.
     gate = subprocess.run(
         [*GH_BASH, _step("Apply fail-on threshold")["run"]],
-        env={**os.environ, "TFA_FAIL_ON": "HIGH", "TFA_JSON_REPORT": str(report)},
+        env={
+            **os.environ,
+            "TFA_FAIL_ON": "HIGH",
+            "TFA_JSON_REPORT": str(report),
+            "TFA_JSON_RC": outputs["json-rc"],
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -631,6 +642,7 @@ def test_scan_step_survives_a_non_zero_engine_exit(tmp_path: Path, docker_exit: 
     for name in ("tf-analyze-findings.json", "tf-analyze.sarif",
                  "tf-analyze-report.html", "tf-analyze-pr-summary.md"):
         assert (out_dir / name).stat().st_size > 0, name
+    assert outputs["json-rc"] == str(docker_exit)
     assert outputs["score"] == "40" and outputs["grade"] == "D"
     assert outputs["total"] == "1"
     assert outputs["critical"] == "1" and outputs["high"] == "2"
@@ -666,3 +678,53 @@ def test_graph_promotion_does_not_unsuppress_a_baselined_finding(tmp_path: Path)
     with_graph, without = new("--attack-graph"), new()
     assert with_graph == without
     assert len(with_graph) <= 3, with_graph  # the escalated ones only
+
+
+CLEAN_REPORT = {"summary": {"counts": {}}, "findings": []}
+
+
+def test_gate_honours_the_engines_own_gate(tmp_path: Path) -> None:
+    # `--fail-on LOW` (or --fail-on-parse-error) in extra-args makes the
+    # engine exit 1; the report itself has nothing at the action's
+    # fail-on, and the gate used to pass it.
+    gate = _gate(tmp_path, CLEAN_REPORT, "CRITICAL", json_rc="1")
+    assert gate.returncode == 1
+    assert "extra-args" in gate.stderr
+
+
+def test_gate_passes_a_clean_scan_that_exited_0(tmp_path: Path) -> None:
+    assert _gate(tmp_path, CLEAN_REPORT, "CRITICAL", json_rc="0").returncode == 0
+
+
+def test_gate_fails_on_a_crashed_scan_or_a_missing_exit_code(tmp_path: Path) -> None:
+    crashed = _gate(tmp_path, CLEAN_REPORT, "CRITICAL", json_rc="2")
+    assert crashed.returncode == 1 and "crashed" in crashed.stderr
+    assert _gate(tmp_path, CLEAN_REPORT, "CRITICAL", json_rc="").returncode == 1
+
+
+def test_scan_step_records_the_json_exit_code_for_the_gate(tmp_path: Path) -> None:
+    # End to end: a stub engine exits 1 with a report the threshold alone
+    # would pass; the gate reads the recorded code and fails.
+    proc, outputs = _run_scan_step(tmp_path, 1)
+    assert proc.returncode == 0, proc.stderr
+    assert outputs["json-rc"] == "1"
+    (tmp_path / "clean.json").write_text(json.dumps(CLEAN_REPORT))
+    gate = subprocess.run(
+        [*GH_BASH, _step("Apply fail-on threshold")["run"]],
+        env={
+            **os.environ,
+            "TFA_FAIL_ON": "CRITICAL",
+            "TFA_JSON_REPORT": str(tmp_path / "clean.json"),
+            "TFA_JSON_RC": outputs["json-rc"],
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert gate.returncode == 1 and "extra-args" in gate.stderr
+
+
+def test_integration_template_fails_on_a_crashed_json_scan() -> None:
+    text = (REPO_ROOT / "integrations" / "github-action.yml").read_text()
+    assert "|| JSON_RC=$?" in text
+    assert "int(os.environ.get('JSON_RC') or 0) >= 2" in text

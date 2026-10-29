@@ -64,6 +64,11 @@ change them for those runs, edit the fallback after `||` in the file.
   excluding everything), the job fails with "nothing was checked"
   instead of passing with a score of 100. A PR that simply changes no
   Terraform still passes.
+- **The engine's own gate counts.** A gate flag passed through the
+  composite action's `extra-args` (`--fail-on`, `--fail-on-parse-error`,
+  ...) makes the engine exit 1, and the job fails on it even when the
+  report has nothing at the action's `fail-on` level. An engine crash
+  (exit 2 or more) fails the job too.
 - **Unchecked input fails the job.** If a rule check ran out of time
   (`summary.rule_timeouts`) or a file couldn't be read
   (`summary.unreadable_files`), part of the target wasn't checked, so the
