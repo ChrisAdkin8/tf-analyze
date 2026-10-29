@@ -48,5 +48,7 @@ fix_hcl: |
     administrator_password = "REDACTED"
   }
 fix_disruption: forces_replacement
+# The version is an example; it has to match the server's engine.
+fix_hcl_example: true
 fixtures:
   - azure_mysql_eol_version

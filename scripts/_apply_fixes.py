@@ -317,11 +317,65 @@ def _backup_path(path: Path) -> Path:
     return candidate
 
 
+def _split_inline_block(lines: list[str], start: int, eol: str) -> None:
+    """Give the block opening on line `start` its own lines: its ``{`` ends
+    a line and its closing ``}`` starts one. The fixes below insert before
+    the closing line and match attributes at the start of a line, so for
+    ``resource "x" "y" {}`` (or ``{ a = 1 }``) they put the new lines
+    *above* the header, outside the block, and every re-run added them
+    again. Edits `lines` in place; a block already laid out is untouched.
+    """
+    code = code_lines(lines)
+    depth, open_col, close = 0, None, None
+    for i in range(start, len(lines)):
+        for col, ch in enumerate(code[i]):
+            if ch == "{":
+                if depth == 0 and i == start:
+                    open_col = col
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    close = (i, col)
+                    break
+        if close or (i == start and open_col is None):
+            break
+    if open_col is None or close is None:
+        return
+    head = lines[start]
+    head_indent = head[:len(head) - len(head.lstrip())]
+    end, close_col = close
+    # Closing brace first: it is on the same or a later line, so splitting
+    # it leaves `open_col` valid.
+    if code[end][:close_col].strip():
+        raw = lines[end]
+        lines[end:end + 1] = [raw[:close_col].rstrip() + eol, head_indent + raw[close_col:]]
+    rest = lines[start][open_col + 1:]
+    if code[start][open_col + 1:len(lines[start]) - len(eol)].strip():
+        lines[start:start + 1] = [
+            lines[start][:open_col + 1] + eol, head_indent + "  " + rest.lstrip(),
+        ]
+
+
 def _apply_pattern(
     modified: list[str], start_idx: int, kind: str, arg: str, fix_hcl: str, eol: str,
 ) -> bool:
     """Apply one pattern's fix to the resource block opening at
-    `start_idx`, editing `modified` in place. True if it changed it."""
+    `start_idx`, editing `modified` in place. True if it changed it. An
+    inline block is split onto its own lines first (`_split_inline_block`),
+    and kept split only when the fix then changes it."""
+    trial = modified[:]
+    _split_inline_block(trial, start_idx, eol)
+    if not _apply_pattern_to_block(trial, start_idx, kind, arg, fix_hcl, eol):
+        return False
+    modified[:] = trial
+    return True
+
+
+def _apply_pattern_to_block(
+    modified: list[str], start_idx: int, kind: str, arg: str, fix_hcl: str, eol: str,
+) -> bool:
+    """`_apply_pattern` for a block whose braces are on their own lines."""
     block_end = find_block_end_in_lines(modified, start_idx)
     if block_end is None:
         return False
