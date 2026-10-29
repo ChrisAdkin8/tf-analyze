@@ -1706,16 +1706,25 @@ from _modes import (
 )
 
 
-def _fleet_scan(args: object, targets: list[Path], entries: list[dict]) -> dict:
+def _fleet_scan(args: object, targets: list[Path], entries: list[dict],
+                collect: dict | None = None) -> dict:
     """detect.py-side adapter: each target goes through `_scan_target`,
     with its own `.tf-analyze.yaml` (or `--config`, or none with
-    `--no-project-config`)."""
+    `--no-project-config`). `collect`, when given, gathers every target's
+    suppressed findings and resource types for the fleet's summary."""
     def scan_one(target: Path) -> dict:
         if args.no_project_config:
             config = {}
         else:
             config = _load_project_config(Path(args.config).parent if args.config else target)
-        return _scan_target(args, target, entries, config, contain_symlinks=True)
+        result = _scan_target(args, target, entries, config, contain_symlinks=True)
+        if collect is not None:
+            collect.setdefault("suppressed", []).extend(result["suppressed_findings"])
+            collect.setdefault("resource_types", []).extend(
+                b["groups"][0] for t in result["all_text"].values()
+                for b in find_blocks(t, RESOURCE_START)
+            )
+        return result
     return _fleet_scan_raw(targets, scan_one)
 
 
@@ -2155,7 +2164,8 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
             file=sys.stderr,
         )
         return 2
-    fleet_result = _fleet_scan(args, fleet_targets, entries)
+    collected: dict = {}
+    fleet_result = _fleet_scan(args, fleet_targets, entries, collected)
     # A gate reading the JSON (the GitHub Action) must see the checks that
     # ran out of time, as --fail-on does.
     if RULE_TIMEOUTS:
@@ -2168,14 +2178,29 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     # finding that wasn't escalated, so it passed a CRITICAL.
     _enrich_findings_for_output(all_findings, entries)
     _enrich_findings_for_output(fleet_result["fleet_wide"], entries)
+    # SARIF, HTML and the PR summary render every target's findings with
+    # the static scan's renderers; they all used to emit the Markdown
+    # fleet report, which code scanning rejects and a browser shows as text.
+    if args.format in ("html", "pr-summary"):
+        suppressed = collected.get("suppressed", [])
+        summary = _compute_summary(
+            all_findings, suppressed, [],
+            resources_scanned=_scored_resource_count(
+                collected.get("resource_types", []), entries,
+            ),
+        )
     if args.format == "sarif":
-        # Every target's findings in one SARIF run; it used to emit the
-        # Markdown report, which code scanning rejects.
         emit(json.dumps(to_sarif(
             all_findings, entries,
             parse_fallback_files=fleet_result["parse_fallback_files"],
             source_root=sarif_source_root(fleet_targets[0]),
         ), indent=2))
+    elif args.format == "html":
+        emit(to_html(all_findings, entries, suppressed,
+                     show_fixes=getattr(args, "show_fixes", False),
+                     summary=summary))
+    elif args.format == "pr-summary":
+        emit(_render_pr_summary(all_findings, entries, summary))
     else:
         emit(_render_fleet_report(fleet_result, args.format))
     if out_file is not None:

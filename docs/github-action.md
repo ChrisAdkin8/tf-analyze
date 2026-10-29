@@ -71,7 +71,10 @@ change them for those runs, edit the fallback after `||` in the file.
 - **The composite action's gate reads every report shape.** `mode:
   fleet` reports findings per target (`by_target`), and the gate fails on
   them, and on a fleet's unreadable files, as it does for one target;
-  fleet SARIF is real SARIF. `mode: plan` is a static scan of the
+  a target with no Terraform (a mistyped path) fails it, listed in
+  `empty_targets`, even when the other targets are clean. Fleet SARIF,
+  HTML and `pr-summary` output are the real formats, over every
+  target's findings. `mode: plan` is a static scan of the
   `plan-json` input (required). `mode: trend` is refused: it is a
   history table with nothing to gate. The `section` input is passed as
   `--focus`.
@@ -87,12 +90,14 @@ change them for those runs, edit the fallback after `||` in the file.
   with no baseline. A baseline entry without an `urgency` (an old report)
   counts as its rule's default urgency, so it can't hide a finding that
   was escalated above that.
-- **Reports are written under `$RUNNER_TEMP`.** The composite action
-  writes its JSON, SARIF, HTML and PR-summary reports, and the engine's
-  stderr, to a fresh `mktemp -d` folder, never the PR's checkout, where
-  a committed symlink could send the write anywhere the runner can
-  write. Use the `json-report-path`, `sarif-report-path` and
-  `html-report-path` outputs to find them.
+- **Reports are written under `$RUNNER_TEMP`.** Both the composite
+  action and this workflow template write their JSON, SARIF, HTML and
+  PR-summary reports, and the engine's stderr, to a fresh `mktemp -d`
+  folder, never the checkout, where a symlink committed in a PR could
+  send the write anywhere the runner can write. Use the composite
+  action's `json-report-path`, `sarif-report-path` and
+  `html-report-path` outputs, or the template's `analyze` step output
+  `out-dir`, to find them.
 - **Pushes to `main` / `master`** run `--mode static` — full workspace
   scan. SARIF is always uploaded; the HTML report is always attached.
 - **SARIF upload** lights up findings in the repo's Security → Code

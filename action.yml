@@ -826,7 +826,9 @@ runs:
         # No .tf files under the target (wrong `target`, or ignore_paths
         # excluding everything): a clean result would be a false pass.
         if summary.get("nothing_scanned"):
-            print("::error::tf-analyze: no .tf / .tf.json files found under the target; nothing was checked. Check the `target` input and ignore_paths.", file=sys.stderr)
+            # In a fleet, `empty_targets` lists each target that had none.
+            where = ", ".join(summary.get("empty_targets") or []) or "the target"
+            print(f"::error::tf-analyze: no .tf / .tf.json files found under {where}; nothing was checked there. Check the `target` input, extra-args targets and ignore_paths.", file=sys.stderr)
             sys.exit(1)
         # A rule check that ran out of time, or a file that couldn't be
         # read, was not checked: `--fail-on` fails on both, so this gate

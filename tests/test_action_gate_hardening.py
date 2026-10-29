@@ -166,6 +166,49 @@ def test_fleet_findings_carry_their_urgency(tmp_path: Path) -> None:
     assert gate.returncode == 1, gate.stderr
 
 
+def test_fleet_with_one_empty_target_fails_the_gate(tmp_path: Path) -> None:
+    # A mistyped target in a fleet must not pass because the others are clean.
+    clean = tmp_path / "clean"
+    clean.mkdir()
+    (clean / "main.tf").write_text("locals {\n  x = 1\n}\n")
+    empty = tmp_path / "typo"
+    empty.mkdir()
+    proc = _detect("--mode", "fleet", "--target", str(clean), "--target", str(empty),
+                   "--format", "json")
+    data = json.loads(proc.stdout)
+    assert data["empty_targets"] == [str(empty.resolve())]
+    assert data["nothing_scanned"] is True
+    gate = _gate(tmp_path, proc.stdout, "CRITICAL")
+    assert gate.returncode == 1 and str(empty.resolve()) in gate.stderr
+
+
+def test_fleet_with_every_target_empty_fails_the_gate(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    proc = _detect("--mode", "fleet", "--target", str(a), "--target", str(b),
+                   "--format", "json")
+    data = json.loads(proc.stdout)
+    assert len(data["empty_targets"]) == 2
+    assert _gate(tmp_path, proc.stdout, "CRITICAL").returncode == 1
+
+
+def test_fleet_with_terraform_in_every_target_does_not_flag(tmp_path: Path) -> None:
+    proc = _fleet_report(tmp_path)
+    data = json.loads(proc.stdout)
+    assert "nothing_scanned" not in data and "empty_targets" not in data
+
+
+def test_fleet_html_and_pr_summary_are_real_formats(tmp_path: Path) -> None:
+    html = _fleet_report(tmp_path, "html").stdout
+    assert html.lstrip().lower().startswith("<!doctype html")
+    assert "SEC-AWS-SG-001" in html
+    summary = _fleet_report(tmp_path, "pr-summary").stdout
+    assert summary.startswith("## tf-analyze:")
+    assert "SEC-AWS-SG-001" in summary
+    assert "# Fleet Scan Report" not in summary
+
+
 def test_gate_fails_on_fleet_unreadable_files(tmp_path: Path) -> None:
     report = {
         "by_target": {"/a": []},
@@ -416,6 +459,22 @@ def test_engine_accepts_every_flag_the_action_passes(tmp_path: Path) -> None:
 
 
 # ---- 6. reports are not written into the PR's checkout -------------------------
+
+
+def test_integration_template_writes_reports_outside_the_checkout() -> None:
+    import re
+
+    text = (REPO_ROOT / "integrations" / "github-action.yml").read_text()
+    # Every redirect into a report file goes to the mktemp folder.
+    targets = re.findall(r"[0-9]?>\s*(\S*tf-analyze-[\w.-]+)", text)
+    assert targets, "no report redirects found"
+    for target in targets:
+        assert target.startswith(('"$OUT/', '"$TFA_OUT/')), target
+    assert 'OUT="$(mktemp -d "${RUNNER_TEMP:-/tmp}/tf-analyze-out.XXXXXX")"' in text
+    # And every reader looks there.
+    assert "sarif_file: ${{ steps.analyze.outputs.out-dir }}/tf-analyze.sarif" in text
+    assert "path: ${{ steps.analyze.outputs.out-dir }}/tf-analyze-report.html" in text
+    assert not re.search(r"readFileSync\('tf-analyze", text)
 
 
 def test_scan_writes_reports_outside_the_workspace(tmp_path: Path) -> None:

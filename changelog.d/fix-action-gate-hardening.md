@@ -12,8 +12,12 @@
   escalated fleet finding carried an `urgency`. Fleet findings now carry
   urgency, title and the other report fields, and the gate reads them.
   It also fails on a fleet's unreadable files and timed-out rule checks
-  (now in the fleet JSON as `rule_timeouts`). `--mode fleet
-  --format sarif` emitted the Markdown report; it now emits SARIF.
+  (now in the fleet JSON as `rule_timeouts`), and on any target with no
+  `.tf` / `.tf.json` files: the fleet JSON lists those in `empty_targets`
+  and sets `nothing_scanned`, so a mistyped target fails even when the
+  others are clean. `--mode fleet --format sarif`, `html` and
+  `pr-summary` emitted the Markdown fleet report; they now emit SARIF,
+  the HTML report and the PR summary over every target's findings.
 - **`mode: trend`** is refused by the Action with a reason: it is a
   history table with no findings to gate, and the gate crashed on it.
 - **`mode: plan`** was accepted by the Action but isn't an engine mode,
@@ -32,11 +36,13 @@
   (an older report) counts as its rule's default urgency, so it can't
   hide a finding that was escalated above it; it used to match any
   urgency.
-- **Report files**: the Action wrote its reports and the engine's stderr
-  into the workspace, which is the PR's checkout, so a committed symlink
+- **Report files**: the Action, and the `integrations/github-action.yml`
+  template, wrote their reports and the engine's stderr into the
+  workspace, which is the PR's checkout, so a committed symlink
   named `tf-analyze.sarif` (or any other report name) sent the write
   wherever it pointed. They now go to a fresh `mktemp -d` folder under
   `$RUNNER_TEMP`. **If a workflow read
   `${{ github.workspace }}/tf-analyze-findings.json`, use the
   `json-report-path` output instead** (likewise `sarif-report-path`
-  and `html-report-path`).
+  and `html-report-path`); in the template, the `analyze` step's
+  `out-dir` output holds them.

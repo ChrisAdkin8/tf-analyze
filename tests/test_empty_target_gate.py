@@ -175,7 +175,7 @@ def _template_gate(tmp_path: Path, report: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-c", textwrap.dedent(_template_gate_script())],
         capture_output=True, text=True, cwd=tmp_path, check=False,
-        env={**os.environ, "FAIL_ON": "HIGH"},
+        env={**os.environ, "FAIL_ON": "HIGH", "OUT": str(tmp_path)},
     )
 
 
