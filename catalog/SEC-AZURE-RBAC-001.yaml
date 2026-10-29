@@ -61,5 +61,7 @@ fix_hcl: |
     principal_id         = azurerm_user_assigned_identity.example.principal_id
   }
 fix_disruption: none
+# The scope is an example reference; a person picks the real one.
+fix_hcl_example: true
 fixtures:
   - azure_role_assignment_subscription

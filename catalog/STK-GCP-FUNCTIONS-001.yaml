@@ -62,5 +62,7 @@ fix_hcl: |
   }
 fix_disruption: forces_replacement
 fix_disruption_note: "Runtime upgrades may break source compatibility (removed stdlib APIs, dependency conflicts); test in a staging project first."
+# The runtime is an example; it has to match the function's language.
+fix_hcl_example: true
 fixtures:
   - gcp_function_eol_runtime

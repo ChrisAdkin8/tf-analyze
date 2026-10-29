@@ -33,5 +33,7 @@ fix_hcl: |
     filename      = "function.zip"
   }
 fix_disruption: none
+# The runtime is an example; it has to match the function's language.
+fix_hcl_example: true
 fixtures:
   - aws_lambda_eol_runtime

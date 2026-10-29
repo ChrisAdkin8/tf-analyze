@@ -63,6 +63,8 @@ fix_hcl: |
     member  = "serviceAccount:${google_service_account.example.email}"
   }
 fix_disruption: none
+# The role is an example; a person picks the least role that works.
+fix_hcl_example: true
 fixtures:
   - iam_too_broad
 test_template: |

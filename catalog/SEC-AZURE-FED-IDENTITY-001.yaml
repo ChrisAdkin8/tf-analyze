@@ -66,5 +66,7 @@ fix_hcl: |
   }
 fix_disruption: none
 fix_disruption_note: "Tightening the subject does not affect callers that already match the exact claim."
+# The subject is an example; a person picks the real repo and ref.
+fix_hcl_example: true
 fixtures:
   - azure_fed_identity_wildcard

@@ -56,5 +56,7 @@ fix_hcl: |
     password       = var.db_password
   }
 fix_disruption: plan_required
+# The version is an example; it has to match the instance's engine.
+fix_hcl_example: true
 fixtures:
   - aws_rds_eol_version
