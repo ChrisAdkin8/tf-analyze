@@ -147,6 +147,42 @@ verification: TODO
 """,
         ["patterns[0] missing 'kind'"],
     ),
+    (
+        # The handler returns nothing without `regex`, so the pattern is
+        # dead: SEC-K8S-PSA-001 shipped three like this (`expected:`).
+        "SEC-HELM-NO-REGEX-001.yaml",
+        """\
+id: SEC-HELM-NO-REGEX-001
+title: "helm_set_value pattern without a regex"
+section: security
+default_urgency: HIGH
+blast_radius: module
+patterns:
+  - kind: helm_set_value
+    resource: helm_release
+    name: securityContext.runAsNonRoot
+    expected: 'true'
+recommendation: TODO
+verification: TODO
+""",
+        ["patterns[0] (kind=helm_set_value) needs 'regex'"],
+    ),
+    (
+        "SEC-IAM-BAD-CHECK-001.yaml",
+        """\
+id: SEC-IAM-BAD-CHECK-001
+title: "IAM pattern with an unknown check"
+section: security
+default_urgency: HIGH
+blast_radius: module
+patterns:
+  - kind: iam_json_policy_analysis
+    check: not_action
+recommendation: TODO
+verification: TODO
+""",
+        ["patterns[0].check 'not_action' not in"],
+    ),
 ]
 
 

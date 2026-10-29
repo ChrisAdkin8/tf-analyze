@@ -22,6 +22,8 @@ patterns:
       AdministratorAccess shape, hand-rolled inline rather than via
       the named AWS-managed policy. Bypasses org-level controls and
       audit tools that recognise `AdministratorAccess`.
+      `Action: "*"` with `NotResource` (every resource bar the few
+      listed) is the same shape and is reported here too.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:
@@ -61,3 +63,4 @@ fix_hcl: |
 fix_disruption: plan_required
 fixtures:
   - aws_iam_json_full_admin
+  - aws_iam_json_admin_not_resource

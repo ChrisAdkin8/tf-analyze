@@ -20,6 +20,7 @@
 #
 # Expected tf-analyze findings:
 #   - SEC-AWS-IAM-POLICY-005  CRITICAL  IAM policy document with actions and resources `*`
+#   - SEC-AWS-IAM-POLICY-006  MEDIUM    JSON policy Allow with NotAction (everything except IAM)
 #   - SEC-AWS-S3-001   HIGH   S3 bucket missing server-side encryption
 #   - SEC-AWS-S3-PUBLIC-BLOCK-001  HIGH  S3 bucket with no public access block
 #   - SEC-AWS-S3-PUBLIC-001        HIGH  S3 bucket ACL `public-read`
@@ -41,6 +42,20 @@ data "aws_iam_policy_document" "all_access" {
 resource "aws_iam_policy" "godmode" {
   name   = "demo-godmode"
   policy = data.aws_iam_policy_document.all_access.json
+}
+
+# "Everything except IAM" — negative form, so every AWS API added later
+# is granted too.
+resource "aws_iam_policy" "all_but_iam" {
+  name = "demo-all-but-iam"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      NotAction = ["iam:*"]
+      Resource  = "arn:aws:s3:::demo-*"
+    }]
+  })
 }
 
 # S3 bucket with no public-access block — anonymous reads are

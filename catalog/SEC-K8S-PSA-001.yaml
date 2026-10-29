@@ -1,5 +1,5 @@
 id: SEC-K8S-PSA-001
-title: "kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
+title: "kubernetes_namespace missing PSA label OR helm_release turns off runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
 section: security
 default_urgency: MEDIUM
 blast_radius: environment
@@ -28,8 +28,10 @@ owasp:
 # Absorbs the NIST 800-190 (Application Container Security)
 # `STK-K8S-RUNTIME-001` requirement: pods must run with
 # `runAsNonRoot=true`, `readOnlyRootFilesystem=true`, and
-# `capabilities.drop=[ALL]`. The helm_set_value pattern below catches
-# the most common helm-chart values that fail to set these.
+# `capabilities.drop=[ALL]`. The helm_set_value patterns below catch a
+# helm_release `set` that explicitly turns one of these off; a release
+# that leaves a value at the chart default is not reported (the default
+# lives in the chart, which is not scanned).
 patterns:
   - kind: resource_missing_arg
     resource: kubernetes_namespace
@@ -43,27 +45,34 @@ patterns:
   - kind: helm_set_value
     resource: helm_release
     name: securityContext.runAsNonRoot
-    expected: 'true'
+    regex: '(?i)^\s*false\s*$'
     description: |
-      R30.5 / NIST 800-190 — helm_release must set
-      `securityContext.runAsNonRoot = true`. Containers running as
-      uid 0 inside the pod expose the host to capability escalations.
+      R30.5 / NIST 800-190 — helm_release sets
+      `securityContext.runAsNonRoot = false`; it must be `true`.
+      Containers running as uid 0 inside the pod expose the host to
+      capability escalations. (`helm_set_value` fires on the value the
+      release sets, so the regex names the bad value, not the good one.)
   - kind: helm_set_value
     resource: helm_release
     name: securityContext.readOnlyRootFilesystem
-    expected: 'true'
+    regex: '(?i)^\s*false\s*$'
     description: |
-      R30.5 / NIST 800-190 — helm_release must set
-      `securityContext.readOnlyRootFilesystem = true`. A writable
-      rootfs lets attackers persist tooling across pod restarts.
+      R30.5 / NIST 800-190 — helm_release sets
+      `securityContext.readOnlyRootFilesystem = false`; it must be
+      `true`. A writable rootfs lets attackers persist tooling across
+      pod restarts.
   - kind: helm_set_value
     resource: helm_release
     name: securityContext.capabilities.drop
-    expected: 'ALL'
+    regex: '^(?!.*\bALL\b)\s*\S'
     description: |
-      R30.5 / NIST 800-190 — drop ALL kernel capabilities and add back
-      only what the app needs. Default Linux capabilities (CAP_NET_RAW
-      etc.) give a compromised pod meaningful escalation surface.
+      R30.5 / NIST 800-190 — helm_release overrides
+      `securityContext.capabilities.drop` with a list that leaves out
+      `ALL`. Only a literal value is judged: `helm_set_value` skips
+      an expression (`var.x`, `lookup(...)`), whose value is unknown
+      here, and an empty value. Drop ALL kernel capabilities and add back only what
+      the app needs. Default Linux capabilities (CAP_NET_RAW etc.) give
+      a compromised pod meaningful escalation surface.
 recommendation: |
   Add the PSA enforcement label to every namespace, scoped to the
   least-privileged level the workload tolerates:
@@ -97,3 +106,4 @@ fix_disruption: plan_required
 fix_disruption_note: "Tightening PSA on a running namespace can reject pending pods that violate the level. Roll out in audit mode first."
 fixtures:
   - k8s_namespace_no_psa
+  - k8s_helm_psa_disabled

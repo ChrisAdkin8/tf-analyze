@@ -100,6 +100,35 @@ _REQUIRED_FIELDS = (
     "patterns", "recommendation", "verification",
 )
 
+# The pattern keys each handler needs before it does anything: without
+# them it returns no findings, so the pattern is dead. Each item is a
+# tuple of alternatives, one of which must be set. SEC-K8S-PSA-001 shipped
+# three `helm_set_value` patterns with `expected:` and no `regex:` that
+# never fired. Such a pattern is dropped with a WARN (the rest of the
+# rule still loads), and is a hard error under --strict-catalog. Keep in
+# step with the guards at the top of each handler in
+# `scripts/_handlers_*.py`.
+_PATTERN_REQUIRED_KEYS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "resource_present": (("resource",),),
+    "data_source_present": (("data_source",),),
+    "resource_arg": (("resource",), ("arg", "nested_path"), ("regex", "not_regex")),
+    "ip_range_span": (("resource",), ("start_arg",), ("end_arg",), ("min_addresses",)),
+    "resource_missing_arg": (("resource",), ("arg", "nested_path")),
+    "resource_missing_companion": (("resource",), ("companion",), ("via",)),
+    "resource_body_contains": (("resource",), ("regex",)),
+    "resource_has_block": (("resource",), ("path",)),
+    "hcl_attr": (("resource",), ("path",), ("not_equal",)),
+    "resource_absent": (("resource",),),
+    "module_block_missing_arg": (("arg",),),
+    "grep": (("regex",),),
+    "backend_missing_arg": (("backend_type",), ("arg",)),
+    "graph_check": (("function",),),
+    "variable_type": (("type_regex", "regex"),),
+    "iam_policy_analysis": (("check",),),
+    "iam_json_policy_analysis": (("check",),),
+    "helm_set_value": (("name",), ("regex",)),
+}
+
 
 # ---- Minimal YAML loader -----------------------------------------------
 # Avoid PyYAML dependency. Catalogue YAML is shallow and well-formed.
@@ -213,10 +242,66 @@ def load_yaml(text: str) -> dict:
 _RULE_ID_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+")
 _LITERAL_BACKSLASH_ESCAPE_RE = re.compile(r"\\\\[.sdwSDWbB()\[\]{}+*?|^$]")
 
-def validate_catalog_entry(data: dict, source: str) -> list[str]:
+def _unusable_pattern_errors(p: dict, i: int, source: str) -> list[str]:
+    """Why pattern `p` (index `i`) could never fire, or [] if it can."""
+    out: list[str] = []
+    kind = p.get("kind")
+    for alts in _PATTERN_REQUIRED_KEYS.get(kind, ()):
+        if all(p.get(k) is None or p.get(k) == "" for k in alts):
+            want = " or ".join(repr(k) for k in alts)
+            out.append(
+                f"{source}: patterns[{i}] (kind={kind}) needs {want}; "
+                f"without it the pattern never fires"
+            )
+    # Lazy imports: the vocabularies live with the engine code.
+    if kind in ("iam_policy_analysis", "iam_json_policy_analysis") and p.get("check"):
+        from _iam_policy import CHECKS  # noqa: PLC0415
+        if p["check"] not in CHECKS:
+            out.append(
+                f"{source}: patterns[{i}].check {p['check']!r} not in {sorted(CHECKS)}"
+            )
+    if kind == "graph_check" and p.get("function"):
+        from _cross_resource import _GRAPH_CHECKS  # noqa: PLC0415
+        if p["function"] not in _GRAPH_CHECKS:
+            out.append(
+                f"{source}: patterns[{i}].function {p['function']!r} not in "
+                f"{sorted(_GRAPH_CHECKS)}"
+            )
+    return out
+
+
+def _drop_unusable_patterns(data: dict, unusable: dict[int, list[str]]) -> bool:
+    """Remove the patterns in `unusable` from `data`, with a WARN naming
+    the rule and each pattern. False when no usable pattern is left (the
+    entry would never fire, so the caller skips it, loudly)."""
+    rid = data.get("id", "?")
+    for i, msgs in sorted(unusable.items()):
+        for msg in msgs:
+            print(f"WARN: {rid}: skipping patterns[{i}]: {msg}", file=sys.stderr)
+    data["patterns"] = [
+        p for i, p in enumerate(data.get("patterns") or []) if i not in unusable
+    ]
+    if not data["patterns"]:
+        print(
+            f"WARN: {rid}: no usable patterns left; the rule is skipped and "
+            f"will never fire",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def validate_catalog_entry(
+    data: dict, source: str, unusable: dict[int, list[str]] | None = None,
+) -> list[str]:
     """Return a list of human-readable schema errors. Empty list = valid.
 
     `source` is the catalogue YAML file path used in error messages.
+
+    A pattern its handler can't use (a required key missing, an unknown
+    `check:` / `function:`) is an error too, unless `unusable` is given:
+    then those errors go there, keyed by pattern index, so the loader can
+    drop just that pattern and keep the rest of the rule.
     """
     errs: list[str] = []
     if not isinstance(data, dict):
@@ -265,6 +350,12 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
                         f"{bad.group()[2:]!r}; write the regex in single quotes "
                         f"(regex: 'a\\.b')"
                     )
+            dead = _unusable_pattern_errors(p, i, source)
+            if unusable is not None:
+                if dead:
+                    unusable[i] = dead
+            else:
+                errs.extend(dead)
             if not p.get("kind"):
                 errs.append(f"{source}: patterns[{i}] missing 'kind'")
             elif p.get("kind") == "policy":
@@ -626,7 +717,10 @@ def load_catalog(
             continue
         # Schema validation. Skip the entry if any required field is missing
         # — the alternative (loading partial entries) lets bugs hide.
-        errs = validate_catalog_entry(data, str(yml))
+        unusable: dict[int, list[str]] = {}
+        errs = validate_catalog_entry(data, str(yml), unusable=unusable)
+        if strict:
+            errs += [m for _i, msgs in sorted(unusable.items()) for m in msgs]
         if errs:
             for msg in errs:
                 print(f"ERROR: {msg}", file=sys.stderr)
@@ -636,6 +730,8 @@ def load_catalog(
         if status == "deprecated":
             continue
         if status == "stub" and not include_stubs:
+            continue
+        if unusable and not _drop_unusable_patterns(data, unusable):
             continue
         data["patterns"] = _with_kubernetes_aliases(data.get("patterns") or [])
         entries.append(data)
@@ -648,6 +744,7 @@ def load_catalog(
 
     # Load custom rules from extra_rules_dir if provided
     if extra_rules_dir is not None and Path(extra_rules_dir).is_dir():
+        custom_dead = 0
         for yml in sorted(Path(extra_rules_dir).glob("*.yaml")):
             try:
                 data = load_yaml(yml.read_text())
@@ -662,17 +759,35 @@ def load_catalog(
                     file=sys.stderr,
                 )
                 continue
-            errs = validate_catalog_entry(data, str(yml))
+            unusable = {}
+            errs = validate_catalog_entry(data, str(yml), unusable=unusable)
             if errs:
                 for msg in errs:
                     print(f"ERROR: {msg}", file=sys.stderr)
+                continue
+            if unusable and strict:
+                # A dead pattern is a hard error under --strict-catalog,
+                # for custom rules as for the built-in catalogue.
+                for _i, msgs in sorted(unusable.items()):
+                    for msg in msgs:
+                        print(f"ERROR: {msg}", file=sys.stderr)
+                custom_dead += 1
                 continue
             status = data.get("status", "active")
             if status == "deprecated":
                 continue
             if status == "stub" and not include_stubs:
                 continue
+            if unusable and not _drop_unusable_patterns(data, unusable):
+                continue
             data["patterns"] = _with_kubernetes_aliases(data.get("patterns") or [])
             entries.append(data)
+        if custom_dead:
+            print(
+                f"FATAL: {custom_dead} custom rule(s) with unusable patterns; "
+                f"aborting (--strict-catalog)",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
     return entries

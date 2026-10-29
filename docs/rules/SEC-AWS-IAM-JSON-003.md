@@ -47,6 +47,8 @@ both `Action: "*"` and `Resource: "*"` — the canonical
 AdministratorAccess shape, hand-rolled inline rather than via
 the named AWS-managed policy. Bypasses org-level controls and
 audit tools that recognise `AdministratorAccess`.
+`Action: "*"` with `NotResource` (every resource bar the few
+listed) is the same shape and is reported here too.
 
 ## Why it likely fired
 
@@ -55,6 +57,8 @@ both `Action: "*"` and `Resource: "*"` — the canonical
 AdministratorAccess shape, hand-rolled inline rather than via
 the named AWS-managed policy. Bypasses org-level controls and
 audit tools that recognise `AdministratorAccess`.
+`Action: "*"` with `NotResource` (every resource bar the few
+listed) is the same shape and is reported here too.
 
 ## Adversarial scenario
 

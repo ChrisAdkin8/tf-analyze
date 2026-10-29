@@ -42,11 +42,16 @@ keywords: "security, critical, terraform, iac, gcp, cis-5.1, cis-7.1, mitre-T107
 ## What this checks
 
 1. **`resource_arg`** on `google_project_iam_member` (`member`) matching `/^(allUsers|allAuthenticatedUsers)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-2. **`resource_arg`** on `google_bigquery_dataset_iam_member` (`member`) matching `/^(allUsers|allAuthenticatedUsers)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+2. **`resource_arg`** on `google_project_iam_binding` (`members`) matching `/"all(Authenticated)?Users"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `google_project_iam_binding.members` (a list, unlike the singular
+`member` of `_iam_member`) includes `allUsers` or
+`allAuthenticatedUsers`.
 
 ## Why it likely fired
 
-Walk the patterns above against the flagged resource. The detector ran when the listed conditions were satisfied; review the source line in your scan output to see the exact match.
+`google_project_iam_binding.members` (a list, unlike the singular
+`member` of `_iam_member`) includes `allUsers` or
+`allAuthenticatedUsers`.
 
 ## Adversarial scenario
 

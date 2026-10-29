@@ -152,6 +152,18 @@ the per-resource kinds below, and `resource_absent` accepts either version
 for both `resource` and `when_present` (`_catalog.kubernetes_type_aliases`).
 Write rules against one name only.
 
+**Required keys.** A handler skips a pattern that lacks the keys it
+needs (`helm_set_value` without `regex:`, `resource_arg` without
+`regex:`/`not_regex:`, `hcl_attr` without `not_equal:`, …), so the
+pattern would never fire. The same goes for an `iam_*_policy_analysis`
+`check:` or a `graph_check` `function:` the engine doesn't know. The
+loader drops such a pattern with a `WARN` naming the rule and pattern
+index, and keeps the rest of the rule; a rule left with no usable
+pattern is skipped with a `WARN`. Under `--strict-catalog` each one is
+an `ERROR` and exit 2 (custom rules too). The table is
+`_PATTERN_REQUIRED_KEYS` in `scripts/_catalog.py`; extend it when a new
+kind has required keys.
+
 Per-file kinds (run inside `detect_in_file`):
 
 | Kind | Meaning |

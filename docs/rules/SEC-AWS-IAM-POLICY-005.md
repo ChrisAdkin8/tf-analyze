@@ -46,7 +46,9 @@ keywords: "security, critical, terraform, iac, aws, cis-1.16, mitre-T1078.004, m
 with effect Allow. This is the canonical "AdministratorAccess"
 shape — equivalent to attaching the AWS-managed Administrator
 policy by hand-rolled means and bypassing org-level guardrails
-that detect the named policy.
+that detect the named policy. `actions = ["*"]` with
+`not_resources` (every resource bar the few listed) is the same
+shape and is reported here too.
 
 ## Why it likely fired
 
@@ -54,7 +56,9 @@ Single statement grants `actions = ["*"]` *and* `resources = ["*"]`
 with effect Allow. This is the canonical "AdministratorAccess"
 shape — equivalent to attaching the AWS-managed Administrator
 policy by hand-rolled means and bypassing org-level guardrails
-that detect the named policy.
+that detect the named policy. `actions = ["*"]` with
+`not_resources` (every resource bar the few listed) is the same
+shape and is reported here too.
 
 ## Adversarial scenario
 
@@ -133,7 +137,7 @@ See also rules in the `SEC-AWS-IAM-POLICY-*` family:
 - [`SEC-AWS-IAM-POLICY-002`](./SEC-AWS-IAM-POLICY-002.md) — IAM policy document grants wildcard `iam:*` actions
 - [`SEC-AWS-IAM-POLICY-003`](./SEC-AWS-IAM-POLICY-003.md) — IAM policy document grants wildcard `resources = [\"*\"]`
 - [`SEC-AWS-IAM-POLICY-004`](./SEC-AWS-IAM-POLICY-004.md) — IAM policy document grants principal `identifiers = [\"*\"]` (public)
-- [`SEC-AWS-IAM-POLICY-006`](./SEC-AWS-IAM-POLICY-006.md) — IAM policy uses `not_actions` or `not_resources`
+- [`SEC-AWS-IAM-POLICY-006`](./SEC-AWS-IAM-POLICY-006.md) — IAM Allow statement uses NotAction / NotResource
 
 ---
 

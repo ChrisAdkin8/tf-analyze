@@ -36,6 +36,17 @@ _JSONENCODE_RE = re.compile(r"\s*jsonencode\s*\((.*)\)\s*", re.DOTALL)
 
 WILDCARD_ACTIONS = frozenset({"*", "*:*"})
 
+# The `check` values `Statement.matches` knows; the catalogue loader
+# rejects any other (an unknown check would never fire).
+CHECKS = frozenset({
+    "wildcard_action",
+    "wildcard_resource",
+    "wildcard_action_and_resource",
+    "wildcard_action_iam",
+    "public_principal",
+    "not_action_or_not_resource",
+})
+
 # Read-only Describe* / List* calls: many accept no resource ARN at all
 # (ec2:DescribeInstances, s3:ListAllMyBuckets), so `Resource = "*"` is the
 # only valid value and must not count as a wildcard grant.
@@ -65,6 +76,11 @@ class Statement:
         wild_resource = "*" in self.resources and not (
             actions and all(_READ_ONLY_LIST_ACTION.match(a) for a in actions)
         )
+        # `Action: "*"` with `NotResource` is every action on every
+        # resource bar the few listed: AdministratorAccess in all but name,
+        # so it is reported as the admin shape, not a mere wildcard action.
+        if wild_action and self.not_resources and not self.resources:
+            wild_resource = True
         # A statement with both wildcards is one problem, reported once by
         # `wildcard_action_and_resource`, not three times.
         if check == "wildcard_action":
@@ -78,7 +94,11 @@ class Statement:
         if check == "public_principal":
             return "*" in self.principals
         if check == "not_action_or_not_resource":
-            return bool(self.not_actions or self.not_resources)
+            # An admin-equivalent statement is already reported (once) by
+            # `wildcard_action_and_resource`.
+            return bool(self.not_actions or self.not_resources) and not (
+                wild_action and wild_resource
+            )
         return False
 
 

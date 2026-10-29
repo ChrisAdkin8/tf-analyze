@@ -47,6 +47,12 @@ to `allUsers` or `allAuthenticatedUsers`. The service is reachable
 by anyone on the internet.
 2. **`resource_arg`** on `google_cloud_run_v2_service_iam_member` (`member`) matching `/^all(Authenticated)?Users$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
   Cloud Run v2 IAM binding exposes service to allUsers/allAuthenticatedUsers
+3. **`resource_arg`** on `google_cloud_run_service_iam_binding` (`members`) matching `/"all(Authenticated)?Users"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  `google_cloud_run_service_iam_binding.members` includes `allUsers`
+or `allAuthenticatedUsers`: the service is reachable by anyone on
+the internet.
+4. **`resource_arg`** on `google_cloud_run_v2_service_iam_binding` (`members`) matching `/"all(Authenticated)?Users"/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+  Cloud Run v2 IAM binding members include allUsers/allAuthenticatedUsers
 
 ## Why it likely fired
 
@@ -55,6 +61,12 @@ to `allUsers` or `allAuthenticatedUsers`. The service is reachable
 by anyone on the internet.
 
 Cloud Run v2 IAM binding exposes service to allUsers/allAuthenticatedUsers
+
+`google_cloud_run_service_iam_binding.members` includes `allUsers`
+or `allAuthenticatedUsers`: the service is reachable by anyone on
+the internet.
+
+Cloud Run v2 IAM binding members include allUsers/allAuthenticatedUsers
 
 ## Adversarial scenario
 

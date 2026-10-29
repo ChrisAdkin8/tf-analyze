@@ -23,6 +23,7 @@
 #   - SEC-GCP-IAM-001     HIGH       Project-level binding of overly broad role
 #   - SEC-GCP-STORAGE-IAM-001 CRITICAL Public bucket binding (allUsers)
 #   - SEC-GCP-IAM-003     HIGH       Member has both project-level and resource-level IAM grants
+#   - SEC-GCP-CLOUDRUN-002 CRITICAL  Cloud Run invoker binding whose members include allUsers
 #
 # Fix summary: bind narrow roles at the resource level using
 # `google_<service>_iam_member`. If the workload genuinely needs
@@ -52,4 +53,13 @@ resource "google_storage_bucket_iam_member" "app_at_bucket" {
   bucket = "demo-data"
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:app@demo-project.iam.gserviceaccount.com"
+}
+
+# The authoritative `_iam_binding` form takes a `members` list: one
+# public entry makes the service callable by anyone on the internet.
+resource "google_cloud_run_service_iam_binding" "public_invoker" {
+  service  = "demo-frontend"
+  location = "us-central1"
+  role     = "roles/run.invoker"
+  members  = ["allUsers"]
 }
