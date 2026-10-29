@@ -5,14 +5,21 @@
   `capabilities.drop`) had `expected:` and no `regex:`, and the handler
   skips a pattern without `regex:`. A `helm_release` that sets
   `runAsNonRoot` or `readOnlyRootFilesystem` to `false`, or a
-  `capabilities.drop` list without `ALL`, is now reported.
-- **The catalogue loader rejects dead patterns**: a pattern missing a key
+  `capabilities.drop` list without `ALL`, is now reported. Only a
+  literal value is judged: `helm_set_value` now skips an expression
+  (`var.x`, `lookup(var.m, "k")`, `"${...}"`) and a missing value, on the
+  parse-tree and the regex fallback path alike. The fallback also reads
+  one-line helm provider v3 items (`{ name = "a", value = "b" }`), whose
+  name it used to run into the value.
+- **The catalogue loader catches dead patterns**: a pattern missing a key
   its kind needs (`helm_set_value` without `regex`, `resource_arg` without
-  `regex`/`not_regex`, `grep` without `regex`, …) is now an `ERROR`, and
-  exit 2 under `--strict-catalog`, instead of a rule that silently never
-  fires. So is an `iam_policy_analysis` / `iam_json_policy_analysis`
-  `check:` the engine doesn't know. PSA-001 was the only shipped entry
-  affected. Custom rules (`.tf-analyze-rules/`) are checked the same way.
+  `regex`/`not_regex`, `hcl_attr` without `not_equal`, `resource_absent`
+  without `resource`, …), an unknown `iam_*_policy_analysis` `check:`,
+  or an unknown `graph_check` `function:` is dropped with a `WARN` naming
+  the rule and pattern; the rest of the rule still loads. A rule with no
+  usable pattern left is skipped with a `WARN`. Under `--strict-catalog`
+  each is an `ERROR` and exit 2, for custom rules (`.tf-analyze-rules/`)
+  as well. PSA-001 was the only shipped entry affected.
 - **GCP public access through `_iam_binding`**: `SEC-GCP-IAM-002` now
   covers `google_project_iam_binding`, and `SEC-GCP-CLOUDRUN-002` covers
   `google_cloud_run_service_iam_binding` and

@@ -218,7 +218,7 @@ def _detect_helm_set_value(c: InFileCtx) -> list[dict]:
         if btype != "helm_release":
             continue
         if any(
-            n.strip() == target_name and vrx.search(v)
+            n.strip() == target_name and v is not None and vrx.search(v)
             for n, v in _helm_set_pairs(blk)
         ):
             out.append({
@@ -230,19 +230,60 @@ def _detect_helm_set_value(c: InFileCtx) -> list[dict]:
     return out
 
 
-def _helm_set_pairs(blk: dict) -> list[tuple[str, str]]:
+_HELM_BARE_LITERAL = re.compile(r"(?i)^(?:true|false|-?\d+(?:\.\d+)?)$")
+
+
+def _helm_literal_value(value) -> str | None:
+    """A parse-tree `set` value as text, or None when it is not a literal
+    (missing, or an expression: python-hcl2 renders those as `${...}`).
+    An expression's value is unknown here, so no pattern may judge it."""
+    if value is None or isinstance(value, (dict, list)):
+        return None
+    text = str(value)
+    return None if "${" in text else text
+
+
+# One `key = value` of a `set` item: at line start, or after `,` / `{` in a
+# one-line v3 item (`{ name = "a", value = "b" }`). The value is a quoted
+# string (escapes allowed) or the bare text up to the next `,` / `}` / EOL.
+_HELM_ITEM_ATTR = r'(?m)(?:^|[,{{])\s*{key}\s*=\s*("(?:[^"\\]|\\.)*"|[^,}}\n]*)'
+
+
+def _helm_text_attr(item_body: str, key: str) -> str | None:
+    """Raw text of `key` in one `set` item (fallback path), comments
+    masked; None when absent."""
+    m = re.search(_HELM_ITEM_ATTR.format(key=key), mask_comments_and_heredocs(item_body))
+    return m.group(1).strip() if m else None
+
+
+def _helm_text_value(item_body: str) -> str | None:
+    """The fallback path's `value` of one `set` item, or None when it is
+    missing or not a literal: a quoted string without `${`, or a bare
+    bool / number. `lookup(var.m, "k")`, `var.x`, `local.y[0]` are
+    expressions, whose value is unknown here."""
+    raw = _helm_text_attr(item_body, "value")
+    if raw is None:
+        return None
+    if raw.startswith('"') and raw.endswith('"') and len(raw) >= 2:
+        text = raw[1:-1]
+        return None if "${" in text else text
+    return raw if _HELM_BARE_LITERAL.match(raw) else None
+
+
+def _helm_set_pairs(blk: dict) -> list[tuple[str, str | None]]:
     """``(name, value)`` of every override on a `helm_release`: the helm
     provider v2 `set { ... }` blocks and the v3 `set = [{ ... }, ...]`
     list (v3 was missed entirely). From the parse tree when the file
     parsed — both forms are a list of `{name, value}` there — else from
-    the text."""
+    the text. `value` is None when it is not a literal (see
+    `_helm_literal_value` / `_helm_text_value`), on both paths."""
     attrs = blk.get("attrs")
     if attrs is not None:
         sets = attrs.get("set") or []
         if isinstance(sets, dict):
             sets = [sets]
         return [
-            (str(item.get("name", "")), str(item.get("value", "")))
+            (str(item.get("name", "")), _helm_literal_value(item.get("value")))
             for item in sets if isinstance(item, dict)
         ]
     body = blk["body"]
@@ -264,7 +305,7 @@ def _helm_set_pairs(blk: dict) -> list[tuple[str, str]]:
             spans.append((j + 1, item_end - 1))
             i = item_end
     return [
-        (block_arg_value(body[a:b], "name") or "", block_arg_value(body[a:b], "value") or "")
+        ((_helm_text_attr(body[a:b], "name") or "").strip('"'), _helm_text_value(body[a:b]))
         for a, b in spans
     ]
 

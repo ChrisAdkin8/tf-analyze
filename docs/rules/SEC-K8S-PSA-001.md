@@ -58,11 +58,12 @@ release sets, so the regex names the bad value, not the good one.)
 `securityContext.readOnlyRootFilesystem = false`; it must be
 `true`. A writable rootfs lets attackers persist tooling across
 pod restarts.
-4. **`helm_set_value`** on `helm_release` matching `/^(?!\$\{|(?:var|local|module|data|each)\.)(?!.*\bALL\b)/` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
+4. **`helm_set_value`** on `helm_release` matching `/^(?!.*\bALL\b)\s*\S/` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
   R30.5 / NIST 800-190 — helm_release overrides
 `securityContext.capabilities.drop` with a list that leaves out
-`ALL` (a reference such as `var.x` is unknown here and is not
-reported). Drop ALL kernel capabilities and add back only what
+`ALL`. Only a literal value is judged: `helm_set_value` skips
+an expression (`var.x`, `lookup(...)`), whose value is unknown
+here, and an empty value. Drop ALL kernel capabilities and add back only what
 the app needs. Default Linux capabilities (CAP_NET_RAW etc.) give
 a compromised pod meaningful escalation surface.
 
@@ -87,8 +88,9 @@ pod restarts.
 
 R30.5 / NIST 800-190 — helm_release overrides
 `securityContext.capabilities.drop` with a list that leaves out
-`ALL` (a reference such as `var.x` is unknown here and is not
-reported). Drop ALL kernel capabilities and add back only what
+`ALL`. Only a literal value is judged: `helm_set_value` skips
+an expression (`var.x`, `lookup(...)`), whose value is unknown
+here, and an empty value. Drop ALL kernel capabilities and add back only what
 the app needs. Default Linux capabilities (CAP_NET_RAW etc.) give
 a compromised pod meaningful escalation surface.
 

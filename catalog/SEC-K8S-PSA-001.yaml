@@ -64,12 +64,13 @@ patterns:
   - kind: helm_set_value
     resource: helm_release
     name: securityContext.capabilities.drop
-    regex: '^(?!\$\{|(?:var|local|module|data|each)\.)(?!.*\bALL\b)'
+    regex: '^(?!.*\bALL\b)\s*\S'
     description: |
       R30.5 / NIST 800-190 — helm_release overrides
       `securityContext.capabilities.drop` with a list that leaves out
-      `ALL` (a reference such as `var.x` is unknown here and is not
-      reported). Drop ALL kernel capabilities and add back only what
+      `ALL`. Only a literal value is judged: `helm_set_value` skips
+      an expression (`var.x`, `lookup(...)`), whose value is unknown
+      here, and an empty value. Drop ALL kernel capabilities and add back only what
       the app needs. Default Linux capabilities (CAP_NET_RAW etc.) give
       a compromised pod meaningful escalation surface.
 recommendation: |
