@@ -123,3 +123,38 @@ def test_untracked_file_in_a_subfolder_target_is_scanned(tmp_path) -> None:
     )
     proc = _diff_scan(repo / "infra")
     assert RULE in _ids(proc), proc.stderr
+
+
+BUCKET = 'resource "aws_s3_bucket" "b" {\n  bucket = "x"\n}\n'
+PAB = (
+    'resource "aws_s3_bucket_public_access_block" "b" {\n'
+    "  bucket                  = aws_s3_bucket.b.id\n"
+    "  block_public_acls       = true\n"
+    "  block_public_policy     = true\n"
+    "  ignore_public_acls      = true\n"
+    "  restrict_public_buckets = true\n"
+    "}\n"
+)
+
+
+def test_moving_a_file_out_rescans_the_folder_it_left(tmp_path) -> None:
+    # git reports a move under its new path only; the bucket left behind
+    # in infra/ lost its public access block.
+    repo = _repo(tmp_path / "r", {"infra/main.tf": BUCKET, "infra/pab.tf": PAB})
+    (repo / "other").mkdir()
+    _git(repo, "mv", "infra/pab.tf", "other/pab.tf")
+    _git(repo, "commit", "-q", "-m", "move")
+    assert "SEC-AWS-S3-PUBLIC-BLOCK-001" in _ids(_diff_scan(repo))
+
+
+def test_caller_change_rescans_its_local_child_module(tmp_path) -> None:
+    caller = 'module "db" {\n  source = "./modules/db"\n  public = %s\n}\n'
+    child = 'variable "public" {}\n' + RDS
+    repo = _repo(
+        tmp_path / "r", {"main.tf": caller % "false", "modules/db/main.tf": child}
+    )
+    _commit(repo, {"main.tf": caller % "true"})
+    assert (repo / "modules" / "db" / "main.tf").resolve() in _diff.get_diff_files(
+        repo, "main"
+    )
+    assert RULE in _ids(_diff_scan(repo))

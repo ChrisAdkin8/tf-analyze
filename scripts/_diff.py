@@ -129,10 +129,41 @@ def _module_siblings(changed: set[Path]) -> set[Path]:
     return out
 
 
+_LOCAL_SOURCE_RE = re.compile(r'^\s*"?source"?\s*[=:]\s*"(\.\.?/[^"]*)"', re.M)
+
+
+def _with_local_children(files: set[Path]) -> set[Path]:
+    """`files` plus the `.tf` files of every local module they call
+    (`source = "./modules/db"`), recursively. A caller passes values into
+    the child (`module "db" { public = var.public }`), so a change to the
+    caller can change the child's findings."""
+    out = set(files)
+    queue = list(files)
+    seen_dirs: set[Path] = set()
+    while queue:
+        fp = queue.pop()
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in _LOCAL_SOURCE_RE.finditer(text):
+            child = (fp.parent / m.group(1)).resolve()
+            if child in seen_dirs or not child.is_dir():
+                continue
+            seen_dirs.add(child)
+            for p in child.iterdir():
+                if p.is_file() and _is_tf(p) and p.resolve() not in out:
+                    out.add(p.resolve())
+                    queue.append(p.resolve())
+    return out
+
+
 def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     """Set of ``.tf`` files to scan for the change between ``diff_base``
-    and HEAD: the changed ones, plus the folder-mates of a changed file
-    that feeds them (`_module_siblings`).
+    and HEAD: the changed ones, the folder-mates of a changed file that
+    feeds them (`_module_siblings`), and the local modules any of those
+    call (`_with_local_children`). Renames count as a delete plus an add
+    (``--no-renames``), so the folder a file left is covered too.
 
     Three sources are unioned:
 
@@ -153,7 +184,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         # 30-second timeout. A None return means the call hung past
         # the cap — report the diff as failed (caller: full scan).
         result = _run_git(
-            ["git", "diff", "--name-only", f"{diff_base}...HEAD", "--", *_DIFF_PATHSPECS],
+            ["git", "diff", "--name-only", "--no-renames", f"{diff_base}...HEAD", "--", *_DIFF_PATHSPECS],
             target, text=True,
         )
         if result is None:
@@ -161,7 +192,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         if result.returncode != 0:
             # Fall back to diff against working tree
             result = _run_git(
-                ["git", "diff", "--name-only", diff_base, "--", *_DIFF_PATHSPECS],
+                ["git", "diff", "--name-only", "--no-renames", diff_base, "--", *_DIFF_PATHSPECS],
                 target, text=True,
             )
             if result is None:
@@ -206,7 +237,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
             if line.strip()
         }
         files = {fp for fp in changed if fp.exists() and _is_tf(fp)}
-        return files | _module_siblings(changed)
+        return _with_local_children(files | _module_siblings(changed))
     except FileNotFoundError:
         print("WARN: git not found", file=sys.stderr)
         return None
