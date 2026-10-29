@@ -100,6 +100,20 @@ change them for those runs, edit the fallback after `||` in the file.
   before `--attack-graph` moved them. A baseline made earlier in the
   job and not committed on the base branch is not used on PRs unless
   `trust-pr-config: true`.
+- **On PRs, an inline `# tf-analyze:ignore` must already be on the base
+  branch.** Otherwise a PR could add `# tf-analyze:ignore SEC-AWS-SG-001`
+  above the security group it opens and pass. Both the composite action
+  (unless `trust-pr-config: true`) and the workflow template pass
+  `--inline-ignores-from` with the fetched base branch, so the engine
+  honours an inline ignore only if the base branch has the same ignore
+  on the same code. Matching is by the code, not the line number, so
+  lines added elsewhere don't break it. An ignore the PR adds, or moves
+  onto other code, or puts in a new file, is not honoured until the PR
+  is merged; the finding shows, and the summary lists the ignore under
+  `inline_ignores_dropped`. If the base branch can't be read, no inline
+  ignore is honoured (`inline_ignores_untrusted: true`, with a warning).
+  The template needs an engine `ref` that has the flag; with an older
+  one it warns and honours every inline ignore, as before.
 - **Reports are written under `$RUNNER_TEMP`.** Both the composite
   action and this workflow template write their JSON, SARIF, HTML and
   PR-summary reports, and the engine's stderr, to a fresh `mktemp -d`

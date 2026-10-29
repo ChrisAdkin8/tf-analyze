@@ -384,3 +384,70 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     except FileNotFoundError:
         print("WARN: git not found", file=sys.stderr)
         return None
+
+
+class GitRefReader:
+    """Read files as they are at a git ref (``--inline-ignores-from``).
+
+    The ref is resolved to a commit once; :meth:`read` then returns a
+    file's text at that commit, or ``None`` when the file isn't there.
+    ``error`` is set (and every read returns ``None``) when the ref can't
+    be read at all: git missing or hung, not a work tree, an unknown ref,
+    or git refusing the repository (``safe.directory``). Callers must
+    treat that as "nothing at the ref is known", i.e. fail closed.
+    """
+
+    def __init__(self, ref: str, target: Path) -> None:
+        self.ref = ref
+        self.error: str | None = None
+        self._root: Path | None = None
+        self._sha = ""
+        cwd = target if target.is_dir() else target.parent
+        # A ref that looks like an option would be read as one by git.
+        if not ref or ref.startswith("-"):
+            self.error = f"invalid ref {ref!r}"
+            return
+        try:
+            top = _run_git(["git", "rev-parse", "--show-toplevel"], cwd, text=True)
+            if top is None or top.returncode != 0:
+                self.error = "not a git work tree" + _git_err(top)
+                return
+            sha = _run_git(
+                ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+                cwd, text=True,
+            )
+            if sha is None or sha.returncode != 0 or not sha.stdout.strip():
+                self.error = "unknown ref" + _git_err(sha)
+                return
+        except OSError as e:  # git not installed
+            self.error = f"git not available ({e})"
+            return
+        self._root = Path(top.stdout.strip()).resolve()
+        self._sha = sha.stdout.strip()
+
+    def read(self, path: Path) -> str | None:
+        """``path``'s text at the ref (line endings normalised to LF), or
+        ``None`` if it doesn't exist there or is outside the work tree."""
+        if self.error or self._root is None:
+            return None
+        try:
+            rel = Path(path).resolve().relative_to(self._root).as_posix()
+        except ValueError:
+            return None
+        try:
+            res = _run_git(["git", "cat-file", "blob", f"{self._sha}:{rel}"], self._root)
+        except OSError:
+            return None
+        if res is None or res.returncode != 0:
+            return None
+        text = res.stdout.decode("utf-8", "replace")
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _git_err(res: subprocess.CompletedProcess | None) -> str:
+    """`: <first stderr line>` of a failed git call, or `` (timed out)``."""
+    if res is None:
+        return " (git timed out)"
+    err = res.stderr if isinstance(res.stderr, str) else (res.stderr or b"").decode("utf-8", "replace")
+    first = err.strip().splitlines()[0] if err.strip() else ""
+    return f": {first}" if first else ""

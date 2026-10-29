@@ -43,10 +43,10 @@ jobs:
           image: tf-analyze:dogfood
           fail-on: CRITICAL
           attack-graph: 'true'
-          # Pin to static: mode=auto resolves to "diff" on PR events, but the
-          # bundled image doesn't ship `git`, so diff mode currently errors
-          # with FileNotFoundError. Tracked as a separate bug (Dockerfile
-          # needs `apt-get install -y git`).
+          # Pin to static: mode=auto resolves to "diff" on PR events, which
+          # scans only the files the PR changed. The demo rarely changes, so
+          # a diff scan would find nothing and the next step's check on its
+          # known CRITICALs would fail. (The image does ship `git`.)
           mode: static
       - name: Expect exactly the demo's known CRITICAL
         env:

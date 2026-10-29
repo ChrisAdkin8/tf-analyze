@@ -168,6 +168,10 @@ Exit with code 1 if any .tf file could not be parsed and was scanned in the less
 
 Read suppressions from PATH instead of looking for .tf-analyze-ignore.yaml in the target and its parent. A missing PATH means no file suppressions. CI uses this to apply the base branch's ignore file rather than the pull request's.
 
+### `--inline-ignores-from`
+
+Honour an inline `# tf-analyze:ignore <ID>` comment only if the file at git REF has the same ignore on the same code (matched by content, not line number). Ignores added since REF, and all ignores in files new since REF, are not honoured. If REF cannot be read, no inline ignores are. CI uses this so a pull request cannot silence its own findings.
+
 ### `--mitre-tactic`
 
 Restrict --format mitre output to one ATT&CK tactic (e.g. 'Initial Access', 'Defense Evasion'). Case-insensitive; hyphens and underscores accepted as separators ('initial-access' is equivalent).

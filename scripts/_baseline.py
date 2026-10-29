@@ -10,6 +10,9 @@ effect is the caller's responsibility.
 * :func:`load_inline_suppressions` — find
   ``# tf-analyze:ignore <ID>`` comments inline in HCL text, return
   ``{line: {ids}}``.
+* :func:`inline_ignore_markers` / :func:`trusted_inline_markers` — the
+  same comments with the code they cover, and the subset a trusted git
+  ref also has (``--inline-ignores-from``).
 * :func:`apply_suppressions` — split findings into active / suppressed
   using both inline and global suppression dicts.
 * :func:`apply_baseline` — filter findings against a baseline JSON
@@ -31,7 +34,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple
 
 
 def load_suppressions(
@@ -133,6 +136,106 @@ def load_inline_suppressions(
             if not before.strip():
                 result.setdefault(i + 1, set()).add(m.group(1))
     return result
+
+
+class InlineMarker(NamedTuple):
+    """One inline ignore: where it is, which rule, the code it covers
+    (``anchor``) and whether it sits on a line of its own (``standalone``,
+    so it also covers the next line)."""
+
+    line: int
+    rule_id: str
+    anchor: str
+    standalone: bool
+
+
+def inline_ignore_markers(
+    text: str,
+    comment_text: str,
+    *,
+    inline_ignore_re: re.Pattern,
+) -> list[InlineMarker]:
+    """Every inline ignore in ``text`` as an :class:`InlineMarker`.
+
+    ``comment_text`` is ``text`` with everything but comments blanked to
+    spaces (same length, same newlines), so a marker inside a string or a
+    heredoc is not one. ``standalone`` follows
+    :func:`load_inline_suppressions`: no code before the line's first
+    comment. The *anchor* is the code the ignore covers,
+    whitespace-normalised: the code on the marker's own line, else (a
+    comment on a line of its own) the next line that has code on it. It
+    does not depend on line numbers, so lines added or removed elsewhere
+    in the file leave it unchanged (see :func:`trusted_inline_markers`).
+    """
+    lines = text.split("\n")
+    clines = comment_text.split("\n")
+
+    def code(i: int) -> str:
+        orig = lines[i] if i < len(lines) else ""
+        com = clines[i] if i < len(clines) else ""
+        # A comment character is non-blank in `com`; keep only the rest.
+        kept = "".join(o if i_ >= len(com) or com[i_].isspace() else " "
+                       for i_, o in enumerate(orig))
+        return " ".join(kept.split())
+
+    markers: list[InlineMarker] = []
+    for i, cline in enumerate(clines):
+        m = inline_ignore_re.search(cline)
+        if not m:
+            continue
+        # Same test as load_inline_suppressions: the line's first comment
+        # starts at its first non-blank masked column.
+        start = len(cline) - len(cline.lstrip())
+        standalone = not (lines[i] if i < len(lines) else "")[:start].strip()
+        anchor = code(i)
+        j = i + 1
+        while not anchor and j < len(lines):
+            anchor = code(j)
+            j += 1
+        markers.append(InlineMarker(i + 1, m.group(1), anchor, standalone))
+    return markers
+
+
+def markers_to_suppressions(markers: list[InlineMarker]) -> dict[int, set[str]]:
+    """``line → {ids}`` for :func:`apply_suppressions`, with the same reach
+    as :func:`load_inline_suppressions`: the marker's line, and the next
+    one too for a comment on a line of its own."""
+    result: dict[int, set[str]] = {}
+    for mk in markers:
+        result.setdefault(mk.line, set()).add(mk.rule_id)
+        if mk.standalone:
+            result.setdefault(mk.line + 1, set()).add(mk.rule_id)
+    return result
+
+
+def trusted_inline_markers(
+    head: list[InlineMarker],
+    base: list[InlineMarker] | None,
+) -> tuple[list[InlineMarker], list[InlineMarker]]:
+    """Split ``head``'s inline ignores into ``(trusted, dropped)`` against
+    the same file's ignores at a trusted ref (``base``; ``None`` when the
+    file isn't there, so nothing is trusted).
+
+    A head ignore is trusted when the base has one for the same rule on
+    the same anchor. Matching is count-aware: if the base has N ignores
+    for a (rule, anchor), at most N head ones are trusted, so copying an
+    accepted marker onto another identical line does not suppress both.
+    """
+    if not base:
+        return [], list(head)
+    budget: dict[tuple[str, str], int] = {}
+    for mk in base:
+        budget[(mk.rule_id, mk.anchor)] = budget.get((mk.rule_id, mk.anchor), 0) + 1
+    trusted: list[InlineMarker] = []
+    dropped: list[InlineMarker] = []
+    for marker in head:
+        key = (marker.rule_id, marker.anchor)
+        if budget.get(key, 0) > 0:
+            budget[key] -= 1
+            trusted.append(marker)
+        else:
+            dropped.append(marker)
+    return trusted, dropped
 
 
 def apply_suppressions(
