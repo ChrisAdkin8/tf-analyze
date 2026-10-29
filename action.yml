@@ -67,10 +67,12 @@ inputs:
       (`false`) the action reads both files, and the custom rules they point
       at, from the PR's base branch instead: settings already merged still
       apply, the PR's changes to them do not. The `baseline` report is
-      read from the base branch the same way. Inline `tf-analyze:ignore`
-      comments are still honoured, because they show in the PR diff. Set
-      `true` to use the PR's own copies. Other events (push, schedule, …)
-      use the checked-out files.
+      read from the base branch the same way. An inline `tf-analyze:ignore`
+      comment is honoured only if the base branch already has it on the same
+      code (`--inline-ignores-from`): one the PR adds does not suppress
+      until it is merged. Set `true` to use the PR's own copies and honour
+      every inline comment. Other events (push, schedule, …) use the
+      checked-out files.
     default: 'false'
   ref:
     description: 'Shorthand for pinning the engine image tag. Accepts both `v0.2.3` (matches GitHub release URLs / CHANGELOG / marketplace listing) and `0.2.3` (matches the docker tag emitted by `docker/metadata-action`); the leading `v` is stripped when followed by a digit. Non-semver refs like `main` or `latest` pass through untouched. Mutually exclusive with an explicit `image:`.'
@@ -215,8 +217,15 @@ runs:
         # resolve to a tag of that name first, and tags can come from a PR.
         BASE="refs/tf-analyze/base"
         cd "$TFA_WORKSPACE"
+        # Drop a copy left by an earlier run (a self-hosted runner keeps the
+        # workspace): if this fetch fails, nothing stale must stand in for it.
+        git update-ref -d "$BASE" >/dev/null 2>&1 || true
+        # The engine honours an inline `tf-analyze:ignore` only if this ref
+        # has it too. Passed even when the fetch fails: the engine then
+        # cannot read the ref and honours no inline ignores (fail closed).
+        echo "inline-ref=${BASE}" >> "$GITHUB_OUTPUT"
         if [ -z "$BRANCH" ] || ! git fetch --no-tags --depth=1 origin "+refs/heads/${BRANCH}:${BASE}" >/dev/null 2>&1; then
-          echo "::warning::tf-analyze: cannot read base branch '${BRANCH}'; scanning with no project config, no ignore file${TFA_BASELINE:+ and no baseline}"
+          echo "::warning::tf-analyze: cannot read base branch '${BRANCH}'; scanning with no project config, no ignore file, no inline ignores${TFA_BASELINE:+ and no baseline}"
           echo "ignore=/trusted/none" >> "$GITHUB_OUTPUT"
           exit 0
         fi
@@ -259,7 +268,7 @@ runs:
             echo "::warning::tf-analyze: baseline '${TFA_BASELINE}' is not on base branch '${BRANCH}'; scanning without a baseline (set trust-pr-config: true to use the PR's copy)"
           fi
         fi
-        echo "::notice::tf-analyze: using .tf-analyze.yaml, .tf-analyze-ignore.yaml${TFA_BASELINE:+ and the baseline} from '${BRANCH}', not from this PR (set trust-pr-config: true to change this)"
+        echo "::notice::tf-analyze: using .tf-analyze.yaml, .tf-analyze-ignore.yaml${TFA_BASELINE:+, the baseline} and the inline ignores from '${BRANCH}', not from this PR (set trust-pr-config: true to change this)"
 
     - name: Build detect.py args
       id: args
@@ -285,6 +294,7 @@ runs:
         TFA_TRUSTED_CONFIG: ${{ steps.trusted.outputs.config }}
         TFA_TRUSTED_IGNORE: ${{ steps.trusted.outputs.ignore }}
         TFA_TRUSTED_BASELINE: ${{ steps.trusted.outputs.baseline }}
+        TFA_TRUSTED_INLINE_REF: ${{ steps.trusted.outputs.inline-ref }}
         TFA_PLAN_JSON: ${{ inputs.plan-json }}
       run: |
         ARGS=(--target "/workspace/${TFA_TARGET}" --mode "${TFA_MODE_OUT}")
@@ -296,6 +306,11 @@ runs:
             ARGS+=(--no-project-config)
           fi
           ARGS+=(--ignore-file "${TFA_TRUSTED_IGNORE}")
+          # Inline ignores the base branch doesn't already have are not
+          # honoured, so the PR can't silence its own findings.
+          if [ -n "${TFA_TRUSTED_INLINE_REF}" ]; then
+            ARGS+=(--inline-ignores-from "${TFA_TRUSTED_INLINE_REF}")
+          fi
         fi
         # Issue #19 hardening — when the "Ensure diff base is available"
         # step ran (PR event + mode=diff), it set `diff-base` to the
@@ -443,6 +458,16 @@ runs:
         if [ -n "${TFA_TRUSTED_DIR}" ]; then
           MOUNTS+=(-v "${TFA_TRUSTED_DIR}:/trusted:ro")
         fi
+        # The engine runs git on /workspace (diff mode, --inline-ignores-from)
+        # as uid 1001. On a runner whose checkout belongs to another uid, git
+        # refuses a repository it doesn't own ("dubious ownership"); mark the
+        # mount safe. Should git still fail, the engine fails closed.
+        # Pin the repository to the checkout's own .git: git otherwise
+        # searches up from the scan target, where a PR could plant a bare
+        # repo (its own "base" blobs, and config that runs commands). The
+        # engine checks git agrees with the pin, else trusts nothing.
+        GIT_ENV=(-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/workspace
+                 -e GIT_DIR=/workspace/.git -e GIT_WORK_TREE=/workspace)
         BASE_ARGS=()
         while IFS= read -r line; do BASE_ARGS+=("$line"); done < /tmp/tf-analyze-base-args
         # Round-5 audit fix #12 — capture each scan's exit code
@@ -469,7 +494,7 @@ runs:
           # crash) would end the step here, skipping the annotation, the
           # other formats and the outputs. Catch the code instead.
           local rc=0
-          docker run --rm "${MOUNTS[@]}" \
+          docker run --rm "${MOUNTS[@]}" "${GIT_ENV[@]}" \
             "${TFA_IMAGE}" \
             "${BASE_ARGS[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
             > "$out" 2>"$err" || rc=$?
@@ -552,6 +577,21 @@ runs:
         print(f"total={len(f)}")
         print(f"critical={c.get('CRITICAL', 0)}")
         print(f"high={c.get('HIGH', 0)}")
+        # Inline ignores the base branch didn't vouch for (counts only: the
+        # file names come from the PR and must not reach a workflow command).
+        if isinstance(s, dict):
+            if s.get("inline_ignores_untrusted"):
+                sys.stderr.write(
+                    "::warning::tf-analyze: could not read the base branch in the "
+                    "scan, so no inline tf-analyze:ignore comments were honoured\n"
+                )
+            dropped = s.get("inline_ignores_dropped")
+            if isinstance(dropped, list) and dropped:
+                sys.stderr.write(
+                    f"::notice::tf-analyze: {len(dropped)} inline tf-analyze:ignore "
+                    f"comment(s) not on the base branch were not honoured; they "
+                    f"take effect once merged\n"
+                )
         PY
 
     - name: Upload SARIF to Code Scanning

@@ -100,6 +100,31 @@ change them for those runs, edit the fallback after `||` in the file.
   before `--attack-graph` moved them. A baseline made earlier in the
   job and not committed on the base branch is not used on PRs unless
   `trust-pr-config: true`.
+- **On PRs, an inline `# tf-analyze:ignore` must already be on the base
+  branch.** Otherwise a PR could add `# tf-analyze:ignore SEC-AWS-SG-001`
+  above the security group it opens and pass. Both the composite action
+  (unless `trust-pr-config: true`) and the workflow template pass
+  `--inline-ignores-from` with the fetched base branch, so the engine
+  honours an inline ignore only if the base branch has the same ignore
+  on the same code. Matching is by the code, not the line number, so
+  lines added elsewhere don't break it. The code is the line the ignore
+  covers; if that line leaves a `{`, `[` or `(` open or starts a heredoc
+  (a `resource ... {` line, where findings such as SEC-AWS-SG-001 are
+  reported, a multi-line `cidr_blocks = [` list, a `jsonencode(` call, a
+  `<<EOF` policy), it is the whole block, list, call or heredoc, so a PR
+  that changes anything inside it (say, widens a port range or adds
+  `0.0.0.0/0`) loses the ignore until the change is merged. An ignore the PR
+  adds, or moves onto other code, or puts in a new file, is not honoured until the PR
+  is merged; the finding shows, and the summary lists the ignore under
+  `inline_ignores_dropped`. If the base branch can't be read, no inline
+  ignore is honoured (`inline_ignores_untrusted: true`, with a warning).
+  The template needs an engine `ref` that has the flag; with an older
+  one it warns and honours every inline ignore, as before.
+- **git only reads the checkout's own repository.** Both set `GIT_DIR` /
+  `GIT_WORK_TREE` to the checkout for the scan, and the engine refuses a
+  repository git finds anywhere else (such as a bare repository a PR
+  commits into the target, whose config could run commands): diff mode
+  then scans every file and no inline ignore is honoured.
 - **Reports are written under `$RUNNER_TEMP`.** Both the composite
   action and this workflow template write their JSON, SARIF, HTML and
   PR-summary reports, and the engine's stderr, to a fresh `mktemp -d`

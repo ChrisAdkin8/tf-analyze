@@ -27,14 +27,35 @@ from pathlib import Path
 # instead of an indefinite hang.
 _GIT_TIMEOUT_SEC = 30
 
+# A commit named by its full SHA-1 or SHA-256 hash.
+_SHA_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+
+# git finds its repository by walking up from the cwd, which is the scan
+# target: files a pull request controls. A PR can commit a *bare* repo
+# (`HEAD`, `config`, `objects/`, `refs/`: git refuses `.git` paths, not
+# these) into the target. git would then read that repo: its blobs (a
+# planted "base" for --inline-ignores-from / --mode diff) and its config,
+# where `core.fsmonitor` (and other keys) run commands. Every git call
+# refuses to discover a bare repo and never runs fsmonitor or hooks;
+# `verified_work_tree` then checks the repo git did find.
+_GIT_SAFETY = (
+    "-c", "safe.bareRepository=explicit",
+    "-c", "core.fsmonitor=false",
+    "-c", "core.hooksPath=/dev/null",
+)
+
 
 def _run_git(argv: list[str], target: Path, *, text: bool = False) -> subprocess.CompletedProcess | None:
     """Run a git subprocess with a timeout. Returns None on hang.
 
     Centralises the timeout + WARN-on-hang discipline so the four
     call sites below share one error path. Callers that need the
-    `text=True` shape pass it through.
+    `text=True` shape pass it through. Every call gets `_GIT_SAFETY`.
+    A repository pinned with ``GIT_DIR`` / ``GIT_WORK_TREE`` in the
+    environment is left to git (which then does no discovery).
     """
+    if argv and argv[0] == "git":
+        argv = ["git", *_GIT_SAFETY, *argv[1:]]
     try:
         return subprocess.run(
             argv,
@@ -49,6 +70,62 @@ def _run_git(argv: list[str], target: Path, *, text: bool = False) -> subprocess
             f"{' '.join(argv)}\n"
         )
         return None
+
+
+def _gitfile_target(dotgit: Path) -> Path | None:
+    """Where a ``.git`` *file* (linked worktree, submodule) points."""
+    try:
+        first = dotgit.read_text().splitlines()[0]
+    except (OSError, IndexError, UnicodeDecodeError):
+        return None
+    if not first.startswith("gitdir:"):
+        return None
+    return (dotgit.parent / first[len("gitdir:"):].strip()).resolve()
+
+
+def verified_work_tree(target: Path) -> tuple[Path | None, str | None]:
+    """``(work tree root, None)`` for the repository git uses from
+    ``target``, or ``(None, reason)`` when there is none or it can't be
+    trusted. Trusted means: pinned by ``GIT_WORK_TREE`` / ``GIT_DIR`` and
+    git agrees with the pin; or else an ordinary checkout, whose git dir
+    is the root's own ``.git`` folder (or what a ``.git`` file points
+    at). A repo git found anywhere else, such as one a PR planted in the
+    target with ``core.worktree`` pointing out of it, is refused."""
+    cwd = target if target.is_dir() else target.parent
+    try:
+        res = _run_git(
+            ["git", "rev-parse", "--show-toplevel", "--absolute-git-dir"], cwd, text=True,
+        )
+    except OSError as e:  # git not installed
+        return None, f"git not available ({e})"
+    if res is None or res.returncode != 0:
+        return None, "not a git work tree" + _git_err(res)
+    out = (res.stdout or "").splitlines()
+    if len(out) != 2 or not out[0].strip() or not out[1].strip():
+        return None, "not a git work tree"
+    root = Path(out[0].strip()).resolve()
+    git_dir = Path(out[1].strip()).resolve()
+    pin_tree = os.environ.get("GIT_WORK_TREE")
+    pin_dir = os.environ.get("GIT_DIR")
+    # A relative pin is relative to the folder git runs in, not ours.
+    if pin_tree and root != (cwd / pin_tree).resolve():
+        return None, f"work tree {root} is not GIT_WORK_TREE {pin_tree}"
+    if pin_dir:
+        want = cwd / pin_dir
+        want = (_gitfile_target(want) if want.is_file() else want.resolve())
+        if want != git_dir:
+            return None, f"git dir {git_dir} is not GIT_DIR {pin_dir}"
+        return root, None
+    dotgit = root / ".git"
+    if dotgit.is_dir() and not dotgit.is_symlink():
+        expected = dotgit.resolve()
+    elif dotgit.is_file():
+        expected = _gitfile_target(dotgit)
+    else:
+        expected = None
+    if expected != git_dir:
+        return None, f"git dir {git_dir} is not {root}/.git"
+    return root, None
 
 
 def auto_detect_base_branch(target: Path) -> str:
@@ -136,13 +213,8 @@ def git_work_tree(target: Path) -> str | None:
     `_run_git`'s timeout), or None outside a repository or without git.
     A stray ``.git`` entry in some parent folder is not taken for a
     repository."""
-    try:
-        res = _run_git(["git", "rev-parse", "--show-toplevel"], target, text=True)
-    except OSError:
-        return None
-    if res is None or res.returncode != 0 or not (res.stdout or "").strip():
-        return None
-    return str(Path(res.stdout.strip()).resolve())
+    root, _err = verified_work_tree(target)
+    return str(root) if root is not None else None
 
 
 def walk_tf_files(target: Path, *, contain: bool = False,
@@ -308,6 +380,10 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     changed; the two must not be confused, or a failed diff would scan
     nothing and pass a CI gate. The caller falls back to a full scan.
     """
+    root, err = verified_work_tree(target)
+    if root is None:
+        print(f"WARN: cannot diff: {err}", file=sys.stderr)
+        return None
     try:
         # The pathspecs are relative to `target` (git's cwd), so a module
         # linked in from outside it (`net -> ../shared`, followed by
@@ -360,14 +436,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         else:
             untracked_stdout = untracked.stdout or ""
 
-        git_root_result = _run_git(
-            ["git", "rev-parse", "--show-toplevel"],
-            target, text=True,
-        )
-        if git_root_result is None or git_root_result.returncode != 0:
-            git_root = target
-        else:
-            git_root = Path(git_root_result.stdout.strip())
+        git_root = root
 
         # Both lists are relative to the repo root (`git diff` always,
         # `ls-files` with `--full-name`), whatever folder `target` is.
@@ -384,3 +453,80 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     except FileNotFoundError:
         print("WARN: git not found", file=sys.stderr)
         return None
+
+
+class GitRefReader:
+    """Read files as they are at a git ref (``--inline-ignores-from``).
+
+    The ref is resolved to a commit once; :meth:`read` then returns a
+    file's text at that commit, or ``None`` when the file isn't there.
+    ``error`` is set (and every read returns ``None``) when the ref can't
+    be read at all: git missing or hung, not a work tree, an unknown ref,
+    or git refusing the repository (``safe.directory``). Callers must
+    treat that as "nothing at the ref is known", i.e. fail closed.
+    """
+
+    def __init__(self, ref: str, target: Path) -> None:
+        self.ref = ref
+        self.error: str | None = None
+        self._root: Path | None = None
+        self._sha = ""
+        cwd = target if target.is_dir() else target.parent
+        # A ref that looks like an option would be read as one by git.
+        if not ref or ref.startswith("-"):
+            self.error = f"invalid ref {ref!r}"
+            return
+        root, err = verified_work_tree(cwd)
+        if root is None:
+            self.error = err
+            return
+        try:
+            # A full ref name must exist as written: rev-parse would try
+            # `refs/tags/<ref>` and others too, and tags can come from a PR.
+            if ref.startswith("refs/"):
+                exact = _run_git(["git", "show-ref", "--verify", "--quiet", ref], cwd)
+                if exact is None or exact.returncode != 0:
+                    self.error = "unknown ref" + _git_err(exact)
+                    return
+            elif not _SHA_RE.fullmatch(ref):
+                self.error = "not a full ref name (refs/...) or commit SHA"
+                return
+            sha = _run_git(
+                ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+                cwd, text=True,
+            )
+            if sha is None or sha.returncode != 0 or not sha.stdout.strip():
+                self.error = "unknown ref" + _git_err(sha)
+                return
+        except OSError as e:  # git not installed
+            self.error = f"git not available ({e})"
+            return
+        self._root = root
+        self._sha = sha.stdout.strip()
+
+    def read(self, path: Path) -> str | None:
+        """``path``'s text at the ref (line endings normalised to LF), or
+        ``None`` if it doesn't exist there or is outside the work tree."""
+        if self.error or self._root is None:
+            return None
+        try:
+            rel = Path(path).resolve().relative_to(self._root).as_posix()
+        except ValueError:
+            return None
+        try:
+            res = _run_git(["git", "cat-file", "blob", f"{self._sha}:{rel}"], self._root)
+        except OSError:
+            return None
+        if res is None or res.returncode != 0:
+            return None
+        text = res.stdout.decode("utf-8", "replace")
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _git_err(res: subprocess.CompletedProcess | None) -> str:
+    """`: <first stderr line>` of a failed git call, or `` (timed out)``."""
+    if res is None:
+        return " (git timed out)"
+    err = res.stderr if isinstance(res.stderr, str) else (res.stderr or b"").decode("utf-8", "replace")
+    first = err.strip().splitlines()[0] if err.strip() else ""
+    return f": {first}" if first else ""

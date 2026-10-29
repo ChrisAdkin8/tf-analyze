@@ -61,9 +61,10 @@ jobs:
       # A pull request could otherwise switch off its own scan: the engine
       # reads `.tf-analyze.yaml` (rules_dir, ignore_paths) and
       # `.tf-analyze-ignore.yaml` from the checkout, i.e. from the PR. Put
-      # the base branch's copies (and its rules_dir) in their place. Inline
-      # `# tf-analyze:ignore` comments are still honoured; they show in the
-      # diff. Works with any engine `ref`, old releases included.
+      # the base branch's copies (and its rules_dir) in their place. The
+      # scan below also honours an inline `# tf-analyze:ignore` only if the
+      # base branch has it (`--inline-ignores-from`, on engines that support
+      # it). Works with any engine `ref`, old releases included.
       - name: Use the base branch's tf-analyze config
         if: github.event_name == 'pull_request'
         env:
@@ -73,6 +74,8 @@ jobs:
           # resolve to a tag of that name first, and tags can come from a PR.
           BASE=refs/tf-analyze/base
           rm -f .tf-analyze.yaml .tf-analyze-ignore.yaml
+          # No stale copy from an earlier run may stand in for a failed fetch.
+          git update-ref -d "$BASE" >/dev/null 2>&1 || true
           if ! git fetch --no-tags --depth=1 origin "+refs/heads/${TFA_BASE_REF}:${BASE}"; then
             echo "::warning::tf-analyze: cannot read base branch '${TFA_BASE_REF}'; scanning with no project config and no ignore file"
             exit 0
@@ -135,6 +138,11 @@ jobs:
         run: |
           # Without pipefail the gate's exit code is lost in `| tee` below.
           set -o pipefail
+          # Pin git to the checkout's own repository. The engine runs git in
+          # the scan target, and git would otherwise use a bare repository a
+          # PR planted there (its own "base" files, and config that can run
+          # commands).
+          export GIT_DIR="$GITHUB_WORKSPACE/.git" GIT_WORK_TREE="$GITHUB_WORKSPACE"
           MODE=static
           if [ "$TFA_EVENT" = "pull_request" ]; then
             MODE=diff
@@ -153,6 +161,20 @@ jobs:
           fi
           if [ "$TFA_SHOW_INFO" = "true" ]; then
             EXTRA_ARGS+=(--show-info)
+          fi
+          # On a PR, honour an inline `# tf-analyze:ignore` only if the base
+          # branch (fetched above) has it too, so the PR can't silence its
+          # own findings. If that fetch failed, the engine honours none.
+          if [ "$TFA_EVENT" = "pull_request" ]; then
+            # Not `--help | grep -q`: under pipefail, grep closing the pipe
+            # early can fail the pipeline.
+            HELP="$(python3 ~/.tf-analyze/scripts/detect.py --help 2>/dev/null || true)"
+            case "$HELP" in
+              *--inline-ignores-from*)
+                EXTRA_ARGS+=(--inline-ignores-from refs/tf-analyze/base) ;;
+              *)
+                echo "::warning::tf-analyze: this engine ref predates --inline-ignores-from, so inline tf-analyze:ignore comments this PR adds are honoured" ;;
+            esac
           fi
 
           # Reports go to a fresh folder under $RUNNER_TEMP, never the

@@ -1479,6 +1479,7 @@ from _diff import (
     find_latest_prior,
     get_diff_files,
     local_module_sources,
+    GitRefReader,
 )
 
 
@@ -1489,6 +1490,9 @@ from _diff import (
 from _baseline import (
     load_suppressions as _baseline_load_suppressions,
     load_inline_suppressions as _baseline_load_inline_suppressions,
+    inline_ignore_markers,
+    markers_to_suppressions,
+    trusted_inline_markers,
     apply_suppressions,
     apply_baseline,
     compare_reports,
@@ -1511,6 +1515,27 @@ def load_inline_suppressions(text: str) -> dict[int, set[str]]:
     return _baseline_load_inline_suppressions(
         comments_only(text), inline_ignore_re=INLINE_IGNORE_RE, source=text,
     )
+
+
+def _trusted_inline_suppressions(fp: Path, text: str, reader: "GitRefReader",
+                                 report: dict) -> dict[int, set[str]]:
+    """Inline suppressions in ``fp`` that the file also has at
+    ``reader``'s ref (``--inline-ignores-from``); the rest are added to
+    ``report["dropped"]``. A file the ref doesn't have, or a ref that
+    can't be read, keeps none."""
+    head = inline_ignore_markers(text, comments_only(text),
+                                 inline_ignore_re=INLINE_IGNORE_RE)
+    if not head:
+        return {}
+    base_text = reader.read(fp)
+    base = None if base_text is None else inline_ignore_markers(
+        base_text, comments_only(base_text), inline_ignore_re=INLINE_IGNORE_RE,
+    )
+    trusted, dropped = trusted_inline_markers(head, base)
+    report["dropped"].extend(
+        {"file": str(fp), "line": mk.line, "id": mk.rule_id} for mk in dropped
+    )
+    return markers_to_suppressions(trusted)
 
 
 # ---- Catalog loading ----------------------------------------------------
@@ -2707,6 +2732,22 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     all_text = {}
     file_inline_suppressions: dict[str, dict[int, set[str]]] = {}
     unreadable_files: list[str] = []
+    # --inline-ignores-from: honour an inline ignore only if the trusted ref
+    # has it too, so a pull request cannot silence its own findings. A ref
+    # that can't be read honours none (fail closed).
+    inline_ref = None
+    inline_report = None
+    if getattr(args, "inline_ignores_from", None) and not args.no_suppress:
+        inline_ref = GitRefReader(args.inline_ignores_from, target)
+        inline_report = {"ref": args.inline_ignores_from,
+                         "untrusted": bool(inline_ref.error), "dropped": []}
+        if inline_ref.error:
+            print(
+                f"WARN: cannot read --inline-ignores-from ref "
+                f"{args.inline_ignores_from!r} ({inline_ref.error}); "
+                f"no inline tf-analyze:ignore comments are honoured",
+                file=sys.stderr,
+            )
     for fp in tf_files:
         try:
             text = _read_tf_source(fp)
@@ -2720,7 +2761,18 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         # rendered-line space, not the JSON lines findings are reported
         # in). Those files are suppressed via project/global config only.
         if not args.no_suppress and not is_tf_json(fp):
-            file_inline_suppressions[str(fp)] = load_inline_suppressions(text)
+            if inline_ref is None:
+                file_inline_suppressions[str(fp)] = load_inline_suppressions(text)
+            else:
+                file_inline_suppressions[str(fp)] = _trusted_inline_suppressions(
+                    fp, text, inline_ref, inline_report,
+                )
+    if inline_report and inline_report["dropped"]:
+        print(
+            f"# {len(inline_report['dropped'])} inline ignore(s) not honoured: "
+            f"not present at {inline_report['ref']!r}",
+            file=sys.stderr,
+        )
 
     # Extra files (workflow YAML, tfvars, etc.) — read with the same
     # normaliser, but never used for provider-constraint detection.
@@ -2868,6 +2920,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         "all_text": all_text,
         "tf_files": tf_files,
         "entries": entries,
+        "inline_ignores": inline_report,
     }
 
 
@@ -3282,6 +3335,23 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
             ".tf-analyze-ignore.yaml in the target and its parent. A missing "
             "PATH means no file suppressions. CI uses this to apply the base "
             "branch's ignore file rather than the pull request's."
+        ),
+    )
+    ap.add_argument(
+        "--inline-ignores-from",
+        default=None,
+        metavar="REF",
+        help=(
+            "Honour an inline `# tf-analyze:ignore <ID>` comment only if the "
+            "file at git REF has the same ignore on the same code (matched "
+            "by content, not line number). The code is the line the comment "
+            "covers or, when that line leaves a `{`, `[` or `(` open or starts "
+            "a heredoc, the whole block, list, call or heredoc, so any change "
+            "inside it drops the ignore. Ignores "
+            "added since REF, and all ignores in files new since REF, are not "
+            "honoured. REF is a full ref name (refs/heads/main) or a commit "
+            "SHA. If REF cannot be read, no inline ignores are. CI uses this "
+            "so a pull request cannot silence its own findings."
         ),
     )
     ap.add_argument(
@@ -4113,6 +4183,15 @@ def _main():
     # GitHub Action's later gate step needs to see it too.
     if unreadable_files:
         summary["unreadable_files"] = list(unreadable_files)
+    # --inline-ignores-from: which ref vouched for inline ignores, whether it
+    # could be read at all, and the ignores it didn't vouch for.
+    _inline = _scan.get("inline_ignores")
+    if _inline:
+        summary["inline_ignores_from"] = _inline["ref"]
+        if _inline["untrusted"]:
+            summary["inline_ignores_untrusted"] = True
+        if _inline["dropped"]:
+            summary["inline_ignores_dropped"] = _inline["dropped"]
     # No Terraform and no plan/state input: the scan checked nothing. With
     # --fail-on this already exited 2 above; ungated (the GitHub Action
     # gates in a later step) the flag lets the gate fail instead of

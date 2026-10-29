@@ -10,6 +10,9 @@ effect is the caller's responsibility.
 * :func:`load_inline_suppressions` — find
   ``# tf-analyze:ignore <ID>`` comments inline in HCL text, return
   ``{line: {ids}}``.
+* :func:`inline_ignore_markers` / :func:`trusted_inline_markers` — the
+  same comments with the code they cover, and the subset a trusted git
+  ref also has (``--inline-ignores-from``).
 * :func:`apply_suppressions` — split findings into active / suppressed
   using both inline and global suppression dicts.
 * :func:`apply_baseline` — filter findings against a baseline JSON
@@ -31,7 +34,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple
 
 
 def load_suppressions(
@@ -106,16 +109,17 @@ def load_inline_suppressions(
 ) -> dict[int, set[str]]:
     """Find ``# tf-analyze:ignore <ID>`` comments and return ``line → {ids}``.
 
-    Each ID suppresses the line the comment is on. A comment on a line of
-    its own also suppresses the next line, so it can sit above the block
-    or argument it silences. A comment after code on the same line
-    (``key = "x" # tf-analyze:ignore ID``) covers only that line: it used
-    to cover the next line too, silencing a finding there that nobody
-    marked.
+    Each ID suppresses the line the comment is on. A comment on a line
+    with no code at all also suppresses the next line, so it can sit
+    above the block or argument it silences. A comment on a line that has
+    code, before or after it (``key = "x" # tf-analyze:ignore ID``,
+    ``/* tf-analyze:ignore ID */ key = "x"``), covers only that line: it
+    used to cover the next line too, silencing a finding there that
+    nobody marked.
 
     ``source`` is the file's text when ``text`` is a comments-only copy
-    of it (everything else blanked, columns kept): the code before a
-    comment is read from it. Without it, ``text`` is the source itself.
+    of it (everything else blanked, columns kept): the line's code is
+    read from it. Without it, ``text`` is the source itself.
     """
     src_lines = source.split("\n") if source is not None else None
     result: dict[int, set[str]] = {}
@@ -124,15 +128,191 @@ def load_inline_suppressions(
         if m:
             result.setdefault(i, set()).add(m.group(1))
             if src_lines is not None and i <= len(src_lines):
-                # Masked: the line's first comment starts at its first
-                # non-blank column; anything before that is code.
-                start = len(line) - len(line.lstrip())
-                before = src_lines[i - 1][:start]
+                code = _line_code(src_lines[i - 1], line)
             else:
-                before = line[:m.start()]
-            if not before.strip():
+                code = line[:m.start()]
+            if not code.strip():
                 result.setdefault(i + 1, set()).add(m.group(1))
     return result
+
+
+def _line_code(orig: str, com: str) -> str:
+    """``orig`` with its comments blanked: ``com`` is the comments-only
+    copy of the same line (comment characters kept, columns kept)."""
+    return "".join(o if k >= len(com) or com[k].isspace() else " "
+                   for k, o in enumerate(orig))
+
+
+class InlineMarker(NamedTuple):
+    """One inline ignore: where it is, which rule, the code it covers
+    (``anchor``) and whether it sits on a line of its own (``standalone``,
+    so it also covers the next line)."""
+
+    line: int
+    rule_id: str
+    anchor: str
+    standalone: bool
+
+
+def inline_ignore_markers(
+    text: str,
+    comment_text: str,
+    *,
+    inline_ignore_re: re.Pattern,
+) -> list[InlineMarker]:
+    """Every inline ignore in ``text`` as an :class:`InlineMarker`.
+
+    ``comment_text`` is ``text`` with everything but comments blanked to
+    spaces (same length, same newlines), so a marker inside a string or a
+    heredoc is not one. ``standalone`` follows
+    :func:`load_inline_suppressions`: the marker's line has no code.
+
+    The *anchor* is the code the ignore covers, comments left out and
+    whitespace normalised. The covered line is the marker's own line if
+    it has code, else (``standalone``) the next line that has code. If
+    the covered line leaves a ``{``, ``[`` or ``(`` open, or starts a
+    heredoc, the anchor runs to the end of that expression (a block, a
+    multi-line list or call, through a heredoc's terminator line), so any
+    change inside it drops a trusted ignore on it: a finding reported on
+    a ``resource`` line covers the whole resource, one on
+    ``cidr_blocks = [`` the whole list. Otherwise it is that one line. It does not depend
+    on line numbers, so lines added or removed elsewhere in the file
+    leave it unchanged (see :func:`trusted_inline_markers`).
+    """
+    lines = text.split("\n")
+    clines = comment_text.split("\n")
+    offsets = [0]
+    for ln in lines:
+        offsets.append(offsets[-1] + len(ln) + 1)
+
+    def raw_code(i: int) -> str:
+        if i >= len(lines):
+            return ""
+        return _line_code(lines[i], clines[i] if i < len(clines) else "")
+
+    def code(i: int) -> str:
+        return " ".join(raw_code(i).split())
+
+    def span_anchor(i: int) -> str:
+        end = _expression_end(text, offsets[i], offsets[i] + len(lines[i]))
+        if end is None:
+            return code(i)
+        last = max(k for k in range(i, len(lines)) if offsets[k] <= end)
+        return " ".join(" ".join(code(k) for k in range(i, last + 1)).split())
+
+    markers: list[InlineMarker] = []
+    for i, cline in enumerate(clines):
+        m = inline_ignore_re.search(cline)
+        if not m:
+            continue
+        standalone = not code(i)
+        covered = i
+        while covered < len(lines) and not code(covered):
+            covered += 1
+        anchor = span_anchor(covered) if covered < len(lines) else ""
+        markers.append(InlineMarker(i + 1, m.group(1), anchor, standalone))
+    return markers
+
+
+# A heredoc opener. HCL's identifier is bare; a quoted one is accepted too,
+# so the anchor errs towards covering more.
+_HEREDOC_OPEN_RE = re.compile(r'<<-?[ \t]*(["\']?)([A-Za-z_][\w-]*)\1[ \t]*\r?\n')
+
+
+def _expression_end(text: str, start: int, line_end: int) -> int | None:
+    """End offset of the expression that starts on the line
+    ``text[start:line_end]``: the first newline at or after ``line_end``
+    with no ``{`` / ``[`` / ``(`` left open and no heredoc unfinished.
+    Comments, strings (with their interpolations) and heredoc bodies are
+    stepped over, so a bracket inside them doesn't count. ``None`` when
+    the expression never closes (fall back to one line).
+
+    "Left open" is measured against the lowest depth the covered line
+    reaches, not zero: ``}, {`` closes one block and opens the next, so
+    its net depth is 0 but a block is still open at the end of the line."""
+    from _hcl import _string_end  # local: keep this module light
+
+    n = len(text)
+    depth = 0
+    floor = 0  # lowest depth reached on the covered line
+    i = start
+    while i < n:
+        ch = text[i]
+        if ch == "\n":
+            if depth <= floor and i >= line_end:
+                return i
+            i += 1
+        elif ch == "#" or text.startswith("//", i):
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            if j < 0:
+                return None
+            i = j + 2
+        elif ch == '"':
+            i = _string_end(text, i)
+        elif ch == "<" and (m := _HEREDOC_OPEN_RE.match(text, i)):
+            term = re.compile(rf"(?m)^[ \t]*{re.escape(m.group(2))}[ \t]*\r?$")
+            t = term.search(text, m.end())
+            if t is None:
+                return None
+            i = t.end()
+            if i >= n and depth <= floor:
+                return n
+        elif ch in "{[(":
+            depth += 1
+            i += 1
+        elif ch in "}])":
+            depth -= 1
+            if i < line_end:
+                floor = min(floor, depth)
+            i += 1
+        else:
+            i += 1
+    return n if depth <= floor else None
+
+
+def markers_to_suppressions(markers: list[InlineMarker]) -> dict[int, set[str]]:
+    """``line → {ids}`` for :func:`apply_suppressions`, with the same reach
+    as :func:`load_inline_suppressions`: the marker's line, and the next
+    one too for a comment on a line of its own."""
+    result: dict[int, set[str]] = {}
+    for mk in markers:
+        result.setdefault(mk.line, set()).add(mk.rule_id)
+        if mk.standalone:
+            result.setdefault(mk.line + 1, set()).add(mk.rule_id)
+    return result
+
+
+def trusted_inline_markers(
+    head: list[InlineMarker],
+    base: list[InlineMarker] | None,
+) -> tuple[list[InlineMarker], list[InlineMarker]]:
+    """Split ``head``'s inline ignores into ``(trusted, dropped)`` against
+    the same file's ignores at a trusted ref (``base``; ``None`` when the
+    file isn't there, so nothing is trusted).
+
+    A head ignore is trusted when the base has one for the same rule on
+    the same anchor. Matching is count-aware: if the base has N ignores
+    for a (rule, anchor), at most N head ones are trusted, so copying an
+    accepted marker onto another identical line does not suppress both.
+    """
+    if not base:
+        return [], list(head)
+    budget: dict[tuple[str, str], int] = {}
+    for mk in base:
+        budget[(mk.rule_id, mk.anchor)] = budget.get((mk.rule_id, mk.anchor), 0) + 1
+    trusted: list[InlineMarker] = []
+    dropped: list[InlineMarker] = []
+    for marker in head:
+        key = (marker.rule_id, marker.anchor)
+        if budget.get(key, 0) > 0:
+            budget[key] -= 1
+            trusted.append(marker)
+        else:
+            dropped.append(marker)
+    return trusted, dropped
 
 
 def apply_suppressions(
