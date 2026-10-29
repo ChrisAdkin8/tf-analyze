@@ -3344,10 +3344,13 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
         help=(
             "Honour an inline `# tf-analyze:ignore <ID>` comment only if the "
             "file at git REF has the same ignore on the same code (matched "
-            "by content, not line number). Ignores added since REF, and all "
-            "ignores in files new since REF, are not honoured. If REF cannot "
-            "be read, no inline ignores are. CI uses this so a pull request "
-            "cannot silence its own findings."
+            "by content, not line number). The code is the line the comment "
+            "covers or, when that line opens a block (ends in `{`), the whole "
+            "block, so any change inside the block drops the ignore. Ignores "
+            "added since REF, and all ignores in files new since REF, are not "
+            "honoured. REF is a full ref name (refs/heads/main) or a commit "
+            "SHA. If REF cannot be read, no inline ignores are. CI uses this "
+            "so a pull request cannot silence its own findings."
         ),
     )
     ap.add_argument(

@@ -74,7 +74,7 @@ def _repo(tmp_path: Path, base: dict[str, str], pr: dict[str, str]) -> Path:
 
 
 def _scan(
-    repo: Path, *extra: str, ref: str | None = "main"
+    repo: Path, *extra: str, ref: str | None = "refs/heads/main"
 ) -> tuple[subprocess.CompletedProcess, dict]:
     args = [
         sys.executable,
@@ -107,7 +107,7 @@ def test_ignore_on_base_unchanged_is_honoured(tmp_path: Path) -> None:
     proc, report = _scan(repo, "--fail-on", "CRITICAL")
     assert _count(report) == 0
     assert proc.returncode == 0, proc.stderr
-    assert report["summary"]["inline_ignores_from"] == "main"
+    assert report["summary"]["inline_ignores_from"] == "refs/heads/main"
     assert "inline_ignores_untrusted" not in report["summary"]
     assert "inline_ignores_dropped" not in report["summary"]
 
@@ -295,12 +295,12 @@ def _markers(text: str) -> list[tuple[int, str, str]]:
 
 def test_trailing_comment_anchors_its_own_line() -> None:
     text = 'resource "a" "b" {   # tf-analyze:ignore X-1\n  k = 1\n}\n'
-    assert _markers(text) == [(1, "X-1", 'resource "a" "b" {', False)]
+    assert _markers(text) == [(1, "X-1", 'resource "a" "b" { k = 1 }', False)]
 
 
 def test_double_slash_marker_is_one() -> None:
     text = '// tf-analyze:ignore X-1\nresource "a" "b" {\n}\n'
-    assert _markers(text) == [(1, "X-1", 'resource "a" "b" {', True)]
+    assert _markers(text) == [(1, "X-1", 'resource "a" "b" { }', True)]
 
 
 @pytest.mark.parametrize(
@@ -339,7 +339,7 @@ def test_trusted_trailing_ignore_does_not_reach_the_next_line(tmp_path: Path) ->
 
 def test_standalone_comment_anchors_next_code_line() -> None:
     text = '# tf-analyze:ignore X-1\n\n# why: legacy\n/* more */\n  resource   "a"  "b" {\n}\n'
-    assert _markers(text) == [(1, "X-1", 'resource "a" "b" {', True)]
+    assert _markers(text) == [(1, "X-1", 'resource "a" "b" { }', True)]
 
 
 def test_marker_in_a_string_or_heredoc_is_not_one() -> None:
@@ -783,7 +783,7 @@ def test_pinned_repository_is_used_and_planted_one_ignored(tmp_path: Path) -> No
             "--format",
             "json",
             "--no-project-config",
-            "--inline-ignores-from=main",
+            "--inline-ignores-from=refs/heads/main",
             "--fail-on",
             "CRITICAL",
         ],
@@ -815,7 +815,7 @@ def test_a_pin_git_disagrees_with_fails_closed(tmp_path: Path) -> None:
             "--format",
             "json",
             "--no-project-config",
-            "--inline-ignores-from=main",
+            "--inline-ignores-from=refs/heads/main",
         ],
         capture_output=True,
         text=True,
@@ -847,3 +847,147 @@ def test_verified_work_tree_rejects_a_foreign_git_dir(
     monkeypatch.setenv("GIT_DIR", str(other / ".git"))
     root, err = verified_work_tree(repo)
     assert root is None and err
+
+
+def test_relative_pin_is_relative_to_the_target(tmp_path: Path, monkeypatch) -> None:
+    # git resolves a relative GIT_DIR / GIT_WORK_TREE against the folder it
+    # runs in (the target), not the engine's own cwd.
+    from _diff import verified_work_tree
+
+    repo = _repo(tmp_path, {"main.tf": "\n"}, {})
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("GIT_DIR", ".git")
+    monkeypatch.setenv("GIT_WORK_TREE", ".")
+    root, err = verified_work_tree(repo)
+    assert root == repo.resolve(), err
+
+
+# ---- a comment on a line with code covers only that line -----------------------
+
+LEADING_BLOCK = """provider "aws" {
+  /* # tf-analyze:ignore SEC-SECRETS-001 */ access_key = "AKIAIOSFODNN7EXAMPLE"
+  secret_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYREALKEY99"
+}
+"""
+
+
+def _secret_lines(report: dict) -> list[int]:
+    return sorted(f["line"] for f in report["findings"] if f["id"] == "SEC-SECRETS-001")
+
+
+@pytest.mark.parametrize(
+    "tf",
+    [
+        LEADING_BLOCK,
+        LEADING_BLOCK.replace("/* # tf-analyze", "/* // tf-analyze"),
+        LEADING_BLOCK.replace(
+            '/* # tf-analyze:ignore SEC-SECRETS-001 */ access_key = "AKIAIOSFODNN7EXAMPLE"',
+            'access_key = "AKIAIOSFODNN7EXAMPLE" // tf-analyze:ignore SEC-SECRETS-001',
+        ),
+    ],
+)
+@pytest.mark.parametrize("ref", [None, "refs/heads/main"])
+def test_comment_with_code_after_it_does_not_reach_the_next_line(
+    tmp_path: Path, tf: str, ref: str | None
+) -> None:
+    # The base already has the same comment, so the trusted path honours it,
+    # but only for its own line: the secret on line 3 still fails the gate.
+    repo = _repo(tmp_path, {"main.tf": tf}, {})
+    proc, report = _scan(repo, "--fail-on", "CRITICAL", ref=ref)
+    assert 3 in _secret_lines(report), report["findings"]
+    assert 2 not in _secret_lines(report)
+    assert proc.returncode == 1
+
+
+def test_comment_only_line_above_still_covers_the_next_line() -> None:
+    from detect import load_inline_suppressions
+
+    text = '/* note */ # tf-analyze:ignore X-1\nresource "a" "b" {\n}\n'
+    assert load_inline_suppressions(text) == {1: {"X-1"}, 2: {"X-1"}}
+    assert _markers(text)[0].standalone is True
+    text = "/* c */ k = 1 # tf-analyze:ignore X-1\nj = 2\n"
+    assert load_inline_suppressions(text) == {1: {"X-1"}}
+    assert _markers(text)[0].standalone is False
+
+
+# ---- an ignore on a block's opening line is anchored to the whole block --------
+
+SG_443 = """# tf-analyze:ignore SEC-AWS-SG-001
+resource "aws_security_group" "web" {
+  name = "web"
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+"""
+
+
+def test_rewriting_an_ignored_block_drops_the_ignore(tmp_path: Path) -> None:
+    pr = (
+        SG_443.replace("from_port   = 443", "from_port   = 0")
+        .replace("to_port     = 443", "to_port     = 65535")
+        .replace('protocol    = "tcp"', 'protocol    = "-1"')
+    )
+    repo = _repo(tmp_path, {"main.tf": SG_443}, {"main.tf": pr})
+    proc, report = _scan(repo, "--fail-on", "CRITICAL")
+    assert _count(report) == 1
+    assert proc.returncode == 1
+    assert len(report["summary"]["inline_ignores_dropped"]) == 1
+
+
+def test_unchanged_block_shifted_down_keeps_the_ignore(tmp_path: Path) -> None:
+    pr = 'variable "a" {}\n\n# unrelated\n\n' + SG_443.replace(
+        '  name = "web"', '  # a comment inside does not count\n  name   =   "web"'
+    )
+    repo = _repo(tmp_path, {"main.tf": SG_443}, {"main.tf": pr})
+    _, report = _scan(repo)
+    assert "inline_ignores_dropped" not in report["summary"]
+    assert _count(report) == 0
+
+
+def test_block_anchor_unit() -> None:
+    text = 'resource "a" "b" { # tf-analyze:ignore X\n  k = "}" # }\n  n {\n  }\n}\nnext = 1\n'
+    assert _markers(text)[0].anchor == 'resource "a" "b" { k = "}" n { } }'
+    # An attribute line stays a one-line anchor.
+    text = '# tf-analyze:ignore X\npassword = "p"\nother = 1\n'
+    assert _markers(text)[0].anchor == 'password = "p"'
+
+
+# ---- the trusted ref must be named exactly -------------------------------------
+
+
+def test_tag_cannot_stand_in_for_a_missing_full_ref(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, {"main.tf": _sg("open")}, {"main.tf": _sg("open", "above")})
+    # A tag (tags can come from a PR) whose name is the ref the action uses,
+    # on a commit that has the ignore. The real ref is absent.
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=e@e", "-c", "user.name=e", "commit", "-q", "-m", "pr")
+    _git(repo, "tag", "refs/tf-analyze/base")
+    proc, report = _scan(repo, "--fail-on", "CRITICAL", ref="refs/tf-analyze/base")
+    assert _count(report) == 1
+    assert report["summary"]["inline_ignores_untrusted"] is True
+    assert proc.returncode == 1
+
+
+def test_short_ref_names_are_refused(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, {"main.tf": _sg("open", "above")}, {})
+    _, report = _scan(repo, ref="main")
+    assert _count(report) == 1
+    assert report["summary"]["inline_ignores_untrusted"] is True
+
+
+def test_full_sha_is_accepted(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, {"main.tf": _sg("open", "above")}, {})
+    sha = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "main"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    _, report = _scan(repo, ref=sha)
+    assert _count(report) == 0

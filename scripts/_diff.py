@@ -27,6 +27,9 @@ from pathlib import Path
 # instead of an indefinite hang.
 _GIT_TIMEOUT_SEC = 30
 
+# A commit named by its full SHA-1 or SHA-256 hash.
+_SHA_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+
 # git finds its repository by walking up from the cwd, which is the scan
 # target: files a pull request controls. A PR can commit a *bare* repo
 # (`HEAD`, `config`, `objects/`, `refs/`: git refuses `.git` paths, not
@@ -104,10 +107,11 @@ def verified_work_tree(target: Path) -> tuple[Path | None, str | None]:
     git_dir = Path(out[1].strip()).resolve()
     pin_tree = os.environ.get("GIT_WORK_TREE")
     pin_dir = os.environ.get("GIT_DIR")
-    if pin_tree and root != Path(pin_tree).resolve():
+    # A relative pin is relative to the folder git runs in, not ours.
+    if pin_tree and root != (cwd / pin_tree).resolve():
         return None, f"work tree {root} is not GIT_WORK_TREE {pin_tree}"
     if pin_dir:
-        want = Path(pin_dir)
+        want = cwd / pin_dir
         want = (_gitfile_target(want) if want.is_file() else want.resolve())
         if want != git_dir:
             return None, f"git dir {git_dir} is not GIT_DIR {pin_dir}"
@@ -477,6 +481,16 @@ class GitRefReader:
             self.error = err
             return
         try:
+            # A full ref name must exist as written: rev-parse would try
+            # `refs/tags/<ref>` and others too, and tags can come from a PR.
+            if ref.startswith("refs/"):
+                exact = _run_git(["git", "show-ref", "--verify", "--quiet", ref], cwd)
+                if exact is None or exact.returncode != 0:
+                    self.error = "unknown ref" + _git_err(exact)
+                    return
+            elif not _SHA_RE.fullmatch(ref):
+                self.error = "not a full ref name (refs/...) or commit SHA"
+                return
             sha = _run_git(
                 ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
                 cwd, text=True,

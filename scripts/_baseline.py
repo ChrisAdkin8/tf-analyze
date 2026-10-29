@@ -109,16 +109,17 @@ def load_inline_suppressions(
 ) -> dict[int, set[str]]:
     """Find ``# tf-analyze:ignore <ID>`` comments and return ``line → {ids}``.
 
-    Each ID suppresses the line the comment is on. A comment on a line of
-    its own also suppresses the next line, so it can sit above the block
-    or argument it silences. A comment after code on the same line
-    (``key = "x" # tf-analyze:ignore ID``) covers only that line: it used
-    to cover the next line too, silencing a finding there that nobody
-    marked.
+    Each ID suppresses the line the comment is on. A comment on a line
+    with no code at all also suppresses the next line, so it can sit
+    above the block or argument it silences. A comment on a line that has
+    code, before or after it (``key = "x" # tf-analyze:ignore ID``,
+    ``/* tf-analyze:ignore ID */ key = "x"``), covers only that line: it
+    used to cover the next line too, silencing a finding there that
+    nobody marked.
 
     ``source`` is the file's text when ``text`` is a comments-only copy
-    of it (everything else blanked, columns kept): the code before a
-    comment is read from it. Without it, ``text`` is the source itself.
+    of it (everything else blanked, columns kept): the line's code is
+    read from it. Without it, ``text`` is the source itself.
     """
     src_lines = source.split("\n") if source is not None else None
     result: dict[int, set[str]] = {}
@@ -127,15 +128,19 @@ def load_inline_suppressions(
         if m:
             result.setdefault(i, set()).add(m.group(1))
             if src_lines is not None and i <= len(src_lines):
-                # Masked: the line's first comment starts at its first
-                # non-blank column; anything before that is code.
-                start = len(line) - len(line.lstrip())
-                before = src_lines[i - 1][:start]
+                code = _line_code(src_lines[i - 1], line)
             else:
-                before = line[:m.start()]
-            if not before.strip():
+                code = line[:m.start()]
+            if not code.strip():
                 result.setdefault(i + 1, set()).add(m.group(1))
     return result
+
+
+def _line_code(orig: str, com: str) -> str:
+    """``orig`` with its comments blanked: ``com`` is the comments-only
+    copy of the same line (comment characters kept, columns kept)."""
+    return "".join(o if k >= len(com) or com[k].isspace() else " "
+                   for k, o in enumerate(orig))
 
 
 class InlineMarker(NamedTuple):
@@ -160,38 +165,54 @@ def inline_ignore_markers(
     ``comment_text`` is ``text`` with everything but comments blanked to
     spaces (same length, same newlines), so a marker inside a string or a
     heredoc is not one. ``standalone`` follows
-    :func:`load_inline_suppressions`: no code before the line's first
-    comment. The *anchor* is the code the ignore covers,
-    whitespace-normalised: the code on the marker's own line, else (a
-    comment on a line of its own) the next line that has code on it. It
-    does not depend on line numbers, so lines added or removed elsewhere
-    in the file leave it unchanged (see :func:`trusted_inline_markers`).
+    :func:`load_inline_suppressions`: the marker's line has no code.
+
+    The *anchor* is the code the ignore covers, comments left out and
+    whitespace normalised. The covered line is the marker's own line if
+    it has code, else (``standalone``) the next line that has code. If
+    the covered line opens a block (its code ends in ``{``), the anchor
+    is the whole block, so any change inside it drops a trusted ignore
+    on the block (a finding reported on a ``resource`` line covers the
+    whole resource). Otherwise it is that one line. It does not depend
+    on line numbers, so lines added or removed elsewhere in the file
+    leave it unchanged (see :func:`trusted_inline_markers`).
     """
     lines = text.split("\n")
     clines = comment_text.split("\n")
+    offsets = [0]
+    for ln in lines:
+        offsets.append(offsets[-1] + len(ln) + 1)
+
+    def raw_code(i: int) -> str:
+        if i >= len(lines):
+            return ""
+        return _line_code(lines[i], clines[i] if i < len(clines) else "")
 
     def code(i: int) -> str:
-        orig = lines[i] if i < len(lines) else ""
-        com = clines[i] if i < len(clines) else ""
-        # A comment character is non-blank in `com`; keep only the rest.
-        kept = "".join(o if i_ >= len(com) or com[i_].isspace() else " "
-                       for i_, o in enumerate(orig))
-        return " ".join(kept.split())
+        return " ".join(raw_code(i).split())
+
+    def block_anchor(i: int) -> str:
+        line = raw_code(i)
+        if not line.rstrip().endswith("{"):
+            return code(i)
+        from _hcl import brace_walk  # local: keep this module light
+
+        end = brace_walk(text, offsets[i] + line.rstrip().rfind("{"))
+        if end is None:
+            return code(i)
+        last = max(k for k in range(i, len(lines)) if offsets[k] < end)
+        return " ".join(" ".join(code(k) for k in range(i, last + 1)).split())
 
     markers: list[InlineMarker] = []
     for i, cline in enumerate(clines):
         m = inline_ignore_re.search(cline)
         if not m:
             continue
-        # Same test as load_inline_suppressions: the line's first comment
-        # starts at its first non-blank masked column.
-        start = len(cline) - len(cline.lstrip())
-        standalone = not (lines[i] if i < len(lines) else "")[:start].strip()
-        anchor = code(i)
-        j = i + 1
-        while not anchor and j < len(lines):
-            anchor = code(j)
-            j += 1
+        standalone = not code(i)
+        covered = i
+        while covered < len(lines) and not code(covered):
+            covered += 1
+        anchor = block_anchor(covered) if covered < len(lines) else ""
         markers.append(InlineMarker(i + 1, m.group(1), anchor, standalone))
     return markers
 

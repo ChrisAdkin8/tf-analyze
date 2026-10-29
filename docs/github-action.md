@@ -107,8 +107,12 @@ change them for those runs, edit the fallback after `||` in the file.
   `--inline-ignores-from` with the fetched base branch, so the engine
   honours an inline ignore only if the base branch has the same ignore
   on the same code. Matching is by the code, not the line number, so
-  lines added elsewhere don't break it. An ignore the PR adds, or moves
-  onto other code, or puts in a new file, is not honoured until the PR
+  lines added elsewhere don't break it. The code is the line the ignore
+  covers; if that line opens a block (a `resource ... {` line, where
+  findings such as SEC-AWS-SG-001 are reported), it is the whole block,
+  so a PR that changes anything inside an ignored block (say, widens its
+  ports) loses the ignore until the change is merged. An ignore the PR
+  adds, or moves onto other code, or puts in a new file, is not honoured until the PR
   is merged; the finding shows, and the summary lists the ignore under
   `inline_ignores_dropped`. If the base branch can't be read, no inline
   ignore is honoured (`inline_ignores_untrusted: true`, with a warning).

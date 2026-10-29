@@ -3,15 +3,24 @@
 - **`--inline-ignores-from REF`** (new flag): an inline
   `# tf-analyze:ignore <ID>` is honoured only if the file at git `REF`
   has an ignore for the same rule on the same code. The match is by the
-  code the comment covers (its own line for a trailing comment, else the
-  next line of code), with whitespace normalised, not by line number, so
-  lines added elsewhere in the file don't break it. It counts copies: if
-  `REF` has the ignore on N identical lines, at most N are honoured. A
-  file that `REF` doesn't have honours none. If `REF` can't be read (git
-  missing, unknown ref, not a work tree, git refusing the repository),
-  none are honoured, with one `WARN` and `inline_ignores_untrusted: true`
-  in the JSON summary. Ignores not honoured are counted on stderr and
-  listed in the summary as `inline_ignores_dropped`.
+  code the comment covers (its own line if that has code, else the next
+  line of code; the whole block when that line opens one, so any change
+  inside an ignored `resource` drops the ignore), comments left out and
+  whitespace normalised, not by line number, so lines added elsewhere in
+  the file don't break it. It counts copies: if `REF` has the ignore on N
+  identical lines, at most N are honoured. A file that `REF` doesn't have
+  honours none. `REF` must be a full ref name (`refs/heads/main`), which
+  must exist exactly as written (a tag of the same name doesn't count),
+  or a commit SHA. If `REF` can't be read (git missing, unknown ref, not a
+  work tree, git refusing the repository), none are honoured, with one
+  `WARN` and `inline_ignores_untrusted: true` in the JSON summary.
+  Ignores not honoured are counted on stderr and listed in the summary as
+  `inline_ignores_dropped`.
+- **A comment with code after it covers only its own line**:
+  `/* # tf-analyze:ignore ID */ key = "..."` counted as a comment on a
+  line of its own, so it also silenced a finding on the next line. A
+  comment now reaches the next line only when its line has no code at
+  all, before or after it.
 - **The GitHub Action passes it on PRs**: on `pull_request`,
   `pull_request_target` and `merge_group` runs (unless
   `trust-pr-config: true`) the composite action passes the base branch it
