@@ -73,7 +73,13 @@ def test_reachability_tiers_move_from_current_urgency() -> None:
     from _attack_graph import _apply_reachability_urgency
 
     entries = {"R-1": {"default_urgency": "HIGH"}}
-    graph = {"critical_path": ["a.crit"], "nodes": [{"id": "a.open", "internet_reachable": True}]}
+    graph = {
+        "critical_path": ["a.crit"],
+        "nodes": [
+            {"id": "a.open", "internet_reachable": True, "exposure_modelled": True},
+            {"id": "a.hidden", "internet_reachable": False, "exposure_modelled": True},
+        ],
+    }
     plain_unreachable = {"id": "R-1", "resource": "a.hidden"}
     escalated_unreachable = {"id": "R-1", "resource": "a.hidden", "urgency": "CRITICAL"}
     escalated_reachable = {"id": "R-1", "resource": "a.open", "urgency": "CRITICAL"}
@@ -84,6 +90,61 @@ def test_reachability_tiers_move_from_current_urgency() -> None:
     assert escalated_unreachable["urgency"] == "CRITICAL"  # escalation is kept
     assert escalated_reachable["urgency"] == "CRITICAL"
     assert on_path["urgency"] == "CRITICAL"  # promoted
+
+
+def test_attack_graph_does_not_demote_what_it_does_not_model(tmp_path) -> None:
+    # An IAM grant is never "internet-reachable", because the graph only
+    # decides exposure for network-facing types; demoting it let an owner
+    # grant pass --fail-on HIGH.
+    (tmp_path / "main.tf").write_text(
+        'resource "google_project_iam_member" "m" {\n'
+        '  project = "p"\n'
+        '  role    = "roles/owner"\n'
+        '  member  = "user:a@example.com"\n'
+        "}\n"
+    )
+    plain = _run("--target", str(tmp_path), "--fail-on", "HIGH")
+    graph = _run("--target", str(tmp_path), "--fail-on", "HIGH", "--attack-graph")
+    assert plain.returncode == graph.returncode == 1
+    urgency = {f["id"]: f["urgency"] for f in json.loads(graph.stdout)["findings"]}
+    assert urgency["SEC-GCP-IAM-001"] == "HIGH"
+
+
+def test_unmodelled_or_pruned_resources_keep_their_urgency() -> None:
+    from _attack_graph import _apply_reachability_urgency
+
+    entries = {"R-1": {"default_urgency": "HIGH"}}
+    graph = {
+        "critical_path": [],
+        "nodes": [{"id": "iam.grant", "internet_reachable": False, "exposure_modelled": False}],
+    }
+    unmodelled = {"id": "R-1", "resource": "iam.grant"}
+    pruned = {"id": "R-1", "resource": "not.in.graph"}
+    _apply_reachability_urgency([unmodelled, pruned], graph, entries)
+    assert unmodelled["urgency"] == pruned["urgency"] == "HIGH"
+
+
+def test_a_resource_behind_a_security_group_is_modelled() -> None:
+    from _attack_graph import build_attack_graph
+
+    def res(rtype: str, body: str) -> dict:
+        return {"type": rtype, "body": body, "file": "main.tf", "line": 1}
+
+    graph = build_attack_graph(
+        {
+            "aws_security_group.sg": res("aws_security_group", ""),
+            "aws_redshift_cluster.c": res(
+                "aws_redshift_cluster",
+                "vpc_security_group_ids = [aws_security_group.sg.id]",
+            ),
+            "aws_iam_role.r": res("aws_iam_role", ""),
+        },
+        [],
+    )
+    modelled = {n["id"]: n.get("exposure_modelled") for n in graph["nodes"]}
+    assert modelled["aws_security_group.sg"] is True
+    assert modelled["aws_redshift_cluster.c"] is True
+    assert modelled["aws_iam_role.r"] is False
 
 
 # ---- --baseline ----------------------------------------------------------------

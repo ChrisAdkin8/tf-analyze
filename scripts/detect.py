@@ -3922,6 +3922,10 @@ def _main():
     # Likewise only when a rule check ran out of time (`_call_with_budget`).
     if RULE_TIMEOUTS:
         summary["rule_timeouts"] = list(RULE_TIMEOUTS)
+    # And when a .tf file couldn't be read: --fail-on fails on it, so the
+    # GitHub Action's later gate step needs to see it too.
+    if unreadable_files:
+        summary["unreadable_files"] = list(unreadable_files)
     # No Terraform and no plan/state input: the scan checked nothing. With
     # --fail-on this already exited 2 above; ungated (the GitHub Action
     # gates in a later step) the flag lets the gate fail instead of

@@ -111,3 +111,78 @@ def test_action_gate_still_fails_on_findings(tmp_path) -> None:
     tf.mkdir()
     (tf / "main.tf").write_text(SSH_OPEN)
     assert _gate(tmp_path, _engine_report(tf)).returncode == 1
+
+
+# ---- unchecked input (critical review) ---------------------------------------------
+# The engine fails --fail-on when a rule check runs out of time or a file
+# can't be read. The Action gates its own report without --fail-on, so it
+# has to read both from the summary, or a slow-to-match input turns a red
+# PR green.
+
+
+def _timeout_report(tmp_path: Path) -> dict:
+    (tmp_path / "tf").mkdir()
+    (tmp_path / "tf" / "main.tf").write_text(SSH_OPEN)
+    proc = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "detect.py"), "--target",
+         str(tmp_path / "tf"), "--format", "json"],
+        capture_output=True, text=True, check=False,
+        env={**os.environ, "TF_ANALYZE_PATTERN_TIMEOUT": "0.00001"},
+    )
+    report = json.loads(proc.stdout)
+    assert report["summary"]["rule_timeouts"]
+    return report
+
+
+def _unreadable_report(tmp_path: Path) -> dict:
+    (tmp_path / "tf").mkdir()
+    (tmp_path / "tf" / "main.tf").write_text("locals {\n  x = 1\n}\n")
+    (tmp_path / "tf" / "bad.tf").write_bytes(b"\xff\xfe\x00bad")
+    report = _engine_report(tmp_path / "tf")
+    assert report["summary"]["unreadable_files"] == [str(tmp_path / "tf" / "bad.tf")]
+    return report
+
+
+def test_action_gate_fails_when_a_rule_check_timed_out(tmp_path) -> None:
+    report = _timeout_report(tmp_path)
+    report["findings"] = []  # the timed-out checks are what found them
+    res = _gate(tmp_path, report)
+    assert res.returncode == 1
+    assert "ran out of time" in res.stderr
+
+
+def test_action_gate_fails_when_a_file_could_not_be_read(tmp_path) -> None:
+    res = _gate(tmp_path, _unreadable_report(tmp_path))
+    assert res.returncode == 1
+    assert "could not be read" in res.stderr
+
+
+def _template_gate_script() -> str:
+    text = (REPO / "integrations" / "github-action.yml").read_text()
+    m = re.search(r'python3 -c "\n(.*?)\n\s*" \| tee', text, re.DOTALL)
+    assert m, "template gate step no longer runs inline python3 -c"
+    return m.group(1)
+
+
+def _template_gate(tmp_path: Path, report: dict) -> subprocess.CompletedProcess:
+    (tmp_path / "tf-analyze-findings.json").write_text(json.dumps(report))
+    import textwrap
+
+    return subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(_template_gate_script())],
+        capture_output=True, text=True, cwd=tmp_path, check=False,
+        env={**os.environ, "FAIL_ON": "HIGH"},
+    )
+
+
+def test_template_gate_fails_on_unchecked_input(tmp_path) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _template_gate(tmp_path, _engine_report(empty)).returncode == 1
+    assert _template_gate(tmp_path, _unreadable_report(tmp_path)).returncode == 1
+
+
+def test_template_gate_passes_a_clean_scan(tmp_path) -> None:
+    (tmp_path / "tf").mkdir()
+    (tmp_path / "tf" / "main.tf").write_text("locals {\n  x = 1\n}\n")
+    assert _template_gate(tmp_path, _engine_report(tmp_path / "tf")).returncode == 0
