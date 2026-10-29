@@ -1,6 +1,6 @@
 ---
-title: "SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
-description: "tf-analyze rule SEC-K8S-PSA-001 (MEDIUM · security): kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / c…"
+title: "SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release turns off runAsNonRoot / readOnlyRootFilesystem / capabilities.drop"
+description: "tf-analyze rule SEC-K8S-PSA-001 (MEDIUM · security): kubernetes_namespace missing PSA label OR helm_release turns off runAsNonRoot / readOnlyRootFilesystem…"
 keywords: "security, medium, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, cwe-269, cwe-250, nist-csf-pr.pt-3, nist-800-53-ac-6, csa-ccm-iam-09"
 ---
 
@@ -8,7 +8,7 @@ keywords: "security, medium, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, 
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "SEC-K8S-PSA-001 \u2014 kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop",
+  "headline": "SEC-K8S-PSA-001 \u2014 kubernetes_namespace missing PSA label OR helm_release turns off runAsNonRoot / readOnlyRootFilesystem / capabilities.drop",
   "description": "Add the PSA enforcement label to every namespace, scoped to the\nleast-privileged level the workload tolerates:",
   "url": "https://chrisadkin8.github.io/tf-analyze/rules/SEC-K8S-PSA-001/",
   "mainEntityOfPage": {
@@ -31,13 +31,13 @@ keywords: "security, medium, terraform, iac, cis-5.2.1, cis-5.7.3, mitre-T1611, 
 }
 </script>
 
-# 💡 SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop
+# 💡 SEC-K8S-PSA-001 — kubernetes_namespace missing PSA label OR helm_release turns off runAsNonRoot / readOnlyRootFilesystem / capabilities.drop
 
 ![MEDIUM](https://img.shields.io/badge/MEDIUM-f1c40f?style=flat-square) ![Section: security](https://img.shields.io/badge/section-security-blue?style=flat-square) ![Blast radius: environment](https://img.shields.io/badge/blast%20radius-environment-purple?style=flat-square)
 
 <p><a href="vscode://tfanalyze.tf-analyze/rule/SEC-K8S-PSA-001" style="display:inline-block;padding:6px 12px;background:#157878;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px">📂 Open in VS Code</a><a href="vscode://tfanalyze.tf-analyze/suppress?id=SEC-K8S-PSA-001" style="display:inline-block;padding:6px 12px;background:#fff;color:#c27a00;text-decoration:none;border:1px solid #c27a00;border-radius:4px;font-weight:600;font-size:14px;margin-top:6px;margin-left:6px" title="Add SEC-K8S-PSA-001 to .tf-analyze.yaml's ignore_rules in your workspace">📝 Suppress in workspace</a> <span style="color:#666;font-size:12px;margin-left:4px">(requires the <a href="https://marketplace.visualstudio.com/items?itemName=tfanalyze.tf-analyze" style="color:#157878">tf-analyze extension</a>)</span></p>
 
-> **kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
+> **kubernetes_namespace missing PSA label OR helm_release turns off runAsNonRoot / readOnlyRootFilesystem / capabilities.drop.** This rule has `default_urgency: MEDIUM` and operates on a environment blast radius. 
 
 ## What this checks
 
@@ -47,18 +47,24 @@ without `pod-security.kubernetes.io/enforce`). Without a Pod
 Security Admission level, the namespace defaults to no enforcement
 — privileged pods, hostPath mounts, and host-network pods are all
 permitted. PSA replaced the deprecated PodSecurityPolicy in 1.25.
-2. **`helm_set_value`** on `helm_release` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
-  R30.5 / NIST 800-190 — helm_release must set
-`securityContext.runAsNonRoot = true`. Containers running as
-uid 0 inside the pod expose the host to capability escalations.
-3. **`helm_set_value`** on `helm_release` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
-  R30.5 / NIST 800-190 — helm_release must set
-`securityContext.readOnlyRootFilesystem = true`. A writable
-rootfs lets attackers persist tooling across pod restarts.
-4. **`helm_set_value`** on `helm_release` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
-  R30.5 / NIST 800-190 — drop ALL kernel capabilities and add back
-only what the app needs. Default Linux capabilities (CAP_NET_RAW
-etc.) give a compromised pod meaningful escalation surface.
+2. **`helm_set_value`** on `helm_release` matching `/(?i)^\s*false\s*$/` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
+  R30.5 / NIST 800-190 — helm_release sets
+`securityContext.runAsNonRoot = false`; it must be `true`.
+Containers running as uid 0 inside the pod expose the host to
+capability escalations. (`helm_set_value` fires on the value the
+release sets, so the regex names the bad value, not the good one.)
+3. **`helm_set_value`** on `helm_release` matching `/(?i)^\s*false\s*$/` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
+  R30.5 / NIST 800-190 — helm_release sets
+`securityContext.readOnlyRootFilesystem = false`; it must be
+`true`. A writable rootfs lets attackers persist tooling across
+pod restarts.
+4. **`helm_set_value`** on `helm_release` matching `/^(?!\$\{|(?:var|local|module|data|each)\.)(?!.*\bALL\b)/` — _a `helm_release` `set { name = ...; value = ... }` override matches the listed condition._
+  R30.5 / NIST 800-190 — helm_release overrides
+`securityContext.capabilities.drop` with a list that leaves out
+`ALL` (a reference such as `var.x` is unknown here and is not
+reported). Drop ALL kernel capabilities and add back only what
+the app needs. Default Linux capabilities (CAP_NET_RAW etc.) give
+a compromised pod meaningful escalation surface.
 
 ## Why it likely fired
 
@@ -68,17 +74,23 @@ Security Admission level, the namespace defaults to no enforcement
 — privileged pods, hostPath mounts, and host-network pods are all
 permitted. PSA replaced the deprecated PodSecurityPolicy in 1.25.
 
-R30.5 / NIST 800-190 — helm_release must set
-`securityContext.runAsNonRoot = true`. Containers running as
-uid 0 inside the pod expose the host to capability escalations.
+R30.5 / NIST 800-190 — helm_release sets
+`securityContext.runAsNonRoot = false`; it must be `true`.
+Containers running as uid 0 inside the pod expose the host to
+capability escalations. (`helm_set_value` fires on the value the
+release sets, so the regex names the bad value, not the good one.)
 
-R30.5 / NIST 800-190 — helm_release must set
-`securityContext.readOnlyRootFilesystem = true`. A writable
-rootfs lets attackers persist tooling across pod restarts.
+R30.5 / NIST 800-190 — helm_release sets
+`securityContext.readOnlyRootFilesystem = false`; it must be
+`true`. A writable rootfs lets attackers persist tooling across
+pod restarts.
 
-R30.5 / NIST 800-190 — drop ALL kernel capabilities and add back
-only what the app needs. Default Linux capabilities (CAP_NET_RAW
-etc.) give a compromised pod meaningful escalation surface.
+R30.5 / NIST 800-190 — helm_release overrides
+`securityContext.capabilities.drop` with a list that leaves out
+`ALL` (a reference such as `var.x` is unknown here and is not
+reported). Drop ALL kernel capabilities and add back only what
+the app needs. Default Linux capabilities (CAP_NET_RAW etc.) give
+a compromised pod meaningful escalation surface.
 
 ## Adversarial scenario
 

@@ -36,6 +36,21 @@ patterns:
     nested_path: member
     regex: '^all(Authenticated)?Users$'
     description: Cloud Run v2 IAM binding exposes service to allUsers/allAuthenticatedUsers
+  # The authoritative `_iam_binding` forms take a `members` list, not a
+  # single `member`, so the patterns above never saw them.
+  - kind: resource_arg
+    resource: google_cloud_run_service_iam_binding
+    nested_path: members
+    regex: '"all(Authenticated)?Users"'
+    description: |
+      `google_cloud_run_service_iam_binding.members` includes `allUsers`
+      or `allAuthenticatedUsers`: the service is reachable by anyone on
+      the internet.
+  - kind: resource_arg
+    resource: google_cloud_run_v2_service_iam_binding
+    nested_path: members
+    regex: '"all(Authenticated)?Users"'
+    description: Cloud Run v2 IAM binding members include allUsers/allAuthenticatedUsers
 recommendation: |
   Replace the public binding with a specific identity (group, service
   account, or Identity-Aware Proxy):

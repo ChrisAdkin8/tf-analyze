@@ -21,7 +21,9 @@ patterns:
       with effect Allow. This is the canonical "AdministratorAccess"
       shape — equivalent to attaching the AWS-managed Administrator
       policy by hand-rolled means and bypassing org-level guardrails
-      that detect the named policy.
+      that detect the named policy. `actions = ["*"]` with
+      `not_resources` (every resource bar the few listed) is the same
+      shape and is reported here too.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:
@@ -55,3 +57,4 @@ fix_hcl: |
 fix_disruption: plan_required
 fixtures:
   - aws_iam_policy_full_admin
+  - aws_iam_json_admin_not_resource

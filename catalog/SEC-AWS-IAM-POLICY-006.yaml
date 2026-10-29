@@ -1,5 +1,5 @@
 id: SEC-AWS-IAM-POLICY-006
-title: "IAM policy uses `not_actions` or `not_resources`"
+title: "IAM Allow statement uses NotAction / NotResource"
 section: security
 default_urgency: MEDIUM
 blast_radius: infrastructure-wide
@@ -21,6 +21,16 @@ patterns:
       error-prone: any new AWS API or resource type added in future
       is implicitly allowed. AWS itself recommends against negative
       form for Allow statements.
+  - kind: iam_json_policy_analysis
+    check: not_action_or_not_resource
+    description: |
+      The same negative-form grant written as JSON: an Allow statement
+      with `NotAction` or `NotResource` in a `policy` (jsonencode,
+      heredoc or JSON string) on `aws_iam_policy`, `aws_iam_role_policy`,
+      `aws_iam_user_policy`, `aws_iam_group_policy`, or an
+      `aws_iam_role` `inline_policy` block. `Action: "*"` with
+      `NotResource` is admin-equivalent and is reported once, as
+      SEC-AWS-IAM-JSON-003 / SEC-AWS-IAM-POLICY-005, not by this rule.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 cwe:
@@ -49,3 +59,4 @@ fix_hcl: |
 fix_disruption: plan_required
 fixtures:
   - aws_iam_policy_not_action
+  - aws_iam_json_not_action

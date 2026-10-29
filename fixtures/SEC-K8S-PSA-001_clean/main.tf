@@ -12,3 +12,42 @@ resource "kubernetes_namespace" "example" {
     }
   }
 }
+
+# A release that sets the hardened values (and one whose drop list comes
+# from a variable, which is unknown here) must not fire either.
+resource "helm_release" "hardened" {
+  name       = "hardened"
+  chart      = "app"
+  repository = "https://charts.example.com"
+  version    = "1.2.3"
+
+  set {
+    name  = "securityContext.runAsNonRoot"
+    value = "true"
+  }
+  set {
+    name  = "securityContext.readOnlyRootFilesystem"
+    value = true
+  }
+  set {
+    name  = "securityContext.capabilities.drop"
+    value = "{ALL}"
+  }
+}
+
+variable "drop_caps" {
+  type    = string
+  default = "{ALL}"
+}
+
+resource "helm_release" "from_var" {
+  name       = "from-var"
+  chart      = "app"
+  repository = "https://charts.example.com"
+  version    = "1.2.3"
+
+  set {
+    name  = "securityContext.capabilities.drop"
+    value = var.drop_caps
+  }
+}

@@ -6,7 +6,7 @@
 
 | File | OWASP | What's vulnerable |
 |---|---|---|
-| [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | `roles/owner` at project; `allUsers` on a bucket; same SA at project + resource scope |
+| [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | `roles/owner` at project; `allUsers` on a bucket; same SA at project + resource scope; Cloud Run invoker binding with `allUsers` in `members` (SEC-GCP-CLOUDRUN-002) |
 | [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | KMS key with no `rotation_period`; bucket↔key-ring location mismatch; sensitive output unmarked; Cloud Memorystore Redis with auth disabled and TLS disabled |
 | [`03_injection.tf`](03_injection.tf) | A03 | `null_resource` provisioner shelling out to a tfvar; `data.external` with user-controlled query |
 | [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | One SA used by every workload; stateful Spanner + state bucket without `prevent_destroy` |
@@ -28,7 +28,7 @@ SEC-GCP-BUCKET-001, SEC-GCP-BUCKET-002,
 SEC-GCP-COMPUTE-SA-001, SEC-GCP-COMPUTE-PUBLIC-IP-001, SEC-GCP-COMPUTE-SHIELDED-001,
 SEC-GCP-NETWORK-001, SEC-GCP-NETWORK-002, SEC-GCP-NETWORK-003, SEC-GCP-NETWORK-004,
 SEC-GCP-REDIS-001, SEC-GCP-REDIS-002,
-SEC-GCP-SQL-PUBLIC-001, SEC-GCP-CLOUDRUN-001,
+SEC-GCP-SQL-PUBLIC-001, SEC-GCP-CLOUDRUN-001, SEC-GCP-CLOUDRUN-002,
 SEC-GCP-LOGGING-001, SEC-GCP-SA-KEY-001, SEC-SENSITIVE-001,
 SEC-PROVISIONER-001, SEC-DATASOURCE-001,
 SEC-GCP-GKE-NETWORK-POLICY-001,

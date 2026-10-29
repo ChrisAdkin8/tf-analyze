@@ -100,6 +100,33 @@ _REQUIRED_FIELDS = (
     "patterns", "recommendation", "verification",
 )
 
+# The pattern keys each handler needs before it does anything: without
+# them it returns no findings, so the pattern is dead. Each item is a
+# tuple of alternatives, one of which must be set. SEC-K8S-PSA-001 shipped
+# three `helm_set_value` patterns with `expected:` and no `regex:` that
+# never fired; a typo'd key now fails the load (and --strict-catalog)
+# instead. Keep in step with the guards at the top of each handler in
+# `scripts/_handlers_*.py`.
+_PATTERN_REQUIRED_KEYS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "resource_present": (("resource",),),
+    "data_source_present": (("data_source",),),
+    "resource_arg": (("resource",), ("arg", "nested_path"), ("regex", "not_regex")),
+    "ip_range_span": (("resource",), ("start_arg",), ("end_arg",), ("min_addresses",)),
+    "resource_missing_arg": (("resource",), ("arg", "nested_path")),
+    "resource_missing_companion": (("resource",), ("companion",), ("via",)),
+    "resource_body_contains": (("resource",), ("regex",)),
+    "resource_has_block": (("resource",), ("path",)),
+    "hcl_attr": (("resource",), ("path",)),
+    "module_block_missing_arg": (("arg",),),
+    "grep": (("regex",),),
+    "backend_missing_arg": (("backend_type",), ("arg",)),
+    "graph_check": (("function",),),
+    "variable_type": (("type_regex", "regex"),),
+    "iam_policy_analysis": (("check",),),
+    "iam_json_policy_analysis": (("check",),),
+    "helm_set_value": (("name",), ("regex",)),
+}
+
 
 # ---- Minimal YAML loader -----------------------------------------------
 # Avoid PyYAML dependency. Catalogue YAML is shallow and well-formed.
@@ -264,6 +291,20 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
                         f"{source}: patterns[{i}].{key} has a literal backslash before "
                         f"{bad.group()[2:]!r}; write the regex in single quotes "
                         f"(regex: 'a\\.b')"
+                    )
+            kind = p.get("kind")
+            for alts in _PATTERN_REQUIRED_KEYS.get(kind, ()):
+                if all(p.get(k) in (None, "") for k in alts):
+                    want = " or ".join(repr(k) for k in alts)
+                    errs.append(
+                        f"{source}: patterns[{i}] (kind={kind}) needs {want}; "
+                        f"without it the pattern never fires"
+                    )
+            if kind in ("iam_policy_analysis", "iam_json_policy_analysis") and p.get("check"):
+                from _iam_policy import CHECKS  # noqa: PLC0415
+                if p["check"] not in CHECKS:
+                    errs.append(
+                        f"{source}: patterns[{i}].check {p['check']!r} not in {sorted(CHECKS)}"
                     )
             if not p.get("kind"):
                 errs.append(f"{source}: patterns[{i}] missing 'kind'")

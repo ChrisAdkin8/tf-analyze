@@ -6,7 +6,7 @@
 
 | File | OWASP | What's vulnerable |
 |---|---|---|
-| [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | IAM policy with `Action:*, Resource:*`; bucket without public-access block; role assumed by `Principal: "*"` |
+| [`01_broken_access_control.tf`](01_broken_access_control.tf) | A01 | IAM policy with `Action:*, Resource:*`; JSON policy with `NotAction` (SEC-AWS-IAM-POLICY-006); bucket without public-access block; role assumed by `Principal: "*"` |
 | [`02_cryptographic_failures.tf`](02_cryptographic_failures.tf) | A02 | S3 without SSE; RDS `storage_encrypted = false`; EBS without `encrypted`; KMS key without `enable_key_rotation`; Secrets Manager secret with no rotation resource |
 | [`03_injection.tf`](03_injection.tf) | A03 | EC2 `user_data` constructed from unvalidated tfvar; `null_resource` shelling out with interpolated input |
 | [`04_insecure_design.tf`](04_insecure_design.tf) | A04 | Hardcoded API key in HCL; one shared Lambda role with `AdministratorAccess`; DynamoDB without `prevent_destroy` |
@@ -38,7 +38,7 @@ You should see at least one instance of each of:
 
 | Domain | Rule IDs |
 |---|---|
-| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-APIGW-001`, `SEC-AWS-CLOUDFRONT-001/002`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-COGNITO-001`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-002/003`, `SEC-AWS-IAM-JSON-003`, `SEC-AWS-IAM-POLICY-005`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
+| SEC | `SEC-AWS-ACCESSKEY-001`, `SEC-AWS-APIGW-001`, `SEC-AWS-CLOUDFRONT-001/002`, `SEC-AWS-CLOUDTRAIL-001/002`, `SEC-AWS-COGNITO-001`, `SEC-AWS-EBS-001`, `SEC-AWS-ECR-001/002`, `SEC-AWS-GUARDDUTY-001`, `SEC-AWS-IAM-002/003`, `SEC-AWS-IAM-JSON-003`, `SEC-AWS-IAM-POLICY-005/006`, `SEC-AWS-KMS-001`, `SEC-AWS-RDS-001/002`, `SEC-AWS-S3-001`, `SEC-AWS-S3-LOGGING-001`, `SEC-AWS-S3-PUBLIC-001`, `SEC-AWS-S3-PUBLIC-BLOCK-001`, `SEC-AWS-SECRETSMANAGER-001`, `SEC-AWS-SG-001`, `SEC-AWS-SNS-001`, `SEC-AWS-SQS-001`, `SEC-AWS-SSRF-001`, `SEC-AWS-VPC-FLOWLOGS-001`, `SEC-PROVISIONER-001`, `SEC-SECRETS-001` |
 | ROB | `ROB-AWS-BACKEND-001`, `ROB-AWS-LIFECYCLE-001/002`, `ROB-AWS-RDS-001/002/003`, `ROB-AWS-S3-001`, `ROB-VERSION-001/003` |
 | STK | `STK-AWS-ECS-001`, `STK-AWS-EKS-001/002/003/004/005`, `STK-AWS-LAMBDA-001/002/003`, `STK-AWS-LAUNCH-TEMPLATE-001`, `STK-AWS-RDS-004`, `STK-AWS-ROUTE53-001` |
 | OPS/COST/MOD | `OPS-AWS-TAGS-001`, `COST-AWS-RISK-001`, `MOD-PIN-001`, `CI-TEST-001` |

@@ -174,12 +174,12 @@ Both modes require at least one of `regex` or `not_regex`. When both are present
 | `wildcard_resource`                | `resources` list contains `"*"`                                         |
 | `public_principal`                 | any `principals { identifiers = [..., "*", ...] }` block                |
 | `wildcard_action_iam`              | any `iam:*` action (privesc class)                                      |
-| `wildcard_action_and_resource`     | both `actions` and `resources` contain `"*"` in the same statement      |
-| `not_action_or_not_resource`       | uses `not_actions` or `not_resources` on an Allow statement             |
+| `wildcard_action_and_resource`     | both `actions` and `resources` contain `"*"` in the same statement (or `actions = ["*"]` with `not_resources`: admin in all but name) |
+| `not_action_or_not_resource`       | uses `not_actions` / `NotAction` or `not_resources` / `NotResource` on an Allow statement (not reported again when the statement is the admin shape) |
 
 See `catalog/SEC-AWS-IAM-POLICY-001..006.yaml` (data-source) and `catalog/SEC-AWS-IAM-JSON-001..004.yaml` (inline JSON) for shipped instances.
 
-**`helm_set_value` pattern kind** *(new in Round 26)*: walks every `resource "helm_release" "..." { set { name = "..."; value = "..." } }` block and fires when the (name, regex) pair matches. Lets the catalogue express "this chart override is unsafe" without needing every chart's value schema. Pattern fields: `name:` (exact key like `service.type`) and `regex:` (against the value). See `catalog/SEC-K8S-HELM-001..002.yaml`.
+**`helm_set_value` pattern kind** *(new in Round 26)*: walks every `resource "helm_release" "..." { set { name = "..."; value = "..." } }` block and fires when the (name, regex) pair matches. Lets the catalogue express "this chart override is unsafe" without needing every chart's value schema. Pattern fields: `name:` (exact key like `service.type`) and `regex:` (against the value) — both required: the catalogue loader rejects a pattern without them (and any pattern missing the keys its kind needs), since the handler would skip it silently. See `catalog/SEC-K8S-HELM-001..002.yaml` and `SEC-K8S-PSA-001.yaml`.
 
 **`applies_when:` rule gating** (engine support since Round 1; documented here): catalogue rules can declare `applies_when: { min_provider: { aws: "5.0" }, min_terraform: "1.6" }`. Rules whose constraints can't be satisfied by the repo's `required_providers` / `required_version` are silently skipped, with a stderr count. Use this when a rule depends on attributes added in a specific provider version (e.g. `ssl_mode` was added in google provider 5.x).
 
@@ -497,7 +497,7 @@ Examine every `.tf` file in scope for:
 
 ### 2b. IAM and access control
 - Overly broad IAM roles (`roles/owner`, `roles/editor`, `roles/admin`, `*Admin`) → **SEC-GCP-IAM-001** | CIS 1.6
-- `allUsers` or `allAuthenticatedUsers` in a project / dataset IAM binding → **SEC-GCP-IAM-002**; on a Cloud Storage bucket → **SEC-GCP-STORAGE-IAM-001** | CIS 5.1, 7.1
+- `allUsers` or `allAuthenticatedUsers` in a project IAM member or binding → **SEC-GCP-IAM-002**; on a BigQuery dataset → **SEC-GCP-BIGQUERY-001**; on a Cloud Storage bucket → **SEC-GCP-STORAGE-IAM-001**; on a Cloud Run service → **SEC-GCP-CLOUDRUN-002** (each covers the `_iam_member` and `_iam_binding` forms) | CIS 5.1, 7.1
 - IAM bindings at project level that should be at resource level (consult Appendix A first)
 - Service accounts with more permissions than their usage requires
 - Missing `condition` blocks on IAM bindings where appropriate
@@ -976,7 +976,7 @@ Apply these checks based on which providers and resources are detected in the co
 - Missing `point_in_time_recovery_enabled` for Postgres / MySQL
 
 ### 10e. BigQuery-specific (if `google_bigquery_dataset` / `google_bigquery_table` present)
-- Public access via `allUsers` / `allAuthenticatedUsers` in dataset access blocks → **SEC-GCP-IAM-002** | CIS 7.1
+- Public access via `allUsers` / `allAuthenticatedUsers` in dataset access blocks or dataset IAM members / bindings → **SEC-GCP-BIGQUERY-001** | CIS 7.1
 - Tables/datasets without CMEK → CIS 7.2, 7.3
 
 ### 10f. Helm-specific (if `helm_release` resources present)

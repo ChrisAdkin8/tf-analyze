@@ -157,7 +157,9 @@ def _legacy_policy_document(
         not_actions = block_arg_value(sbody, "not_actions") or ""
         not_resources = block_arg_value(sbody, "not_resources") or ""
         has_wild_action = '"*"' in actions
-        has_wild_resource = '"*"' in resources_l
+        has_wild_resource = '"*"' in resources_l or (
+            has_wild_action and bool(not_resources) and not resources_l
+        )
         has_iam_wild = bool(re.search(r'"iam:[^"]*\*"', actions))
         has_public_principal = False
         for pm in re.finditer(r'(?m)^\s*principals\s*\{', sbody):
@@ -185,7 +187,7 @@ def _legacy_policy_document(
             triggered = True
         elif check == "not_action_or_not_resource" and (
             not_actions or not_resources
-        ):
+        ) and not (has_wild_action and has_wild_resource):
             triggered = True
         if triggered:
             stmt_line = dblk["start_line"] + body[: sm.start()].count("\n")

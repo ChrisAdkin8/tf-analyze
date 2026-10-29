@@ -134,7 +134,7 @@ See also rules in the `SEC-AWS-IAM-POLICY-*` family:
 - [`SEC-AWS-IAM-POLICY-002`](./SEC-AWS-IAM-POLICY-002.md) — IAM policy document grants wildcard `iam:*` actions
 - [`SEC-AWS-IAM-POLICY-003`](./SEC-AWS-IAM-POLICY-003.md) — IAM policy document grants wildcard `resources = [\"*\"]`
 - [`SEC-AWS-IAM-POLICY-005`](./SEC-AWS-IAM-POLICY-005.md) — IAM policy grants both `actions = [\"*\"]` and `resources = [\"*\"]`
-- [`SEC-AWS-IAM-POLICY-006`](./SEC-AWS-IAM-POLICY-006.md) — IAM policy uses `not_actions` or `not_resources`
+- [`SEC-AWS-IAM-POLICY-006`](./SEC-AWS-IAM-POLICY-006.md) — IAM Allow statement uses NotAction / NotResource
 
 ---
 

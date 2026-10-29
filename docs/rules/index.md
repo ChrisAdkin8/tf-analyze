@@ -195,7 +195,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-AWS-ES-003`](./SEC-AWS-ES-003.md) | MEDIUM | OpenSearch domain missing fine-grained access control |
 | [`SEC-AWS-GUARDDUTY-001`](./SEC-AWS-GUARDDUTY-001.md) | MEDIUM | GuardDuty detector not provisioned |
 | [`SEC-AWS-IAM-003`](./SEC-AWS-IAM-003.md) | MEDIUM | IAM account password policy is not configured or too weak |
-| [`SEC-AWS-IAM-POLICY-006`](./SEC-AWS-IAM-POLICY-006.md) | MEDIUM | IAM policy uses `not_actions` or `not_resources` |
+| [`SEC-AWS-IAM-POLICY-006`](./SEC-AWS-IAM-POLICY-006.md) | MEDIUM | IAM Allow statement uses NotAction / NotResource |
 | [`SEC-AWS-KINESIS-001`](./SEC-AWS-KINESIS-001.md) | MEDIUM | Kinesis Data Stream not encrypted with KMS |
 | [`SEC-AWS-KMS-001`](./SEC-AWS-KMS-001.md) | MEDIUM | KMS key rotation disabled |
 | [`SEC-AWS-LB-LISTENER-001`](./SEC-AWS-LB-LISTENER-001.md) | MEDIUM | ALB listener serves plain HTTP without redirect |
@@ -293,7 +293,7 @@ Per-rule documentation auto-generated from the catalogue YAML ([`catalog/`](http
 | [`SEC-K8S-HELM-004`](./SEC-K8S-HELM-004.md) | MEDIUM | helm_release bypasses chart safety (`disable_webhooks = true` OR `skip_crds = true`) |
 | [`SEC-K8S-NETPOL-001`](./SEC-K8S-NETPOL-001.md) | MEDIUM | kubernetes_network_policy absent for the corpus |
 | [`SEC-K8S-NETPOL-002`](./SEC-K8S-NETPOL-002.md) | MEDIUM | kubernetes_network_policy is overly permissive (0.0.0.0/0 cidr OR empty rule) |
-| [`SEC-K8S-PSA-001`](./SEC-K8S-PSA-001.md) | MEDIUM | kubernetes_namespace missing PSA label OR helm_release omits runAsNonRoot / readOnlyRootFilesystem / capabilities.drop |
+| [`SEC-K8S-PSA-001`](./SEC-K8S-PSA-001.md) | MEDIUM | kubernetes_namespace missing PSA label OR helm_release turns off runAsNonRoot / readOnlyRootFilesystem / capabilities.drop |
 | [`SEC-K8S-SA-001`](./SEC-K8S-SA-001.md) | MEDIUM | kubernetes_service_account allows automount of API token |
 | [`SEC-LOG-CROSS-ACCOUNT-001`](./SEC-LOG-CROSS-ACCOUNT-001.md) | MEDIUM | Audit log destination is in the same AWS account (no cross-account isolation) |
 | [`SEC-PROVIDER-001`](./SEC-PROVIDER-001.md) | MEDIUM | Provider version constraint missing upper bound |

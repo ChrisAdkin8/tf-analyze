@@ -10,14 +10,20 @@ cis:
 patterns:
   # Cloud Storage bindings are SEC-GCP-STORAGE-IAM-001 (member and members
   # forms); this rule used to report them too, so each was a double CRITICAL.
+  # BigQuery dataset grants (access block, _iam_member and _iam_binding) are
+  # SEC-GCP-BIGQUERY-001 for the same reason.
   - kind: resource_arg
     resource: google_project_iam_member
     arg: member
     regex: "^(allUsers|allAuthenticatedUsers)$"
   - kind: resource_arg
-    resource: google_bigquery_dataset_iam_member
-    arg: member
-    regex: "^(allUsers|allAuthenticatedUsers)$"
+    resource: google_project_iam_binding
+    nested_path: members
+    regex: '"all(Authenticated)?Users"'
+    description: |
+      `google_project_iam_binding.members` (a list, unlike the singular
+      `member` of `_iam_member`) includes `allUsers` or
+      `allAuthenticatedUsers`.
 owasp_iac:
   - "Develop and Distribute / Resource Permission Minimization"
 recommendation: |

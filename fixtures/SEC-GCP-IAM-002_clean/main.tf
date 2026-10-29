@@ -8,3 +8,13 @@ resource "google_storage_bucket_iam_member" "example" {
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.example.email}"
 }
+
+# The authoritative form, with only named principals.
+resource "google_project_iam_binding" "viewers" {
+  project = "my-project"
+  role    = "roles/viewer"
+  members = [
+    "group:viewers@example.com",
+    "serviceAccount:${google_service_account.example.email}",
+  ]
+}
