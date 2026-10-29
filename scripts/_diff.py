@@ -12,6 +12,7 @@ private names so existing call sites keep working without churn.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -96,8 +97,73 @@ def find_latest_prior(reports_dir: Path, suffix: str = ".md") -> Path | None:
     return candidates[0] if candidates else None
 
 
+_DIFF_PATHSPECS = ("*.tf", "*.tf.json", "*.tfvars", "*.tfvars.json")
+# A `variable` or `locals` block feeds every file in its folder (one
+# Terraform module). Comments aren't skipped: a false match only widens
+# the scan.
+_SHARED_INPUT_RE = re.compile(r'^\s*(?:variable|locals)\b|"(?:variable|locals)"\s*:', re.M)
+
+
+def _is_tf(fp: Path) -> bool:
+    return fp.name.endswith((".tf", ".tf.json"))
+
+
+def _module_siblings(changed: set[Path]) -> set[Path]:
+    """The `.tf` files sharing a folder with a changed file that feeds
+    them: a `.tfvars`, a file declaring `variable` / `locals`, or a
+    deleted file (which may have held a variable or a resource another
+    check pairs with). Without this, a PR that only flips a variable
+    default in `variables.tf` re-scanned `variables.tf` alone, and the
+    resource using `var.x` in `main.tf` was never checked."""
+    out: set[Path] = set()
+    for fp in changed:
+        if fp.exists() and not fp.name.endswith((".tfvars", ".tfvars.json")):
+            try:
+                text = fp.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = "variable"  # unreadable: widen rather than guess
+            if not _SHARED_INPUT_RE.search(text):
+                continue
+        if fp.parent.is_dir():
+            out.update(p.resolve() for p in fp.parent.iterdir() if p.is_file() and _is_tf(p))
+    return out
+
+
+_LOCAL_SOURCE_RE = re.compile(r'^\s*"?source"?\s*[=:]\s*"(\.\.?/[^"]*)"', re.M)
+
+
+def _with_local_children(files: set[Path]) -> set[Path]:
+    """`files` plus the `.tf` files of every local module they call
+    (`source = "./modules/db"`), recursively. A caller passes values into
+    the child (`module "db" { public = var.public }`), so a change to the
+    caller can change the child's findings."""
+    out = set(files)
+    queue = list(files)
+    seen_dirs: set[Path] = set()
+    while queue:
+        fp = queue.pop()
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in _LOCAL_SOURCE_RE.finditer(text):
+            child = (fp.parent / m.group(1)).resolve()
+            if child in seen_dirs or not child.is_dir():
+                continue
+            seen_dirs.add(child)
+            for p in child.iterdir():
+                if p.is_file() and _is_tf(p) and p.resolve() not in out:
+                    out.add(p.resolve())
+                    queue.append(p.resolve())
+    return out
+
+
 def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
-    """Set of ``.tf`` files changed between ``diff_base`` and HEAD.
+    """Set of ``.tf`` files to scan for the change between ``diff_base``
+    and HEAD: the changed ones, the folder-mates of a changed file that
+    feeds them (`_module_siblings`), and the local modules any of those
+    call (`_with_local_children`). Renames count as a delete plus an add
+    (``--no-renames``), so the folder a file left is covered too.
 
     Three sources are unioned:
 
@@ -118,7 +184,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         # 30-second timeout. A None return means the call hung past
         # the cap — report the diff as failed (caller: full scan).
         result = _run_git(
-            ["git", "diff", "--name-only", f"{diff_base}...HEAD", "--", "*.tf", "*.tf.json"],
+            ["git", "diff", "--name-only", "--no-renames", f"{diff_base}...HEAD", "--", *_DIFF_PATHSPECS],
             target, text=True,
         )
         if result is None:
@@ -126,7 +192,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         if result.returncode != 0:
             # Fall back to diff against working tree
             result = _run_git(
-                ["git", "diff", "--name-only", diff_base, "--", "*.tf", "*.tf.json"],
+                ["git", "diff", "--name-only", "--no-renames", diff_base, "--", *_DIFF_PATHSPECS],
                 target, text=True,
             )
             if result is None:
@@ -145,7 +211,8 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
                 return None
         # Also include untracked .tf files
         untracked = _run_git(
-            ["git", "ls-files", "--others", "--exclude-standard", "--", "*.tf", "*.tf.json"],
+            ["git", "ls-files", "--others", "--exclude-standard", "--full-name",
+             "--", *_DIFF_PATHSPECS],
             target, text=True,
         )
         if untracked is None:
@@ -153,7 +220,6 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         else:
             untracked_stdout = untracked.stdout or ""
 
-        files: set[Path] = set()
         git_root_result = _run_git(
             ["git", "rev-parse", "--show-toplevel"],
             target, text=True,
@@ -163,17 +229,15 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         else:
             git_root = Path(git_root_result.stdout.strip())
 
-        for line in (result.stdout or "").strip().splitlines():
-            if line:
-                fp = (git_root / line).resolve()
-                if fp.exists():
-                    files.add(fp)
-        for line in untracked_stdout.strip().splitlines():
-            if line:
-                fp = (git_root / line).resolve()
-                if fp.exists():
-                    files.add(fp)
-        return files
+        # Both lists are relative to the repo root (`git diff` always,
+        # `ls-files` with `--full-name`), whatever folder `target` is.
+        changed = {
+            (git_root / line).resolve()
+            for line in ((result.stdout or "") + "\n" + untracked_stdout).splitlines()
+            if line.strip()
+        }
+        files = {fp for fp in changed if fp.exists() and _is_tf(fp)}
+        return _with_local_children(files | _module_siblings(changed))
     except FileNotFoundError:
         print("WARN: git not found", file=sys.stderr)
         return None
