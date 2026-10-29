@@ -101,6 +101,7 @@ from _versions import (
     _extract_provider_constraints,
     _extract_terraform_version,
     _constraints_by_dir,
+    _effective_constraints,
     _entry_applies_to_providers,
 )
 
@@ -205,13 +206,20 @@ COUNT_GUARD_RE = re.compile(r'\?|try\s*\(|length\s*\(|one\s*\(')
 
 
 def _git_work_tree(target: Path) -> str | None:
-    """Real path of the git work tree holding ``target`` (the nearest
-    folder with a ``.git`` entry), or None outside a repository."""
-    root = target.resolve()
-    for d in (root, *root.parents):
-        if (d / ".git").exists():
-            return str(d)
-    return None
+    """Real path of the git work tree holding ``target``, as git itself
+    reports it (``git rev-parse --show-toplevel`` run in ``target``, via
+    `_diff._run_git`'s timeout), or None outside a repository or without
+    git. A stray ``.git`` entry in some parent folder is not taken for a
+    repository."""
+    from _diff import _run_git
+
+    try:
+        res = _run_git(["git", "rev-parse", "--show-toplevel"], target, text=True)
+    except OSError:
+        return None
+    if res is None or res.returncode != 0 or not (res.stdout or "").strip():
+        return None
+    return str(Path(res.stdout.strip()).resolve())
 
 
 def _path_is_ignored(path: Path, target: Path, ignore_paths: list,
@@ -1442,6 +1450,7 @@ from _diff import (
     auto_detect_base_branch as _auto_detect_base_branch,
     find_latest_prior,
     get_diff_files,
+    local_module_sources,
 )
 
 
@@ -2694,13 +2703,25 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     # their findings in a folder that rules them out are dropped after.
     # Surface the skip counts so users know rules are conditionally off
     # rather than silently disabled.
-    dir_constraints = _constraints_by_dir(all_text)
-    gated_dirs: dict[str, set[str]] = {}  # rule id -> folders it is off in
-    for _dir, (_pc, _tfc) in dir_constraints.items():
-        for e in entries:
-            if e.get("applies_when") and not _entry_applies_to_providers(e, _pc, _tfc):
-                gated_dirs.setdefault(e["id"], set()).add(_dir)
+    # A child module runs under its caller's pins, so a folder's pins are
+    # its own combined with its local-module callers' (or, called by no
+    # one, its nearest pinned ancestor's): see `_effective_constraints`.
     _scanned_dirs = {str(fp.parent) for fp in all_text}
+    _callers: dict[str, set[str]] = {}
+    for _fp, _text in all_text.items():
+        for _child in local_module_sources(Path(_fp), _text):
+            _callers.setdefault(os.path.normpath(_child), set()).add(str(Path(_fp).parent))
+    dir_constraints = _effective_constraints(
+        _constraints_by_dir(all_text), _callers, _scanned_dirs, str(target),
+    )
+    gated_dirs: dict[str, set[str]] = {}  # rule id -> folders it is off in
+    _gated_entries = [e for e in entries if e.get("applies_when")]
+    for _dir, _alts in dir_constraints.items():
+        if _alts == [({}, "")]:
+            continue
+        for e in _gated_entries:
+            if not any(_entry_applies_to_providers(e, _pc, _tfc) for _pc, _tfc in _alts):
+                gated_dirs.setdefault(e["id"], set()).add(_dir)
     _off_everywhere = {
         rid for rid, dirs in gated_dirs.items() if _scanned_dirs <= dirs
     }
@@ -2718,7 +2739,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         )))
         print(
             f"# {_partly} rule(s) skipped in {_nd} folder(s) due to applies_when "
-            f"provider/terraform-version constraints (each folder's own pin)",
+            f"provider/terraform-version constraints (each module's own and callers' pins)",
             file=sys.stderr,
         )
 

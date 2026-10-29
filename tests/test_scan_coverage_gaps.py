@@ -167,6 +167,64 @@ def test_a_pin_ruling_a_rule_out_everywhere_still_skips_it(tmp_path) -> None:
     assert "rule(s) skipped due to applies_when" in proc.stderr
 
 
+def _module_call(name: str, source: str) -> str:
+    return f'module "{name}" {{\n  source = "{source}"\n}}\n'
+
+
+def test_unpinned_child_is_gated_by_its_callers_pin(tmp_path) -> None:
+    # The child runs under the root's azurerm ~> 2.99, so the >= 3 rule
+    # must not fire in it.
+    (tmp_path / "main.tf").write_text(
+        _pin("~> 2.99") + _module_call("aks", "./modules/aks")
+    )
+    child = tmp_path / "modules" / "aks"
+    child.mkdir(parents=True)
+    (child / "main.tf").write_text(AKS)
+    proc = _scan(tmp_path)
+    assert not _hits(proc, AKS_RULE), proc.stderr
+
+
+def test_child_with_two_callers_is_gated_only_if_both_rule_it_out(tmp_path) -> None:
+    child = tmp_path / "modules" / "aks"
+    child.mkdir(parents=True)
+    (child / "main.tf").write_text(AKS)
+    for env, pin in (("old", "~> 2.99"), ("new", "~> 3.100")):
+        (tmp_path / env).mkdir()
+        (tmp_path / env / "main.tf").write_text(
+            _pin(pin) + _module_call("aks", "../modules/aks")
+        )
+    proc = _scan(tmp_path)
+    assert _hits(proc, AKS_RULE) == [(str(child / "main.tf"), 1)], proc.stderr
+    # Both callers old: ruled out.
+    (tmp_path / "new" / "main.tf").write_text(
+        _pin("~> 2.90") + _module_call("aks", "../modules/aks")
+    )
+    assert not _hits(_scan(tmp_path), AKS_RULE)
+
+
+def test_uncalled_folder_falls_back_to_its_nearest_pinned_ancestor(tmp_path) -> None:
+    (tmp_path / "versions.tf").write_text(_pin("~> 2.99"))
+    orphan = tmp_path / "stacks" / "aks"
+    orphan.mkdir(parents=True)
+    (orphan / "main.tf").write_text(AKS)
+    assert not _hits(_scan(tmp_path), AKS_RULE)
+
+
+def test_effective_constraints() -> None:
+    own = {
+        "/r": ({"azurerm": "~> 2.99"}, ""),
+        "/r/m": ({"azurerm": ">= 2.0"}, ">= 1.5"),
+    }
+    callers = {"/r/m": {"/r"}, "/x": {"/r/m"}}
+    got = _versions._effective_constraints(
+        own, callers, ["/r", "/r/m", "/x", "/y"], "/r"
+    )
+    assert got["/r"] == [({"azurerm": "~> 2.99"}, "")]
+    assert got["/r/m"] == [({"azurerm": ">= 2.0, ~> 2.99"}, ">= 1.5")]
+    assert got["/x"] == got["/r/m"]  # through the call chain
+    assert got["/y"] == [({}, "")]  # outside the root, called by no one: ungated
+
+
 def test_constraints_by_dir() -> None:
     got = _versions._constraints_by_dir(
         {
@@ -206,6 +264,54 @@ def test_symlinked_module_in_the_repo_is_scanned_once(tmp_path) -> None:
     proc = _scan(root)
     assert _hits(proc, SG_RULE) == [(str(root / "net" / "main.tf"), 1)], proc.stderr
     assert "not following 1 symlinked folder(s)" in proc.stderr  # `up`
+
+
+@needs_symlinks
+def test_linked_file_outside_the_target_is_never_patched(tmp_path) -> None:
+    root = _linked_repo(tmp_path)
+    _git(tmp_path, "init", "-q")
+    before = (tmp_path / "shared" / "main.tf").read_text()
+    proc = _scan(root, "--apply-fixes", "apply")
+    # Scanned (so a fix was offered), but the write was refused.
+    assert "resolves outside the scan target" in proc.stderr
+    assert (tmp_path / "shared" / "main.tf").read_text() == before
+    assert not list((tmp_path / "shared").glob("*.bak*"))
+
+
+@needs_symlinks
+def test_sarif_uri_for_a_linked_file_is_its_repo_path(tmp_path) -> None:
+    root = _linked_repo(tmp_path)
+    _git(tmp_path, "init", "-q")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "scripts" / "detect.py"),
+            "--target",
+            str(root),
+            "--format",
+            "sarif",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    uris = {
+        loc["physicalLocation"]["artifactLocation"]["uri"]
+        for r in json.loads(proc.stdout)["runs"][0]["results"]
+        if r["ruleId"] == SG_RULE
+        for loc in r["locations"]
+    }
+    assert uris == {"shared/main.tf"}, uris  # the tracked file; no `../`
+
+
+def test_work_tree_comes_from_git_not_a_stray_dot_git(tmp_path) -> None:
+    (tmp_path / ".git").mkdir()  # not a repository
+    (tmp_path / "t").mkdir()
+    assert detect._git_work_tree(tmp_path / "t") is None
+    repo = tmp_path / "r"
+    (repo / "t").mkdir(parents=True)
+    _git(repo, "init", "-q")
+    assert detect._git_work_tree(repo / "t") == str(repo.resolve())
 
 
 @needs_symlinks

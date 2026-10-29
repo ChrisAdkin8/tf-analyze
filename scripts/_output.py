@@ -329,7 +329,11 @@ def _sarif_uri(file: str, root: Path | None) -> tuple[str, bool]:
         return "", False
     p = Path(file)
     if root is not None and p.is_absolute():
-        for cand in (p, p.resolve()):
+        # The real path first: a file reached through a symlinked folder
+        # (`root/net/main.tf`, `net -> ../shared`) is tracked by git, and
+        # shown by Code Scanning, at its real path. `relative_to` never
+        # yields a `../` escape; a file outside `root` stays absolute.
+        for cand in (p.resolve(), p):
             try:
                 rel = cand.relative_to(root)
             except ValueError:

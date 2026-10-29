@@ -219,6 +219,82 @@ def _constraints_by_dir(all_files_text: dict) -> dict[str, tuple[dict[str, str],
     return out
 
 
+def _combine_constraints(a: tuple, b: tuple) -> tuple[dict[str, str], str]:
+    """Both of two ``(provider_constraints, terraform_constraint)`` pins at
+    once (Terraform must satisfy every module's pin): clauses of the same
+    provider are joined with ``,``, which `_provider_constraint_allows`
+    reads as "all of these"."""
+    providers = dict(a[0])
+    for name, c in b[0].items():
+        providers[name] = f"{providers[name]}, {c}" if providers.get(name) else c
+    tf = ", ".join(x for x in (a[1], b[1]) if x)
+    return providers, tf
+
+
+_NO_PIN: tuple[dict[str, str], str] = ({}, "")
+_MAX_ALTERNATIVES = 64
+
+
+def _effective_constraints(
+    own: dict[str, tuple[dict[str, str], str]],
+    callers: dict[str, set[str]],
+    dirs,
+    root: str,
+) -> dict[str, list[tuple[dict[str, str], str]]]:
+    """For each folder in ``dirs``, the pins it can run under: one
+    ``(provider_constraints, terraform_constraint)`` per way it is used.
+
+    A child module runs with the providers its caller's root selected, so
+    a folder's pins are its own (``own``, from `_constraints_by_dir`)
+    combined with each caller's effective pins (``callers``: folder ->
+    the folders that call it as a local module), up the call chain. A
+    folder with several callers gets one alternative per caller; the gate
+    rules a rule out only when every alternative does, so ambiguity never
+    drops a finding. A folder no one calls uses its own pin, or else the
+    nearest ancestor folder (up to ``root``) that has one. An entry of
+    ``_NO_PIN`` alone means ungated. Folder keys are ``str`` paths in one
+    form throughout."""
+    memo: dict[str, list] = {}
+    active: set[str] = set()
+
+    def eff(d: str) -> list:
+        if d in memo:
+            return memo[d]
+        if d in active:  # a call cycle: nothing more to add
+            return [_NO_PIN]
+        active.add(d)
+        mine = own.get(d, _NO_PIN)
+        alts: list = []
+        for c in sorted(callers.get(d, ())):
+            for alt in eff(c):
+                alts.append(_combine_constraints(mine, alt))
+        if not alts:
+            if d in own:
+                alts = [mine]
+            else:
+                alts = [_NO_PIN]
+                p = Path(d)
+                while p != p.parent and str(p) != root and _under(str(p), root):
+                    p = p.parent
+                    if str(p) in own or callers.get(str(p)):
+                        alts = eff(str(p))
+                        break
+        uniq: dict = {}
+        for pc, tf in alts:
+            uniq.setdefault((tuple(sorted(pc.items())), tf), (pc, tf))
+        out = list(uniq.values())[:_MAX_ALTERNATIVES]
+        active.discard(d)
+        memo[d] = out
+        return out
+
+    return {d: eff(d) for d in dirs}
+
+
+def _under(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip("/\\") + "/") \
+        or path.startswith(root.rstrip("/\\") + "\\")
+
+
 def _entry_applies_to_providers(
     entry: dict,
     provider_constraints: dict[str, str],

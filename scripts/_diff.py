@@ -132,6 +132,14 @@ def _module_siblings(changed: set[Path]) -> set[Path]:
 _LOCAL_SOURCE_RE = re.compile(r'^\s*"?source"?\s*[=:]\s*"(\.\.?/[^"]*)"', re.M)
 
 
+def local_module_sources(fp: Path, text: str) -> list[Path]:
+    """The folders `fp` calls as local modules (`source = "./modules/db"`),
+    joined onto its folder but not resolved. Shared by the diff scope
+    below and by `applies_when` gating (a child runs under its caller's
+    provider pins)."""
+    return [fp.parent / m.group(1) for m in _LOCAL_SOURCE_RE.finditer(text)]
+
+
 def _with_local_children(files: set[Path]) -> set[Path]:
     """`files` plus the `.tf` files of every local module they call
     (`source = "./modules/db"`), recursively. A caller passes values into
@@ -146,8 +154,8 @@ def _with_local_children(files: set[Path]) -> set[Path]:
             text = fp.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for m in _LOCAL_SOURCE_RE.finditer(text):
-            child = (fp.parent / m.group(1)).resolve()
+        for src in local_module_sources(fp, text):
+            child = src.resolve()
             if child in seen_dirs or not child.is_dir():
                 continue
             seen_dirs.add(child)
@@ -174,9 +182,8 @@ def _with_local_callers(files: set[Path], target: Path) -> set[Path]:
             text = fp.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for m in _LOCAL_SOURCE_RE.finditer(text):
-            child = (fp.parent / m.group(1)).resolve()
-            callers.setdefault(child, set()).add(fp.parent.resolve())
+        for src in local_module_sources(fp, text):
+            callers.setdefault(src.resolve(), set()).add(fp.parent.resolve())
     out = set(files)
     queue = list({fp.parent for fp in files})
     seen = set(queue)

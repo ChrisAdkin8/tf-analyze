@@ -13,9 +13,12 @@
 - **Version pins are per module**: every folder's `required_providers`
   were merged into one pin for the whole tree, so a `modules/legacy`
   pinning an old provider switched rules off for the root module too.
-  Each folder is now gated by its own pin; a folder with no pin is not
-  gated. stderr reports rules skipped everywhere and rules skipped in
-  some folders.
+  Each folder is now gated by its own pin combined with the pins of the
+  modules that call it (a child runs under its caller's providers); with
+  several callers, a rule is skipped only if every caller rules it out.
+  A folder no one calls and with no pin uses its nearest pinned parent
+  folder's pin, else it is not gated. stderr reports rules skipped
+  everywhere and rules skipped in some folders.
 - **Symlinked module folders**: a module linked in as `net -> ../shared`
   was never scanned. Symlinked folders are now followed (each real
   folder once, loop-safe). One that leaves the target is followed only
