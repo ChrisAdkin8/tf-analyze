@@ -26,6 +26,7 @@ from _hcl import (
 from _cross_resource import _GRAPH_CHECKS
 from detect import (
     CorpusCtx,
+    _path_is_ignored,
     _register_corpus,
     DATA_START,
     MODULE_START,
@@ -204,30 +205,31 @@ def _corpus_provider_alias_module_mismatch(c: CorpusCtx) -> list[dict]:
     return out
 
 
+def state_files(target: Path, ignore_paths: list = ()) -> list[Path]:
+    """Every ``*.tfstate*`` file under ``target`` (outside ``.terraform/``
+    and ``ignore_paths``), sorted. Read from disk, not the scanned text,
+    so ``--cache`` keys on this list too."""
+    root = target if target.is_dir() else target.parent
+    return sorted(
+        p for p in root.rglob("*.tfstate*")
+        if ".terraform" not in p.parts and not _path_is_ignored(p, root, ignore_paths)
+    )
+
+
 @_register_corpus("tfstate_in_repo")
 def _corpus_tfstate_in_repo(c: CorpusCtx) -> list[dict]:
     """``tfstate_in_repo`` — walk the workspace once for ``*.tfstate*``
     files. Such files in a repo are usually accidents (state should
-    live in a backend, never a git repo).
+    live in a backend, never a git repo). The walk starts at the target:
+    it used to start at the first scanned file's folder, which missed a
+    state file in a sibling module (`b/` when `a/main.tf` came first).
     """
-    out: list[dict] = []
-    seen_dirs: set[str] = set()
-    for fp in c.all_files_text:
-        d = Path(fp).parent
-        if str(d) in seen_dirs:
-            continue
-        seen_dirs.add(str(d))
-        for p in d.rglob("*.tfstate*"):
-            if ".terraform" in p.parts:
-                continue
-            out.append({
-                "id": c.eid,
-                "file": str(p),
-                "line": 1,
-                "resource": p.name,
-            })
-        break  # walk from the outermost target once
-    return out
+    if not c.all_files_text:
+        return []
+    return [
+        {"id": c.eid, "file": str(p), "line": 1, "resource": p.name}
+        for p in state_files(c.target, c.ignore_paths)
+    ]
 
 
 @_register_corpus("submodule_version_missing")
