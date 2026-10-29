@@ -14,6 +14,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 import _hcl
 import detect
 
@@ -236,11 +238,20 @@ def test_unclosed_template_with_later_braces_costs_only_its_line() -> None:
     assert _resources(text) == [(("aws_thing", "a"), 1), (("aws_thing", "b"), 5)]
 
 
-def test_many_unclosed_templates_stay_fast() -> None:
-    text = 'resource "aws_thing" "a" {\n' + '  a = "${ x\n' * 5000 + "}\n"
+@pytest.mark.parametrize(
+    "line, tail",
+    [
+        ('  a = "${ x\n', ""),
+        ('  a = "${ /*\n', ""),  # block comment that never closes
+        ('  a = "${ /*\n', "*/\n"),  # ...or closes only at the end
+    ],
+)
+def test_many_unclosed_templates_stay_fast(line, tail) -> None:
+    # One search to EOF per line would make these quadratic in file size.
+    text = 'resource "aws_thing" "a" {\n' + line * 20000 + tail + "}\n"
     start = time.perf_counter()
     assert [g for g, _ in _resources(text)] == [("aws_thing", "a")]
-    assert time.perf_counter() - start < 5
+    assert time.perf_counter() - start < 10
 
 
 # ---- end to end, on the real catalogue -----------------------------------------

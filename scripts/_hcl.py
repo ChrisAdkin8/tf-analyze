@@ -945,9 +945,10 @@ _IDENT_LABEL_RE = re.compile(r'^[A-Za-z_][\w-]*$')
 # hide every block after it), the lexer gives up on that construct and
 # resumes on the next line — a broken construct costs at most its line.
 #
-# Cost rule: every helper is linear. A quoted string (with any `${…}` in
-# it) never crosses its line — the vendored parser rejects a newline or
-# comment there too — and nesting is capped. Searches to EOF that fail are
+# Cost rule: every helper is linear. A quoted string's literal text never
+# crosses its line; only a `${…}` in it may, as the vendored parser allows,
+# and a string or comment inside that still ends on its own line. Nesting
+# is capped. Searches to EOF that fail are
 # remembered in `_Misses`, so a run of unclosed heredocs or comments costs
 # one scan, not one each.
 
@@ -1000,10 +1001,10 @@ def _next_line(text: str, i: int) -> int:
 def _template_end(text: str, i: int, limit: int, depth: int) -> int | None:
     """`i` is just past a `${` / `%{` in a quoted string whose line ends at
     `limit`. Return the index past its `}`, or None when it never closes.
-    The interpolation is an expression, so it is lexed like code: comments
-    and strings inside it cannot move the depth, and like code it may run
-    onto later lines (`"${join("-", [\n var.env])}"`). A string inside it
-    still ends at its own line, so a stray quote cannot eat the file."""
+    The interpolation is an expression, so it is lexed like code: strings
+    inside it cannot move the depth, and like code it may run onto later
+    lines (`"${join("-", [\n var.env])}"`). A string or comment inside it
+    still ends on its own line, so neither can eat the file."""
     braces = 1
     while True:
         if i >= limit:
@@ -1015,15 +1016,16 @@ def _template_end(text: str, i: int, limit: int, depth: int) -> int | None:
         m = _LEX_RE.match(text, i, limit)
         kind = m.lastgroup
         i = m.end()
+        # A comment inside `${ }` is a parse error, so it only has to be
+        # skipped well enough to keep the depth right; bounding it to the
+        # line keeps the lexer linear (one search to EOF per line would
+        # be quadratic).
         if kind == "bc":
-            j = text.find("*/", i)
+            j = text.find("*/", i, limit)
             if j < 0:
                 return None
             i = j + 2
-            limit = _next_line(text, i)
-        elif kind == "lc":
-            i = limit
-        elif kind == "hd":
+        elif kind in ("lc", "hd"):
             return None
         elif kind == "dq":
             end, _plain, ok = _lex_string_end(text, m.start(), limit, depth + 1)
