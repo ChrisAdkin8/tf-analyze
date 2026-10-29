@@ -16,6 +16,8 @@ Public surface:
     `{provider_name: constraint_string}`.
   * `_extract_terraform_version(all_files_text)` — pull
     `terraform { required_version = "…" }`.
+  * `_constraints_by_dir(all_files_text)` — both of the above, per
+    folder (one Terraform module), for the folders that declare any.
   * `_entry_applies_to_providers(entry, constraints, tf_constraint)` —
     gate a catalogue entry on its `applies_when:` clause.
 
@@ -32,8 +34,9 @@ invariant that the refactor is a no-behaviour-change extraction.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
-from _hcl import brace_walk  # type: ignore
+from _hcl import brace_walk, mask_comments_and_heredocs  # type: ignore
 
 
 def _version_tuple(s: str) -> tuple[int, ...]:
@@ -132,7 +135,11 @@ def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
     and return the per-provider version constraint string. Last-write-
     wins is fine — most repos define `required_providers` in exactly
     one file (versions.tf), and divergent declarations should be flagged
-    by ROB-VERSION-002 separately."""
+    by ROB-VERSION-002 separately.
+
+    Comments and heredocs are masked first: a commented-out
+    `# azurerm = { version = "~> 2.99" }` or a `/* terraform {...} */`
+    block used to override the real pin."""
     constraints: dict[str, str] = {}
     tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
     rp_block_re = re.compile(r"required_providers\s*\{")
@@ -140,7 +147,8 @@ def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
         r'(\w[\w-]*)\s*=\s*\{[^{}]*?version\s*=\s*"([^"]+)"',
         re.DOTALL,
     )
-    for text in all_files_text.values():
+    for raw in all_files_text.values():
+        text = mask_comments_and_heredocs(raw)
         for m in tf_block_re.finditer(text):
             # Quote/comment-aware walk (shared with _extract_terraform_version)
             # so a `}` inside a string in the terraform{} block doesn't
@@ -172,11 +180,13 @@ def _extract_terraform_version(all_files_text: dict) -> str:
         }
 
     used to return "" and silently disable every `applies_when.min_terraform`
-    gate. Walking the full block body fixes that.
+    gate. Walking the full block body fixes that. Comments are masked
+    first, so a commented-out `required_version` is not read.
     """
     tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
     rv_re = re.compile(r'(?m)^\s*required_version\s*=\s*"([^"]+)"')
-    for text in all_files_text.values():
+    for raw in all_files_text.values():
+        text = mask_comments_and_heredocs(raw)
         for m in tf_block_re.finditer(text):
             end_after = brace_walk(text, m.end() - 1)
             if end_after is None:
@@ -185,6 +195,28 @@ def _extract_terraform_version(all_files_text: dict) -> str:
             if rm:
                 return rm.group(1)
     return ""
+
+
+def _constraints_by_dir(all_files_text: dict) -> dict[str, tuple[dict[str, str], str]]:
+    """``{folder: (provider_constraints, terraform_constraint)}`` for every
+    folder whose files declare a `required_providers` version or a
+    `required_version`; keys are ``str(path.parent)``.
+
+    Terraform scopes `required_providers` to one module (one folder), so
+    a pin is read per folder: a `modules/legacy/versions.tf` pinning
+    `azurerm ~> 2.99` used to be merged into one tree-wide pin and switch
+    rules off for the root module too. A folder that declares nothing is
+    absent (its findings are not gated)."""
+    by_dir: dict[str, dict] = {}
+    for fp, text in all_files_text.items():
+        by_dir.setdefault(str(Path(fp).parent), {})[fp] = text
+    out: dict[str, tuple[dict[str, str], str]] = {}
+    for d, files in by_dir.items():
+        providers = _extract_provider_constraints(files)
+        tf_version = _extract_terraform_version(files)
+        if providers or tf_version:
+            out[d] = (providers, tf_version)
+    return out
 
 
 def _entry_applies_to_providers(

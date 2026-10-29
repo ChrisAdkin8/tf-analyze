@@ -38,7 +38,7 @@ def resolve_fleet_targets(args) -> list[Path]:
     if tf_path_attr:
         tf_path = Path(tf_path_attr)
         if tf_path.exists():
-            for line in tf_path.read_text().splitlines():
+            for line in tf_path.read_text(encoding="utf-8-sig").splitlines():
                 line = line.strip()
                 if line and not line.startswith("#"):
                     targets.append(Path(line).resolve())

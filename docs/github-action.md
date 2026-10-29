@@ -57,7 +57,8 @@ change them for those runs, edit the fallback after `||` in the file.
 
 - **PR runs** use `--mode diff` — only changed files are scanned, plus
   the rest of a folder whose `.tfvars`, `variable` or `locals` changed,
-  and the local modules they call.
+  the local modules they call, and the folders that call a changed
+  folder as a local module.
   Failures are gated by the `fail-on` threshold (default `HIGH`).
 - **No Terraform found fails the job.** If there are no `.tf` /
   `.tf.json` files under `target` (a wrong path, or `ignore_paths`

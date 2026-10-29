@@ -685,6 +685,11 @@ def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
 
 # ---- Text normalisation -------------------------------------------------
 
+# Files already warned about as not UTF-8, so a file read twice (scan,
+# then tfvars / LSP) is reported once.
+_NON_UTF8_WARNED: set[str] = set()
+
+
 def _read_normalized(path: Path) -> str:
     """Read a text file and normalize line endings to LF.
 
@@ -693,8 +698,27 @@ def _read_normalized(path: Path) -> str:
     `\\r` carried position offset from the disk byte stream made line
     numbers in findings drift on Windows-edited code. The fix is cheap
     and the substring searches are unaffected.
+
+    Terraform reads its files as UTF-8, so this does too, whatever the
+    locale (Windows' cp1252 used to garble or reject valid UTF-8). A
+    UTF-8 byte-order mark is dropped. A file with bytes that are not
+    UTF-8 (a Latin-1 ``é`` in a comment) used to be skipped whole, with
+    every finding in it; each bad byte now becomes U+FFFD instead, which
+    keeps line numbers, and a WARN names the file.
     """
-    return path.read_text().replace("\r\n", "\n").replace("\r", "\n")
+    data = path.read_bytes()
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        text = data.decode("utf-8-sig", errors="replace")
+        if str(path) not in _NON_UTF8_WARNED:
+            _NON_UTF8_WARNED.add(str(path))
+            print(
+                f"WARN: {path}: not valid UTF-8 (byte 0x{data[e.start]:02x} "
+                f"at offset {e.start}); scanned with invalid bytes replaced",
+                file=sys.stderr,
+            )
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _parse_scalar(v: str):

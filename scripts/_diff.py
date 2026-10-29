@@ -158,12 +158,46 @@ def _with_local_children(files: set[Path]) -> set[Path]:
     return out
 
 
+def _with_local_callers(files: set[Path], target: Path) -> set[Path]:
+    """`files` plus the `.tf` files of every folder under `target` that
+    calls a folder of `files` as a local module (`source = "../net"`),
+    recursively up the call chain. A child's outputs feed its caller
+    (`security_groups = [module.net.sg_id]`), so a change to the child
+    can change the caller's findings."""
+    from _tfjson import tf_source_files  # local: _tfjson is engine-side
+
+    callers: dict[Path, set[Path]] = {}  # child folder -> caller folders
+    for fp in tf_source_files(target):
+        if ".terraform" in fp.parts:
+            continue
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for m in _LOCAL_SOURCE_RE.finditer(text):
+            child = (fp.parent / m.group(1)).resolve()
+            callers.setdefault(child, set()).add(fp.parent.resolve())
+    out = set(files)
+    queue = list({fp.parent for fp in files})
+    seen = set(queue)
+    while queue:
+        for caller in callers.get(queue.pop(), ()):
+            if caller in seen:
+                continue
+            seen.add(caller)
+            queue.append(caller)
+            out.update(p.resolve() for p in caller.iterdir() if p.is_file() and _is_tf(p))
+    return out
+
+
 def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     """Set of ``.tf`` files to scan for the change between ``diff_base``
     and HEAD: the changed ones, the folder-mates of a changed file that
-    feeds them (`_module_siblings`), and the local modules any of those
-    call (`_with_local_children`). Renames count as a delete plus an add
-    (``--no-renames``), so the folder a file left is covered too.
+    feeds them (`_module_siblings`), the local modules any of those call
+    (`_with_local_children`), and the folders under ``target`` that call
+    any of their folders as a local module (`_with_local_callers`).
+    Renames count as a delete plus an add (``--no-renames``), so the
+    folder a file left is covered too.
 
     Three sources are unioned:
 
@@ -237,7 +271,10 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
             if line.strip()
         }
         files = {fp for fp in changed if fp.exists() and _is_tf(fp)}
-        return _with_local_children(files | _module_siblings(changed))
+        base = files | _module_siblings(changed)
+        if not base:
+            return base
+        return _with_local_children(base) | _with_local_callers(base, target)
     except FileNotFoundError:
         print("WARN: git not found", file=sys.stderr)
         return None
