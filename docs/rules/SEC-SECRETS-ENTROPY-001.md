@@ -43,7 +43,8 @@ keywords: "security, high, terraform, iac, mitre-T1552.001, cwe-798, cwe-259"
 
 1. **`high_entropy_string`** — _a `high_entropy_string` pattern._
   A string literal whose Shannon entropy is >= 4.0 bits/char over a
-base64/token charset (length 20-100), assigned to *any* argument —
+base64/token charset (length 20-100), assigned to *any* argument of
+a resource, data source, provider, module call or `locals` block —
 the signature of a hardcoded API token, access key, or other secret
 regardless of the argument's name. Complements the name-based grep
 secret rules (SEC-SECRETS-001), which only fire on
@@ -56,7 +57,8 @@ heuristic — verify and rotate the value if it is a real credential.
 ## Why it likely fired
 
 A string literal whose Shannon entropy is >= 4.0 bits/char over a
-base64/token charset (length 20-100), assigned to *any* argument —
+base64/token charset (length 20-100), assigned to *any* argument of
+a resource, data source, provider, module call or `locals` block —
 the signature of a hardcoded API token, access key, or other secret
 regardless of the argument's name. Complements the name-based grep
 secret rules (SEC-SECRETS-001), which only fire on
