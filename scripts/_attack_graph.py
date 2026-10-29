@@ -177,6 +177,21 @@ _EDGE_GCP_SA_NAME_RE  = re.compile(
     r'(?<!\w)service_account\s*=\s*google_service_account\.([\w-]+)(?:\.\w+)?')
 
 
+# Types whose exposure `_is_internet_reachable` actually decides. For any
+# other type (IAM, logging, KMS, ...) "not internet-reachable" is the
+# default, not evidence, so its findings must not be demoted.
+_EXPOSURE_TYPES: frozenset[str] = frozenset({
+    "aws_instance", "aws_db_instance", "aws_rds_cluster",
+    "aws_rds_cluster_instance", "google_sql_database_instance",
+    "aws_security_group", "google_cloud_run_v2_service",
+    "google_cloud_run_service", "aws_lb", "aws_alb",
+    "google_compute_instance", "google_container_cluster",
+    "azurerm_public_ip", "azurerm_app_service", "azurerm_linux_web_app",
+    "azurerm_windows_web_app", "azurerm_function_app",
+    "azurerm_linux_function_app",
+})
+
+
 def _is_internet_reachable(rtype: str, body: str) -> bool:
     """Return True if the resource type + body suggests it is directly internet-reachable."""
     if rtype == "aws_instance":
@@ -241,6 +256,8 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
             "line": res["line"],
             "findings": finding_by_resource.get(addr, []),
             "internet_reachable": reachable,
+            # Set below too, for a resource behind a security group.
+            "exposure_modelled": rtype in _EXPOSURE_TYPES,
             "is_crown_jewel": rtype in _CROWN_JEWEL_TYPES,
             "on_critical_path": False,
         }
@@ -345,6 +362,12 @@ def build_attack_graph(resource_index: dict, findings: list[dict]) -> dict:
                 nodes[src]["internet_reachable"] = True
                 edges.append({"from": "INTERNET", "to": src, "label": "internet (via sg)"})
                 internet_edge_targets.add(src)
+
+    # A resource attached to a security group is exposed exactly when the
+    # group is, so the graph decides its reachability too.
+    for e in edges:
+        if e["label"] == "security_group" and e["from"] in nodes:
+            nodes[e["from"]]["exposure_modelled"] = True
 
     # BFS: shortest path from INTERNET to each crown jewel
     adj: dict[str, list[str]] = {}
@@ -475,7 +498,9 @@ def _apply_reachability_urgency(
     entry_map: dict[str, dict],
 ) -> None:
     """Promote findings on critical-path resources by one urgency tier;
-    demote findings on resources unreachable from INTERNET by one tier.
+    demote findings on resources unreachable from INTERNET by one tier,
+    but only when the graph models that resource's exposure
+    (``exposure_modelled``).
 
     The tier moves from the finding's current urgency, not the
     catalogue default, so a structured escalation (e.g. SSH open to the
@@ -483,8 +508,12 @@ def _apply_reachability_urgency(
     the escalation is direct evidence, the graph's reachability is an
     inference, and demoting it would let ``--fail-on`` pass."""
     critical_path_set = set(graph.get("critical_path", []))
-    internet_reachable_set = {
-        n["id"] for n in graph.get("nodes", []) if n.get("internet_reachable")
+    # Only a resource whose exposure the graph decides can be demoted for
+    # being unreachable; one it doesn't model (an IAM grant) or pruned
+    # from a large graph keeps its urgency.
+    demotable = {
+        n["id"] for n in graph.get("nodes", [])
+        if n.get("exposure_modelled") and not n.get("internet_reachable")
     }
     for f in findings:
         resource = f.get("resource", "")
@@ -499,7 +528,7 @@ def _apply_reachability_urgency(
         if resource and resource in critical_path_set:
             f["urgency"] = _URGENCY_TIERS[min(idx + 1, len(_URGENCY_TIERS) - 1)]
             f["on_critical_path"] = True
-        elif resource and resource not in internet_reachable_set and not escalated:
+        elif resource in demotable and not escalated:
             f["urgency"] = _URGENCY_TIERS[max(idx - 1, 0)]
         else:
             f["urgency"] = base

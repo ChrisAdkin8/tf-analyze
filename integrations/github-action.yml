@@ -202,7 +202,13 @@ jobs:
           threshold = rank.get(os.environ['FAIL_ON'].upper(), 3)
           breach = [f for f in findings if rank.get(f.get('urgency',''), 0) >= threshold]
           print(f'finding_count={len(findings)}')
-          sys.exit(1 if breach else 0)
+          # Unchecked input fails like --fail-on does: an empty target, a
+          # rule check that ran out of time, a file that couldn't be read.
+          summary = d.get('summary', {}) if isinstance(d, dict) else {}
+          unchecked = summary.get('nothing_scanned') or summary.get('rule_timeouts') or summary.get('unreadable_files')
+          if unchecked:
+              print('::error::tf-analyze: part of the target was not checked (see summary.nothing_scanned / rule_timeouts / unreadable_files)', file=sys.stderr)
+          sys.exit(1 if breach or unchecked else 0)
           " | tee -a "$GITHUB_OUTPUT"
 
       - name: Upload SARIF to Code Scanning

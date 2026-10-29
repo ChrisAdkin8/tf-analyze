@@ -156,7 +156,8 @@ class TestAttackGraphModule:
         graph = {
             "nodes": [
                 {"id": "aws_db_instance.crown", "internet_reachable": True},
-                {"id": "aws_lambda_function.unreachable", "internet_reachable": False},
+                {"id": "aws_lambda_function.unreachable", "internet_reachable": False,
+                 "exposure_modelled": True},
             ],
             "critical_path": ["aws_db_instance.crown"],
         }
