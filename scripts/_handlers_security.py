@@ -43,7 +43,9 @@ from detect import (
     _register_infile,
     _register_corpus,
     DATA_START,
+    LOCALS_START,
     MODULE_START,
+    PROVIDER_START,
     VARIABLE_START,
     OUTPUT_START,
     RESOURCE_START,
@@ -382,7 +384,8 @@ _ENTROPY_TOKEN_RE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
 
 # `name = "value"` single-line literal assignments. Interpolations and
 # references are filtered out by inspecting the captured value below.
-_ENTROPY_ASSIGN_RE = re.compile(r'(?m)([A-Za-z_][\w-]*)\s*=\s*"([^"\n]*)"')
+# A quoted key (`"token" = "..."`, common in maps) counts as an argument too.
+_ENTROPY_ASSIGN_RE = re.compile(r'(?m)"?([A-Za-z_][\w-]*)"?\s*=\s*"([^"\n]*)"')
 
 # Cloud resource-id prefixes: structured, base64-charset, occasionally
 # H>4.0 (e.g. `ami-0abcdef1234567890`) but never secrets.
@@ -451,8 +454,15 @@ def _detect_high_entropy_string(c: InFileCtx) -> list[dict]:
     max_len = int(c.pat.get("max_length", 100))
     min_entropy = float(c.pat.get("min_entropy", 4.0))
     out: list[dict] = []
-    for blk in c.resources:
-        btype, bname = blk["groups"]
+    # Not just resources: a `provider` block's `secret_key` / `token`, a
+    # `locals` value and a `module` input are where hardcoded credentials
+    # most often sit, and only resources were checked.
+    blocks = [(blk, "{}.{}".format(*blk["groups"])) for blk in c.resources]
+    blocks += [(blk, "data.{}.{}".format(*blk["groups"])) for blk in find_blocks(c.text, DATA_START)]
+    blocks += [(blk, f"provider.{blk['groups'][0]}") for blk in find_blocks(c.text, PROVIDER_START)]
+    blocks += [(blk, f"module.{blk['groups'][0]}") for blk in find_blocks(c.text, MODULE_START)]
+    blocks += [(blk, "locals") for blk in find_blocks(c.text, LOCALS_START)]
+    for blk, address in blocks:
         body = strip_hcl_context(blk["body"])   # blank comments, keep offsets
         seen: set[tuple[str, str]] = set()
         for m in _ENTROPY_ASSIGN_RE.finditer(body):
@@ -470,7 +480,7 @@ def _detect_high_entropy_string(c: InFileCtx) -> list[dict]:
                 "id": c.eid,
                 "file": str(c.file_path),
                 "line": line,
-                "resource": f"{btype}.{bname}",
+                "resource": address,
                 "context": (
                     f"high-entropy string assigned to `{arg}` "
                     f"(entropy {ent:.2f} bits/char, length {len(value)}) "

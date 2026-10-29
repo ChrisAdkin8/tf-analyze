@@ -29,6 +29,7 @@ def _ctx(tf: str, pat: dict | None = None) -> SimpleNamespace:
         pat=pat or {},
         eid="SEC-SECRETS-ENTROPY-001",
         file_path=Path("main.tf"),
+        text=tf,
         resources=find_blocks(tf, RESOURCE_START),
     )
 

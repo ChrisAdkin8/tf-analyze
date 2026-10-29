@@ -41,32 +41,38 @@ keywords: "security, critical, terraform, iac, cwe-798, d3-ch, nist-csf-pr.ds-5,
 
 ## What this checks
 
-1. **`grep`** matching `/(?:password|secret|api_key|master_password|admin_password)\s*=\s*"[^$"{][^"]{7,}"/` — _a textual regex matched somewhere in the file._
-  Literal string assigned to a password/secret/key argument that
-is not a variable reference (`var.*`), a data reference, or a
+1. **`grep`** matching `/(?:password|secret|api_key|secret_key|private_key|token)"?\s*=\s*"[^$"{][^"]{7,}"/` — _a textual regex matched somewhere in the file._
+  Literal string assigned to an argument or map key whose name ends
+in `password`, `secret`, `api_key`, `secret_key`, `private_key` or
+`token` (so `db_password`, `client_secret`, `access_token` too),
+that is not a variable reference (`var.*`), a data reference, or a
 local function call. Matches patterns like
-`password = "s3cr3t123"` that embed the credential directly.
+`password = "s3cr3t123"` or a provider's `secret_key = "..."` that
+embed the credential directly.
 hcl_context strips comments first so examples in `# …` lines
 do not produce false positives.
 2. **`grep`** matching `/AKIA[0-9A-Z]{16}/` — _a textual regex matched somewhere in the file._
   AWS IAM access key ID literal in source.
 3. **`grep`** matching `/sk-(?:live|test|proj)-[A-Za-z0-9]+/` — _a textual regex matched somewhere in the file._
   Stripe / OpenAI / similar API key prefix in source.
-4. **`grep`** matching `/(?:password|secret|api_key)\s*=\s*"[^$"{][^"]{7,}"/` — _a textual regex matched somewhere in the file._
+4. **`grep`** matching `/(?:password|secret|api_key|secret_key|private_key|token)"?\s*=\s*"[^$"{][^"]{7,}"/` — _a textual regex matched somewhere in the file._
   Same pattern in .tfvars and .auto.tfvars files. tfvars are often
 committed to repos despite containing credentials — and are
 frequently NOT gitignored. The fixed file_glob matching (lstrip "*/")
 means this also catches *.auto.tfvars files.
-5. **`grep`** matching `/"(?:password|secret|api_key)"\s*:\s*"[^$"{][^"]{7,}"/` — _a textual regex matched somewhere in the file._
+5. **`grep`** matching `/"\w*(?:password|secret|api_key|secret_key|private_key|token)"\s*:\s*"[^$"{][^"]{7,}"/` — _a textual regex matched somewhere in the file._
   Same pattern in JSON-format tfvars (*.tfvars.json). These are
 auto-loaded by Terraform and equally capable of containing secrets.
 
 ## Why it likely fired
 
-Literal string assigned to a password/secret/key argument that
-is not a variable reference (`var.*`), a data reference, or a
+Literal string assigned to an argument or map key whose name ends
+in `password`, `secret`, `api_key`, `secret_key`, `private_key` or
+`token` (so `db_password`, `client_secret`, `access_token` too),
+that is not a variable reference (`var.*`), a data reference, or a
 local function call. Matches patterns like
-`password = "s3cr3t123"` that embed the credential directly.
+`password = "s3cr3t123"` or a provider's `secret_key = "..."` that
+embed the credential directly.
 hcl_context strips comments first so examples in `# …` lines
 do not produce false positives.
 
