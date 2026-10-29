@@ -64,14 +64,19 @@ def fleet_scan(
           "unreadable_files": [str(path)],
           "parse_fallback_files": [{"file", "reason"}],
           "suppressed_count": int,
+          "empty_targets": [str(target)],  # only when a target had no .tf files
+          "nothing_scanned": True,         # likewise
         }
     """
     by_target: dict[str, list[dict]] = {}
     unreadable_files: list[str] = []
     parse_fallback_files: list[dict] = []
     suppressed_count = 0
+    empty_targets: list[str] = []
     for target in targets:
         result = scan_target(target)
+        if not result.get("tf_files"):
+            empty_targets.append(str(target))
         by_target[str(target)] = result["findings"]
         unreadable_files.extend(result["unreadable_files"])
         parse_fallback_files.extend(result["parse_fallback_files"])
@@ -100,7 +105,7 @@ def fleet_scan(
                     "fleet_repos": repos,
                 })
 
-    return {
+    out = {
         "by_target": by_target,
         "fleet_wide": fleet_wide,
         "summary": {t: len(fs) for t, fs in by_target.items()},
@@ -108,6 +113,14 @@ def fleet_scan(
         "parse_fallback_files": parse_fallback_files,
         "suppressed_count": suppressed_count,
     }
+    # A target with no Terraform (a mistyped path, or ignore_paths
+    # excluding everything) was not checked, so the fleet result is not a
+    # pass even when the other targets are clean. Top level, since
+    # `summary` maps each target to its count.
+    if empty_targets:
+        out["empty_targets"] = empty_targets
+        out["nothing_scanned"] = True
+    return out
 
 
 def render_fleet_report(fleet_result: dict, fmt: str) -> str:

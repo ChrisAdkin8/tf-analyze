@@ -143,7 +143,7 @@ jobs:
           # inputs don't leak as bare shell tokens.
           EXTRA_ARGS=()
           if [ -n "$TFA_SECTION" ]; then
-            EXTRA_ARGS+=(--section "$TFA_SECTION")
+            EXTRA_ARGS+=(--focus "$TFA_SECTION")
           fi
           if [ -n "$TFA_COMPLIANCE" ]; then
             EXTRA_ARGS+=(--compliance-framework "$TFA_COMPLIANCE")
@@ -155,13 +155,24 @@ jobs:
             EXTRA_ARGS+=(--show-info)
           fi
 
+          # Reports go to a fresh folder under $RUNNER_TEMP, never the
+          # checkout: on a PR the checkout is the PR's, and a symlink it
+          # commits as e.g. `tf-analyze.sarif` would send the `>` write
+          # wherever it points. Later steps find them via `out-dir`.
+          OUT="$(mktemp -d "${RUNNER_TEMP:-/tmp}/tf-analyze-out.XXXXXX")"
+          export OUT
+          echo "out-dir=$OUT" >> "$GITHUB_OUTPUT"
+
           # JSON for suggestion-block step + exit-code evaluation.
           python3 ~/.tf-analyze/scripts/detect.py \
             --target . \
             --mode "$MODE" \
             --format json \
             "${EXTRA_ARGS[@]}" \
-            > tf-analyze-findings.json 2>tf-analyze-stderr.txt || true
+            > "$OUT/tf-analyze-findings.json" 2>"$OUT/tf-analyze-stderr.txt" \
+            || JSON_RC=$?
+          # Exit 2+ is a crash: fail on it below, whatever the JSON holds.
+          export JSON_RC="${JSON_RC:-0}"
 
           # Engine-rendered PR summary (R28.1) — score+grade emoji,
           # top-3 findings, top fix, attack-graph block when --attack-graph
@@ -171,7 +182,7 @@ jobs:
             --mode "$MODE" \
             --format pr-summary \
             "${EXTRA_ARGS[@]}" \
-            > tf-analyze-summary.md 2>/dev/null || true
+            > "$OUT/tf-analyze-summary.md" 2>/dev/null || true
 
           # SARIF for Code Scanning (enterprise/paid orgs).
           python3 ~/.tf-analyze/scripts/detect.py \
@@ -179,7 +190,7 @@ jobs:
             --mode "$MODE" \
             --format sarif \
             "${EXTRA_ARGS[@]}" \
-            > tf-analyze.sarif 2>/dev/null || true
+            > "$OUT/tf-analyze.sarif" 2>/dev/null || true
 
           # Optional compliance gap report — appended to the PR comment
           # as a collapsible section so reviewers see framework posture
@@ -190,13 +201,16 @@ jobs:
               --mode "$MODE" \
               --format compliance \
               --compliance-framework "$TFA_COMPLIANCE" \
-              > tf-analyze-compliance.txt 2>/dev/null || true
+              > "$OUT/tf-analyze-compliance.txt" 2>/dev/null || true
           fi
 
           # Determine exit code based on fail-on threshold.
           python3 -c "
           import json, os, sys
-          d = json.load(open('tf-analyze-findings.json'))
+          if int(os.environ.get('JSON_RC') or 0) >= 2:
+              print('::error::tf-analyze: the JSON scan crashed (exit ' + os.environ['JSON_RC'] + '); see tf-analyze-stderr.txt', file=sys.stderr)
+              sys.exit(1)
+          d = json.load(open(os.path.join(os.environ['OUT'], 'tf-analyze-findings.json')))
           findings = d.get('findings', d if isinstance(d, list) else [])
           rank = {'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1, 'INFO': 0}
           threshold = rank.get(os.environ['FAIL_ON'].upper(), 3)
@@ -212,11 +226,11 @@ jobs:
           " | tee -a "$GITHUB_OUTPUT"
 
       - name: Upload SARIF to Code Scanning
-        if: always()
+        if: always() && steps.analyze.outputs.out-dir != ''
         continue-on-error: true   # free-tier repos lack Code Scanning; don't fail the job
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
-          sarif_file: tf-analyze.sarif
+          sarif_file: ${{ steps.analyze.outputs.out-dir }}/tf-analyze.sarif
           category: tf-analyze
 
       - name: Post PR suggestion comments
@@ -227,12 +241,14 @@ jobs:
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           TFA_COMPLIANCE: ${{ inputs.compliance-framework }}
+          TFA_OUT: ${{ steps.analyze.outputs.out-dir }}
         with:
           script: |
             const fs = require('fs');
+            const out = (name) => `${process.env.TFA_OUT}/${name}`;
             let findings = [];
             try {
-              const raw = JSON.parse(fs.readFileSync('tf-analyze-findings.json', 'utf8'));
+              const raw = JSON.parse(fs.readFileSync(out('tf-analyze-findings.json'), 'utf8'));
               findings = raw.findings ?? (Array.isArray(raw) ? raw : []);
             } catch(e) {
               core.warning('Could not read tf-analyze-findings.json: ' + e.message);
@@ -311,7 +327,7 @@ jobs:
             // table if the file is somehow missing/empty.
             let summaryBody;
             try {
-              const rendered = fs.readFileSync('tf-analyze-summary.md', 'utf8').trim();
+              const rendered = fs.readFileSync(out('tf-analyze-summary.md'), 'utf8').trim();
               if (rendered) {
                 summaryBody = rendered;
               }
@@ -351,7 +367,7 @@ jobs:
             const fw = process.env.TFA_COMPLIANCE || '';
             if (fw) {
               try {
-                const compliance = fs.readFileSync('tf-analyze-compliance.txt', 'utf8').trim();
+                const compliance = fs.readFileSync(out('tf-analyze-compliance.txt'), 'utf8').trim();
                 if (compliance) {
                   summaryBody += [
                     '',
@@ -396,16 +412,18 @@ jobs:
             }
 
       - name: Generate HTML report
-        if: always()
+        if: always() && steps.analyze.outputs.out-dir != ''
+        env:
+          TFA_OUT: ${{ steps.analyze.outputs.out-dir }}
         run: |
           python3 ~/.tf-analyze/scripts/detect.py \
             --target . \
-            --format html > tf-analyze-report.html
+            --format html > "$TFA_OUT/tf-analyze-report.html"
 
       - name: Upload HTML artifact
-        if: always()
+        if: always() && steps.analyze.outputs.out-dir != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: tf-analyze-report
-          path: tf-analyze-report.html
+          path: ${{ steps.analyze.outputs.out-dir }}/tf-analyze-report.html
           retention-days: 30

@@ -61,8 +61,9 @@ Functions
   mutates the findings list in place. Promotes findings on
   critical-path resources by one urgency tier (LOW → MEDIUM →
   HIGH → CRITICAL) and demotes findings on resources unreachable from
-  INTERNET by one tier. Findings on internet-reachable nodes keep
-  their default urgency.
+  INTERNET by one tier (only network-exposure types the graph models,
+  and never a credential-exposure rule — see `_reach_independent`).
+  Findings on internet-reachable nodes keep their default urgency.
 * ``_mermaid_id(addr)`` — sanitise ``aws_iam_role.foo`` →
   ``aws_iam_role_foo`` for Mermaid node IDs.
 * ``graph_to_mermaid(graph)`` — turn the graph dict into a
@@ -492,6 +493,33 @@ def _score_fix_centrality(graph: dict, findings: list[dict]) -> list[dict]:
     return sorted(results, key=lambda x: (-x["impact"], x["finding_id"]))
 
 
+# A leaked credential is read from the source, the state or the plan, not
+# reached over the network, so where the resource holding it sits says
+# nothing about its risk: these rules are never demoted for being
+# unreachable. Matched on the rule's CWE / ATT&CK tags.
+_REACH_INDEPENDENT_CWES: frozenset[str] = frozenset({
+    "CWE-256",  # plaintext storage of a password
+    "CWE-259",  # hard-coded password
+    "CWE-312",  # cleartext storage of sensitive information
+    "CWE-321",  # hard-coded cryptographic key
+    "CWE-522",  # insufficiently protected credentials
+    "CWE-798",  # hard-coded credentials
+})
+_REACH_INDEPENDENT_TECHNIQUES: tuple[str, ...] = ("T1552",)  # Unsecured Credentials
+
+
+def _reach_independent(entry: dict) -> bool:
+    """True when a rule's risk does not depend on network reachability
+    (a credential-exposure rule), so `--attack-graph` must not demote it."""
+    cwes = {str(c).upper() for c in (entry.get("cwe") or [])}
+    if cwes & _REACH_INDEPENDENT_CWES:
+        return True
+    return any(
+        str(t).upper().startswith(_REACH_INDEPENDENT_TECHNIQUES)
+        for t in (entry.get("mitre") or [])
+    )
+
+
 def _apply_reachability_urgency(
     findings: list[dict],
     graph: dict,
@@ -506,7 +534,10 @@ def _apply_reachability_urgency(
     catalogue default, so a structured escalation (e.g. SSH open to the
     world -> CRITICAL) is kept. An escalated finding is never demoted:
     the escalation is direct evidence, the graph's reachability is an
-    inference, and demoting it would let ``--fail-on`` pass."""
+    inference, and demoting it would let ``--fail-on`` pass. A
+    credential-exposure rule (`_reach_independent`) is never demoted
+    either: a hard-coded password is as exposed on a private database as
+    on a public one."""
     critical_path_set = set(graph.get("critical_path", []))
     # Only a resource whose exposure the graph decides can be demoted for
     # being unreachable; one it doesn't model (an IAM grant) or pruned
@@ -525,10 +556,15 @@ def _apply_reachability_urgency(
             default in _URGENCY_TIERS and base in _URGENCY_TIERS
             and idx > _URGENCY_TIERS.index(default)
         )
+        # `--baseline` compares this, not the graph-adjusted urgency: a
+        # baseline accepts a finding's risk, and the graph's one-tier move
+        # is a ranking, not the finding getting worse. Stripped before
+        # output (detect.py).
+        f["_urgency_before_graph"] = base
         if resource and resource in critical_path_set:
             f["urgency"] = _URGENCY_TIERS[min(idx + 1, len(_URGENCY_TIERS) - 1)]
             f["on_critical_path"] = True
-        elif resource in demotable and not escalated:
+        elif resource in demotable and not escalated and not _reach_independent(entry):
             f["urgency"] = _URGENCY_TIERS[max(idx - 1, 0)]
         else:
             f["urgency"] = base

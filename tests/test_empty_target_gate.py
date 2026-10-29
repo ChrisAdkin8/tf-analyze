@@ -77,7 +77,12 @@ def _gate_script() -> str:
 
 def _gate(tmp_path: Path, report: dict) -> subprocess.CompletedProcess:
     (tmp_path / "tf-analyze-findings.json").write_text(json.dumps(report))
-    env = {**os.environ, "GITHUB_WORKSPACE": str(tmp_path), "TFA_FAIL_ON": "HIGH"}
+    env = {
+        **os.environ,
+        "TFA_JSON_REPORT": str(tmp_path / "tf-analyze-findings.json"),
+        "TFA_JSON_RC": "0",
+        "TFA_FAIL_ON": "HIGH",
+    }
     return subprocess.run(
         [sys.executable, "-c", _gate_script()],
         capture_output=True,
@@ -171,7 +176,7 @@ def _template_gate(tmp_path: Path, report: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-c", textwrap.dedent(_template_gate_script())],
         capture_output=True, text=True, cwd=tmp_path, check=False,
-        env={**os.environ, "FAIL_ON": "HIGH"},
+        env={**os.environ, "FAIL_ON": "HIGH", "OUT": str(tmp_path)},
     )
 
 

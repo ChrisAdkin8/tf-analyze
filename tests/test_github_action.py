@@ -176,10 +176,23 @@ class TestEngineFlagWiring:
     ) -> None:
         assert "--show-info" in action_text
 
-    def test_section_flag_used_when_input_set(
+    def test_every_engine_flag_is_one_the_engine_accepts(
         self, action_text: str,
     ) -> None:
-        assert "--section" in action_text
+        # Grepping for a flag's name let `--section` (never an engine
+        # flag; the section filter is `--focus`) pass while every run
+        # with `section:` set died on an argparse error. Check each flag
+        # the template adds against the engine's own parser.
+        import re
+
+        import detect
+
+        flags = set(re.findall(r"EXTRA_ARGS\+=\((--[a-z-]+)", action_text))
+        assert "--focus" in flags
+        known = {
+            s for a in detect._build_parser()._actions for s in a.option_strings
+        }
+        assert flags <= known, f"flags the engine rejects: {sorted(flags - known)}"
 
 
 # ---------------------------------------------------------------------------

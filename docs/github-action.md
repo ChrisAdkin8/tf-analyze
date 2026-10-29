@@ -64,10 +64,49 @@ change them for those runs, edit the fallback after `||` in the file.
   excluding everything), the job fails with "nothing was checked"
   instead of passing with a score of 100. A PR that simply changes no
   Terraform still passes.
+- **The engine's own gate counts.** A gate flag passed through the
+  composite action's `extra-args` (`--fail-on`, `--fail-on-parse-error`,
+  ...) makes the engine exit 1, and the job fails on it even when the
+  report has nothing at the action's `fail-on` level. An engine crash
+  (exit 2 or more) fails the job too.
 - **Unchecked input fails the job.** If a rule check ran out of time
   (`summary.rule_timeouts`) or a file couldn't be read
   (`summary.unreadable_files`), part of the target wasn't checked, so the
   job fails, as `--fail-on` does on the command line.
+- **The composite action's gate reads every report shape.** `mode:
+  fleet` reports findings per target (`by_target`), and the gate fails on
+  them, and on a fleet's unreadable files, as it does for one target;
+  a target with no Terraform (a mistyped path) fails it, listed in
+  `empty_targets`, even when the other targets are clean. Fleet SARIF,
+  HTML and `pr-summary` output are the real formats, over every
+  target's findings. `mode: plan` is a static scan of the
+  `plan-json` input (required). `mode: trend` is refused: it is a
+  history table with nothing to gate. `mode: pr-review` is refused too:
+  the action posts the inline suggestions itself (`post-pr-comment`). The `section` input is passed as
+  `--focus`.
+- **`--attack-graph` only lowers what reachability decides.** A finding
+  on a network resource the graph shows is not reachable from the
+  internet drops one tier. Findings on other resources (IAM, logging,
+  KMS, …) and credential-exposure rules (a hard-coded password: CWE-798
+  and similar, or ATT&CK T1552) keep their urgency, since a leaked
+  secret is read from the source, not reached over the network.
+- **The composite action's baseline comes from the base branch on PRs**,
+  like the config (unless `trust-pr-config: true`), so a PR can't add its
+  own findings to it. If the base branch has no such file the scan runs
+  with no baseline. A baseline entry without an `urgency` (an old report)
+  counts as its rule's default urgency, so it can't hide a finding that
+  was escalated above that. Findings are matched at their urgency
+  before `--attack-graph` moved them. A baseline made earlier in the
+  job and not committed on the base branch is not used on PRs unless
+  `trust-pr-config: true`.
+- **Reports are written under `$RUNNER_TEMP`.** Both the composite
+  action and this workflow template write their JSON, SARIF, HTML and
+  PR-summary reports, and the engine's stderr, to a fresh `mktemp -d`
+  folder, never the checkout, where a symlink committed in a PR could
+  send the write anywhere the runner can write. Use the composite
+  action's `json-report-path`, `sarif-report-path` and
+  `html-report-path` outputs, or the template's `analyze` step output
+  `out-dir`, to find them.
 - **Pushes to `main` / `master`** run `--mode static` — full workspace
   scan. SARIF is always uploaded; the HTML report is always attached.
 - **SARIF upload** lights up findings in the repo's Security → Code
@@ -215,5 +254,6 @@ status. Operators can no longer mistake a crashed engine for a clean
 scan.
 
 The per-format stderr files (`tf-analyze-json-stderr.txt`,
-`tf-analyze-sarif-stderr.txt`, etc.) are still collected and shown in
+`tf-analyze-sarif-stderr.txt`, etc., in the action's `$RUNNER_TEMP`
+report folder) are still collected and shown in
 collapsible groups in the workflow log.

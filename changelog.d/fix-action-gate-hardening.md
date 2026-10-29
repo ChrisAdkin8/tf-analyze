@@ -1,0 +1,89 @@
+## The GitHub Action's gate fails when the scan says it should
+
+- **`--attack-graph` keeps a leaked secret's urgency**: a finding on a
+  network resource the graph found unreachable still drops one tier, but
+  a credential-exposure rule (CWE-798, CWE-259, CWE-256, CWE-312,
+  CWE-321, CWE-522 or ATT&CK T1552) no longer does. A hard-coded
+  database password was CRITICAL without the flag and HIGH with it, so
+  the Action (which turns the flag on by default) passed
+  `fail-on: CRITICAL`.
+- **`mode: fleet`**: fleet JSON has findings under `by_target`, not
+  `findings`, so the Action's gate saw none and passed; and only an
+  escalated fleet finding carried an `urgency`. Fleet findings now carry
+  urgency, title and the other report fields, and the gate reads them.
+  It also fails on a fleet's unreadable files and timed-out rule checks
+  (now in the fleet JSON as `rule_timeouts`), and on any target with no
+  `.tf` / `.tf.json` files: the fleet JSON lists those in `empty_targets`
+  and sets `nothing_scanned`, so a mistyped target fails even when the
+  others are clean. `--mode fleet --format sarif`, `html` and
+  `pr-summary` emitted the Markdown fleet report; they now emit SARIF,
+  the HTML report and the PR summary over every target's findings.
+- **`mode: trend`** is refused by the Action with a reason: it is a
+  history table with no findings to gate, and the gate crashed on it.
+- **`mode: pr-review`** is refused by the Action too: the engine posts
+  with a `GITHUB_TOKEN` the container never received, so it always
+  exited 2. Use `mode: diff` (or `auto`) with `post-pr-comment: true`,
+  which posts the same inline suggestions.
+- **The Action's scan step survives an engine exit code**: GitHub runs
+  the step with `bash -e`, so an engine exit 1 (findings, with
+  `--fail-on` in `extra-args`) or 2 (a crash) ended it at the first
+  scan: no crash annotation, no SARIF / HTML / PR summary, no engine
+  stderr in the log, and no `score` / `grade` / count outputs.
+- **A gate flag in `extra-args` is honoured**: the Action rebuilt its
+  verdict from the JSON report, so `--fail-on LOW` or
+  `--fail-on-parse-error` passed in `extra-args` made the engine exit 1
+  and the Action pass anyway. The scan step records the JSON scan's exit
+  code (`json-rc`); the gate fails on 1 (naming `extra-args`) and on a
+  crash (2+). The `integrations/github-action.yml` template fails on a
+  crashed JSON scan the same way.
+- **The gate fails on a report that has no findings list** (neither
+  `findings` nor `by_target`) instead of passing it.
+- **`mode: plan`** was accepted by the Action but isn't an engine mode,
+  so every run failed. It is now a static scan of the new `plan-json`
+  input (passed as `--plan-json`, and usable with the other modes too).
+- **`section`** was passed as `--section`, which the engine doesn't
+  accept (it is `--focus`), so any run with `section:` set failed. The
+  same fix applies to the `integrations/github-action.yml` template and
+  the pre-commit docs. A test now parses the flags the Action passes
+  with the engine's own argument parser.
+- **Baseline on PRs**: the `baseline:` report was read from the PR's
+  checkout, so a PR could add its own findings to it. On pull requests
+  and merge-queue runs it is now read from the base branch, like the
+  config (unless `trust-pr-config: true`); if the base branch has none,
+  the scan runs without a baseline. A baseline entry with no `urgency`
+  (an older report) counts as its rule's default urgency, so it can't
+  hide a finding that was escalated above it; it used to match any
+  urgency. A finding is matched at its urgency before `--attack-graph`
+  moved it, so turning the graph on (the Action's default) does not
+  un-suppress baselined findings that it promoted.
+- **Report files**: the Action, and the `integrations/github-action.yml`
+  template, wrote their reports and the engine's stderr into the
+  workspace, which is the PR's checkout, so a committed symlink
+  named `tf-analyze.sarif` (or any other report name) sent the write
+  wherever it pointed. They now go to a fresh `mktemp -d` folder under
+  `$RUNNER_TEMP`. **If a workflow read
+  `${{ github.workspace }}/tf-analyze-findings.json`, use the
+  `json-report-path` output instead** (likewise `sarif-report-path`
+  and `html-report-path`); in the template, the `analyze` step's
+  `out-dir` output holds them.
+
+**Upgrade notes**
+
+- **Old baselines**: a baseline entry with no `urgency` now matches a
+  finding only at the rule's catalogue default urgency. A finding that
+  an escalation raised above that default (e.g. SSH open to the world
+  making `SEC-AWS-SG-001` CRITICAL) is reported as new. Regenerate the
+  baseline with the current engine to accept those.
+- **Baselines made during the job**: on pull requests and merge-queue
+  runs the Action now reads `baseline:` from the base branch only. A
+  baseline produced earlier in the same job (downloaded as an artifact,
+  or generated by a step) and not committed on the base branch is no
+  longer used, so the PR is gated on every finding. Commit the baseline
+  to the base branch, or set `trust-pr-config: true` to use the
+  checkout's copy (the PR can then edit it).
+- **Report paths**: the Action's reports are no longer in the
+  workspace. Read them through the `json-report-path`,
+  `sarif-report-path` and `html-report-path` outputs (in the template,
+  the `analyze` step's `out-dir` output).
+- **Modes**: `mode: trend` and `mode: pr-review` now fail with an error
+  in the Action; `mode: plan` needs the new `plan-json` input.

@@ -71,7 +71,7 @@ def _run_trusted(repo: Path, tmp_path: Path, target: str = ".",
     runner_temp = tmp_path / "runner_temp"
     runner_temp.mkdir(exist_ok=True)
     proc = subprocess.run(
-        ["bash", "-c", _step("Use the base branch's tf-analyze config")["run"]],
+        ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", _step("Use the base branch's tf-analyze config")["run"]],
         env={
             **os.environ,
             "TFA_TARGET": target,
@@ -214,12 +214,12 @@ def test_args_step_passes_the_trusted_copies(tmp_path: Path) -> None:
         "TFA_TRUSTED_CONFIG": "",
         "TFA_TRUSTED_IGNORE": "/trusted/none",
     }
-    subprocess.run(["bash", "-c", script], env=env, check=True, capture_output=True)
+    subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script], env=env, check=True, capture_output=True)
     args = args_file.read_text().splitlines()
     assert "--no-project-config" in args
     assert args[args.index("--ignore-file") + 1] == "/trusted/none"
     env.update(TFA_TRUSTED_DIR="")
-    subprocess.run(["bash", "-c", script], env=env, check=True, capture_output=True)
+    subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script], env=env, check=True, capture_output=True)
     args = args_file.read_text().splitlines()
     assert "--ignore-file" not in args and "--no-project-config" not in args
 
