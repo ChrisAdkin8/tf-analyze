@@ -49,10 +49,12 @@ jobs:
       - name: Expect exactly the demo's known CRITICAL
         env:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          # The action writes its reports under $RUNNER_TEMP, not the workspace.
+          TFA_JSON_REPORT: ${{ steps.scan.outputs.json-report-path }}
         run: |
           python3 - <<'PY'
           import json, os, sys
-          with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")) as f:
+          with open(os.environ["TFA_JSON_REPORT"]) as f:
               findings = json.load(f)["findings"]
           critical = sorted(
               (f["id"], f.get("resource", "")) for f in findings if f.get("urgency") == "CRITICAL"

@@ -246,6 +246,7 @@ def apply_baseline(
     current: list[dict],
     baseline_path: Path,
     target: Path | None = None,
+    default_urgency: dict[str, str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Filter ``current`` findings against a baseline JSON report.
 
@@ -263,6 +264,12 @@ def apply_baseline(
     (e.g. a security group moving from port 443 to 22) is retained: the
     baseline accepted the old risk, not the worse one.
 
+    A baseline finding with no ``urgency`` (an old report, or a
+    hand-written one) counts as its rule's catalogue default
+    (`default_urgency`, rule id -> urgency), or as the lowest tier when
+    the rule is unknown: it still suppresses the same finding at its
+    default urgency, but cannot hide one that was escalated above it.
+
     A missing or unreadable baseline returns ``(current, [])`` plus a
     stderr warning — better to surface noisily than silently pass.
     """
@@ -271,9 +278,11 @@ def apply_baseline(
         return current, []
     prior, prior_target = loaded
     paired, _ = _pair_findings(prior, current, prior_target or target, target)
+    defaults = default_urgency or {}
     for ci, pi in list(paired.items()):
-        was, now = _urgency_rank(prior[pi]), _urgency_rank(current[ci])
-        if was >= 0 and now > was:
+        was = _urgency_rank(prior[pi], defaults)
+        now = _urgency_rank(current[ci], defaults)
+        if now > was:
             del paired[ci]
     retained = [f for i, f in enumerate(current) if i not in paired]
     suppressed = [f for i, f in enumerate(current) if i in paired]
@@ -283,11 +292,13 @@ def apply_baseline(
 _URGENCY_RANK = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 
 
-def _urgency_rank(finding: dict) -> int:
-    """A finding's urgency as a number; -1 when it carries none (an old
-    report, or a finding not yet enriched). A baseline finding with no
-    urgency is never compared, so old baselines keep suppressing."""
-    return _URGENCY_RANK.get(str(finding.get("urgency") or "").upper(), -1)
+def _urgency_rank(finding: dict, defaults: dict[str, str] | None = None) -> int:
+    """A finding's urgency as a number. One that carries none (an old
+    report, or a finding not yet enriched) takes its rule's default from
+    `defaults`, else the lowest tier (0): a missing urgency must never
+    let a baseline entry hide a higher-urgency finding."""
+    urgency = finding.get("urgency") or (defaults or {}).get(finding.get("id"), "")
+    return _URGENCY_RANK.get(str(urgency).upper(), 0)
 
 
 def compare_reports(

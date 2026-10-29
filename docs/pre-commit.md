@@ -55,7 +55,7 @@ repos:
 ```yaml
 hooks:
   - id: tf-analyze
-    args: ["--target", ".", "--fail-on", "HIGH", "--section", "security"]
+    args: ["--target", ".", "--fail-on", "HIGH", "--focus", "security"]
 ```
 
 ## CI integration

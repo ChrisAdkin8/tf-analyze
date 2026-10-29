@@ -40,6 +40,7 @@ def _run(tmp_path: Path) -> list[str]:
     proc = subprocess.run(
         ["bash", "-c", _print_loop()],
         cwd=tmp_path,
+        env={"OUT": str(tmp_path), "PATH": "/usr/bin:/bin"},
         capture_output=True,
         text=True,
         check=True,

@@ -173,7 +173,8 @@ def test_baseline_still_suppresses_an_unchanged_finding(tmp_path) -> None:
 
 
 def test_baseline_without_urgency_still_suppresses(tmp_path) -> None:
-    # Reports from before findings carried `urgency` must keep working.
+    # Reports from before findings carried `urgency` must keep working: the
+    # missing urgency counts as the rule's catalogue default.
     prior = [{"id": "R-1", "file": "main.tf", "resource": "a.b", "line": 1}]
     path = tmp_path / "old.json"
     path.write_text(json.dumps(prior))
@@ -186,7 +187,9 @@ def test_baseline_without_urgency_still_suppresses(tmp_path) -> None:
             "urgency": "HIGH",
         }
     ]
-    retained, suppressed = _baseline.apply_baseline(current, path)
+    retained, suppressed = _baseline.apply_baseline(
+        current, path, None, {"R-1": "HIGH"}
+    )
     assert retained == [] and suppressed == current
 
 

@@ -143,7 +143,7 @@ jobs:
           # inputs don't leak as bare shell tokens.
           EXTRA_ARGS=()
           if [ -n "$TFA_SECTION" ]; then
-            EXTRA_ARGS+=(--section "$TFA_SECTION")
+            EXTRA_ARGS+=(--focus "$TFA_SECTION")
           fi
           if [ -n "$TFA_COMPLIANCE" ]; then
             EXTRA_ARGS+=(--compliance-framework "$TFA_COMPLIANCE")

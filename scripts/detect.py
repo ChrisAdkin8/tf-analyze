@@ -2156,12 +2156,30 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
         )
         return 2
     fleet_result = _fleet_scan(args, fleet_targets, entries)
+    # A gate reading the JSON (the GitHub Action) must see the checks that
+    # ran out of time, as --fail-on does.
+    if RULE_TIMEOUTS:
+        fleet_result["rule_timeouts"] = list(RULE_TIMEOUTS)
     total = sum(fleet_result["summary"].values())
     print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
-    emit(_render_fleet_report(fleet_result, args.format))
+    all_findings = [f for fs in fleet_result["by_target"].values() for f in fs]
+    # Give every finding its urgency (and title, ...) as a static scan's
+    # report does: a gate reading the fleet JSON saw no `urgency` on any
+    # finding that wasn't escalated, so it passed a CRITICAL.
+    _enrich_findings_for_output(all_findings, entries)
+    _enrich_findings_for_output(fleet_result["fleet_wide"], entries)
+    if args.format == "sarif":
+        # Every target's findings in one SARIF run; it used to emit the
+        # Markdown report, which code scanning rejects.
+        emit(json.dumps(to_sarif(
+            all_findings, entries,
+            parse_fallback_files=fleet_result["parse_fallback_files"],
+            source_root=sarif_source_root(fleet_targets[0]),
+        ), indent=2))
+    else:
+        emit(_render_fleet_report(fleet_result, args.format))
     if out_file is not None:
         out_file.close()
-    all_findings = [f for fs in fleet_result["by_target"].values() for f in fs]
     return _gate_exit_code(args, all_findings, entries,
                            fleet_result["parse_fallback_files"],
                            fleet_result["unreadable_files"], RULE_TIMEOUTS)
@@ -2262,6 +2280,7 @@ def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
         if _baseline_path.exists():
             _retained, _suppressed_b = apply_baseline(
                 findings, _baseline_path, _report_target(args),
+                {e["id"]: e.get("default_urgency", "") for e in entries},
             )
             if _suppressed_b:
                 print(
@@ -3883,6 +3902,7 @@ def _main():
     if getattr(args, "baseline", None):
         retained, suppressed_by_baseline = apply_baseline(
             findings, Path(args.baseline), _report_target(args),
+            {e["id"]: e.get("default_urgency", "") for e in entries},
         )
         if suppressed_by_baseline:
             print(

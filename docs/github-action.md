@@ -68,6 +68,31 @@ change them for those runs, edit the fallback after `||` in the file.
   (`summary.rule_timeouts`) or a file couldn't be read
   (`summary.unreadable_files`), part of the target wasn't checked, so the
   job fails, as `--fail-on` does on the command line.
+- **The composite action's gate reads every report shape.** `mode:
+  fleet` reports findings per target (`by_target`), and the gate fails on
+  them, and on a fleet's unreadable files, as it does for one target;
+  fleet SARIF is real SARIF. `mode: plan` is a static scan of the
+  `plan-json` input (required). `mode: trend` is refused: it is a
+  history table with nothing to gate. The `section` input is passed as
+  `--focus`.
+- **`--attack-graph` only lowers what reachability decides.** A finding
+  on a network resource the graph shows is not reachable from the
+  internet drops one tier. Findings on other resources (IAM, logging,
+  KMS, …) and credential-exposure rules (a hard-coded password: CWE-798
+  and similar, or ATT&CK T1552) keep their urgency, since a leaked
+  secret is read from the source, not reached over the network.
+- **The composite action's baseline comes from the base branch on PRs**,
+  like the config (unless `trust-pr-config: true`), so a PR can't add its
+  own findings to it. If the base branch has no such file the scan runs
+  with no baseline. A baseline entry without an `urgency` (an old report)
+  counts as its rule's default urgency, so it can't hide a finding that
+  was escalated above that.
+- **Reports are written under `$RUNNER_TEMP`.** The composite action
+  writes its JSON, SARIF, HTML and PR-summary reports, and the engine's
+  stderr, to a fresh `mktemp -d` folder, never the PR's checkout, where
+  a committed symlink could send the write anywhere the runner can
+  write. Use the `json-report-path`, `sarif-report-path` and
+  `html-report-path` outputs to find them.
 - **Pushes to `main` / `master`** run `--mode static` — full workspace
   scan. SARIF is always uploaded; the HTML report is always attached.
 - **SARIF upload** lights up findings in the repo's Security → Code
@@ -215,5 +240,6 @@ status. Operators can no longer mistake a crashed engine for a clean
 scan.
 
 The per-format stderr files (`tf-analyze-json-stderr.txt`,
-`tf-analyze-sarif-stderr.txt`, etc.) are still collected and shown in
+`tf-analyze-sarif-stderr.txt`, etc., in the action's `$RUNNER_TEMP`
+report folder) are still collected and shown in
 collapsible groups in the workflow log.

@@ -14,16 +14,19 @@ inputs:
     description: 'Minimum urgency level that fails the action (CRITICAL, HIGH, MEDIUM, LOW, INFO).'
     default: 'HIGH'
   mode:
-    description: 'Execution mode (static, diff, plan, fleet, trend, pr-review). Auto-selects "diff" on pull_request events when set to "auto".'
+    description: 'Execution mode (static, diff, plan, fleet, pr-review). Auto-selects "diff" on pull_request events when set to "auto". "plan" is a static scan plus the `plan-json` input (required). "fleet" scans every --target / --targets-file passed in `extra-args` as well as `target`. ("trend" is a history report with nothing to gate: run `detect.py --mode trend` directly.)'
     default: 'auto'
+  plan-json:
+    description: 'Path, relative to the workspace, to `terraform show -json plan.tfplan` output. Passed as `--plan-json`; required by `mode: plan`, optional with the other modes.'
+    default: ''
   section:
-    description: 'Restrict to a single catalogue section (security, robustness, ops, …). Empty = all sections.'
+    description: 'Restrict to a single catalogue section (security, robustness, ops, …), passed as `--focus`. Empty = all sections.'
     default: ''
   attack-graph:
-    description: 'Build the internet → crown-jewels attack graph and promote critical-path findings one urgency tier.'
+    description: 'Build the internet → crown-jewels attack graph: promote critical-path findings one urgency tier, and lower findings on network resources the graph shows are unreachable by one tier (never an escalated finding, a resource type the graph does not model such as IAM, or a credential-exposure rule).'
     default: 'true'
   baseline:
-    description: 'Path to a prior JSON report. Findings present in the baseline are suppressed; only NEW findings affect the exit code.'
+    description: 'Path, relative to the workspace, to a prior JSON report. Findings present in the baseline are suppressed; only NEW findings affect the exit code. On pull_request / pull_request_target / merge_group events the baseline is read from the base branch (a PR could otherwise add its own findings to it), unless `trust-pr-config` is `true`; if the base branch has no such file the scan runs without a baseline.'
     default: ''
   post-pr-comment:
     description: 'Post inline `suggestion` blocks for fixable findings on pull_request events. Requires permissions.pull-requests: write.'
@@ -63,7 +66,8 @@ inputs:
       or `.tf-analyze-ignore.yaml` to switch the gate off. By default
       (`false`) the action reads both files, and the custom rules they point
       at, from the PR's base branch instead: settings already merged still
-      apply, the PR's changes to them do not. Inline `tf-analyze:ignore`
+      apply, the PR's changes to them do not. The `baseline` report is
+      read from the base branch the same way. Inline `tf-analyze:ignore`
       comments are still honoured, because they show in the PR diff. Set
       `true` to use the PR's own copies. Other events (push, schedule, …)
       use the checked-out files.
@@ -89,13 +93,13 @@ outputs:
     description: 'HIGH findings.'
     value: ${{ steps.scan.outputs.high }}
   json-report-path:
-    description: 'Path to tf-analyze-findings.json.'
+    description: 'Path to tf-analyze-findings.json. The reports are written to a fresh folder under $RUNNER_TEMP, not the workspace (a symlink committed in a PR could otherwise redirect the write); read them through these outputs.'
     value: ${{ steps.scan.outputs.json-report-path }}
   html-report-path:
-    description: 'Path to tf-analyze-report.html.'
+    description: 'Path to tf-analyze-report.html (under $RUNNER_TEMP, see json-report-path).'
     value: ${{ steps.scan.outputs.html-report-path }}
   sarif-report-path:
-    description: 'Path to tf-analyze.sarif.'
+    description: 'Path to tf-analyze.sarif (under $RUNNER_TEMP, see json-report-path).'
     value: ${{ steps.scan.outputs.sarif-report-path }}
 
 runs:
@@ -107,9 +111,14 @@ runs:
       # Through `env:`, like every other input: `${{ inputs.mode }}` inside
       # `run:` is pasted into the script before bash parses it, so a caller
       # passing event data into `mode` could inject shell. Unknown modes fail.
+      #
+      # `mode` is the engine's --mode. `plan` isn't one: it is a static scan
+      # of the plan JSON, so it needs `plan-json`. `trend` emits a history
+      # table with no findings, so there is nothing for the gate to check.
       env:
         TFA_MODE_IN: ${{ inputs.mode }}
         TFA_EVENT: ${{ github.event_name }}
+        TFA_PLAN_JSON: ${{ inputs.plan-json }}
       run: |
         MODE="${TFA_MODE_IN}"
         if [ "$MODE" = "auto" ]; then
@@ -120,9 +129,20 @@ runs:
           fi
         fi
         case "$MODE" in
-          static|diff|plan|fleet|trend|pr-review) ;;
+          static|diff|fleet|pr-review) ;;
+          plan)
+            if [ -z "${TFA_PLAN_JSON}" ]; then
+              echo "::error::tf-analyze: mode 'plan' needs the 'plan-json' input (the output of 'terraform show -json plan.tfplan')"
+              exit 1
+            fi
+            MODE="static"
+            ;;
+          trend)
+            echo "::error::tf-analyze: mode 'trend' is a history report with no findings to gate; run 'detect.py --mode trend' outside this action"
+            exit 1
+            ;;
           *)
-            echo "::error::tf-analyze: unknown mode '${MODE}' (static, diff, plan, fleet, trend, pr-review, auto)"
+            echo "::error::tf-analyze: unknown mode '${MODE}' (static, diff, plan, fleet, pr-review, auto)"
             exit 1
             ;;
         esac
@@ -175,6 +195,7 @@ runs:
       shell: bash
       env:
         TFA_TARGET: ${{ inputs.target }}
+        TFA_BASELINE: ${{ inputs.baseline }}
         # A merge queue run scans the PR merged onto its target branch.
         TFA_BASE_REF: ${{ github.base_ref || github.event.merge_group.base_ref }}
         TFA_WORKSPACE: ${{ github.workspace }}
@@ -188,7 +209,7 @@ runs:
         BASE="refs/tf-analyze/base"
         cd "$TFA_WORKSPACE"
         if [ -z "$BRANCH" ] || ! git fetch --no-tags --depth=1 origin "+refs/heads/${BRANCH}:${BASE}" >/dev/null 2>&1; then
-          echo "::warning::tf-analyze: cannot read base branch '${BRANCH}'; scanning with no project config and no ignore file"
+          echo "::warning::tf-analyze: cannot read base branch '${BRANCH}'; scanning with no project config, no ignore file${TFA_BASELINE:+ and no baseline}"
           echo "ignore=/trusted/none" >> "$GITHUB_OUTPUT"
           exit 0
         fi
@@ -217,7 +238,21 @@ runs:
           copy "${PARENT}.tf-analyze-ignore.yaml" && IGNORE="/trusted/${PARENT}.tf-analyze-ignore.yaml"
         fi
         echo "ignore=$IGNORE" >> "$GITHUB_OUTPUT"
-        echo "::notice::tf-analyze: using .tf-analyze.yaml and .tf-analyze-ignore.yaml from '${BRANCH}', not from this PR (set trust-pr-config: true to change this)"
+        # The baseline decides which findings are "already known", so the
+        # PR's copy could list its own new findings. Use the base branch's;
+        # without one, scan with no baseline (every finding counts).
+        if [ -n "$TFA_BASELINE" ]; then
+          B="${TFA_BASELINE#./}"
+          case "/$B/" in
+            *"/../"*|//*) B="" ;;  # stay inside the repo
+          esac
+          if [ -n "$B" ] && copy "$B"; then
+            echo "baseline=/trusted/$B" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::tf-analyze: baseline '${TFA_BASELINE}' is not on base branch '${BRANCH}'; scanning without a baseline (set trust-pr-config: true to use the PR's copy)"
+          fi
+        fi
+        echo "::notice::tf-analyze: using .tf-analyze.yaml, .tf-analyze-ignore.yaml${TFA_BASELINE:+ and the baseline} from '${BRANCH}', not from this PR (set trust-pr-config: true to change this)"
 
     - name: Build detect.py args
       id: args
@@ -242,6 +277,8 @@ runs:
         TFA_TRUSTED_DIR: ${{ steps.trusted.outputs.dir }}
         TFA_TRUSTED_CONFIG: ${{ steps.trusted.outputs.config }}
         TFA_TRUSTED_IGNORE: ${{ steps.trusted.outputs.ignore }}
+        TFA_TRUSTED_BASELINE: ${{ steps.trusted.outputs.baseline }}
+        TFA_PLAN_JSON: ${{ inputs.plan-json }}
       run: |
         ARGS=(--target "/workspace/${TFA_TARGET}" --mode "${TFA_MODE_OUT}")
         # Set only on PRs (see the step above): use the base branch's copies.
@@ -261,13 +298,22 @@ runs:
           ARGS+=(--diff-base "${TFA_DIFF_BASE}")
         fi
         if [ -n "${TFA_SECTION}" ]; then
-          ARGS+=(--section "${TFA_SECTION}")
+          ARGS+=(--focus "${TFA_SECTION}")
+        fi
+        if [ -n "${TFA_PLAN_JSON}" ]; then
+          ARGS+=(--plan-json "/workspace/${TFA_PLAN_JSON}")
         fi
         if [ "${TFA_ATTACK_GRAPH}" = "true" ]; then
           ARGS+=(--attack-graph)
         fi
         if [ -n "${TFA_BASELINE}" ]; then
-          ARGS+=(--baseline "/workspace/${TFA_BASELINE}")
+          if [ -z "${TFA_TRUSTED_DIR}" ]; then
+            ARGS+=(--baseline "/workspace/${TFA_BASELINE}")
+          elif [ -n "${TFA_TRUSTED_BASELINE}" ]; then
+            # A PR: the base branch's copy (see the step above).
+            ARGS+=(--baseline "${TFA_TRUSTED_BASELINE}")
+          fi
+          # Else a PR whose base branch has no baseline: none (warned above).
         fi
         if [ -n "${TFA_COMPLIANCE_FW}" ]; then
           ARGS+=(--compliance --compliance-framework "${TFA_COMPLIANCE_FW}")
@@ -399,29 +445,39 @@ runs:
         # findings present (both valid). Exit ≥ 2 means the engine
         # itself died — surface that as an `::error::` annotation so
         # the workflow status reflects reality.
+        # Reports and stderr go to a fresh folder under $RUNNER_TEMP, never
+        # the workspace: the workspace is the PR's checkout, and a symlink
+        # committed as e.g. `tf-analyze.sarif` would send the `>` write to
+        # wherever it points. mktemp -d makes a new, empty, private folder.
+        OUT="$(mktemp -d "${RUNNER_TEMP:-/tmp}/tf-analyze-out.XXXXXX")"
+        echo "out-dir=${OUT}" >> "$GITHUB_OUTPUT"
+        echo "json-report-path=${OUT}/tf-analyze-findings.json" >> "$GITHUB_OUTPUT"
+        echo "html-report-path=${OUT}/tf-analyze-report.html" >> "$GITHUB_OUTPUT"
+        echo "sarif-report-path=${OUT}/tf-analyze.sarif" >> "$GITHUB_OUTPUT"
+        echo "pr-summary-path=${OUT}/tf-analyze-pr-summary.md" >> "$GITHUB_OUTPUT"
         run_scan() {
-          local fmt="$1" out="$2" err="$3"
+          local fmt="$1" out="$OUT/$2" err="$OUT/$3"
           docker run --rm "${MOUNTS[@]}" \
             "${TFA_IMAGE}" \
             "${BASE_ARGS[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
             > "$out" 2>"$err"
           local rc=$?
           if [ "$rc" -ge 2 ]; then
-            echo "::error::tf-analyze: $fmt scan crashed (exit $rc). See $err for the engine traceback."
+            echo "::error::tf-analyze: $fmt scan crashed (exit $rc). See $3 in the log below for the engine traceback."
           fi
           # We still allow the workflow to continue; the json-load
           # step has a try/except (round-3 fix #5) that emits zeroed
           # defaults so downstream steps run with a clear signal.
           return 0
         }
-        run_scan json    "${{ github.workspace }}/tf-analyze-findings.json"   tf-analyze-json-stderr.txt
-        run_scan sarif   "${{ github.workspace }}/tf-analyze.sarif"           tf-analyze-sarif-stderr.txt
-        run_scan html    "${{ github.workspace }}/tf-analyze-report.html"     tf-analyze-html-stderr.txt
+        run_scan json    tf-analyze-findings.json   tf-analyze-json-stderr.txt
+        run_scan sarif   tf-analyze.sarif           tf-analyze-sarif-stderr.txt
+        run_scan html    tf-analyze-report.html     tf-analyze-html-stderr.txt
         # `pr-summary` is a Markdown shape sized for the GitHub PR
         # comment body. Generated separately so the github-script step
         # can use it verbatim — keeps the rendered shape in the engine
         # rather than duplicating it in JS here.
-        run_scan pr-summary "${{ github.workspace }}/tf-analyze-pr-summary.md" tf-analyze-pr-summary-stderr.txt
+        run_scan pr-summary tf-analyze-pr-summary.md tf-analyze-pr-summary-stderr.txt
         # The engine's stderr names repo files, and a PR controls those names:
         # a path holding a newline could start a log line with `::error::`,
         # `::add-mask::` or `::stop-commands::` and forge annotations or hide
@@ -429,10 +485,10 @@ runs:
         # nobody can guess.
         LOG_TOKEN="tfa-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
         for f in tf-analyze-json-stderr.txt tf-analyze-sarif-stderr.txt tf-analyze-html-stderr.txt tf-analyze-pr-summary-stderr.txt; do
-          if [ -s "$f" ]; then
+          if [ -s "$OUT/$f" ]; then
             echo "::group::$f"
             echo "::stop-commands::${LOG_TOKEN}"
-            cat "$f"
+            cat "$OUT/$f"
             echo "::${LOG_TOKEN}::"
             echo "::endgroup::"
           fi
@@ -445,9 +501,9 @@ runs:
         # an untruncated Python traceback. The PR-comment step that
         # consumes these outputs (downstream) then sees zeroed
         # defaults rather than an undefined `findings` list.
-        python3 - <<'PY' >> "$GITHUB_OUTPUT"
+        TFA_JSON="$OUT/tf-analyze-findings.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
         import json, os, sys
-        path = os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")
+        path = os.environ["TFA_JSON"]
         try:
             with open(path) as fh:
                 d = json.load(fh)
@@ -461,33 +517,40 @@ runs:
             # comment, SARIF upload) can still run with safe defaults
             # instead of failing on an undefined variable.
             d = {"summary": {}, "findings": []}
-        s = d.get("summary", {})
-        c = s.get("counts", {})
-        f = d.get("findings", [])
+        if not isinstance(d, dict):
+            d = {"summary": {}, "findings": []}
+        if "by_target" in d:
+            # --mode fleet: findings per target; `summary` maps target -> count.
+            f = [x for fs in d["by_target"].values() for x in fs]
+            s = {}
+            c = {}
+            for x in f:
+                c[x.get("urgency", "")] = c.get(x.get("urgency", ""), 0) + 1
+        else:
+            s = d.get("summary", {})
+            c = s.get("counts", {})
+            f = d.get("findings", [])
         print(f"score={s.get('score', 0)}")
         print(f"grade={s.get('grade', '?')}")
         print(f"total={len(f)}")
         print(f"critical={c.get('CRITICAL', 0)}")
         print(f"high={c.get('HIGH', 0)}")
-        print(f"json-report-path={os.path.join(os.environ['GITHUB_WORKSPACE'], 'tf-analyze-findings.json')}")
-        print(f"html-report-path={os.path.join(os.environ['GITHUB_WORKSPACE'], 'tf-analyze-report.html')}")
-        print(f"sarif-report-path={os.path.join(os.environ['GITHUB_WORKSPACE'], 'tf-analyze.sarif')}")
         PY
 
     - name: Upload SARIF to Code Scanning
-      if: always() && inputs.upload-sarif == 'true'
+      if: always() && inputs.upload-sarif == 'true' && steps.scan.outputs.out-dir != ''
       continue-on-error: true
       uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
-        sarif_file: ${{ github.workspace }}/tf-analyze.sarif
+        sarif_file: ${{ steps.scan.outputs.sarif-report-path }}
         category: tf-analyze
 
     - name: Upload HTML artifact
-      if: always() && inputs.upload-html-artifact == 'true'
+      if: always() && inputs.upload-html-artifact == 'true' && steps.scan.outputs.out-dir != ''
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: tf-analyze-report
-        path: ${{ github.workspace }}/tf-analyze-report.html
+        path: ${{ steps.scan.outputs.html-report-path }}
         retention-days: 30
 
     # Off-by-default companion to the HTML artifact. Uploads the raw
@@ -499,11 +562,11 @@ runs:
     # alone doesn't carry the finding objects' `line` / `file` / `fix_hcl`
     # fields the action consumes.
     - name: Upload findings.json artifact (debug)
-      if: always() && inputs.debug-upload-findings == 'true'
+      if: always() && inputs.debug-upload-findings == 'true' && steps.scan.outputs.out-dir != ''
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: tf-analyze-findings-json
-        path: ${{ github.workspace }}/tf-analyze-findings.json
+        path: ${{ steps.scan.outputs.json-report-path }}
         retention-days: 7
 
     - name: Post PR review comments + summary
@@ -513,21 +576,23 @@ runs:
         github.event_name == 'pull_request'
       continue-on-error: true
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+      env:
+        TFA_JSON_REPORT: ${{ steps.scan.outputs.json-report-path }}
+        TFA_PR_SUMMARY: ${{ steps.scan.outputs.pr-summary-path }}
       with:
         script: |
           const fs = require('fs');
-          const path = require('path');
           let data = {};
           try {
-            data = JSON.parse(fs.readFileSync(
-              path.join(process.env.GITHUB_WORKSPACE, 'tf-analyze-findings.json'),
-              'utf8'
-            ));
+            data = JSON.parse(fs.readFileSync(process.env.TFA_JSON_REPORT, 'utf8'));
           } catch (e) {
             core.warning('Could not read tf-analyze-findings.json: ' + e.message);
             return;
           }
-          const findings = data.findings || [];
+          // --mode fleet reports findings per target, under `by_target`.
+          const findings = data.by_target
+            ? Object.values(data.by_target).flat()
+            : (data.findings || []);
           const summary = data.summary || {};
           const counts = summary.counts || {};
 
@@ -669,7 +734,7 @@ runs:
           let prSummaryRendered = '';
           try {
             prSummaryRendered = require('fs').readFileSync(
-              `${process.env.GITHUB_WORKSPACE}/tf-analyze-pr-summary.md`,
+              process.env.TFA_PR_SUMMARY,
               'utf-8'
             ).trim();
           } catch (e) {
@@ -737,27 +802,40 @@ runs:
       # variable read (no parser code-path) so injection is impossible.
       env:
         TFA_FAIL_ON: ${{ inputs.fail-on }}
+        TFA_JSON_REPORT: ${{ steps.scan.outputs.json-report-path }}
       run: |
         python3 - <<'PY'
         import json, sys, os
-        with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "tf-analyze-findings.json")) as f:
+        # A missing or malformed report (the scan never ran or crashed)
+        # raises here and fails the step: no report is not a pass.
+        with open(os.environ["TFA_JSON_REPORT"]) as f:
             d = json.load(f)
+        if not isinstance(d, dict):
+            print("::error::tf-analyze: the JSON report is not a findings report; nothing to gate.", file=sys.stderr)
+            sys.exit(1)
         rank = {"CRITICAL":4,"HIGH":3,"MEDIUM":2,"LOW":1,"INFO":0}
         fail_on = os.environ.get("TFA_FAIL_ON", "HIGH")
+        if "by_target" in d:
+            # --mode fleet: findings per target, and the diagnostics at the
+            # top level (its `summary` maps each target to a count).
+            findings = [f for fs in d["by_target"].values() for f in fs]
+            summary = d
+        else:
+            findings = d.get("findings", [])
+            summary = d.get("summary", {})
         # No .tf files under the target (wrong `target`, or ignore_paths
         # excluding everything): a clean result would be a false pass.
-        if d.get("summary", {}).get("nothing_scanned"):
+        if summary.get("nothing_scanned"):
             print("::error::tf-analyze: no .tf / .tf.json files found under the target; nothing was checked. Check the `target` input and ignore_paths.", file=sys.stderr)
             sys.exit(1)
         # A rule check that ran out of time, or a file that couldn't be
         # read, was not checked: `--fail-on` fails on both, so this gate
         # must too, or a slow-to-match input turns a red PR green.
-        summary = d.get("summary", {})
         if summary.get("rule_timeouts") or summary.get("unreadable_files"):
-            print(f"::error::tf-analyze: {len(summary.get('rule_timeouts', []))} rule check(s) ran out of time and {len(summary.get('unreadable_files', []))} file(s) could not be read; those were not checked.", file=sys.stderr)
+            print(f"::error::tf-analyze: {len(summary.get('rule_timeouts') or [])} rule check(s) ran out of time and {len(summary.get('unreadable_files') or [])} file(s) could not be read; those were not checked.", file=sys.stderr)
             sys.exit(1)
         threshold = rank.get(fail_on, 3)
-        breach = [f for f in d.get("findings", []) if rank.get(f.get("urgency",""), 0) >= threshold]
+        breach = [f for f in findings if rank.get(f.get("urgency",""), 0) >= threshold]
         if breach:
             print(f"::error::tf-analyze: {len(breach)} finding(s) at or above {fail_on} — failing the workflow", file=sys.stderr)
             sys.exit(1)
