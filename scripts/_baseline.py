@@ -264,6 +264,10 @@ def apply_baseline(
     (e.g. a security group moving from port 443 to 22) is retained: the
     baseline accepted the old risk, not the worse one.
 
+    A current finding is compared at its urgency before
+    ``--attack-graph`` moved it (``_urgency_before_graph``), so turning the
+    graph on, or the graph's view changing, does not un-suppress it.
+
     A baseline finding with no ``urgency`` (an old report, or a
     hand-written one) counts as its rule's catalogue default
     (`default_urgency`, rule id -> urgency), or as the lowest tier when
@@ -297,7 +301,11 @@ def _urgency_rank(finding: dict, defaults: dict[str, str] | None = None) -> int:
     report, or a finding not yet enriched) takes its rule's default from
     `defaults`, else the lowest tier (0): a missing urgency must never
     let a baseline entry hide a higher-urgency finding."""
-    urgency = finding.get("urgency") or (defaults or {}).get(finding.get("id"), "")
+    urgency = (
+        finding.get("_urgency_before_graph")
+        or finding.get("urgency")
+        or (defaults or {}).get(finding.get("id"), "")
+    )
     return _URGENCY_RANK.get(str(urgency).upper(), 0)
 
 

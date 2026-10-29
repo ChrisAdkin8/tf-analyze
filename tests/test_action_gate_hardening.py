@@ -38,6 +38,11 @@ resource "aws_db_instance" "db" {
 """
 
 
+# How GitHub runs a composite step with `shell: bash`: errexit and pipefail
+# on, so a bare failing command ends the step.
+GH_BASH = ("bash", "--noprofile", "--norc", "-eo", "pipefail", "-c")
+
+
 def _step(name: str) -> dict:
     return next(s for s in ACTION["runs"]["steps"] if s.get("name") == name)
 
@@ -58,7 +63,7 @@ def _gate(
     path = tmp_path / "report.json"
     path.write_text(report if isinstance(report, str) else json.dumps(report))
     return subprocess.run(
-        ["bash", "-c", _step("Apply fail-on threshold")["run"]],
+        [*GH_BASH, _step("Apply fail-on threshold")["run"]],
         env={**os.environ, "TFA_FAIL_ON": fail_on, "TFA_JSON_REPORT": str(path)},
         capture_output=True,
         text=True,
@@ -240,7 +245,7 @@ def _resolve_mode(
     gh_out = tmp_path / "gh_output"
     gh_out.write_text("")
     proc = subprocess.run(
-        ["bash", "-c", _step("Resolve mode")["run"]],
+        [*GH_BASH, _step("Resolve mode")["run"]],
         env={
             **os.environ,
             "TFA_MODE_IN": mode,
@@ -258,6 +263,19 @@ def _resolve_mode(
 def test_mode_trend_is_rejected_with_a_reason(tmp_path: Path) -> None:
     rc, stdout, _ = _resolve_mode(tmp_path, "trend")
     assert rc == 1 and "history report" in stdout
+
+
+def test_mode_pr_review_is_rejected_with_a_reason(tmp_path: Path) -> None:
+    # The container never gets a GITHUB_TOKEN, so the engine's pr-review
+    # always exited 2; the action posts the suggestions itself.
+    rc, stdout, _ = _resolve_mode(tmp_path, "pr-review")
+    assert rc == 1 and "post-pr-comment" in stdout
+
+
+def test_gate_fails_on_a_dict_with_no_findings(tmp_path: Path) -> None:
+    assert _gate(tmp_path, {"summary": {"score": 100}}).returncode == 1
+    assert _gate(tmp_path, {"error": "boom"}).returncode == 1
+    assert _gate(tmp_path, {"summary": {}, "findings": []}).returncode == 0
 
 
 def test_mode_plan_needs_plan_json_and_runs_static(tmp_path: Path) -> None:
@@ -314,7 +332,7 @@ def _args_step(tmp_path: Path, **env: str) -> list[str]:
         "TFA_TRUSTED_BASELINE": "",
         **env,
     }
-    subprocess.run(["bash", "-c", script], env=full, check=True, capture_output=True)
+    subprocess.run([*GH_BASH, script], env=full, check=True, capture_output=True)
     return args_file.read_text().splitlines()
 
 
@@ -454,7 +472,7 @@ def test_engine_accepts_every_flag_the_action_passes(tmp_path: Path) -> None:
         for a in detect._build_parser()._actions
         if "--mode" in a.option_strings
     )
-    for mode in ("static", "diff", "fleet", "pr-review"):
+    for mode in ("static", "diff", "fleet"):
         assert mode in mode_choices
 
 
@@ -513,7 +531,7 @@ def test_scan_writes_reports_outside_the_workspace(tmp_path: Path) -> None:
         .replace("/tmp/tf-analyze-base-args", str(args_file))
     )
     proc = subprocess.run(
-        ["bash", "-c", script],
+        [*GH_BASH, script],
         cwd=ws,
         env={
             **os.environ,
@@ -547,10 +565,104 @@ def test_scan_writes_reports_outside_the_workspace(tmp_path: Path) -> None:
     )
     # The gate reads it too, and fails on the CRITICAL.
     gate = subprocess.run(
-        ["bash", "-c", _step("Apply fail-on threshold")["run"]],
+        [*GH_BASH, _step("Apply fail-on threshold")["run"]],
         env={**os.environ, "TFA_FAIL_ON": "HIGH", "TFA_JSON_REPORT": str(report)},
         capture_output=True,
         text=True,
         check=False,
     )
     assert gate.returncode == 1
+
+
+def _run_scan_step(tmp_path: Path, docker_exit: int) -> tuple[subprocess.CompletedProcess, dict]:
+    """Run the scan step with a stub `docker` that writes a report and exits
+    `docker_exit`, under GitHub's `bash -eo pipefail`."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(
+        "#!/bin/sh\n"
+        'echo \'{"summary": {"score": 40, "grade": "D", "counts": {"CRITICAL": 1, "HIGH": 2}}, '
+        '"findings": [{"id": "X", "urgency": "CRITICAL"}]}\'\n'
+        "echo engine-trace >&2\n"
+        f"exit {docker_exit}\n"
+    )
+    docker.chmod(docker.stat().st_mode | stat.S_IXUSR)
+    args_file = tmp_path / "base-args"
+    args_file.write_text("--target\n/workspace/.\n")
+    runner_temp = tmp_path / "rt"
+    runner_temp.mkdir()
+    gh_out = tmp_path / "gh_output"
+    gh_out.write_text("")
+    script = (
+        _step("Run tf-analyze (JSON)")["run"]
+        .replace("${{ github.workspace }}", str(ws))
+        .replace("/tmp/tf-analyze-base-args", str(args_file))
+    )
+    proc = subprocess.run(
+        [*GH_BASH, script],
+        cwd=ws,
+        env={
+            **os.environ,
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "TFA_IMAGE": "img",
+            "TFA_TRUSTED_DIR": "",
+            "RUNNER_TEMP": str(runner_temp),
+            "GITHUB_OUTPUT": str(gh_out),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    outputs = dict(line.split("=", 1) for line in gh_out.read_text().splitlines())
+    return proc, outputs
+
+
+@pytest.mark.parametrize("docker_exit", [1, 2])
+def test_scan_step_survives_a_non_zero_engine_exit(tmp_path: Path, docker_exit: int) -> None:
+    # Exit 1 (findings, with --fail-on in extra-args) or 2 (a crash) used to
+    # end the step at the first `docker run` under `bash -e`: no other
+    # formats, no stderr in the log, no outputs.
+    proc, outputs = _run_scan_step(tmp_path, docker_exit)
+    assert proc.returncode == 0, proc.stderr
+    out_dir = Path(outputs["out-dir"])
+    for name in ("tf-analyze-findings.json", "tf-analyze.sarif",
+                 "tf-analyze-report.html", "tf-analyze-pr-summary.md"):
+        assert (out_dir / name).stat().st_size > 0, name
+    assert outputs["score"] == "40" and outputs["grade"] == "D"
+    assert outputs["total"] == "1"
+    assert outputs["critical"] == "1" and outputs["high"] == "2"
+    assert proc.stdout.count("engine-trace") == 4  # each format's stderr, shown
+    crashed = [ln for ln in proc.stdout.splitlines() if "scan crashed" in ln]
+    if docker_exit == 2:
+        assert len(crashed) == 4 and all(ln.startswith("::error::") for ln in crashed)
+    else:
+        assert crashed == []
+
+
+def test_graph_promotion_does_not_unsuppress_a_baselined_finding(tmp_path: Path) -> None:
+    # Terragoat with an urgency-less baseline taken without the graph: with
+    # --attack-graph on (the Action's default), every promoted finding used
+    # to count as new. Only real escalations may, and the same ones as
+    # without the graph.
+    target = REPO_ROOT / "examples" / "terragoat"
+    report = json.loads(_detect("--target", str(target), "--format", "json").stdout)
+    for f in report["findings"]:
+        f.pop("urgency", None)
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps(report))
+
+    def new(*extra: str) -> list[tuple[str, str]]:
+        proc = _detect("--target", str(target), "--format", "json",
+                       "--baseline", str(baseline), *extra)
+        data = json.loads(proc.stdout)
+        leaked = [f for f in data["findings"] + data.get("suppressed_by_baseline", [])
+                  if "_urgency_before_graph" in f]
+        assert not leaked
+        return sorted((f["id"], f.get("resource", "")) for f in data["findings"])
+
+    with_graph, without = new("--attack-graph"), new()
+    assert with_graph == without
+    assert len(with_graph) <= 3, with_graph  # the escalated ones only

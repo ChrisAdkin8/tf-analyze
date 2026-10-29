@@ -76,7 +76,8 @@ change them for those runs, edit the fallback after `||` in the file.
   HTML and `pr-summary` output are the real formats, over every
   target's findings. `mode: plan` is a static scan of the
   `plan-json` input (required). `mode: trend` is refused: it is a
-  history table with nothing to gate. The `section` input is passed as
+  history table with nothing to gate. `mode: pr-review` is refused too:
+  the action posts the inline suggestions itself (`post-pr-comment`). The `section` input is passed as
   `--focus`.
 - **`--attack-graph` only lowers what reachability decides.** A finding
   on a network resource the graph shows is not reachable from the
@@ -89,7 +90,10 @@ change them for those runs, edit the fallback after `||` in the file.
   own findings to it. If the base branch has no such file the scan runs
   with no baseline. A baseline entry without an `urgency` (an old report)
   counts as its rule's default urgency, so it can't hide a finding that
-  was escalated above that.
+  was escalated above that. Findings are matched at their urgency
+  before `--attack-graph` moved them. A baseline made earlier in the
+  job and not committed on the base branch is not used on PRs unless
+  `trust-pr-config: true`.
 - **Reports are written under `$RUNNER_TEMP`.** Both the composite
   action and this workflow template write their JSON, SARIF, HTML and
   PR-summary reports, and the engine's stderr, to a fresh `mktemp -d`

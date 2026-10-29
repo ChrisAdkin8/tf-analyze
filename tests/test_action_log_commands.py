@@ -38,7 +38,7 @@ def _print_loop() -> str:
 def _run(tmp_path: Path) -> list[str]:
     (tmp_path / "tf-analyze-json-stderr.txt").write_text(FORGED)
     proc = subprocess.run(
-        ["bash", "-c", _print_loop()],
+        ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", _print_loop()],
         cwd=tmp_path,
         env={"OUT": str(tmp_path), "PATH": "/usr/bin:/bin"},
         capture_output=True,

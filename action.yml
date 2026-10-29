@@ -14,7 +14,7 @@ inputs:
     description: 'Minimum urgency level that fails the action (CRITICAL, HIGH, MEDIUM, LOW, INFO).'
     default: 'HIGH'
   mode:
-    description: 'Execution mode (static, diff, plan, fleet, pr-review). Auto-selects "diff" on pull_request events when set to "auto". "plan" is a static scan plus the `plan-json` input (required). "fleet" scans every --target / --targets-file passed in `extra-args` as well as `target`. ("trend" is a history report with nothing to gate: run `detect.py --mode trend` directly.)'
+    description: 'Execution mode (static, diff, plan, fleet). Auto-selects "diff" on pull_request events when set to "auto". "plan" is a static scan plus the `plan-json` input (required). "fleet" scans every --target / --targets-file passed in `extra-args` as well as `target`. "trend" (a history report with nothing to gate) and "pr-review" (this action already posts the PR review comments, see `post-pr-comment`) are refused: run `detect.py --mode trend` / `--mode pr-review` directly.'
     default: 'auto'
   plan-json:
     description: 'Path, relative to the workspace, to `terraform show -json plan.tfplan` output. Passed as `--plan-json`; required by `mode: plan`, optional with the other modes.'
@@ -129,7 +129,7 @@ runs:
           fi
         fi
         case "$MODE" in
-          static|diff|fleet|pr-review) ;;
+          static|diff|fleet) ;;
           plan)
             if [ -z "${TFA_PLAN_JSON}" ]; then
               echo "::error::tf-analyze: mode 'plan' needs the 'plan-json' input (the output of 'terraform show -json plan.tfplan')"
@@ -141,8 +141,15 @@ runs:
             echo "::error::tf-analyze: mode 'trend' is a history report with no findings to gate; run 'detect.py --mode trend' outside this action"
             exit 1
             ;;
+          pr-review)
+            # The engine's pr-review posts with a GITHUB_TOKEN the container
+            # never gets, so it always exited 2. This action posts the same
+            # inline suggestions itself (post-pr-comment).
+            echo "::error::tf-analyze: mode 'pr-review' is not supported by this action; use mode 'diff' (or 'auto') with post-pr-comment: true, which posts the inline suggestions"
+            exit 1
+            ;;
           *)
-            echo "::error::tf-analyze: unknown mode '${MODE}' (static, diff, plan, fleet, pr-review, auto)"
+            echo "::error::tf-analyze: unknown mode '${MODE}' (static, diff, plan, fleet, auto)"
             exit 1
             ;;
         esac
@@ -457,11 +464,15 @@ runs:
         echo "pr-summary-path=${OUT}/tf-analyze-pr-summary.md" >> "$GITHUB_OUTPUT"
         run_scan() {
           local fmt="$1" out="$OUT/$2" err="$OUT/$3"
+          # GitHub runs `shell: bash` with -e: a bare non-zero `docker run`
+          # (exit 1 = findings under a --fail-on in extra-args, exit 2 = a
+          # crash) would end the step here, skipping the annotation, the
+          # other formats and the outputs. Catch the code instead.
+          local rc=0
           docker run --rm "${MOUNTS[@]}" \
             "${TFA_IMAGE}" \
             "${BASE_ARGS[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
-            > "$out" 2>"$err"
-          local rc=$?
+            > "$out" 2>"$err" || rc=$?
           if [ "$rc" -ge 2 ]; then
             echo "::error::tf-analyze: $fmt scan crashed (exit $rc). See $3 in the log below for the engine traceback."
           fi
@@ -810,7 +821,11 @@ runs:
         # raises here and fails the step: no report is not a pass.
         with open(os.environ["TFA_JSON_REPORT"]) as f:
             d = json.load(f)
-        if not isinstance(d, dict):
+        # Fail closed on anything that isn't a findings report (a trend
+        # table, an error object, a truncated write): it has nothing to pass.
+        if not isinstance(d, dict) or not (
+            isinstance(d.get("findings"), list) or isinstance(d.get("by_target"), dict)
+        ):
             print("::error::tf-analyze: the JSON report is not a findings report; nothing to gate.", file=sys.stderr)
             sys.exit(1)
         rank = {"CRITICAL":4,"HIGH":3,"MEDIUM":2,"LOW":1,"INFO":0}

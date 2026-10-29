@@ -556,6 +556,11 @@ def _apply_reachability_urgency(
             default in _URGENCY_TIERS and base in _URGENCY_TIERS
             and idx > _URGENCY_TIERS.index(default)
         )
+        # `--baseline` compares this, not the graph-adjusted urgency: a
+        # baseline accepts a finding's risk, and the graph's one-tier move
+        # is a ranking, not the finding getting worse. Stripped before
+        # output (detect.py).
+        f["_urgency_before_graph"] = base
         if resource and resource in critical_path_set:
             f["urgency"] = _URGENCY_TIERS[min(idx + 1, len(_URGENCY_TIERS) - 1)]
             f["on_critical_path"] = True

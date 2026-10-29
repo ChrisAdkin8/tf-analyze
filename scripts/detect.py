@@ -3937,6 +3937,9 @@ def _main():
                 file=sys.stderr,
             )
         findings = retained
+    # Internal to the baseline match above (see _apply_reachability_urgency).
+    for _f in (*findings, *suppressed_by_baseline):
+        _f.pop("_urgency_before_graph", None)
 
     # PR review mode — post inline comments and exit. After the baseline,
     # so a baselined finding is neither posted nor gated; it used to run
