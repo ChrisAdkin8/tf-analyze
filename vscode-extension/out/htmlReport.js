@@ -106,7 +106,7 @@ class HtmlReportPanel {
         const extraArgs = (0, engineRunner_1.engineExtraArgs)();
         const argv = ['--target', wsFolder, '--format', 'html'];
         if (section)
-            argv.push('--section', section);
+            argv.push('--focus', section);
         argv.push(...extraArgs);
         (0, engineRunner_1.runEngine)(absScript, argv, ({ err, stdout, stderr, cmdLine, timedOut }) => {
             // Same diagnostic shape as the attack-graph panel: exit 1 with

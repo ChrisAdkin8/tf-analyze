@@ -3654,6 +3654,17 @@ def _main():
             )
             sys.exit(2)
 
+    # --focus narrows a scan to one catalogue section, as it does for
+    # --list-rules. An unknown section is an error, not an empty pass.
+    if args.focus:
+        entries = [e for e in entries if e.get("section") == args.focus]
+        if not entries:
+            print(
+                f"ERROR: --focus {args.focus!r} matches no catalogue section",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
     # Fleet mode — scan multiple repos and cross-correlate
     if args.mode == "fleet":
         sys.exit(_mode_fleet(args, entries, _emit, _out_file))
