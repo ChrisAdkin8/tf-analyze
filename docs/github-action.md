@@ -114,6 +114,11 @@ change them for those runs, edit the fallback after `||` in the file.
   ignore is honoured (`inline_ignores_untrusted: true`, with a warning).
   The template needs an engine `ref` that has the flag; with an older
   one it warns and honours every inline ignore, as before.
+- **git only reads the checkout's own repository.** Both set `GIT_DIR` /
+  `GIT_WORK_TREE` to the checkout for the scan, and the engine refuses a
+  repository git finds anywhere else (such as a bare repository a PR
+  commits into the target, whose config could run commands): diff mode
+  then scans every file and no inline ignore is honoured.
 - **Reports are written under `$RUNNER_TEMP`.** Both the composite
   action and this workflow template write their JSON, SARIF, HTML and
   PR-summary reports, and the engine's stderr, to a fresh `mktemp -d`

@@ -646,3 +646,204 @@ def test_integration_workflow_passes_the_flag_on_prs_only() -> None:
     assert run[cond:].startswith('if [ "$TFA_EVENT" = "pull_request" ]')
     # Not via `${{ }}` in the script.
     assert "${{" not in run
+    # git is pinned to the checkout's own repository.
+    assert (
+        'export GIT_DIR="$GITHUB_WORKSPACE/.git" GIT_WORK_TREE="$GITHUB_WORKSPACE"'
+        in run
+    )
+
+
+def test_scan_step_pins_the_repository() -> None:
+    run = _step("Run tf-analyze (JSON)")["run"]
+    assert "-e GIT_DIR=/workspace/.git -e GIT_WORK_TREE=/workspace" in run
+
+
+# ---- a bare repository planted in the target is never used ---------------------
+
+
+def _planted(tmp_path: Path, *, pr_tf: str, planted_tf: str) -> tuple[Path, Path, Path]:
+    """A real repo whose `main` has `infra/main.tf` with no ignore, and a
+    PR working tree whose `infra/` holds `pr_tf` plus a *bare* repository
+    (HEAD, config, objects, refs: no `.git` path, so a PR can commit it).
+    The planted repo's `main` has `planted_tf` as `main.tf`, its work tree
+    is `infra/`, and its config runs a command through core.fsmonitor.
+    Returns (repo, infra, marker file the command would create)."""
+    repo = _repo(tmp_path, {"infra/main.tf": _sg("open")}, {"infra/main.tf": pr_tf})
+    infra = repo / "infra"
+    evil = tmp_path / "evil"
+    evil.mkdir()
+    _git(evil, "init", "-q", "-b", "main")
+    (evil / "main.tf").write_text(planted_tf)
+    _git(evil, "add", "-A")
+    _git(evil, "-c", "user.email=e@e", "-c", "user.name=e", "commit", "-q", "-m", "x")
+    bare = tmp_path / "evil.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(evil), str(bare)], check=True)
+    for item in bare.iterdir():
+        dest = infra / item.name
+        if item.is_dir():
+            import shutil
+
+            shutil.copytree(item, dest)
+        else:
+            dest.write_bytes(item.read_bytes())
+    marker = tmp_path / "PWNED"
+    cfg = infra / "config"
+    for key, value in (
+        ("core.bare", "false"),
+        ("core.worktree", str(infra)),
+        ("core.fsmonitor", f"touch '{marker}'; false"),
+    ):
+        subprocess.run(["git", "config", "--file", str(cfg), key, value], check=True)
+    # Sanity: plain git, run in the target, uses the planted repo and runs
+    # its command.
+    found = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel", "--absolute-git-dir"],
+        cwd=infra,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert [Path(x).resolve() for x in found.stdout.split()] == [infra.resolve()] * 2
+    subprocess.run(
+        ["git", "status", "--short"], cwd=infra, capture_output=True, check=False
+    )
+    assert marker.exists()
+    marker.unlink()
+    return repo, infra, marker
+
+
+def test_planted_bare_repo_is_not_a_trusted_base(tmp_path: Path) -> None:
+    repo, infra, marker = _planted(
+        tmp_path, pr_tf=_sg("open", "above"), planted_tf=_sg("open", "above")
+    )
+    proc, report = _scan(infra, "--fail-on", "CRITICAL")
+    assert _count(report) == 1
+    assert proc.returncode == 1
+    assert report["summary"]["inline_ignores_untrusted"] is True
+    assert not marker.exists()
+
+
+def test_planted_bare_repo_does_not_scope_diff_mode(tmp_path: Path) -> None:
+    # The planted repo's `main` equals the PR's file, so a diff against it
+    # would say nothing changed and scan nothing.
+    repo, infra, marker = _planted(tmp_path, pr_tf=_sg("open"), planted_tf=_sg("open"))
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(DETECT),
+            "--target",
+            str(infra),
+            "--format",
+            "json",
+            "--no-project-config",
+            "--mode",
+            "diff",
+            "--diff-base",
+            "main",
+            "--fail-on",
+            "CRITICAL",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    report = json.loads(proc.stdout)
+    assert _count(report) == 1
+    assert proc.returncode == 1
+    assert "scanning all files" in proc.stderr
+    assert not marker.exists()
+
+
+def test_pinned_repository_is_used_and_planted_one_ignored(tmp_path: Path) -> None:
+    # The real base has the ignore; the planted repo is bypassed by the pin.
+    repo, infra, marker = _planted(
+        tmp_path, pr_tf=_sg("open", "above"), planted_tf=_sg("open", "above")
+    )
+    _git(repo, "checkout", "-q", "main")
+    (infra / "main.tf").write_text(_sg("open", "above"))
+    _git(repo, "add", "infra/main.tf")
+    _git(
+        repo,
+        "-c",
+        "user.email=e@e",
+        "-c",
+        "user.name=e",
+        "commit",
+        "-q",
+        "-m",
+        "accept",
+    )
+    env = {**os.environ, "GIT_DIR": str(repo / ".git"), "GIT_WORK_TREE": str(repo)}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(DETECT),
+            "--target",
+            str(infra),
+            "--format",
+            "json",
+            "--no-project-config",
+            "--inline-ignores-from=main",
+            "--fail-on",
+            "CRITICAL",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    report = json.loads(proc.stdout)
+    assert _count(report) == 0, proc.stderr
+    assert proc.returncode == 0
+    assert "inline_ignores_untrusted" not in report["summary"]
+    assert not marker.exists()
+
+
+def test_a_pin_git_disagrees_with_fails_closed(tmp_path: Path) -> None:
+    repo = _repo(tmp_path, {"main.tf": _sg("open", "above")}, {})
+    env = {
+        **os.environ,
+        "GIT_DIR": str(tmp_path / "missing" / ".git"),
+        "GIT_WORK_TREE": str(repo),
+    }
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(DETECT),
+            "--target",
+            str(repo),
+            "--format",
+            "json",
+            "--no-project-config",
+            "--inline-ignores-from=main",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    report = json.loads(proc.stdout)
+    assert _count(report) == 1
+    assert report["summary"]["inline_ignores_untrusted"] is True
+
+
+def test_verified_work_tree_rejects_a_foreign_git_dir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from _diff import verified_work_tree
+
+    repo = _repo(tmp_path, {"main.tf": "\n"}, {})
+    monkeypatch.delenv("GIT_DIR", raising=False)
+    monkeypatch.delenv("GIT_WORK_TREE", raising=False)
+    root, err = verified_work_tree(repo)
+    assert root == repo.resolve() and err is None
+    # A pin naming another work tree than the one git reports.
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.setenv("GIT_DIR", str(repo / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(repo))
+    root, err = verified_work_tree(repo)
+    assert root == repo.resolve()
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    root, err = verified_work_tree(repo)
+    assert root is None and err

@@ -138,6 +138,11 @@ jobs:
         run: |
           # Without pipefail the gate's exit code is lost in `| tee` below.
           set -o pipefail
+          # Pin git to the checkout's own repository. The engine runs git in
+          # the scan target, and git would otherwise use a bare repository a
+          # PR planted there (its own "base" files, and config that can run
+          # commands).
+          export GIT_DIR="$GITHUB_WORKSPACE/.git" GIT_WORK_TREE="$GITHUB_WORKSPACE"
           MODE=static
           if [ "$TFA_EVENT" = "pull_request" ]; then
             MODE=diff

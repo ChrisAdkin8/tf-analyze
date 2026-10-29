@@ -23,11 +23,11 @@ Extracted from ``detect.py`` as the **sixteenth modularisation seam**.
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Callable
 
+from _diff import _run_git
 from _output import _md_code
 
 
@@ -167,12 +167,12 @@ def render_fleet_report(fleet_result: dict, fmt: str) -> str:
 
 def trend_get_commits(target: Path, lookback_days: int) -> list[tuple[str, str]]:
     """Return ``(sha, date)`` pairs for commits touching .tf files, oldest first."""
-    result = subprocess.run(
+    result = _run_git(
         ["git", "log", "--format=%H %as", f"--since={lookback_days} days ago",
          "--reverse", "--", "*.tf"],
-        capture_output=True, text=True, cwd=str(target),
+        target, text=True,
     )
-    if result.returncode != 0:
+    if result is None or result.returncode != 0:
         return []
     pairs: list[tuple[str, str]] = []
     for line in result.stdout.strip().splitlines():
@@ -184,10 +184,9 @@ def trend_get_commits(target: Path, lookback_days: int) -> list[tuple[str, str]]
 
 def trend_tf_files_at_sha(target: Path, sha: str) -> list[str]:
     """List .tf files tracked at a given commit SHA."""
-    result = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", sha],
-        capture_output=True, text=True, cwd=str(target),
-    )
+    result = _run_git(["git", "ls-tree", "-r", "--name-only", sha], target, text=True)
+    if result is None or result.returncode != 0:
+        return []
     return [p for p in result.stdout.strip().splitlines() if p.endswith(".tf")]
 
 
@@ -206,11 +205,8 @@ def trend_scan_at_sha(
     """
     findings_set: set[tuple[str, str, int]] = set()
     for rel_path in trend_tf_files_at_sha(target, sha):
-        show = subprocess.run(
-            ["git", "show", f"{sha}:{rel_path}"],
-            capture_output=True, text=True, cwd=str(target),
-        )
-        if show.returncode != 0:
+        show = _run_git(["git", "show", f"{sha}:{rel_path}"], target, text=True)
+        if show is None or show.returncode != 0:
             continue
         text = show.stdout
         fake_path = target / rel_path

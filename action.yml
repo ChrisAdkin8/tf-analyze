@@ -462,7 +462,12 @@ runs:
         # as uid 1001. On a runner whose checkout belongs to another uid, git
         # refuses a repository it doesn't own ("dubious ownership"); mark the
         # mount safe. Should git still fail, the engine fails closed.
-        GIT_ENV=(-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/workspace)
+        # Pin the repository to the checkout's own .git: git otherwise
+        # searches up from the scan target, where a PR could plant a bare
+        # repo (its own "base" blobs, and config that runs commands). The
+        # engine checks git agrees with the pin, else trusts nothing.
+        GIT_ENV=(-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/workspace
+                 -e GIT_DIR=/workspace/.git -e GIT_WORK_TREE=/workspace)
         BASE_ARGS=()
         while IFS= read -r line; do BASE_ARGS+=("$line"); done < /tmp/tf-analyze-base-args
         # Round-5 audit fix #12 — capture each scan's exit code

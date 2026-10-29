@@ -25,6 +25,22 @@
   checkout belongs to another user. The workflow template
   (`integrations/github-action.yml`) does the same on PRs when its engine
   `ref` has the flag, and warns when it doesn't.
+- **Security: git no longer uses a repository planted in the target**:
+  the engine runs git in the scan target, and git looks for its
+  repository from there. A PR could commit a bare repository (`HEAD`,
+  `config`, `objects/`, `refs/`; git forbids `.git` paths, not these)
+  into the target. `--mode diff` then diffed against the PR's own
+  planted "base" (scanning only what the PR chose), and the planted
+  `config` could run any command in the scanner through
+  `core.fsmonitor`. Every git call (diff mode, trend mode,
+  `--inline-ignores-from`, the symlink work-tree check) now runs with
+  `safe.bareRepository=explicit`, `core.fsmonitor=false` and no hooks,
+  and the engine uses a repository only if it is the work tree's own
+  `.git` (or what a `.git` file points at), or matches a
+  `GIT_DIR` / `GIT_WORK_TREE` pin. Otherwise diff mode scans every file
+  and `--inline-ignores-from` honours no inline ignores, with a `WARN`.
+  The Action and the workflow template pin `GIT_DIR` / `GIT_WORK_TREE`
+  to the checkout.
 - **Upgrade note**: on PRs, an inline ignore the PR adds no longer
   suppresses its finding until the PR is merged. Set
   `trust-pr-config: true` to honour the PR's own inline ignores as before.
