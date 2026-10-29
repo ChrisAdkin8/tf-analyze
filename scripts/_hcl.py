@@ -69,6 +69,7 @@ existing call sites and tests need no migration.
 from __future__ import annotations
 
 import bisect
+import codecs
 import functools
 import io
 import json
@@ -688,6 +689,9 @@ def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
 # Files already warned about as not UTF-8, so a file read twice (scan,
 # then tfvars / LSP) is reported once.
 _NON_UTF8_WARNED: set[str] = set()
+# UTF-32 first: its little-endian mark starts with UTF-16's.
+_WIDE_BOMS = (codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE,
+              codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)
 
 
 def _read_normalized(path: Path) -> str:
@@ -705,17 +709,30 @@ def _read_normalized(path: Path) -> str:
     UTF-8 (a Latin-1 ``é`` in a comment) used to be skipped whole, with
     every finding in it; each bad byte now becomes U+FFFD instead, which
     keeps line numbers, and a WARN names the file.
+
+    A UTF-16 / UTF-32 file (by its byte-order mark) or one holding NUL
+    bytes is not 8-bit text: replacing its bytes would leave nothing to
+    scan and report the file as clean. It still raises
+    ``UnicodeDecodeError``, so the caller lists it as unreadable (and a
+    ``--fail-on`` gate fails).
     """
     data = path.read_bytes()
+    if data.startswith(_WIDE_BOMS) or b"\x00" in data:
+        raise UnicodeDecodeError(
+            "utf-8", data, 0, 1,
+            "UTF-16 / UTF-32 or binary data (NUL bytes), not UTF-8 text",
+        )
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError as e:
         text = data.decode("utf-8-sig", errors="replace")
         if str(path) not in _NON_UTF8_WARNED:
             _NON_UTF8_WARNED.add(str(path))
+            # `e` indexes the bytes after a UTF-8 BOM the codec dropped.
+            bom = len(codecs.BOM_UTF8) if data.startswith(codecs.BOM_UTF8) else 0
             print(
-                f"WARN: {path}: not valid UTF-8 (byte 0x{data[e.start]:02x} "
-                f"at offset {e.start}); scanned with invalid bytes replaced",
+                f"WARN: {path}: not valid UTF-8 (byte 0x{e.object[e.start]:02x} "
+                f"at offset {e.start + bom}); scanned with invalid bytes replaced",
                 file=sys.stderr,
             )
     return text.replace("\r\n", "\n").replace("\r", "\n")

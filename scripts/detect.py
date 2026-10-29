@@ -206,20 +206,48 @@ COUNT_GUARD_RE = re.compile(r'\?|try\s*\(|length\s*\(|one\s*\(')
 
 
 def _git_work_tree(target: Path) -> str | None:
-    """Real path of the git work tree holding ``target``, as git itself
-    reports it (``git rev-parse --show-toplevel`` run in ``target``, via
-    `_diff._run_git`'s timeout), or None outside a repository or without
-    git. A stray ``.git`` entry in some parent folder is not taken for a
-    repository."""
-    from _diff import _run_git
+    """`_diff.git_work_tree` (kept under this name for callers/tests)."""
+    from _diff import git_work_tree
 
-    try:
-        res = _run_git(["git", "rev-parse", "--show-toplevel"], target, text=True)
-    except OSError:
-        return None
-    if res is None or res.returncode != 0 or not (res.stdout or "").strip():
-        return None
-    return str(Path(res.stdout.strip()).resolve())
+    return git_work_tree(target)
+
+
+def _target_tf_files(target: Path, ignore_paths: list, *,
+                     contain_symlinks: bool = False) -> list[Path]:
+    """The `.tf` / `.tf.json` files a scan of ``target`` reads: every mode
+    (static, fleet, verify-fixed) lists them here, so they can't diverge.
+
+    Symlinked folders are followed (`_diff.walk_tf_files`): a module
+    linked in as `net -> ../shared` is real Terraform, and was never
+    scanned. One that leaves the target is followed only within the
+    enclosing git work tree (the repo being scanned, never other files
+    on the machine), and never with ``contain_symlinks`` (fleet: targets
+    may be untrusted repos). A file symlink out is still always skipped
+    (`_path_is_ignored`). Every link not followed gets a WARN."""
+    from _diff import walk_tf_files
+
+    root = target.resolve()
+    skipped_links: list[Path] = []
+    linked: list[str] = []
+    files = [
+        p for p in walk_tf_files(target, contain=contain_symlinks,
+                                 skipped=skipped_links, followed=linked)
+        if ".terraform" not in p.parts
+        and not _path_is_ignored(p, target, ignore_paths, linked_roots=linked)
+        # fleet targets may be untrusted repos: never follow a symlink out
+        and (not contain_symlinks or p.resolve().is_relative_to(root))
+    ]
+    if skipped_links:
+        print(
+            f"WARN: not following {len(skipped_links)} symlinked folder(s) "
+            f"that point outside {target}"
+            f"{'' if contain_symlinks else ' and its git repository'}, "
+            f"or to a parent of it, or into .terraform / .git: "
+            f"{', '.join(map(str, skipped_links[:5]))}"
+            f"{', ...' if len(skipped_links) > 5 else ''}",
+            file=sys.stderr,
+        )
+    return files
 
 
 def _path_is_ignored(path: Path, target: Path, ignore_paths: list,
@@ -430,7 +458,7 @@ def _tfvars_values(directory: Path) -> dict[str, str]:
             if not path.is_file() or not path.resolve().is_relative_to(root):
                 continue
             text = _read_normalized(path)
-        except OSError:
+        except (OSError, UnicodeDecodeError):  # UTF-16 / binary: no values
             continue
         if name.endswith(".json"):
             try:
@@ -2243,11 +2271,7 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         return 2
     # Load corpus for re-probing
     _ignore_paths_vf = project_config.get("ignore_paths") or []
-    tf_files = [
-        p for p in tf_source_files(target)
-        if ".terraform" not in p.parts
-        and not _path_is_ignored(p, target, _ignore_paths_vf)
-    ]
+    tf_files = _target_tf_files(target, _ignore_paths_vf)
     all_text = {}
     unreadable_files: list[str] = []
     for fp in tf_files:
@@ -2604,36 +2628,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
             )
 
     _ignore_paths = project_config.get("ignore_paths") or []
-    _root = target.resolve()
-    # Symlinked folders are followed: a module linked in as `net ->
-    # ../shared` is real Terraform, and was never scanned. One that leaves
-    # the target is followed only within the enclosing git work tree (the
-    # repo being scanned, never other files on the machine), and never in
-    # fleet mode, where targets may be untrusted repos. A file symlink out
-    # is still always skipped (`_path_is_ignored`).
-    _skipped_links: list[Path] = []
-    _linked: list[str] = []
-    tf_files = [
-        p for p in tf_source_files(
-            target,
-            follow_within=None if contain_symlinks else _git_work_tree(target),
-            skipped=_skipped_links, followed=_linked,
-        )
-        if ".terraform" not in p.parts
-        and not _path_is_ignored(p, target, _ignore_paths, linked_roots=_linked)
-        # fleet targets may be untrusted repos: never follow a symlink out
-        and (not contain_symlinks or p.resolve().is_relative_to(_root))
-    ]
-    if _skipped_links:
-        print(
-            f"WARN: not following {len(_skipped_links)} symlinked folder(s) "
-            f"that point outside {target}"
-            f"{'' if contain_symlinks else ' and its git repository'}, "
-            f"or to a parent of it: "
-            f"{', '.join(map(str, _skipped_links[:5]))}"
-            f"{', ...' if len(_skipped_links) > 5 else ''}",
-            file=sys.stderr,
-        )
+    tf_files = _target_tf_files(target, _ignore_paths, contain_symlinks=contain_symlinks)
     if not tf_files:
         # A gated scan that checked no Terraform is a misconfigured CI job
         # (wrong folder, or ignore_paths excluding everything), not a pass:

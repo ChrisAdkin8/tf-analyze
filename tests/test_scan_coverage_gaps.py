@@ -400,3 +400,155 @@ def test_trailing_ignore_does_not_hide_the_next_line(tmp_path) -> None:
     proc = _scan(tmp_path)
     main = str(tmp_path / "main.tf")
     assert _hits(proc, SG_RULE) == [(main, 1), (main, 10)], proc.stderr
+
+
+# ---- review round 2 ---------------------------------------------------------
+
+
+@needs_symlinks
+def test_verify_fixed_lists_files_like_the_scan(tmp_path) -> None:
+    # It used its own walk, didn't follow the link, and called the
+    # unchanged finding in net/main.tf RESOLVED.
+    root = _linked_repo(tmp_path)
+    _git(tmp_path, "init", "-q")
+    report = tmp_path / "report.json"
+    report.write_text(_scan(root).stdout)
+    proc = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "detect.py"), "--target", str(root),
+         "--mode", "verify-fixed", "--prior-report", str(report), "--format", "json"],
+        capture_output=True, text=True, check=False,
+    )
+    res = json.loads(proc.stdout)["results"]
+    still = {(f["id"], f["file"]) for f in res.get("STILL-PRESENT", [])}
+    assert (SG_RULE, str(root / "net" / "main.tf")) in still, proc.stderr
+
+
+def _commit_all(repo: Path, msg: str) -> None:
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "add", "-A")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-qm", msg)
+
+
+@needs_symlinks
+def test_diff_mode_sees_a_change_in_a_linked_module(tmp_path) -> None:
+    root = _linked_repo(tmp_path)
+    (tmp_path / "shared" / "main.tf").write_text("locals {}\n")
+    _git(tmp_path, "init", "-q", "-b", "main")
+    _commit_all(tmp_path, "base")
+    _git(tmp_path, "switch", "-qc", "feat")
+    (tmp_path / "shared" / "main.tf").write_text(SG)
+    _commit_all(tmp_path, "open")
+    assert (tmp_path / "shared" / "main.tf").resolve() in _diff.get_diff_files(root, "main")
+    proc = _scan(root, "--mode", "diff", "--diff-base", "main")
+    assert _hits(proc, SG_RULE) == [(str(root / "net" / "main.tf"), 1)], proc.stderr
+
+
+@needs_symlinks
+def test_links_into_terraform_cache_are_not_followed(tmp_path) -> None:
+    cache = tmp_path / ".terraform" / "modules" / "vpc"
+    cache.mkdir(parents=True)
+    (cache / "main.tf").write_text("locals {}\n")
+    (tmp_path / "main.tf").write_text("locals {}\n")
+    os.symlink(".terraform/modules", tmp_path / "mods")
+    skipped: list = []
+    assert _tfjson.tf_source_files(tmp_path, skipped=skipped) == [tmp_path / "main.tf"]
+    assert skipped == [tmp_path / "mods"]
+
+
+def test_only_module_block_sources_are_module_calls() -> None:
+    text = (
+        '/*\nmodule "old" {\n  source = "../a"\n}\n*/\n'
+        '# source = "../b"\n'
+        'resource "null_resource" "x" {\n'
+        '  provisioner "file" {\n    source      = "../c"\n    destination = "/tmp"\n  }\n'
+        '  user_data = <<EOT\nmodule "h" {\n  source = "../d"\n}\nEOT\n'
+        "}\n"
+        'module "real" {\n'
+        '  tags = { source = "../e" }\n'
+        '  source = "./modules/f"\n'
+        "}\n"
+    )
+    assert _diff.local_module_sources(Path("/r/main.tf"), text) == [
+        Path("/r/modules/f")
+    ]
+
+
+def test_provisioner_source_does_not_make_a_caller(tmp_path) -> None:
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    (legacy / "main.tf").write_text(
+        _pin("~> 2.99") + 'resource "null_resource" "x" {\n'
+        '  provisioner "file" {\n    source      = "../shared"\n'
+        '    destination = "/tmp/shared"\n  }\n}\n'
+    )
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / "main.tf").write_text(AKS)
+    proc = _scan(tmp_path)
+    assert _hits(proc, AKS_RULE) == [(str(tmp_path / "shared" / "main.tf"), 1)], proc.stderr
+
+
+def test_too_many_alternatives_means_ungated() -> None:
+    callers = {f"/r/e{i:02d}" for i in range(70)}
+    own = {c: ({}, f"< 1.9, != 1.0.{i}") for i, c in enumerate(sorted(callers))}
+    own["/r/e00"] = ({}, ">= 1.10")  # the one caller that allows the rule
+    got = _versions._effective_constraints(own, {"/r/shared": callers}, ["/r/shared"], "/r")
+    assert got["/r/shared"] == [({}, "")]
+
+
+def test_utf16_and_binary_files_stay_unreadable(tmp_path) -> None:
+    bucket = 'resource "aws_s3_bucket" "b" {\n  acl = "public-read"\n}\n'
+    for name, data in (
+        ("utf16", bucket.encode("utf-16")),  # with its BOM
+        ("nul", b"locals {}\n\x00\x01\x02"),
+    ):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "main.tf").write_bytes(data)
+        proc = _scan(d, "--fail-on", "HIGH")
+        assert proc.returncode == 1, proc.stderr
+        assert json.loads(proc.stdout)["summary"]["unreadable_files"] == [str(d / "main.tf")]
+
+
+def test_non_utf8_warning_offset_counts_the_bom(tmp_path, capsys) -> None:
+    p = tmp_path / "bom.tf"
+    p.write_bytes(b"\xef\xbb\xbf# caf\xe9\n")
+    detect._read_normalized(p)
+    assert "byte 0xe9 at offset 8" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("constraint", "minimum", "allowed"),
+    [
+        ("5.31.0", "5.0", True),  # bare exact pin above the minimum
+        ("= 5.31.0", "5.0", True),
+        ("= 4.9.0", "5.0", False),
+        ("5.0.0", "5.0", True),
+        ("1.11.0", "1.10", True),
+        ("v1.11.0", "1.10", True),
+        ("= 5.0.0-beta1", "5.0", True),  # pre-release compared by its numbers
+        ("!= 5.0.0", "5.0", True),
+        ("= 5.0.0, != 5.0.0", "5.0", False),
+        ("= 5.1, = 5.2", "5.0", False),
+        ("> 5.0", "5.0", True),
+        ("> 4.0", "5.0", True),
+        (">= 4.0", "5.0", True),
+        ("< 5.0", "5.0", False),
+        ("< 5.0.1", "5.0", True),
+        ("<= 5.0", "5.0", True),
+        ("<= 4.99", "5.0", False),
+        (">= 5.0, <= 5.0", "5.0", True),
+        (">= 5.0, <= 5.0, != 5.0.0", "5.0", False),
+        ("~> 5.40", "5.0", True),
+        ("~> 4.50", "5.0", False),
+        ("~> 4.50.1", "4.51", False),  # 3 parts: < 4.51.0
+        ("~> 4.50.1", "4.50", True),
+        ("~> 3", "3.0", True),
+        ("~> 3", "4.0", False),
+        (">= 1.5.0, < 1.10", "1.10", False),
+        (">= 1.5.0, < 1.11", "1.10", True),
+        ("< 1.9, != 1.0.3", "1.10", False),
+        ("garbage", "5.0", True),
+        ("", "5.0", True),
+    ],
+)
+def test_constraint_allows_table(constraint: str, minimum: str, allowed: bool) -> None:
+    assert _versions._provider_constraint_allows(constraint, minimum) is allowed

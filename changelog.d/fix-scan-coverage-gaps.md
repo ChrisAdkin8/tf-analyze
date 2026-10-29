@@ -5,17 +5,25 @@
   lost. Files are now read as UTF-8 on every platform (Windows used the
   locale's codec and could break valid UTF-8 too), a byte-order mark is
   dropped, and a bad byte is replaced: the file is scanned, line numbers
-  hold, and a `WARN` names it. Plan / state JSON, baselines, ignore files
-  and config are read as UTF-8 too.
+  hold, and a `WARN` names it. A UTF-16 / UTF-32 file or one with NUL
+  bytes is still unreadable (and fails a `--fail-on` gate). Plan / state
+  JSON, baselines, ignore files and config are read as UTF-8 too.
 - **Commented-out version pins**: a `# azurerm = { version = "~> 2.99" }`
   or a `/* terraform { ... } */` block was read as the real pin and
   switched `applies_when` rules off. Comments and heredocs are skipped.
+- **Exact version pins**: `version = "5.31.0"` (or `= 5.31.0`, or
+  `required_version = "1.11.0"`) was read as "the pin must equal the
+  rule's minimum", so an exact pin switched off every rule with a lower
+  minimum. All clauses of a constraint are now intersected and the rule
+  runs when that range reaches its minimum.
 - **Version pins are per module**: every folder's `required_providers`
   were merged into one pin for the whole tree, so a `modules/legacy`
   pinning an old provider switched rules off for the root module too.
   Each folder is now gated by its own pin combined with the pins of the
   modules that call it (a child runs under its caller's providers); with
   several callers, a rule is skipped only if every caller rules it out.
+  Only a `source` argument of a `module` block counts as a call (not one
+  in a comment, a heredoc or a `provisioner "file"`).
   A folder no one calls and with no pin uses its nearest pinned parent
   folder's pin, else it is not gated. stderr reports rules skipped
   everywhere and rules skipped in some folders.
@@ -23,7 +31,11 @@
   was never scanned. Symlinked folders are now followed (each real
   folder once, loop-safe). One that leaves the target is followed only
   inside the same git repository, never in fleet mode, and never to a
-  parent of the target; a link not followed gets a `WARN`.
+  parent of the target or into `.terraform` / `.git`; a link not
+  followed gets a `WARN`. `--mode verify-fixed` lists files the same
+  way, and `--mode diff` sees changes inside a linked module.
+  `--apply-fixes` never writes to a file outside the target, and SARIF
+  reports a linked file at its real path in the repository.
 - **`--mode diff` and module callers**: a change to a local child module
   (say an output) now also re-scans the folders that call it.
 - **Inline ignore scope**: a trailing `key = "x" # tf-analyze:ignore ID`

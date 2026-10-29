@@ -395,8 +395,8 @@ def tf_source_files(root: Path, *, follow_within: str | None = None,
     Which links are followed: one resolving inside `root`; one resolving
     outside it only when it stays inside `follow_within` (the scan
     passes the enclosing git work tree, so a module shared within the
-    repo is scanned but nothing else on the machine is) and not inside a
-    `.git` folder. A link to `root` or one of its parents (`up -> ..`,
+    repo is scanned but nothing else on the machine is). Never one into
+    a `.terraform` or `.git` folder, inside `root` or out. A link to `root` or one of its parents (`up -> ..`,
     `/`) never is. Links not followed are appended to `skipped`; the
     real paths of followed links that leave `root`, to `followed`.
     """
@@ -411,10 +411,11 @@ def tf_source_files(root: Path, *, follow_within: str | None = None,
         if _within(real_root, real):  # root itself or above it
             return False
         if _within(real, real_root):
-            return True
+            # e.g. `mods -> .terraform/modules`: never walked directly
+            return not _SKIP_DIRS & set(Path(real).relative_to(real_root).parts)
         if follow_within is None or not _within(real, follow_within):
             return False
-        if ".git" in Path(real).parts:
+        if _SKIP_DIRS & set(Path(real).relative_to(follow_within).parts):
             return False
         if followed is not None:
             followed.append(real)
