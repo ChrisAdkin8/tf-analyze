@@ -174,7 +174,10 @@ def _tf_text(fp: Path) -> str | None:
         return None
 
 
-_MODULE_BLOCK_RE = re.compile(r'(?m)^[ \t]*module[ \t]+"[^"\n]*"[ \t]*\{')
+# The label may be quoted or bare: `module a { ... }` is valid HCL too.
+_MODULE_BLOCK_RE = re.compile(
+    r'(?m)^[ \t]*module[ \t]+(?:"[^"\n]*"|[A-Za-z_][\w-]*)[ \t]*\{'
+)
 _SOURCE_ATTR_RE = re.compile(r'(?m)^[ \t]*source[ \t]*=[ \t]*"(\.\.?/[^"\n]*)"')
 
 

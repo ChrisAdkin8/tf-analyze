@@ -498,7 +498,8 @@ def test_utf16_and_binary_files_stay_unreadable(tmp_path) -> None:
     bucket = 'resource "aws_s3_bucket" "b" {\n  acl = "public-read"\n}\n'
     for name, data in (
         ("utf16", bucket.encode("utf-16")),  # with its BOM
-        ("nul", b"locals {}\n\x00\x01\x02"),
+        ("utf16_no_bom", bucket.encode("utf-16-le")),
+        ("binary", b"\x7fELF\x02\x01\x01" + b"\x00" * 64 + b"locals {}\n"),
     ):
         d = tmp_path / name
         d.mkdir()
@@ -506,6 +507,26 @@ def test_utf16_and_binary_files_stay_unreadable(tmp_path) -> None:
         proc = _scan(d, "--fail-on", "HIGH")
         assert proc.returncode == 1, proc.stderr
         assert json.loads(proc.stdout)["summary"]["unreadable_files"] == [str(d / "main.tf")]
+
+
+def test_a_stray_nul_in_a_comment_is_still_scanned(tmp_path) -> None:
+    # NUL is valid UTF-8; main scanned such a file, so it must not become
+    # "unreadable" and fail the gate.
+    (tmp_path / "main.tf").write_bytes(
+        b"# note \x00 here\n"
+        b'resource "aws_s3_bucket_acl" "b" {\n  bucket = "b"\n  acl = "public-read"\n}\n'
+    )
+    proc = _scan(tmp_path)
+    report = json.loads(proc.stdout)
+    assert report["summary"].get("unreadable_files", []) == [], proc.stderr
+    assert report["findings"], proc.stderr
+
+
+def test_a_bare_module_label_is_a_module_call() -> None:
+    text = 'module a {\n  source = "./m"\n}\nmodule "b" {\n  source = "./n"\n}\n'
+    assert _diff.local_module_sources(Path("/r/main.tf"), text) == [
+        Path("/r/m"), Path("/r/n")
+    ]
 
 
 def test_non_utf8_warning_offset_counts_the_bom(tmp_path, capsys) -> None:

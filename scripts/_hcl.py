@@ -690,6 +690,9 @@ def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
 # then tfvars / LSP) is reported once.
 _NON_UTF8_WARNED: set[str] = set()
 # UTF-32 first: its little-endian mark starts with UTF-16's.
+# More than one byte in this many being NUL marks UTF-16 without a BOM,
+# or binary data, rather than a stray NUL in a comment.
+_NUL_SHARE = 8
 _WIDE_BOMS = (codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE,
               codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)
 
@@ -710,16 +713,20 @@ def _read_normalized(path: Path) -> str:
     every finding in it; each bad byte now becomes U+FFFD instead, which
     keeps line numbers, and a WARN names the file.
 
-    A UTF-16 / UTF-32 file (by its byte-order mark) or one holding NUL
-    bytes is not 8-bit text: replacing its bytes would leave nothing to
-    scan and report the file as clean. It still raises
-    ``UnicodeDecodeError``, so the caller lists it as unreadable (and a
-    ``--fail-on`` gate fails).
+    A UTF-16 / UTF-32 file (by its byte-order mark, or without one, by
+    its NUL bytes) or a binary file is not 8-bit text: replacing its
+    bytes would leave nothing to scan and report the file as clean. It
+    still raises ``UnicodeDecodeError``, so the caller lists it as
+    unreadable (and a ``--fail-on`` gate fails). A stray NUL in an
+    otherwise UTF-8 file (NUL is valid UTF-8) is scanned as before.
     """
     data = path.read_bytes()
-    if data.startswith(_WIDE_BOMS) or b"\x00" in data:
+    nul = data.find(b"\x00")
+    if data.startswith(_WIDE_BOMS) or (
+        nul >= 0 and data.count(b"\x00") * _NUL_SHARE > len(data)
+    ):
         raise UnicodeDecodeError(
-            "utf-8", data, 0, 1,
+            "utf-8", data, max(nul, 0), max(nul, 0) + 1,
             "UTF-16 / UTF-32 or binary data (NUL bytes), not UTF-8 text",
         )
     try:
