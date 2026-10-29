@@ -497,7 +497,7 @@ function buildArgs(target: string): string[] {
   // R30.18 panels render empty. See engineSmoke.test.ts for the guard.
   const args = ["--target", target, "--format", "json", "--attack-graph"];
   const section: string = cfg.get("section") ?? "";
-  if (section) args.push("--section", section);
+  if (section) args.push("--focus", section);
   // Auto-pin a baseline file if one exists at the workspace root.
   // The engine will then suppress matching findings — this is the
   // sole consumer surface for the baseline UI's writes.

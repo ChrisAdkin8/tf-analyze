@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **The `section` setting no longer stops every scan.** With
+  `tf-analyze.section` set, the extension passed `--section` to the
+  engine, a flag it doesn't have, so the scan and the report panel failed
+  with a usage error and showed nothing. Both now pass `--focus`, and the
+  engine uses it to show only that section's findings.
+
 ## [0.1.59] — 2026-10-28
 
 ### Security

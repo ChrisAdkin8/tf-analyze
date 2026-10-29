@@ -86,7 +86,7 @@ export class HtmlReportPanel {
     const section = (cfg.get<string>('section') ?? '').trim();
     const extraArgs = engineExtraArgs();
     const argv = ['--target', wsFolder, '--format', 'html'];
-    if (section) argv.push('--section', section);
+    if (section) argv.push('--focus', section);
     argv.push(...extraArgs);
 
     runEngine(absScript, argv, ({ err, stdout, stderr, cmdLine, timedOut }) => {
