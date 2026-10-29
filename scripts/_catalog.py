@@ -640,7 +640,7 @@ def _load_project_config(target: Path) -> dict:
     if not cfg_path.exists():
         return {}
     try:
-        return load_yaml(cfg_path.read_text()) or {}
+        return load_yaml(cfg_path.read_text(encoding="utf-8-sig")) or {}
     except Exception as e:
         print(f"WARN: cannot parse {cfg_path}: {e}", file=sys.stderr)
         return {}
@@ -710,7 +710,7 @@ def load_catalog(
     error_count = 0
     for yml in sorted(catalog_dir.glob("*.yaml")):
         try:
-            data = load_yaml(yml.read_text())
+            data = load_yaml(yml.read_text(encoding="utf-8-sig"))
         except Exception as e:
             print(f"ERROR: cannot parse {yml}: {e}", file=sys.stderr)
             error_count += 1
@@ -747,7 +747,7 @@ def load_catalog(
         custom_dead = 0
         for yml in sorted(Path(extra_rules_dir).glob("*.yaml")):
             try:
-                data = load_yaml(yml.read_text())
+                data = load_yaml(yml.read_text(encoding="utf-8-sig"))
             except Exception as e:
                 print(f"ERROR: cannot parse custom rule {yml}: {e}", file=sys.stderr)
                 continue

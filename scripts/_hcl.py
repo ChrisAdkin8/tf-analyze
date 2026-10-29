@@ -69,6 +69,7 @@ existing call sites and tests need no migration.
 from __future__ import annotations
 
 import bisect
+import codecs
 import functools
 import io
 import json
@@ -685,6 +686,17 @@ def resource_has_path(blk: dict, path: str, *, every: bool = True) -> bool:
 
 # ---- Text normalisation -------------------------------------------------
 
+# Files already warned about as not UTF-8, so a file read twice (scan,
+# then tfvars / LSP) is reported once.
+_NON_UTF8_WARNED: set[str] = set()
+# UTF-32 first: its little-endian mark starts with UTF-16's.
+# More than one byte in this many being NUL marks UTF-16 without a BOM,
+# or binary data, rather than a stray NUL in a comment.
+_NUL_SHARE = 8
+_WIDE_BOMS = (codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE,
+              codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)
+
+
 def _read_normalized(path: Path) -> str:
     """Read a text file and normalize line endings to LF.
 
@@ -693,8 +705,44 @@ def _read_normalized(path: Path) -> str:
     `\\r` carried position offset from the disk byte stream made line
     numbers in findings drift on Windows-edited code. The fix is cheap
     and the substring searches are unaffected.
+
+    Terraform reads its files as UTF-8, so this does too, whatever the
+    locale (Windows' cp1252 used to garble or reject valid UTF-8). A
+    UTF-8 byte-order mark is dropped. A file with bytes that are not
+    UTF-8 (a Latin-1 ``é`` in a comment) used to be skipped whole, with
+    every finding in it; each bad byte now becomes U+FFFD instead, which
+    keeps line numbers, and a WARN names the file.
+
+    A UTF-16 / UTF-32 file (by its byte-order mark, or without one, by
+    its NUL bytes) or a binary file is not 8-bit text: replacing its
+    bytes would leave nothing to scan and report the file as clean. It
+    still raises ``UnicodeDecodeError``, so the caller lists it as
+    unreadable (and a ``--fail-on`` gate fails). A stray NUL in an
+    otherwise UTF-8 file (NUL is valid UTF-8) is scanned as before.
     """
-    return path.read_text().replace("\r\n", "\n").replace("\r", "\n")
+    data = path.read_bytes()
+    nul = data.find(b"\x00")
+    if data.startswith(_WIDE_BOMS) or (
+        nul >= 0 and data.count(b"\x00") * _NUL_SHARE > len(data)
+    ):
+        raise UnicodeDecodeError(
+            "utf-8", data, max(nul, 0), max(nul, 0) + 1,
+            "UTF-16 / UTF-32 or binary data (NUL bytes), not UTF-8 text",
+        )
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        text = data.decode("utf-8-sig", errors="replace")
+        if str(path) not in _NON_UTF8_WARNED:
+            _NON_UTF8_WARNED.add(str(path))
+            # `e` indexes the bytes after a UTF-8 BOM the codec dropped.
+            bom = len(codecs.BOM_UTF8) if data.startswith(codecs.BOM_UTF8) else 0
+            print(
+                f"WARN: {path}: not valid UTF-8 (byte 0x{e.object[e.start]:02x} "
+                f"at offset {e.start + bom}); scanned with invalid bytes replaced",
+                file=sys.stderr,
+            )
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _parse_scalar(v: str):

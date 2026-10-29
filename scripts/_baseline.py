@@ -61,7 +61,7 @@ def load_suppressions(
             return active, expired
 
     try:
-        data = load_yaml(ignore_file.read_text())
+        data = load_yaml(ignore_file.read_text(encoding="utf-8-sig"))
         for item in data.get("suppressions") or []:
             sid = item.get("id", "")
             if not sid:
@@ -102,19 +102,36 @@ def load_inline_suppressions(
     text: str,
     *,
     inline_ignore_re: re.Pattern,
+    source: str | None = None,
 ) -> dict[int, set[str]]:
     """Find ``# tf-analyze:ignore <ID>`` comments and return ``line → {ids}``.
 
-    Each ID suppresses both the line the comment is on *and* the
-    next line — so the comment can sit above a block that the next
-    line opens.
+    Each ID suppresses the line the comment is on. A comment on a line of
+    its own also suppresses the next line, so it can sit above the block
+    or argument it silences. A comment after code on the same line
+    (``key = "x" # tf-analyze:ignore ID``) covers only that line: it used
+    to cover the next line too, silencing a finding there that nobody
+    marked.
+
+    ``source`` is the file's text when ``text`` is a comments-only copy
+    of it (everything else blanked, columns kept): the code before a
+    comment is read from it. Without it, ``text`` is the source itself.
     """
+    src_lines = source.split("\n") if source is not None else None
     result: dict[int, set[str]] = {}
-    for i, line in enumerate(text.splitlines(), 1):
+    for i, line in enumerate(text.split("\n"), 1):
         m = inline_ignore_re.search(line)
         if m:
             result.setdefault(i, set()).add(m.group(1))
-            result.setdefault(i + 1, set()).add(m.group(1))
+            if src_lines is not None and i <= len(src_lines):
+                # Masked: the line's first comment starts at its first
+                # non-blank column; anything before that is code.
+                start = len(line) - len(line.lstrip())
+                before = src_lines[i - 1][:start]
+            else:
+                before = line[:m.start()]
+            if not before.strip():
+                result.setdefault(i + 1, set()).add(m.group(1))
     return result
 
 
@@ -178,7 +195,7 @@ def _load_report(path: Path, what: str) -> tuple[list[dict], Path | None] | None
     list); `target` is the scan target the report recorded, if any.
     None — with a stderr warning — when the file cannot be read."""
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception as e:
         print(f"WARN: cannot load {what} {path}: {e}", file=sys.stderr)
         return None

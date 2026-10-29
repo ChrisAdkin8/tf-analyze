@@ -122,7 +122,7 @@ def load_scan_cache(cache_path: Path) -> dict | None:
     overwrites a stale schema.
     """
     try:
-        with open(cache_path) as f:
+        with open(cache_path, encoding="utf-8") as f:
             data = json.load(f)
         if data.get("version") != CACHE_FORMAT_VERSION:
             return None
@@ -150,7 +150,7 @@ def save_scan_cache(
     try:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
-            "w", dir=cache_path.parent, prefix=".tf-analyze-cache-",
+            "w", encoding="utf-8", dir=cache_path.parent, prefix=".tf-analyze-cache-",
             suffix=".tmp", delete=False,
         ) as f:
             tmp_name = f.name

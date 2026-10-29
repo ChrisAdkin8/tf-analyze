@@ -392,7 +392,7 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
     # message as one running it on a corrupted JSON, with no signal
     # that the file simply wasn't there.
     try:
-        text = plan_json_path.read_text()
+        text = plan_json_path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         raise PlanInputError(
             f"plan JSON not found: {plan_json_path}. "
@@ -402,6 +402,8 @@ def detect_in_plan(plan_json_path: Path, entries: list[dict]) -> list[dict]:
         raise PlanInputError(
             f"cannot read plan JSON {plan_json_path} (OS error): {e}"
         )
+    except UnicodeDecodeError as e:
+        raise PlanInputError(f"plan JSON {plan_json_path} is not UTF-8: {e}")
     try:
         plan = json.loads(text)
     except json.JSONDecodeError as e:
@@ -441,7 +443,7 @@ def detect_in_state(state_json_path: Path, entries: list[dict]) -> list[dict]:
     """
     # Round-5 audit fix #7 — same split as `detect_in_plan` above.
     try:
-        text = state_json_path.read_text()
+        text = state_json_path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         raise PlanInputError(
             f"state JSON not found: {state_json_path}. "
@@ -451,6 +453,8 @@ def detect_in_state(state_json_path: Path, entries: list[dict]) -> list[dict]:
         raise PlanInputError(
             f"cannot read state JSON {state_json_path} (OS error): {e}"
         )
+    except UnicodeDecodeError as e:
+        raise PlanInputError(f"state JSON {state_json_path} is not UTF-8: {e}")
     try:
         state = json.loads(text)
     except json.JSONDecodeError as e:

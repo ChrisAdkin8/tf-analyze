@@ -60,7 +60,7 @@ def parse_markdown_report(path: Path) -> list[dict]:
     via section-heading tracking so a re-probe doesn't re-flag what
     the previous report already marked resolved.
     """
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
     rows: list[dict] = []
     current_section = ""
     in_resolved = False
@@ -99,7 +99,7 @@ def parse_prior_report(path: Path) -> list[dict]:
     parsed to zero findings and verification "passed". A report in a
     format with no finding rows to read (SARIF, HTML) raises ValueError.
     """
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
     try:
         data = json.loads(text)
     except ValueError:

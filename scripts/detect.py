@@ -100,6 +100,8 @@ from _versions import (
     _provider_constraint_allows,
     _extract_provider_constraints,
     _extract_terraform_version,
+    _constraints_by_dir,
+    _effective_constraints,
     _entry_applies_to_providers,
 )
 
@@ -196,16 +198,64 @@ FOREACH_ATTR_RE = re.compile(r'(?m)^\s*for_each\s*=')
 VALIDATION_BLOCK_RE = re.compile(r'(?m)^\s*validation\s*\{')
 VAR_REF_RE = re.compile(r'\bvar\.([\w-]+)\b')
 MODULE_REF_RE = re.compile(r'\bmodule\.([\w-]+)\.([\w-]+)')
-INLINE_IGNORE_RE = re.compile(r'#\s*tf-analyze:ignore\s+([\w-]+)')
+INLINE_IGNORE_RE = re.compile(r'(?:#|//)\s*tf-analyze:ignore\s+([\w-]+)')
 BOOL_COUNT_RE = re.compile(
     r'^\s*count\s*=\s*.*\?\s*1\s*:\s*0\s*$', re.MULTILINE
 )
 COUNT_GUARD_RE = re.compile(r'\?|try\s*\(|length\s*\(|one\s*\(')
 
 
-def _path_is_ignored(path: Path, target: Path, ignore_paths: list) -> bool:
+def _git_work_tree(target: Path) -> str | None:
+    """`_diff.git_work_tree` (kept under this name for callers/tests)."""
+    from _diff import git_work_tree
+
+    return git_work_tree(target)
+
+
+def _target_tf_files(target: Path, ignore_paths: list, *,
+                     contain_symlinks: bool = False) -> list[Path]:
+    """The `.tf` / `.tf.json` files a scan of ``target`` reads: every mode
+    (static, fleet, verify-fixed) lists them here, so they can't diverge.
+
+    Symlinked folders are followed (`_diff.walk_tf_files`): a module
+    linked in as `net -> ../shared` is real Terraform, and was never
+    scanned. One that leaves the target is followed only within the
+    enclosing git work tree (the repo being scanned, never other files
+    on the machine), and never with ``contain_symlinks`` (fleet: targets
+    may be untrusted repos). A file symlink out is still always skipped
+    (`_path_is_ignored`). Every link not followed gets a WARN."""
+    from _diff import walk_tf_files
+
+    root = target.resolve()
+    skipped_links: list[Path] = []
+    linked: list[str] = []
+    files = [
+        p for p in walk_tf_files(target, contain=contain_symlinks,
+                                 skipped=skipped_links, followed=linked)
+        if ".terraform" not in p.parts
+        and not _path_is_ignored(p, target, ignore_paths, linked_roots=linked)
+        # fleet targets may be untrusted repos: never follow a symlink out
+        and (not contain_symlinks or p.resolve().is_relative_to(root))
+    ]
+    if skipped_links:
+        print(
+            f"WARN: not following {len(skipped_links)} symlinked folder(s) "
+            f"that point outside {target}"
+            f"{'' if contain_symlinks else ' and its git repository'}, "
+            f"or to a parent of it, or into .terraform / .git: "
+            f"{', '.join(map(str, skipped_links[:5]))}"
+            f"{', ...' if len(skipped_links) > 5 else ''}",
+            file=sys.stderr,
+        )
+    return files
+
+
+def _path_is_ignored(path: Path, target: Path, ignore_paths: list,
+                     linked_roots: list = ()) -> bool:
     """Return True when ``path`` should be skipped per ``ignore_paths`` —
-    or, always, when it resolves outside ``target`` (a symlink out).
+    or, always, when it resolves outside ``target`` (a symlink out),
+    unless it lies in one of ``linked_roots`` (the real paths of symlinked
+    folders `tf_source_files` followed).
 
     Each entry is matched against the file's path *relative to the scan
     target* (so users write paths the way they'd type them at the repo
@@ -223,6 +273,16 @@ def _path_is_ignored(path: Path, target: Path, ignore_paths: list) -> bool:
     try:
         rel = path.resolve().relative_to(target.resolve())
     except ValueError:
+        rel = None
+    if rel is None and any(path.resolve().is_relative_to(r) for r in linked_roots):
+        # Reached through a symlinked folder `tf_source_files` chose to
+        # follow (in the same repository): match `ignore_paths` against
+        # the path as it appears under the target.
+        try:
+            rel = path.relative_to(target)
+        except ValueError:
+            rel = None
+    if rel is None:
         # A symlink that resolves outside the target: scanning it would
         # read (and print excerpts of) files the target does not contain
         # — e.g. `x.tf -> ../.git/config` in CI — and `--apply-fixes`
@@ -398,7 +458,7 @@ def _tfvars_values(directory: Path) -> dict[str, str]:
             if not path.is_file() or not path.resolve().is_relative_to(root):
                 continue
             text = _read_normalized(path)
-        except OSError:
+        except (OSError, UnicodeDecodeError):  # UTF-16 / binary: no values
             continue
         if name.endswith(".json"):
             try:
@@ -1418,6 +1478,7 @@ from _diff import (
     auto_detect_base_branch as _auto_detect_base_branch,
     find_latest_prior,
     get_diff_files,
+    local_module_sources,
 )
 
 
@@ -1444,9 +1505,11 @@ def load_inline_suppressions(text: str) -> dict[int, set[str]]:
 
     Only real comments count: the marker inside a string value (say a
     ``description``) or a heredoc script would otherwise silence a
-    finding without looking like a suppression in review."""
+    finding without looking like a suppression in review. A comment
+    after code covers its own line only; one on a line by itself covers
+    the next line too."""
     return _baseline_load_inline_suppressions(
-        comments_only(text), inline_ignore_re=INLINE_IGNORE_RE,
+        comments_only(text), inline_ignore_re=INLINE_IGNORE_RE, source=text,
     )
 
 
@@ -1583,7 +1646,7 @@ def _cmd_explain(catalog_dir: Path, rule_id: str) -> int:
         )
         return 1
     try:
-        data = load_yaml(yml.read_text())
+        data = load_yaml(yml.read_text(encoding="utf-8-sig"))
     except Exception as e:
         print(f"ERROR: cannot parse {yml}: {e}", file=sys.stderr)
         return 2
@@ -2025,10 +2088,10 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
     def _scanner(path: Path, entries: list[dict], text: str | None) -> list[dict]:
         # `text`: the editor's unsaved buffer, when the client sent one.
         if text is None:
-            text = path.read_text()
+            text = _read_normalized(path)
         target_dir = path.parent
         all_files = {
-            str(p): p.read_text()
+            str(p): _read_normalized(p)
             for p in target_dir.glob("*.tf") if p.exists()
         }
         all_files[str(path)] = text
@@ -2251,11 +2314,7 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         return 2
     # Load corpus for re-probing
     _ignore_paths_vf = project_config.get("ignore_paths") or []
-    tf_files = [
-        p for p in tf_source_files(target)
-        if ".terraform" not in p.parts
-        and not _path_is_ignored(p, target, _ignore_paths_vf)
-    ]
+    tf_files = _target_tf_files(target, _ignore_paths_vf)
     all_text = {}
     unreadable_files: list[str] = []
     for fp in tf_files:
@@ -2467,7 +2526,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
 
     if not _cache_hit:
         for fp, text in all_text.items():
-            if diff_files is not None and fp not in diff_files:
+            if diff_files is not None and fp.resolve() not in diff_files:
                 continue
             findings.extend(scan_file(fp, text, entries))
             # parse_tf is memoised, so this re-reads detect_in_file's result.
@@ -2567,6 +2626,19 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     return findings, parse_fallback_files
 
 
+def _finding_dir(finding: dict, target: Path, scanned_dirs: set) -> str:
+    """The folder whose `applies_when` pin gates ``finding``: its file's
+    folder, the folder itself for a module-level finding filed against a
+    folder, and the scan target for `--plan-json` / `--state-json`
+    findings (filed as ``<plan>`` / ``<state>``)."""
+    file = str(finding.get("file") or "")
+    if file in ("<plan>", "<state>"):
+        return str(target)
+    if file in scanned_dirs:
+        return file
+    return str(Path(file).parent)
+
+
 def _scan_target(args: object, target: Path, entries: list, project_config: dict,
                  diff_files=None, *, contain_symlinks: bool = False) -> dict:
     """One target through the static pipeline: read the files, filter rules
@@ -2600,14 +2672,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
             )
 
     _ignore_paths = project_config.get("ignore_paths") or []
-    _root = target.resolve()
-    tf_files = [
-        p for p in tf_source_files(target)
-        if ".terraform" not in p.parts
-        and not _path_is_ignored(p, target, _ignore_paths)
-        # fleet targets may be untrusted repos: never follow a symlink out
-        and (not contain_symlinks or p.resolve().is_relative_to(_root))
-    ]
+    tf_files = _target_tf_files(target, _ignore_paths, contain_symlinks=contain_symlinks)
     if not tf_files:
         # A gated scan that checked no Terraform is a misconfigured CI job
         # (wrong folder, or ignore_paths excluding everything), not a pass:
@@ -2667,23 +2732,53 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
             print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
 
-    # Provider/Terraform-version-aware filter: entries with `applies_when`
-    # are skipped when the target's required_providers / required_version
-    # constraint cannot reach the minimum version. Surface the skip count
-    # so users know rules are conditionally off rather than silently
-    # disabled.
-    provider_constraints = _extract_provider_constraints(all_text)
-    tf_constraint = _extract_terraform_version(all_text)
-    pre_filter = len(entries)
-    entries = [
-        e for e in entries
-        if _entry_applies_to_providers(e, provider_constraints, tf_constraint)
-    ]
-    skipped = pre_filter - len(entries)
-    if skipped:
+    # Provider/Terraform-version-aware filter: an entry with `applies_when`
+    # is off in a folder whose required_providers / required_version
+    # constraint cannot reach the minimum version. Terraform scopes those
+    # per module (folder), so each folder is gated by its own pin: one
+    # `modules/legacy` pinning an old provider used to switch rules off
+    # for the whole tree. A folder with no pin is not gated. Rules off in
+    # every scanned folder are dropped before detection; the rest run, and
+    # their findings in a folder that rules them out are dropped after.
+    # Surface the skip counts so users know rules are conditionally off
+    # rather than silently disabled.
+    # A child module runs under its caller's pins, so a folder's pins are
+    # its own combined with its local-module callers' (or, called by no
+    # one, its nearest pinned ancestor's): see `_effective_constraints`.
+    _scanned_dirs = {str(fp.parent) for fp in all_text}
+    _callers: dict[str, set[str]] = {}
+    for _fp, _text in all_text.items():
+        for _child in local_module_sources(Path(_fp), _text):
+            _callers.setdefault(os.path.normpath(_child), set()).add(str(Path(_fp).parent))
+    dir_constraints = _effective_constraints(
+        _constraints_by_dir(all_text), _callers, _scanned_dirs, str(target),
+    )
+    gated_dirs: dict[str, set[str]] = {}  # rule id -> folders it is off in
+    _gated_entries = [e for e in entries if e.get("applies_when")]
+    for _dir, _alts in dir_constraints.items():
+        if _alts == [({}, "")]:
+            continue
+        for e in _gated_entries:
+            if not any(_entry_applies_to_providers(e, _pc, _tfc) for _pc, _tfc in _alts):
+                gated_dirs.setdefault(e["id"], set()).add(_dir)
+    _off_everywhere = {
+        rid for rid, dirs in gated_dirs.items() if _scanned_dirs <= dirs
+    }
+    if _off_everywhere:
+        entries = [e for e in entries if e["id"] not in _off_everywhere]
         print(
-            f"# {skipped} rule(s) skipped due to applies_when "
+            f"# {len(_off_everywhere)} rule(s) skipped due to applies_when "
             f"provider/terraform-version constraints",
+            file=sys.stderr,
+        )
+    _partly = len(gated_dirs) - len(_off_everywhere)
+    if _partly:
+        _nd = len(set().union(*(
+            d for rid, d in gated_dirs.items() if rid not in _off_everywhere
+        )))
+        print(
+            f"# {_partly} rule(s) skipped in {_nd} folder(s) due to applies_when "
+            f"provider/terraform-version constraints (each module's own and callers' pins)",
             file=sys.stderr,
         )
 
@@ -2693,6 +2788,12 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     findings, parse_fallback_files = _run_detection(
         args, all_text, extra_text, entries, diff_files, target, _ignore_paths,
     )
+    if gated_dirs:
+        findings = [
+            f for f in findings
+            if _finding_dir(f, target, _scanned_dirs)
+            not in gated_dirs.get(f["id"], ())
+        ]
     remap_lines(findings)
     for _pf in parse_fallback_files:
         print(

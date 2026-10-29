@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import bisect
 import json
+import os
 import re
 from pathlib import Path
 
@@ -373,9 +374,95 @@ def is_tf_source(path: Path) -> bool:
     return path.suffix == ".tf" or is_tf_json(path)
 
 
-def tf_source_files(root: Path) -> list[Path]:
-    """Every `*.tf` then every `*.tf.json` under `root` (recursive)."""
-    return list(root.rglob("*.tf")) + list(root.rglob("*.tf.json"))
+# Folders never walked: Terraform's own cache (every caller dropped files
+# under it anyway) and git's object store.
+_SKIP_DIRS = frozenset({".terraform", ".git"})
+
+
+def tf_source_files(root: Path, *, follow_within: str | None = None,
+                    skipped: list | None = None,
+                    followed: list | None = None) -> list[Path]:
+    """Every `*.tf` then every `*.tf.json` file under `root` (recursive).
+
+    Symlinked folders are followed: `Path.rglob` didn't, so a module
+    linked in as `net -> ../shared` was never scanned. Each real folder
+    is walked once (loop-safe, and a folder reachable both directly and
+    through a link is not scanned twice); real subfolders are walked
+    before links, so a file is reported under its real path when it has
+    one inside `root`. Paths keep the form they were reached by (under
+    `root`).
+
+    Which links are followed: one resolving inside `root`; one resolving
+    outside it only when it stays inside `follow_within` (the scan
+    passes the enclosing git work tree, so a module shared within the
+    repo is scanned but nothing else on the machine is). Never one into
+    a `.terraform` or `.git` folder, inside `root` or out. A link to `root` or one of its parents (`up -> ..`,
+    `/`) never is. Links not followed are appended to `skipped`; the
+    real paths of followed links that leave `root`, to `followed`.
+    """
+    tf: list[Path] = []
+    tf_json: list[Path] = []
+    seen: set[str] = set()
+    real_root = os.path.realpath(root)
+    links: list[Path] = []
+
+    def follow(link: str) -> bool:
+        real = os.path.realpath(link)
+        if _within(real_root, real):  # root itself or above it
+            return False
+        if _within(real, real_root):
+            # e.g. `mods -> .terraform/modules`: never walked directly
+            return not _SKIP_DIRS & set(Path(real).relative_to(real_root).parts)
+        if follow_within is None or not _within(real, follow_within):
+            return False
+        if _SKIP_DIRS & set(Path(real).relative_to(follow_within).parts):
+            return False
+        if followed is not None:
+            followed.append(real)
+        return True
+
+    def walk(top: Path) -> None:
+        stack = [top]
+        while stack:
+            d = stack.pop()
+            real = os.path.realpath(d)
+            if real in seen:
+                continue
+            seen.add(real)
+            try:
+                entries = sorted(os.scandir(d), key=lambda e: e.name)
+            except OSError:
+                continue
+            subdirs: list[Path] = []
+            for e in entries:
+                try:
+                    if e.is_dir():
+                        if e.name in _SKIP_DIRS:
+                            continue
+                        if not e.is_symlink():
+                            subdirs.append(Path(e.path))
+                        elif follow(e.path):
+                            links.append(Path(e.path))
+                        elif skipped is not None:
+                            skipped.append(Path(e.path))
+                    elif e.is_file():
+                        if e.name.endswith(".tf.json"):
+                            tf_json.append(Path(e.path))
+                        elif e.name.endswith(".tf"):
+                            tf.append(Path(e.path))
+                except OSError:
+                    continue
+            stack.extend(reversed(subdirs))
+
+    walk(Path(root))
+    while links:
+        walk(links.pop(0))
+    return tf + tf_json
+
+
+def _within(path: str, root: str) -> bool:
+    """Is real path `path` `root` or below it?"""
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
 # Rendered-line → JSON-line maps of every `.tf.json` read this process,

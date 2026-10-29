@@ -12,6 +12,7 @@ private names so existing call sites keep working without churn.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -129,7 +130,107 @@ def _module_siblings(changed: set[Path]) -> set[Path]:
     return out
 
 
-_LOCAL_SOURCE_RE = re.compile(r'^\s*"?source"?\s*[=:]\s*"(\.\.?/[^"]*)"', re.M)
+def git_work_tree(target: Path) -> str | None:
+    """Real path of the git work tree holding ``target``, as git itself
+    reports it (``git rev-parse --show-toplevel`` run in ``target``, under
+    `_run_git`'s timeout), or None outside a repository or without git.
+    A stray ``.git`` entry in some parent folder is not taken for a
+    repository."""
+    try:
+        res = _run_git(["git", "rev-parse", "--show-toplevel"], target, text=True)
+    except OSError:
+        return None
+    if res is None or res.returncode != 0 or not (res.stdout or "").strip():
+        return None
+    return str(Path(res.stdout.strip()).resolve())
+
+
+def walk_tf_files(target: Path, *, contain: bool = False,
+                  skipped: list | None = None,
+                  followed: list | None = None) -> list[Path]:
+    """The one way every scan path lists a target's `.tf` / `.tf.json`
+    files (static, fleet, verify-fixed, diff scope): `tf_source_files`
+    with its symlink policy. A symlinked folder that leaves the target is
+    followed only inside the enclosing git work tree, and never with
+    `contain` (fleet: targets may be untrusted repos). ``skipped`` /
+    ``followed`` are filled as in `tf_source_files`."""
+    from _tfjson import tf_source_files  # local: _tfjson is engine-side
+
+    return tf_source_files(
+        target,
+        follow_within=None if contain else git_work_tree(target),
+        skipped=skipped, followed=followed,
+    )
+
+
+def _tf_text(fp: Path) -> str | None:
+    """Scannable text of a `.tf` (or rendered `.tf.json`) file, or None."""
+    from _hcl import _read_normalized
+    from _tfjson import read_tf_source
+
+    try:
+        return read_tf_source(fp, _read_normalized)
+    except (OSError, ValueError):
+        return None
+
+
+# The label may be quoted or bare: `module a { ... }` is valid HCL too.
+_MODULE_BLOCK_RE = re.compile(
+    r'(?m)^[ \t]*module[ \t]+(?:"[^"\n]*"|[A-Za-z_][\w-]*)[ \t]*\{'
+)
+_SOURCE_ATTR_RE = re.compile(r'(?m)^[ \t]*source[ \t]*=[ \t]*"(\.\.?/[^"\n]*)"')
+
+
+def _top_level(code: str, start: int, end: int) -> str:
+    """``code[start:end]`` (a block body) with everything nested in it —
+    sub-blocks, lists, calls, and strings inside those — blanked, so
+    only the body's own arguments are left. Newlines are kept."""
+    from _hcl import _string_end
+
+    out = list(code[start:end])
+    depth = 0
+    i = start
+    while i < end:
+        ch = code[i]
+        if ch == '"':
+            j = min(_string_end(code, i), end)
+            if depth:
+                for k in range(i, j):
+                    if out[k - start] != "\n":
+                        out[k - start] = " "
+            i = j
+            continue
+        if ch in "{[(":
+            depth += 1
+        if depth and ch != "\n":
+            out[i - start] = " "
+        if ch in "}])":
+            depth = max(0, depth - 1)
+        i += 1
+    return "".join(out)
+
+
+def local_module_sources(fp: Path, text: str) -> list[Path]:
+    """The folders `fp` calls as local modules (`source = "./modules/db"`),
+    joined onto its folder but not resolved. Shared by the diff scope
+    below and by `applies_when` gating (a child runs under its caller's
+    provider pins).
+
+    Only a `source` argument of a `module` block itself counts: comments
+    and heredocs are masked first, and a `source` nested deeper (a
+    `provisioner "file" { source = "./x" }`) or in another block is not
+    a module call. `text` is HCL (a `.tf.json` rendered by `_tfjson`)."""
+    from _hcl import brace_walk, mask_comments_and_heredocs
+
+    code = mask_comments_and_heredocs(text)
+    out: list[Path] = []
+    for m in _MODULE_BLOCK_RE.finditer(code):
+        end_after = brace_walk(code, m.end() - 1)
+        if end_after is None:
+            continue
+        body = _top_level(code, m.end(), end_after - 1)
+        out.extend(fp.parent / s.group(1) for s in _SOURCE_ATTR_RE.finditer(body))
+    return out
 
 
 def _with_local_children(files: set[Path]) -> set[Path]:
@@ -142,12 +243,11 @@ def _with_local_children(files: set[Path]) -> set[Path]:
     seen_dirs: set[Path] = set()
     while queue:
         fp = queue.pop()
-        try:
-            text = fp.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+        text = _tf_text(fp)
+        if text is None:
             continue
-        for m in _LOCAL_SOURCE_RE.finditer(text):
-            child = (fp.parent / m.group(1)).resolve()
+        for src in local_module_sources(fp, text):
+            child = src.resolve()
             if child in seen_dirs or not child.is_dir():
                 continue
             seen_dirs.add(child)
@@ -158,12 +258,41 @@ def _with_local_children(files: set[Path]) -> set[Path]:
     return out
 
 
+def _with_local_callers(files: set[Path], tf_files: list[Path]) -> set[Path]:
+    """`files` plus the `.tf` files of every folder (of `tf_files`, the
+    target's files from `walk_tf_files`) that calls a folder of `files` as
+    a local module (`source = "../net"`), recursively up the call chain.
+    A child's outputs feed its caller (`security_groups =
+    [module.net.sg_id]`), so a change to the child can change the
+    caller's findings."""
+    callers: dict[Path, set[Path]] = {}  # child folder -> caller folders
+    for fp in tf_files:
+        text = _tf_text(fp)
+        if text is None:
+            continue
+        for src in local_module_sources(fp, text):
+            callers.setdefault(src.resolve(), set()).add(fp.parent.resolve())
+    out = set(files)
+    queue = list({fp.parent for fp in files})
+    seen = set(queue)
+    while queue:
+        for caller in callers.get(queue.pop(), ()):
+            if caller in seen:
+                continue
+            seen.add(caller)
+            queue.append(caller)
+            out.update(p.resolve() for p in caller.iterdir() if p.is_file() and _is_tf(p))
+    return out
+
+
 def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     """Set of ``.tf`` files to scan for the change between ``diff_base``
     and HEAD: the changed ones, the folder-mates of a changed file that
-    feeds them (`_module_siblings`), and the local modules any of those
-    call (`_with_local_children`). Renames count as a delete plus an add
-    (``--no-renames``), so the folder a file left is covered too.
+    feeds them (`_module_siblings`), the local modules any of those call
+    (`_with_local_children`), and the folders under ``target`` that call
+    any of their folders as a local module (`_with_local_callers`).
+    Renames count as a delete plus an add (``--no-renames``), so the
+    folder a file left is covered too.
 
     Three sources are unioned:
 
@@ -180,11 +309,22 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     nothing and pass a CI gate. The caller falls back to a full scan.
     """
     try:
+        # The pathspecs are relative to `target` (git's cwd), so a module
+        # linked in from outside it (`net -> ../shared`, followed by
+        # `walk_tf_files`) needs its own: `../shared/*.tf`. Changed files
+        # come back as real paths; the scan matches them by resolved path.
+        followed: list[str] = []
+        tf_files = walk_tf_files(target, followed=followed)
+        real_target = target.resolve()
+        pathspecs = [*_DIFF_PATHSPECS] + [
+            f"{os.path.relpath(d, real_target)}/{spec}"
+            for d in dict.fromkeys(followed) for spec in _DIFF_PATHSPECS
+        ]
         # All git calls below go through `_run_git`, which applies the
         # 30-second timeout. A None return means the call hung past
         # the cap — report the diff as failed (caller: full scan).
         result = _run_git(
-            ["git", "diff", "--name-only", "--no-renames", f"{diff_base}...HEAD", "--", *_DIFF_PATHSPECS],
+            ["git", "diff", "--name-only", "--no-renames", f"{diff_base}...HEAD", "--", *pathspecs],
             target, text=True,
         )
         if result is None:
@@ -192,7 +332,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         if result.returncode != 0:
             # Fall back to diff against working tree
             result = _run_git(
-                ["git", "diff", "--name-only", "--no-renames", diff_base, "--", *_DIFF_PATHSPECS],
+                ["git", "diff", "--name-only", "--no-renames", diff_base, "--", *pathspecs],
                 target, text=True,
             )
             if result is None:
@@ -212,7 +352,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         # Also include untracked .tf files
         untracked = _run_git(
             ["git", "ls-files", "--others", "--exclude-standard", "--full-name",
-             "--", *_DIFF_PATHSPECS],
+             "--", *pathspecs],
             target, text=True,
         )
         if untracked is None:
@@ -237,7 +377,10 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
             if line.strip()
         }
         files = {fp for fp in changed if fp.exists() and _is_tf(fp)}
-        return _with_local_children(files | _module_siblings(changed))
+        base = files | _module_siblings(changed)
+        if not base:
+            return base
+        return _with_local_children(base) | _with_local_callers(base, tf_files)
     except FileNotFoundError:
         print("WARN: git not found", file=sys.stderr)
         return None

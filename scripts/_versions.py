@@ -16,6 +16,8 @@ Public surface:
     `{provider_name: constraint_string}`.
   * `_extract_terraform_version(all_files_text)` — pull
     `terraform { required_version = "…" }`.
+  * `_constraints_by_dir(all_files_text)` — both of the above, per
+    folder (one Terraform module), for the folders that declare any.
   * `_entry_applies_to_providers(entry, constraints, tf_constraint)` —
     gate a catalogue entry on its `applies_when:` clause.
 
@@ -32,8 +34,9 @@ invariant that the refactor is a no-behaviour-change extraction.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
-from _hcl import brace_walk  # type: ignore
+from _hcl import brace_walk, mask_comments_and_heredocs  # type: ignore
 
 
 def _version_tuple(s: str) -> tuple[int, ...]:
@@ -46,11 +49,30 @@ def _version_tuple(s: str) -> tuple[int, ...]:
     return tuple(int(x) for x in m.group(1).split("."))
 
 
+_CLAUSE_RE = re.compile(
+    r"^\s*(>=|<=|<|>|~>|!=|=)?\s*v?(\d+(?:\.\d+)*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\s*$"
+)
+
+
+def _pad3(v: tuple) -> tuple:
+    """Right-pad a version tuple with zeros (to at least three parts) so
+    `1.10`, `1.10.0` compare equal."""
+    return v + (0,) * max(0, 3 - len(v))
+
+
 def _provider_constraint_allows(constraint: str, min_version: str) -> bool:
     """Does the user's `version =` constraint allow any version
-    >= `min_version`? Each comma-separated clause is parsed
-    individually (`>=`, `<`, `<=`, `~>`, `=`, `!=`), and the answer is
-    "yes" only if no clause excludes versions ≥ `min_version`.
+    >= `min_version`? The comma-separated clauses (`>=`, `>`, `<`, `<=`,
+    `~>`, `=` or a bare version, `!=`) all have to hold at once, so they
+    are intersected into one range (plus an exact pin, if any) and the
+    answer is "yes" when that range holds a version >= `min_version`.
+
+    An exact pin is satisfied by being at or above the minimum: `= 5.31.0`
+    (or a bare `5.31.0`) reaches a `5.0` minimum. (It used to be read as
+    "pin equals the minimum", so every exact pin skipped rules with a
+    lower minimum.) `~> X.Y` allows `[X.Y, X+1.0)`, `~> X.Y.Z` allows
+    `[X.Y.Z, X.Y+1.0)`, and `~> X` is read as `~> X.0`. A pre-release or
+    build suffix (`5.0.0-beta1`) is compared by its numbers.
 
     Behaviour is permissive: an unparseable clause is ignored (rules
     are gated by the readable clauses), and an empty constraint always
@@ -63,6 +85,8 @@ def _provider_constraint_allows(constraint: str, min_version: str) -> bool:
       ('< 5.0',            '5.0')  -> False  (excludes 5.0+)
       ('>= 1.5.0, < 1.10', '1.10') -> False  (upper bound shuts out 1.10)
       ('>= 1.5.0',         '1.10') -> True   (no upper bound)
+      ('5.31.0',           '5.0')  -> True   (exact pin above the minimum)
+      ('= 4.9.0',          '5.0')  -> False  (exact pin below it)
       ('',                 '5.0')  -> True   (no constraint = trust user)
     """
     if not constraint:
@@ -71,60 +95,61 @@ def _provider_constraint_allows(constraint: str, min_version: str) -> bool:
     if not min_v:
         return True
 
-    def _pad(a: tuple, b: tuple) -> tuple[tuple, tuple]:
-        """Right-pad two version tuples with zeros so comparisons treat
-        `1.10` and `1.10.0` as equal."""
-        n = max(len(a), len(b))
-        return a + (0,) * (n - len(a)), b + (0,) * (n - len(b))
+    lo, lo_incl = _pad3(min_v), True  # the rule needs versions >= min_v
+    hi, hi_incl = None, False  # None: no upper bound
+    exact: tuple | None = None
+    excluded: set[tuple] = set()
 
-    clause_re = re.compile(
-        r"^\s*(>=|<=|<|>|~>|!=|=)?\s*(\d+(?:\.\d+)*)\s*$"
-    )
+    def raise_lo(v: tuple, incl: bool) -> None:
+        nonlocal lo, lo_incl
+        if v > lo or (v == lo and not incl):
+            lo, lo_incl = v, incl
+
+    def lower_hi(v: tuple, incl: bool) -> None:
+        nonlocal hi, hi_incl
+        if hi is None or v < hi or (v == hi and not incl):
+            hi, hi_incl = v, incl
+
     for raw in constraint.split(","):
-        m = clause_re.match(raw)
+        m = _CLAUSE_RE.match(raw)
         if not m:
             continue
         op = m.group(1) or "="
-        v = tuple(int(x) for x in m.group(2).split("."))
-        a, b = _pad(min_v, v)
-        if op == "<":
-            # Excludes everything >= v. min_v reachable iff min_v < v.
-            if a >= b:
-                return False
+        parts = tuple(int(x) for x in m.group(2).split("."))
+        v = _pad3(parts)
+        if op == ">=":
+            raise_lo(v, True)
+        elif op == ">":
+            raise_lo(v, False)
+        elif op == "<":
+            lower_hi(v, False)
         elif op == "<=":
-            if a > b:
-                return False
+            lower_hi(v, True)
         elif op == "~>":
-            # Audit item 22 — single-element form `~> 3` was previously
-            # `continue`d (silent skip), producing a false-negative on
-            # any version-gated rule. The Terraform spec treats `~> N`
-            # as `>= N.0, < (N+1).0`, the same shape as `~> N.M` with
-            # one less precision digit; pad `v` to length-2 before the
-            # upper-bound calculation so both forms go through the same
-            # branch.
-            if len(v) < 2:
-                v = v + (0,)
-            # `~> X.Y` allows [X.Y, X+1.0). The constraint can reach
-            # `min_v` iff the upper bound is strictly above `min_v` —
-            # if `min_v >= upper`, every allowed version is below
-            # `min_v` and the rule must skip. The lower bound `v`
-            # being above `min_v` is irrelevant: `min_v` is a floor
-            # for "rule applies", not a required lower edge.
-            upper = list(v)
-            upper[-1] = 0
-            upper[-2] = upper[-2] + 1
-            upper_t = tuple(upper)
-            a_hi, b_hi = _pad(min_v, upper_t)
-            if a_hi >= b_hi:
-                return False
+            # Audit item 22: `~> 3` is `~> 3.0` (>= 3.0, < 4.0).
+            if len(parts) < 2:
+                parts = parts + (0,)
+            raise_lo(_pad3(parts), True)
+            upper = list(parts[:-1])
+            upper[-1] += 1
+            lower_hi(_pad3(tuple(upper)), False)
         elif op == "=":
-            if a != b:
-                return False
+            if exact is not None and exact != v:
+                return False  # two different exact pins: nothing satisfies both
+            exact = v
         elif op == "!=":
-            continue
-        # `>=` and `>` only set lower bounds — they never exclude
-        # min_v from the reachable set.
-    return True
+            excluded.add(v)
+
+    if exact is not None:
+        if exact < lo or (exact == lo and not lo_incl):
+            return False
+        if hi is not None and (exact > hi or (exact == hi and not hi_incl)):
+            return False
+        return exact not in excluded
+    if hi is None or lo < hi:
+        return True
+    # A single point at most: lo == hi, both inclusive, and not excluded.
+    return lo == hi and lo_incl and hi_incl and lo not in excluded
 
 
 def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
@@ -132,7 +157,11 @@ def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
     and return the per-provider version constraint string. Last-write-
     wins is fine — most repos define `required_providers` in exactly
     one file (versions.tf), and divergent declarations should be flagged
-    by ROB-VERSION-002 separately."""
+    by ROB-VERSION-002 separately.
+
+    Comments and heredocs are masked first: a commented-out
+    `# azurerm = { version = "~> 2.99" }` or a `/* terraform {...} */`
+    block used to override the real pin."""
     constraints: dict[str, str] = {}
     tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
     rp_block_re = re.compile(r"required_providers\s*\{")
@@ -140,7 +169,8 @@ def _extract_provider_constraints(all_files_text: dict) -> dict[str, str]:
         r'(\w[\w-]*)\s*=\s*\{[^{}]*?version\s*=\s*"([^"]+)"',
         re.DOTALL,
     )
-    for text in all_files_text.values():
+    for raw in all_files_text.values():
+        text = mask_comments_and_heredocs(raw)
         for m in tf_block_re.finditer(text):
             # Quote/comment-aware walk (shared with _extract_terraform_version)
             # so a `}` inside a string in the terraform{} block doesn't
@@ -172,11 +202,13 @@ def _extract_terraform_version(all_files_text: dict) -> str:
         }
 
     used to return "" and silently disable every `applies_when.min_terraform`
-    gate. Walking the full block body fixes that.
+    gate. Walking the full block body fixes that. Comments are masked
+    first, so a commented-out `required_version` is not read.
     """
     tf_block_re = re.compile(r"(?m)^\s*terraform\s*\{")
     rv_re = re.compile(r'(?m)^\s*required_version\s*=\s*"([^"]+)"')
-    for text in all_files_text.values():
+    for raw in all_files_text.values():
+        text = mask_comments_and_heredocs(raw)
         for m in tf_block_re.finditer(text):
             end_after = brace_walk(text, m.end() - 1)
             if end_after is None:
@@ -185,6 +217,108 @@ def _extract_terraform_version(all_files_text: dict) -> str:
             if rm:
                 return rm.group(1)
     return ""
+
+
+def _constraints_by_dir(all_files_text: dict) -> dict[str, tuple[dict[str, str], str]]:
+    """``{folder: (provider_constraints, terraform_constraint)}`` for every
+    folder whose files declare a `required_providers` version or a
+    `required_version`; keys are ``str(path.parent)``.
+
+    Terraform scopes `required_providers` to one module (one folder), so
+    a pin is read per folder: a `modules/legacy/versions.tf` pinning
+    `azurerm ~> 2.99` used to be merged into one tree-wide pin and switch
+    rules off for the root module too. A folder that declares nothing is
+    absent (its findings are not gated)."""
+    by_dir: dict[str, dict] = {}
+    for fp, text in all_files_text.items():
+        by_dir.setdefault(str(Path(fp).parent), {})[fp] = text
+    out: dict[str, tuple[dict[str, str], str]] = {}
+    for d, files in by_dir.items():
+        providers = _extract_provider_constraints(files)
+        tf_version = _extract_terraform_version(files)
+        if providers or tf_version:
+            out[d] = (providers, tf_version)
+    return out
+
+
+def _combine_constraints(a: tuple, b: tuple) -> tuple[dict[str, str], str]:
+    """Both of two ``(provider_constraints, terraform_constraint)`` pins at
+    once (Terraform must satisfy every module's pin): clauses of the same
+    provider are joined with ``,``, which `_provider_constraint_allows`
+    reads as "all of these"."""
+    providers = dict(a[0])
+    for name, c in b[0].items():
+        providers[name] = f"{providers[name]}, {c}" if providers.get(name) else c
+    tf = ", ".join(x for x in (a[1], b[1]) if x)
+    return providers, tf
+
+
+_NO_PIN: tuple[dict[str, str], str] = ({}, "")
+_MAX_ALTERNATIVES = 64
+
+
+def _effective_constraints(
+    own: dict[str, tuple[dict[str, str], str]],
+    callers: dict[str, set[str]],
+    dirs,
+    root: str,
+) -> dict[str, list[tuple[dict[str, str], str]]]:
+    """For each folder in ``dirs``, the pins it can run under: one
+    ``(provider_constraints, terraform_constraint)`` per way it is used.
+
+    A child module runs with the providers its caller's root selected, so
+    a folder's pins are its own (``own``, from `_constraints_by_dir`)
+    combined with each caller's effective pins (``callers``: folder ->
+    the folders that call it as a local module), up the call chain. A
+    folder with several callers gets one alternative per caller; the gate
+    rules a rule out only when every alternative does, so ambiguity never
+    drops a finding. A folder no one calls uses its own pin, or else the
+    nearest ancestor folder (up to ``root``) that has one. An entry of
+    ``_NO_PIN`` alone means ungated. Folder keys are ``str`` paths in one
+    form throughout."""
+    memo: dict[str, list] = {}
+    active: set[str] = set()
+
+    def eff(d: str) -> list:
+        if d in memo:
+            return memo[d]
+        if d in active:  # a call cycle: nothing more to add
+            return [_NO_PIN]
+        active.add(d)
+        mine = own.get(d, _NO_PIN)
+        alts: list = []
+        for c in sorted(callers.get(d, ())):
+            for alt in eff(c):
+                alts.append(_combine_constraints(mine, alt))
+        if not alts:
+            if d in own:
+                alts = [mine]
+            else:
+                alts = [_NO_PIN]
+                p = Path(d)
+                while p != p.parent and str(p) != root and _under(str(p), root):
+                    p = p.parent
+                    if str(p) in own or callers.get(str(p)):
+                        alts = eff(str(p))
+                        break
+        uniq: dict = {}
+        for pc, tf in alts:
+            uniq.setdefault((tuple(sorted(pc.items())), tf), (pc, tf))
+        out = list(uniq.values())
+        if len(out) > _MAX_ALTERNATIVES:
+            # Too many ways to be used to weigh them all: dropping some
+            # could drop the one that allows a rule, so don't gate.
+            out = [_NO_PIN]
+        active.discard(d)
+        memo[d] = out
+        return out
+
+    return {d: eff(d) for d in dirs}
+
+
+def _under(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip("/\\") + "/") \
+        or path.startswith(root.rstrip("/\\") + "\\")
 
 
 def _entry_applies_to_providers(

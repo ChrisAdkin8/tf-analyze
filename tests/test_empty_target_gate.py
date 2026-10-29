@@ -142,7 +142,12 @@ def _timeout_report(tmp_path: Path) -> dict:
 def _unreadable_report(tmp_path: Path) -> dict:
     (tmp_path / "tf").mkdir()
     (tmp_path / "tf" / "main.tf").write_text("locals {\n  x = 1\n}\n")
-    (tmp_path / "tf" / "bad.tf").write_bytes(b"\xff\xfe\x00bad")
+    # Not UTF-8 is no longer unreadable (bad bytes are replaced and the
+    # file scanned); a file the scan has no permission to read still is.
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root can read a mode-000 file")
+    (tmp_path / "tf" / "bad.tf").write_text("locals {}\n")
+    (tmp_path / "tf" / "bad.tf").chmod(0)
     report = _engine_report(tmp_path / "tf")
     assert report["summary"]["unreadable_files"] == [str(tmp_path / "tf" / "bad.tf")]
     return report
