@@ -924,6 +924,8 @@ class CorpusCtx:
     entry: dict
     eid: str
     pat: dict
+    # `.tf-analyze.yaml` ignore_paths, for checks that walk the disk.
+    ignore_paths: list = ()
 
 
 _CORPUS_HANDLERS: dict[str, _Callable[["CorpusCtx"], list[dict]]] = {}
@@ -941,7 +943,8 @@ def _register_corpus(kind: str):
     return deco
 
 
-def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
+def detect_corpus(target: Path, all_files_text: dict, entries: list,
+                  ignore_paths: list = ()) -> list:
     """Patterns that need a global view: resource_absent, output_sensitive_leak,
     cross_module, variable_unused, output_unused, module_missing_tests."""
     findings = []
@@ -1006,6 +1009,7 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list) -> list:
                 if _handler is not None:
                     _ctx = CorpusCtx(
                         target=target,
+                        ignore_paths=ignore_paths,
                         all_files_text=all_files_text,
                         sensitive_vars=sensitive_vars,
                         module_dirs=module_dirs,
@@ -2329,7 +2333,8 @@ def _make_emitter(args: object):
 
 
 def _run_detection(args: object, all_text: dict, extra_text: dict,
-                   entries: list, diff_files, target: Path) -> tuple[list, list]:
+                   entries: list, diff_files, target: Path,
+                   ignore_paths: list = ()) -> tuple[list, list]:
     """Core scan: per-file + corpus detection over the loaded corpus, with the
     incremental cache, plus --plan-json and --state-json (drift) findings merged
     in. Returns ``(findings, parse_fallback_files)``: the second is one
@@ -2372,7 +2377,14 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         # only runs on a cache MISS, so keying the cache on .tf alone let a
         # warm cache silently skip a secret (or any finding) added to e.g.
         # a `.github/workflows/*.yml` while the .tf files were unchanged.
-        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries)
+        # And the files corpus checks find by walking the disk: a
+        # committed terraform.tfstate added since the last run must not be
+        # a cache hit.
+        _disk_inputs = [*_handlers_infra.state_files(target, ignore_paths)] + [
+            p for d in sorted({fp.parent for fp in all_text})
+            for p in _handlers_modules.module_test_files(d)
+        ]
+        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries, _disk_inputs)
         _cache_path = (
             Path(args.cache_file).resolve()
             if getattr(args, "cache_file", None)
@@ -2475,7 +2487,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
 
     # Corpus-level checks run against all files (even in diff mode)
     if not _cache_hit:
-        corpus_findings = detect_corpus(target, all_text, entries)
+        corpus_findings = detect_corpus(target, all_text, entries, ignore_paths)
         if diff_files is not None:
             # Filter corpus findings to only those touching changed files
             corpus_findings = [
@@ -2620,7 +2632,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     # plus --plan-json and --state-json (drift) findings merged in.
     # See _run_detection. `entries` is already provider-filtered above.
     findings, parse_fallback_files = _run_detection(
-        args, all_text, extra_text, entries, diff_files, target,
+        args, all_text, extra_text, entries, diff_files, target, _ignore_paths,
     )
     remap_lines(findings)
     for _pf in parse_fallback_files:

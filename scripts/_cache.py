@@ -28,7 +28,8 @@ from pathlib import Path
 # written by an older engine are treated as absent. v2: the hash also
 # covers the engine source and parser versions (parser migration,
 # tasks/hcl-parser-migration.md §4.9).
-CACHE_FORMAT_VERSION = 2
+# v3: the hash also covers the paths found on disk (`disk_inputs`).
+CACHE_FORMAT_VERSION = 3
 
 
 def _engine_fingerprint() -> str:
@@ -56,19 +57,25 @@ def _engine_fingerprint() -> str:
     return h.hexdigest()
 
 
-def corpus_hash(all_files_text: dict, entries: list) -> str:
+def corpus_hash(all_files_text: dict, entries: list, disk_inputs: list = ()) -> str:
     """Stable 16-hex-char hash over .tf file contents + catalogue rules.
 
     Used by the ``--cache`` path to determine whether a full re-scan is
     needed. If every file and every catalogue entry is byte-identical
     to the previous run, and the engine and parser are unchanged, the
     cached findings can be returned without re-scanning.
+
+    ``disk_inputs`` are the paths corpus checks find by walking the disk
+    rather than reading scanned text (``*.tfstate*``, ``*.tftest.hcl``):
+    adding one changes a finding, so it has to change the key too.
     """
     fh = hashlib.sha256()
     for fp_raw in sorted(all_files_text.keys(), key=str):
         fh.update(str(fp_raw).encode())
         content = all_files_text[fp_raw]
         fh.update(content.encode() if isinstance(content, str) else content)
+    for p in sorted(str(p) for p in disk_inputs):
+        fh.update(b"\0disk\0" + p.encode())
     ch = hashlib.sha256()
     # Audit follow-up #11 — previously this hashed only the first 200
     # chars of the `patterns` field. Two catalogue entries whose

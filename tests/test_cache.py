@@ -61,3 +61,52 @@ def test_cache_hit_returns_same_findings_when_unchanged(tmp_path: Path) -> None:
     first = _scan(tmp_path, "--cache")
     second = _scan(tmp_path, "--cache")
     assert first == second and first  # identical, non-empty
+
+
+# ---- files corpus checks find on disk (critical review) --------------------------
+# SEC-STATE-001 walks for `*.tfstate*` and CI-TEST-001 looks for
+# `*.tftest.hcl`; neither file is scanned text, so the corpus hash didn't
+# cover them, and a warm cache hid a newly committed state file.
+
+
+def _cached(target: Path, cache: Path) -> set[str]:
+    return _scan(target, "--cache", "--cache-file", str(cache), "--show-info")
+
+
+def test_cache_invalidates_when_a_state_file_appears(tmp_path: Path) -> None:
+    target = tmp_path / "t"
+    target.mkdir()
+    (target / "main.tf").write_text("locals {}\n")
+    cache = tmp_path / "cache.json"
+    assert "SEC-STATE-001" not in _cached(target, cache)
+    (target / "terraform.tfstate").write_text("{}\n")
+    assert "SEC-STATE-001" in _cached(target, cache)
+
+
+def test_cache_invalidates_when_a_module_test_appears(tmp_path: Path) -> None:
+    target = tmp_path / "t"
+    target.mkdir()
+    (target / "main.tf").write_text('variable "x" {}\n')
+    cache = tmp_path / "cache.json"
+    assert "CI-TEST-001" in _cached(target, cache)
+    (target / "tests").mkdir()
+    (target / "tests" / "main.tftest.hcl").write_text('run "plan" {}\n')
+    assert "CI-TEST-001" not in _cached(target, cache)
+
+
+def test_state_file_in_a_sibling_module_is_found(tmp_path: Path) -> None:
+    # The walk started at the first scanned file's folder (a/), so a state
+    # file in b/ was never reported, cache or not.
+    for d in ("a", "b"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "main.tf").write_text("locals {}\n")
+    (tmp_path / "b" / "terraform.tfstate").write_text("{}\n")
+    assert "SEC-STATE-001" in _scan(tmp_path)
+
+
+def test_state_file_under_ignore_paths_is_not_reported(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text("locals {}\n")
+    (tmp_path / "fixtures").mkdir()
+    (tmp_path / "fixtures" / "terraform.tfstate").write_text("{}\n")
+    (tmp_path / ".tf-analyze.yaml").write_text("ignore_paths:\n  - fixtures\n")
+    assert "SEC-STATE-001" not in _scan(tmp_path)

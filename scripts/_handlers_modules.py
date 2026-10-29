@@ -117,6 +117,16 @@ def _corpus_output_unused(c: CorpusCtx) -> list[dict]:
     return out
 
 
+def module_test_files(dir_path: Path) -> list[Path]:
+    """The ``*.tftest.hcl`` files of the module in ``dir_path`` (beside it
+    or under ``tests/``), sorted. Read from disk, so ``--cache`` keys on
+    this list too."""
+    found = list(dir_path.glob("*.tftest.hcl"))
+    if (dir_path / "tests").is_dir():
+        found.extend((dir_path / "tests").glob("*.tftest.hcl"))
+    return sorted(found)
+
+
 @_register_corpus("module_missing_tests")
 def _corpus_module_missing_tests(c: CorpusCtx) -> list[dict]:
     """``module_missing_tests`` — fire once per directory that has .tf
@@ -130,11 +140,7 @@ def _corpus_module_missing_tests(c: CorpusCtx) -> list[dict]:
             continue
         checked_dirs.add(dirkey)
         dir_path = Path(dirkey)
-        test_files = list(dir_path.glob("*.tftest.hcl"))
-        tests_subdir = dir_path / "tests"
-        if tests_subdir.is_dir():
-            test_files.extend(tests_subdir.glob("*.tftest.hcl"))
-        if not test_files:
+        if not module_test_files(dir_path):
             first_tf = None
             for f in c.all_files_text:
                 if str(Path(f).parent) == dirkey:
