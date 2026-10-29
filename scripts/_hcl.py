@@ -999,33 +999,44 @@ def _next_line(text: str, i: int) -> int:
 
 def _template_end(text: str, i: int, limit: int, depth: int) -> int | None:
     """`i` is just past a `${` / `%{` in a quoted string whose line ends at
-    `limit`. Return the index past its `}`, or None when it does not close
-    on that line. The interpolation is an expression, so it is lexed like
-    code: comments and strings inside it cannot move the depth."""
+    `limit`. Return the index past its `}`, or None when it never closes.
+    The interpolation is an expression, so it is lexed like code: comments
+    and strings inside it cannot move the depth, and like code it may run
+    onto later lines (`"${join("-", [\n var.env])}"`). A string inside it
+    still ends at its own line, so a stray quote cannot eat the file."""
     braces = 1
-    while i < limit:
+    while True:
+        if i >= limit:
+            if limit >= len(text):
+                return None
+            i = limit + 1  # past the newline
+            limit = _next_line(text, i)
+            continue
         m = _LEX_RE.match(text, i, limit)
         kind = m.lastgroup
         i = m.end()
         if kind == "bc":
-            j = text.find("*/", i, limit)
+            j = text.find("*/", i)
             if j < 0:
                 return None
             i = j + 2
-        elif kind in ("lc", "hd"):
-            return None  # runs past the line, so the template cannot close
+            limit = _next_line(text, i)
+        elif kind == "lc":
+            i = limit
+        elif kind == "hd":
+            return None
         elif kind == "dq":
             end, _plain, ok = _lex_string_end(text, m.start(), limit, depth + 1)
             if not ok:
                 return None
             i = end
+            limit = _next_line(text, i)
         elif kind == "lb":
             braces += 1
         elif kind == "rb":
             braces -= 1
             if braces == 0:
                 return i
-    return None
 
 
 def _lex_string_end(
@@ -1034,15 +1045,20 @@ def _lex_string_end(
     """`text[i]` is an opening `"` on a line that ends at `limit`. Return
     ``(end, plain, closed)``: the index past the closing quote, whether
     the literal had no escapes or templates, and whether it closed at
-    all. An unclosed string ends at `limit` instead of eating the file."""
+    all. An unclosed string ends at `limit` instead of eating the file;
+    only a `${ }` / `%{ }` inside it may carry it onto a later line."""
+    # A string that never closes ends on its own line, even when a
+    # template inside it ran onto later lines (so one stray `"${` costs
+    # only its line, not the block around it).
+    line_end = limit
     if depth > _MAX_TEMPLATE_DEPTH:
-        return limit, False, False
+        return line_end, False, False
     plain = True
     i += 1
     while True:
         m = _STRING_STOP_RE.search(text, i, limit)
         if m is None:
-            return limit, False, False
+            return line_end, False, False
         i = m.start()
         ch = m.group()
         if ch == '"':
@@ -1057,8 +1073,10 @@ def _lex_string_end(
             plain = False
             end = _template_end(text, i + 2, limit, depth)
             if end is None:
-                return limit, False, False
+                return line_end, False, False
             i = end
+            if i > limit:  # the template ran onto a later line
+                limit = _next_line(text, i)
         else:
             i += 1
 

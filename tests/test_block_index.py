@@ -196,6 +196,53 @@ def test_runaway_constructs_cost_at_most_their_line() -> None:
         assert [g for g, _ in _resources(text)] == [("aws_thing", "a")], broken
 
 
+MULTILINE_TEMPLATE_SECRET = (
+    'resource "kubernetes_secret" "s" {\n'
+    "  metadata {\n"
+    '    name = "${join("-", [\n'
+    '      var.env, "s"])}"\n'
+    "  }\n"
+    "  data = {\n"
+    '    password = "hunter2"\n'
+    "  }\n"
+    "}\n"
+)
+
+
+def test_template_running_onto_later_lines_keeps_the_block_whole() -> None:
+    # Terraform accepts newlines inside `${ }`. The lexer ended the string
+    # at the first line, so the `}` of `])}` closed `metadata`, the block's
+    # own `}` closed the resource early, and the rest of its body was lost.
+    text = MULTILINE_TEMPLATE_SECRET + 'resource "aws_thing" "a" {\n}\n'
+    blocks = detect.find_blocks(text, detect.RESOURCE_START)
+    assert [b["groups"] for b in blocks] == [
+        ("kubernetes_secret", "s"),
+        ("aws_thing", "a"),
+    ]
+    assert "hunter2" in blocks[0]["body"]
+
+
+def test_unclosed_template_with_later_braces_costs_only_its_line() -> None:
+    # The template can run onto later lines, but a string that still never
+    # closes ends on its own line, so the block around it is kept.
+    text = (
+        'resource "aws_thing" "a" {\n'
+        '  x = "${\n'
+        "  y = 1\n"
+        "}\n"
+        'resource "aws_thing" "b" {\n'
+        "}\n"
+    )
+    assert _resources(text) == [(("aws_thing", "a"), 1), (("aws_thing", "b"), 5)]
+
+
+def test_many_unclosed_templates_stay_fast() -> None:
+    text = 'resource "aws_thing" "a" {\n' + '  a = "${ x\n' * 5000 + "}\n"
+    start = time.perf_counter()
+    assert [g for g, _ in _resources(text)] == [("aws_thing", "a")]
+    assert time.perf_counter() - start < 5
+
+
 # ---- end to end, on the real catalogue -----------------------------------------
 
 
@@ -203,6 +250,12 @@ def test_commented_out_copy_does_not_hide_real_finding(tmp_path) -> None:
     text = "/*\n" + OPEN_SG + "*/\n" + OPEN_SG
     found = [f for f in _scan(tmp_path, text) if f["id"] == "SEC-AWS-SG-001"]
     assert [f["line"] for f in found] == [OPEN_SG.count("\n") + 3]
+
+
+def test_secret_after_a_multiline_template_is_found(tmp_path) -> None:
+    assert "SEC-K8S-SECRET-001" in {
+        f["id"] for f in _scan(tmp_path, MULTILINE_TEMPLATE_SECRET)
+    }
 
 
 def test_inline_ignore_after_blank_line_applies(tmp_path) -> None:
