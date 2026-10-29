@@ -1079,6 +1079,13 @@ def test_heredoc_changed_in_pr_drops_the_ignore(tmp_path: Path) -> None:
         ('# tf-analyze:ignore X\nfoo = ["a"]\nnext = 1\n', 'foo = ["a"]'),
         # A bracket in a comment doesn't open anything.
         ("# tf-analyze:ignore X\nfoo = 1 /* [ */\nnext = 1\n", "foo = 1"),
+        # `}, {` closes one object and opens the next: net depth 0, but
+        # the new object is still open, so it runs to its `}`.
+        (
+            '# tf-analyze:ignore X\n}, {\n  cidr = "0.0.0.0/0"\n}\nnext = 1\n',
+            '}, { cidr = "0.0.0.0/0" }',
+        ),
+        ("# tf-analyze:ignore X\n]) + concat([\n  1,\n])\nnext = 1\n", "]) + concat([ 1, ])"),
         # Never closes: fall back to the one line.
         ('# tf-analyze:ignore X\nfoo = [\n  "a",\n', "foo = ["),
     ],

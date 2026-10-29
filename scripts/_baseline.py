@@ -225,16 +225,21 @@ def _expression_end(text: str, start: int, line_end: int) -> int | None:
     with no ``{`` / ``[`` / ``(`` left open and no heredoc unfinished.
     Comments, strings (with their interpolations) and heredoc bodies are
     stepped over, so a bracket inside them doesn't count. ``None`` when
-    the expression never closes (fall back to one line)."""
+    the expression never closes (fall back to one line).
+
+    "Left open" is measured against the lowest depth the covered line
+    reaches, not zero: ``}, {`` closes one block and opens the next, so
+    its net depth is 0 but a block is still open at the end of the line."""
     from _hcl import _string_end  # local: keep this module light
 
     n = len(text)
     depth = 0
+    floor = 0  # lowest depth reached on the covered line
     i = start
     while i < n:
         ch = text[i]
         if ch == "\n":
-            if depth <= 0 and i >= line_end:
+            if depth <= floor and i >= line_end:
                 return i
             i += 1
         elif ch == "#" or text.startswith("//", i):
@@ -253,17 +258,19 @@ def _expression_end(text: str, start: int, line_end: int) -> int | None:
             if t is None:
                 return None
             i = t.end()
-            if i >= n and depth <= 0:
+            if i >= n and depth <= floor:
                 return n
         elif ch in "{[(":
             depth += 1
             i += 1
         elif ch in "}])":
             depth -= 1
+            if i < line_end:
+                floor = min(floor, depth)
             i += 1
         else:
             i += 1
-    return n if depth <= 0 else None
+    return n if depth <= floor else None
 
 
 def markers_to_suppressions(markers: list[InlineMarker]) -> dict[int, set[str]]:
