@@ -1362,12 +1362,46 @@ def reprobe_finding(finding: dict, catalog_by_id: dict,
     )
 
 
+def _file_scanner(all_files_text: dict) -> _Callable[[Path, str, list], list[dict]]:
+    """`scan(fp, text, entries)`: `detect_in_file` the way a full scan runs
+    it, in the corpus's context. Plain `var.X` / `local.X` values are
+    resolved from the folder's variable table, once per caller for a child
+    module with several (see `_extract_var_contexts_by_dir`), and sibling-
+    resource checks (`unless_companion`) see every resource in the module.
+
+    Shared by the scan and by `--mode verify-fixed`, which re-probed
+    without either, so a finding on `publicly_accessible = var.public`
+    could never fire again and came out RESOLVED."""
+    var_contexts_by_dir = _extract_var_contexts_by_dir(all_files_text)
+    module_resources_by_dir: dict[str, list[dict]] = {}
+    for fp, text in all_files_text.items():
+        module_resources_by_dir.setdefault(str(fp.parent), []).extend(
+            find_blocks(text, RESOURCE_START)
+        )
+
+    def scan(fp: Path, text: str, entries: list) -> list[dict]:
+        out: list[dict] = []
+        seen: set[tuple] = set()
+        for var_defaults in var_contexts_by_dir.get(str(fp.parent)) or [{}]:
+            for f in detect_in_file(
+                fp, text, entries, var_defaults=var_defaults,
+                module_resources=module_resources_by_dir.get(str(fp.parent)),
+            ):
+                key = (f.get("id"), f.get("line"), f.get("resource"))
+                if key not in seen:
+                    seen.add(key)
+                    out.append(f)
+        return out
+
+    return scan
+
+
 def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
                  entries: list[dict], unreadable_files: list[str] = ()) -> dict:
-    """Adapter passing detect_in_file + detect_corpus to _verify."""
+    """Adapter passing the scan's file detector + detect_corpus to _verify."""
     return _verify_verify_fixed(
         prior_report, target, all_files_text, entries,
-        detect_in_file=detect_in_file,
+        detect_in_file=_file_scanner(all_files_text),
         detect_corpus=detect_corpus,
         unreadable_files=unreadable_files,
     )
@@ -2341,19 +2375,9 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     (main() runs that filter first, since downstream consumers reuse the same
     list). stderr-only side effects; no report output.
     """
-    # Pass 2 — run per-file detection with the filtered ruleset.
-    # Build the per-directory variable tables once; each detect_in_file
-    # call gets one so plain `var.X` / `local.X` attribute values are
-    # resolved before pattern matching. A child module with several
-    # callers has one table per caller (see _extract_var_contexts_by_dir).
-    var_contexts_by_dir = _extract_var_contexts_by_dir(all_text)
-    # Every resource block per directory (module), for sibling-resource
-    # checks across files (`unless_companion`).
-    module_resources_by_dir: dict[str, list[dict]] = {}
-    for _fp, _text in all_text.items():
-        module_resources_by_dir.setdefault(str(_fp.parent), []).extend(
-            find_blocks(_text, RESOURCE_START)
-        )
+    # Pass 2 — run per-file detection with the filtered ruleset, in the
+    # corpus's variable and module context (`_file_scanner`).
+    scan_file = _file_scanner(all_text)
 
     # Incremental cache: if --cache is set and the corpus hash matches the
     # stored cache, return the cached findings immediately (skipping the full
@@ -2389,16 +2413,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         for fp, text in all_text.items():
             if diff_files is not None and fp not in diff_files:
                 continue
-            seen: set[tuple] = set()
-            for var_defaults in var_contexts_by_dir.get(str(fp.parent)) or [{}]:
-                for f in detect_in_file(
-                    fp, text, entries, var_defaults=var_defaults,
-                    module_resources=module_resources_by_dir.get(str(fp.parent)),
-                ):
-                    key = (f.get("id"), f.get("line"), f.get("resource"))
-                    if key not in seen:
-                        seen.add(key)
-                        findings.append(f)
+            findings.extend(scan_file(fp, text, entries))
             # parse_tf is memoised, so this re-reads detect_in_file's result.
             _parse_error = parse_tf(text)[1]
             if _parse_error:
