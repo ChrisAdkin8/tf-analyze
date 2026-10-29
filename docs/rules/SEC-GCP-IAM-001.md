@@ -41,8 +41,8 @@ keywords: "security, high, terraform, iac, gcp, cis-1.6, mitre-T1078.004, cwe-26
 
 ## What this checks
 
-1. **`resource_arg`** on `google_project_iam_member` (`role`) matching `/^roles/(owner|editor|admin|iam\\.securityAdmin|resourcemanager\\.organizationAdmin|resourcemanager\\.folderAdmin|resourcemanager\\.projectAdmin|compute\\.admin|storage\\.admin|container\\.admin|cloudsql\\.admin|bigquery\\.admin|pubsub\\.admin|secretmanager\\.admin|dataproc\\.admin|appengine\\.appAdmin)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
-2. **`resource_arg`** on `google_project_iam_binding` (`role`) matching `/^roles/(owner|editor|admin|iam\\.securityAdmin|resourcemanager\\.organizationAdmin|resourcemanager\\.folderAdmin|resourcemanager\\.projectAdmin|compute\\.admin|storage\\.admin|container\\.admin|cloudsql\\.admin|bigquery\\.admin|pubsub\\.admin|secretmanager\\.admin|dataproc\\.admin|appengine\\.appAdmin)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+1. **`resource_arg`** on `google_project_iam_member` (`role`) matching `/^roles/(owner|editor|admin|iam\.securityAdmin|resourcemanager\.organizationAdmin|resourcemanager\.folderAdmin|resourcemanager\.projectAdmin|compute\.admin|storage\.admin|container\.admin|cloudsql\.admin|bigquery\.admin|pubsub\.admin|secretmanager\.admin|dataproc\.admin|appengine\.appAdmin)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
+2. **`resource_arg`** on `google_project_iam_binding` (`role`) matching `/^roles/(owner|editor|admin|iam\.securityAdmin|resourcemanager\.organizationAdmin|resourcemanager\.folderAdmin|resourcemanager\.projectAdmin|compute\.admin|storage\.admin|container\.admin|cloudsql\.admin|bigquery\.admin|pubsub\.admin|secretmanager\.admin|dataproc\.admin|appengine\.appAdmin)$/` — _the resource declares the named attribute, but its value matches the rule's pattern._
 
 ## Why it likely fired
 

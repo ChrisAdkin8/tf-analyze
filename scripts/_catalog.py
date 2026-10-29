@@ -211,6 +211,7 @@ def load_yaml(text: str) -> dict:
 # ---- Schema validation --------------------------------------------------
 
 _RULE_ID_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+")
+_LITERAL_BACKSLASH_ESCAPE_RE = re.compile(r"\\\\[.sdwSDWbB()\[\]{}+*?|^$]")
 
 def validate_catalog_entry(data: dict, source: str) -> list[str]:
     """Return a list of human-readable schema errors. Empty list = valid.
@@ -251,6 +252,19 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
             if not isinstance(p, dict):
                 errs.append(f"{source}: patterns[{i}] is not a mapping")
                 continue
+            # The engine's YAML reader keeps both backslashes of a
+            # double-quoted `"a\\.b"`, so the regex looks for a literal `\`
+            # and that alternative never matches (tasks/lessons.md,
+            # 2026-10-28). HCL never needs a literal backslash before a regex
+            # escape, so reject it at load.
+            for key, val in p.items():
+                bad = _LITERAL_BACKSLASH_ESCAPE_RE.search(val) if "regex" in key and isinstance(val, str) else None
+                if bad:
+                    errs.append(
+                        f"{source}: patterns[{i}].{key} has a literal backslash before "
+                        f"{bad.group()[2:]!r}; write the regex in single quotes "
+                        f"(regex: 'a\\.b')"
+                    )
             if not p.get("kind"):
                 errs.append(f"{source}: patterns[{i}] missing 'kind'")
             elif p.get("kind") == "policy":
