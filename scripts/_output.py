@@ -379,6 +379,8 @@ def _enrich_findings_for_output(
             f["fix_hcl"] = e["fix_hcl"]
         if "fix_disruption" not in f and e.get("fix_disruption"):
             f["fix_disruption"] = e["fix_disruption"]
+        if e.get("fix_hcl_example"):
+            f["fix_hcl_example"] = True
         if "mitre" not in f and e.get("mitre"):
             f["mitre"] = list(e["mitre"])
         if "narrative" not in f:

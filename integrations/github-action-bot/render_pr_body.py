@@ -65,7 +65,10 @@ def compose_body(scan: dict, apply_summary: str) -> str:
     # (fix_disruption == none). The engine has already filtered to
     # those; we re-derive the count from the apply summary for the
     # by-family table.
-    fixable = [f for f in findings if f.get("fix_disruption") in (None, "none")]
+    fixable = [
+        f for f in findings
+        if f.get("fix_disruption") in (None, "none") and not f.get("fix_hcl_example")
+    ]
     by_family: dict[str, list[dict]] = defaultdict(list)
     for f in fixable:
         by_family[family_of(f["id"])].append(f)

@@ -415,6 +415,10 @@ def handle_apply_fixes(
         entry = entry_map.get(f["id"])
         if not entry or not (entry.get("fix_hcl_minimal") or entry.get("fix_hcl")):
             continue
+        # Example values (`fix_hcl_example: true`) need a person to choose
+        # the real ones; pasting `Owner = "platform-team"` is not a fix.
+        if entry.get("fix_hcl_example"):
+            continue
         by_file.setdefault(fp, []).append(f)
 
     total_applied = 0

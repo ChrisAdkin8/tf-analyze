@@ -321,6 +321,11 @@ def validate_catalog_entry(data: dict, source: str) -> list[str]:
     # Stripped-down form of `fix_hcl` — just the attribute or nested block
     # the patcher needs to insert/replace, with no surrounding resource
     # declaration. Falls back to `fix_hcl` when absent.
+    # `fix_hcl_example: true`: the snippet shows the shape of the fix with
+    # made-up values (tag owners, project names); `--apply-fixes` never
+    # pastes it.
+    if "fix_hcl_example" in data and not isinstance(data["fix_hcl_example"], bool):
+        errs.append(f"{source}: 'fix_hcl_example' must be true or false")
     fix_hcl_minimal = data.get("fix_hcl_minimal")
     if fix_hcl_minimal is not None and not isinstance(fix_hcl_minimal, str):
         errs.append(f"{source}: 'fix_hcl_minimal' must be a string if present")
