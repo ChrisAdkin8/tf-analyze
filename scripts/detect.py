@@ -223,20 +223,25 @@ def _target_tf_files(target: Path, ignore_paths: list, *,
     enclosing git work tree (the repo being scanned, never other files
     on the machine), and never with ``contain_symlinks`` (fleet: targets
     may be untrusted repos). A file symlink out is still always skipped
-    (`_path_is_ignored`). Every link not followed gets a WARN."""
+    (`_path_is_ignored`). Every link not followed gets a WARN.
+
+    `.terraform` folders aren't walked, but a file in one that a local
+    module `source` reaches is listed (`walk_tf_files`), subject to the
+    same `ignore_paths` and containment checks."""
     from _diff import walk_tf_files
 
     root = target.resolve()
     skipped_links: list[Path] = []
     linked: list[str] = []
-    files = [
-        p for p in walk_tf_files(target, contain=contain_symlinks,
-                                 skipped=skipped_links, followed=linked)
-        if ".terraform" not in p.parts
-        and not _path_is_ignored(p, target, ignore_paths, linked_roots=linked)
-        # fleet targets may be untrusted repos: never follow a symlink out
-        and (not contain_symlinks or p.resolve().is_relative_to(root))
-    ]
+    def scanned(p: Path) -> bool:
+        return (
+            not _path_is_ignored(p, target, ignore_paths, linked_roots=linked)
+            # fleet targets may be untrusted repos: never follow a symlink out
+            and (not contain_symlinks or p.resolve().is_relative_to(root))
+        )
+
+    files = walk_tf_files(target, contain=contain_symlinks, skipped=skipped_links,
+                          followed=linked, keep=scanned)
     if skipped_links:
         print(
             f"WARN: not following {len(skipped_links)} symlinked folder(s) "
@@ -322,7 +327,9 @@ def _collect_extra_files(
 
     De-duplicates across rules so the same file is read once even when
     multiple catalogue entries share a glob. `.terraform/` is excluded
-    so cached provider plugins never appear in the corpus. ``ignore_paths``
+    so cached provider plugins never appear in the corpus, even in a
+    module scanned there: Terraform doesn't load a child's `.tfvars`.
+    ``ignore_paths``
     further filters via :func:`_path_is_ignored` so a workflow YAML living
     under an excluded directory (e.g. ``examples/.github/workflows/...``)
     doesn't contaminate the scan.
@@ -545,7 +552,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
                 continue
             try:
                 child_dir = str((Path(parent_dir) / source).resolve())
-            except (OSError, ValueError):
+            except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             assigns = _top_level_assignments(mblk["body"])
             inputs = {k: v for k, v in assigns.items() if k not in _MODULE_META_ARGS}
@@ -1046,7 +1053,10 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list,
             mod_name = mblk["groups"][0]
             src = block_arg_value(mblk["body"], "source")
             if src and src.startswith("."):
-                child_dir = (caller_dir / src).resolve()
+                try:
+                    child_dir = (caller_dir / src).resolve()
+                except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
+                    continue
                 module_sources[mod_name] = str(child_dir)
 
     # Round 30.14 — pre-build the lazy caches once. Cheap (sub-ms on
@@ -2559,11 +2569,11 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             if _parse_error:
                 parse_fallback_files.append({"file": str(fp), "reason": _parse_error})
         # Run grep-style rules against workflow YAML / tfvars / any
-        # other non-tf file_glob (--mode diff intentionally skips these
-        # since they are not in the git diff of *.tf files).
-        if diff_files is None:
-            for fp, text in extra_text.items():
-                findings.extend(detect_in_file(fp, text, entries))
+        # other non-tf file_glob (--mode diff: only the changed ones).
+        for fp, text in extra_text.items():
+            if diff_files is not None and fp.resolve() not in diff_files:
+                continue
+            findings.extend(detect_in_file(fp, text, entries))
 
     # Plan-mode rule re-evaluation. Findings are merged into the same
     # list so suppression, comparison, and reporting all see them; the
@@ -3383,7 +3393,7 @@ def _add_mode_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--diff-base",
         default=None,
-        help="Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files, plus every .tf file in the folder of a changed .tfvars, a changed file declaring variable / locals, or a deleted or moved file, and the local modules those call.",
+        help="Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files and other changed files rules read (.tfvars, workflow YAML), plus every .tf file in the folder of a changed .tfvars, a changed file declaring variable / locals, or a deleted or moved file, and the local modules those call.",
     )
     ap.add_argument(
         "--state-json",
@@ -3930,7 +3940,7 @@ def _main():
                 f"WARN: could not diff against {base!r}; scanning all files",
                 file=sys.stderr,
             )
-        elif not diff_files:
+        elif not any(is_tf_source(fp) for fp in diff_files):
             print("# no changed .tf / .tf.json files in diff", file=sys.stderr)
 
     # Read, detect, filter and suppress — see _scan_target (shared with

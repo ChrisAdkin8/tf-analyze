@@ -17,6 +17,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Callable
 
 # Round-5 audit fix #3 — every git subprocess call now carries a
 # 30-second wall-clock cap. A hung git (corrupted repo, NFS stall, lock
@@ -44,6 +45,12 @@ _GIT_SAFETY = (
     "-c", "core.hooksPath=/dev/null",
 )
 
+# For a git call that prints paths. Left alone, git writes a path with a
+# non-ASCII byte, a quote or a newline as a quoted C string
+# (`"caf\303\251/main.tf"`), which names no file, so the file was
+# dropped. Pair with `-z` and read the output with `split_git_paths`.
+GIT_RAW_PATHS = ("-c", "core.quotepath=off")
+
 
 def _run_git(argv: list[str], target: Path, *, text: bool = False) -> subprocess.CompletedProcess | None:
     """Run a git subprocess with a timeout. Returns None on hang.
@@ -70,6 +77,13 @@ def _run_git(argv: list[str], target: Path, *, text: bool = False) -> subprocess
             f"{' '.join(argv)}\n"
         )
         return None
+
+
+def split_git_paths(stdout: bytes | None) -> list[str]:
+    """The paths in a `-z` git call's output (run it without ``text``).
+    `os.fsdecode` keeps a name that isn't valid UTF-8, which a text-mode
+    read would crash on, and `open` turns it back into the same bytes."""
+    return [os.fsdecode(p) for p in (stdout or b"").split(b"\0") if p]
 
 
 def _gitfile_target(dotgit: Path) -> Path | None:
@@ -175,7 +189,6 @@ def find_latest_prior(reports_dir: Path, suffix: str = ".md") -> Path | None:
     return candidates[0] if candidates else None
 
 
-_DIFF_PATHSPECS = ("*.tf", "*.tf.json", "*.tfvars", "*.tfvars.json")
 # A `variable` or `locals` block feeds every file in its folder (one
 # Terraform module). Comments aren't skipped: a false match only widens
 # the scan.
@@ -184,6 +197,10 @@ _SHARED_INPUT_RE = re.compile(r'^\s*(?:variable|locals)\b|"(?:variable|locals)"\
 
 def _is_tf(fp: Path) -> bool:
     return fp.name.endswith((".tf", ".tf.json"))
+
+
+def _is_tfvars(fp: Path) -> bool:
+    return fp.name.endswith((".tfvars", ".tfvars.json"))
 
 
 def _module_siblings(changed: set[Path]) -> set[Path]:
@@ -195,7 +212,7 @@ def _module_siblings(changed: set[Path]) -> set[Path]:
     resource using `var.x` in `main.tf` was never checked."""
     out: set[Path] = set()
     for fp in changed:
-        if fp.exists() and not fp.name.endswith((".tfvars", ".tfvars.json")):
+        if fp.exists() and not _is_tfvars(fp):
             try:
                 text = fp.read_text(encoding="utf-8", errors="replace")
             except OSError:
@@ -219,20 +236,62 @@ def git_work_tree(target: Path) -> str | None:
 
 def walk_tf_files(target: Path, *, contain: bool = False,
                   skipped: list | None = None,
-                  followed: list | None = None) -> list[Path]:
+                  followed: list | None = None,
+                  keep: Callable[[Path], bool] | None = None) -> list[Path]:
     """The one way every scan path lists a target's `.tf` / `.tf.json`
     files (static, fleet, verify-fixed, diff scope): `tf_source_files`
     with its symlink policy. A symlinked folder that leaves the target is
     followed only inside the enclosing git work tree, and never with
     `contain` (fleet: targets may be untrusted repos). ``skipped`` /
-    ``followed`` are filled as in `tf_source_files`."""
+    ``followed`` are filled as in `tf_source_files`.
+
+    `.terraform` folders aren't walked, but the files in them that a
+    listed file calls as a local module are listed too (`_used_cached_files`):
+    real Terraform loads those. ``keep`` drops files from the list, so a
+    file the scan won't read reaches nothing."""
     from _tfjson import tf_source_files  # local: _tfjson is engine-side
 
-    return tf_source_files(
+    linked: list[str] = [] if followed is None else followed
+    caches: list[Path] = []
+    files = tf_source_files(
         target,
         follow_within=None if contain else git_work_tree(target),
-        skipped=skipped, followed=followed,
+        skipped=skipped, followed=linked, caches=caches,
     )
+    if keep is not None:
+        files = [fp for fp in files if keep(fp)]
+    # No `.terraform` folder under the target: nothing to find, and no
+    # second read of every file.
+    if caches:
+        files += [
+            fp for fp in _used_cached_files(files, target, linked)
+            if keep is None or keep(fp)
+        ]
+    return files
+
+
+def _used_cached_files(files: list[Path], target: Path, linked: list[str]) -> list[Path]:
+    """The `.tf` files under a `.terraform` folder that `files` reach
+    through local module calls, directly or through each other: code
+    Terraform really runs (`source = "./.terraform/m"`), unlike the
+    downloads a `.terraform` folder normally holds.
+
+    The search stays inside `target` and the folders in `linked` (the
+    real paths of symlinked folders the walk followed), as the walk does:
+    a `source` with enough `../` to leave them is not read. Each file is
+    spelled the way the walk spells its neighbours, under `target`."""
+    root = target.resolve()
+    spelled = {fp.parent.resolve(): fp.parent for fp in files}
+    spelled[root] = target
+    known = set(files) | {fp.resolve() for fp in files}
+    out: list[Path] = []
+    for real in sorted(_with_local_children(set(files), within=[root, *map(Path, linked)]) - known):
+        up = next((d for d in real.parents if d in spelled), None)
+        if up is None:
+            out.append(real)  # `_path_is_ignored` refuses it, with a WARN
+        elif ".terraform" in real.relative_to(up).parts:
+            out.append(spelled[up] / real.relative_to(up))
+    return out
 
 
 def _tf_text(fp: Path) -> str | None:
@@ -305,11 +364,16 @@ def local_module_sources(fp: Path, text: str) -> list[Path]:
     return out
 
 
-def _with_local_children(files: set[Path]) -> set[Path]:
+def _with_local_children(files: set[Path], *, within: list[Path] | None = None) -> set[Path]:
     """`files` plus the `.tf` files of every local module they call
     (`source = "./modules/db"`), recursively. A caller passes values into
     the child (`module "db" { public = var.public }`), so a change to the
-    caller can change the child's findings."""
+    caller can change the child's findings. Each folder is visited once,
+    so modules calling each other can't loop. With `within` (real paths),
+    nothing that resolves outside those folders is read or returned."""
+    def allowed(p: Path) -> bool:
+        return within is None or any(p.is_relative_to(r) for r in within)
+
     out = set(files)
     queue = list(files)
     seen_dirs: set[Path] = set()
@@ -319,14 +383,18 @@ def _with_local_children(files: set[Path]) -> set[Path]:
         if text is None:
             continue
         for src in local_module_sources(fp, text):
-            child = src.resolve()
-            if child in seen_dirs or not child.is_dir():
-                continue
-            seen_dirs.add(child)
-            for p in child.iterdir():
-                if p.is_file() and _is_tf(p) and p.resolve() not in out:
-                    out.add(p.resolve())
-                    queue.append(p.resolve())
+            try:
+                child = src.resolve()
+                if child in seen_dirs or not child.is_dir() or not allowed(child):
+                    continue
+                seen_dirs.add(child)
+                found = [p.resolve() for p in child.iterdir() if p.is_file() and _is_tf(p)]
+            except (OSError, RuntimeError, ValueError):
+                continue  # a symlink loop, an unreadable folder, a bad name
+            for real in found:
+                if real not in out and allowed(real):
+                    out.add(real)
+                    queue.append(real)
     return out
 
 
@@ -343,7 +411,11 @@ def _with_local_callers(files: set[Path], tf_files: list[Path]) -> set[Path]:
         if text is None:
             continue
         for src in local_module_sources(fp, text):
-            callers.setdefault(src.resolve(), set()).add(fp.parent.resolve())
+            try:
+                child = src.resolve()
+            except (OSError, RuntimeError, ValueError):
+                continue  # a symlink loop or a bad name: no folder to call
+            callers.setdefault(child, set()).add(fp.parent.resolve())
     out = set(files)
     queue = list({fp.parent for fp in files})
     seen = set(queue)
@@ -358,19 +430,21 @@ def _with_local_callers(files: set[Path], tf_files: list[Path]) -> set[Path]:
 
 
 def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
-    """Set of ``.tf`` files to scan for the change between ``diff_base``
-    and HEAD: the changed ones, the folder-mates of a changed file that
+    """Set of files to scan for the change between ``diff_base`` and HEAD:
+    the changed ``.tf`` files, the folder-mates of a changed file that
     feeds them (`_module_siblings`), the local modules any of those call
-    (`_with_local_children`), and the folders under ``target`` that call
-    any of their folders as a local module (`_with_local_callers`).
-    Renames count as a delete plus an add (``--no-renames``), so the
-    folder a file left is covered too.
+    (`_with_local_children`), the folders under ``target`` that call any
+    of their folders as a local module (`_with_local_callers`), and every
+    other changed file, so a changed `.tfvars` or workflow file is scanned
+    by the rules that read it (`_collect_extra_files`) and an unchanged
+    one adds no noise. Renames count as a delete plus an add
+    (``--no-renames``), so the folder a file left is covered too.
 
     Three sources are unioned:
 
-    * ``git diff --name-only <base>...HEAD`` (the canonical three-dot
+    * ``git diff -z --name-only <base>...HEAD`` (the canonical three-dot
       diff, falls back to two-dot if the merge-base lookup fails).
-    * ``git ls-files --others --exclude-standard`` for untracked files.
+    * ``git ls-files -z --others --exclude-standard`` for untracked files.
     * Every result is resolved against the repo's git root so the
       caller gets absolute paths that survive any later ``chdir``.
 
@@ -387,29 +461,28 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     try:
         # The pathspecs are relative to `target` (git's cwd), so a module
         # linked in from outside it (`net -> ../shared`, followed by
-        # `walk_tf_files`) needs its own: `../shared/*.tf`. Changed files
-        # come back as real paths; the scan matches them by resolved path.
+        # `walk_tf_files`) needs its own: `../shared`. Changed files come
+        # back as real paths; the scan matches them by resolved path.
         followed: list[str] = []
         tf_files = walk_tf_files(target, followed=followed)
         real_target = target.resolve()
-        pathspecs = [*_DIFF_PATHSPECS] + [
-            f"{os.path.relpath(d, real_target)}/{spec}"
-            for d in dict.fromkeys(followed) for spec in _DIFF_PATHSPECS
-        ]
+        pathspecs = [".", *(os.path.relpath(d, real_target) for d in dict.fromkeys(followed))]
         # All git calls below go through `_run_git`, which applies the
         # 30-second timeout. A None return means the call hung past
         # the cap — report the diff as failed (caller: full scan).
         result = _run_git(
-            ["git", "diff", "--name-only", "--no-renames", f"{diff_base}...HEAD", "--", *pathspecs],
-            target, text=True,
+            ["git", *GIT_RAW_PATHS, "diff", "-z", "--name-only", "--no-renames",
+             f"{diff_base}...HEAD", "--", *pathspecs],
+            target,
         )
         if result is None:
             return None
         if result.returncode != 0:
             # Fall back to diff against working tree
             result = _run_git(
-                ["git", "diff", "--name-only", "--no-renames", diff_base, "--", *pathspecs],
-                target, text=True,
+                ["git", *GIT_RAW_PATHS, "diff", "-z", "--name-only", "--no-renames",
+                 diff_base, "--", *pathspecs],
+                target,
             )
             if result is None:
                 return None
@@ -425,31 +498,39 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
                     file=sys.stderr,
                 )
                 return None
-        # Also include untracked .tf files
+        # Also include untracked files
         untracked = _run_git(
-            ["git", "ls-files", "--others", "--exclude-standard", "--full-name",
-             "--", *pathspecs],
-            target, text=True,
+            ["git", *GIT_RAW_PATHS, "ls-files", "-z", "--others", "--exclude-standard",
+             "--full-name", "--", *pathspecs],
+            target,
         )
         if untracked is None:
-            untracked_stdout = ""
+            untracked_stdout = b""
         else:
-            untracked_stdout = untracked.stdout or ""
+            untracked_stdout = untracked.stdout or b""
 
         git_root = root
 
         # Both lists are relative to the repo root (`git diff` always,
         # `ls-files` with `--full-name`), whatever folder `target` is.
         changed = {
-            (git_root / line).resolve()
-            for line in ((result.stdout or "") + "\n" + untracked_stdout).splitlines()
-            if line.strip()
+            (git_root / name).resolve()
+            for name in split_git_paths((result.stdout or b"") + b"\0" + untracked_stdout)
         }
-        files = {fp for fp in changed if fp.exists() and _is_tf(fp)}
-        base = files | _module_siblings(changed)
+        # A `.terraform` file counts only in a folder the scan reads: one
+        # no module calls must not widen the scan to what it calls.
+        used = {fp.resolve().parent for fp in tf_files}
+        inputs = {
+            fp for fp in changed
+            if (_is_tf(fp) or _is_tfvars(fp))
+            and (".terraform" not in fp.parts or fp.parent in used)
+        }
+        others = {fp for fp in changed if not _is_tf(fp) and fp.is_file()}
+        files = {fp for fp in inputs if fp.exists() and _is_tf(fp)}
+        base = files | _module_siblings(inputs)
         if not base:
-            return base
-        return _with_local_children(base) | _with_local_callers(base, tf_files)
+            return others
+        return _with_local_children(base) | _with_local_callers(base, tf_files) | others
     except FileNotFoundError:
         print("WARN: git not found", file=sys.stderr)
         return None

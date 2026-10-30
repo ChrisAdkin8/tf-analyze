@@ -374,14 +374,15 @@ def is_tf_source(path: Path) -> bool:
     return path.suffix == ".tf" or is_tf_json(path)
 
 
-# Folders never walked: Terraform's own cache (every caller dropped files
-# under it anyway) and git's object store.
+# Folders never walked: Terraform's own cache (`_diff.walk_tf_files` adds
+# back the files in it a module call reaches) and git's object store.
 _SKIP_DIRS = frozenset({".terraform", ".git"})
 
 
 def tf_source_files(root: Path, *, follow_within: str | None = None,
                     skipped: list | None = None,
-                    followed: list | None = None) -> list[Path]:
+                    followed: list | None = None,
+                    caches: list | None = None) -> list[Path]:
     """Every `*.tf` then every `*.tf.json` file under `root` (recursive).
 
     Symlinked folders are followed: `Path.rglob` didn't, so a module
@@ -398,7 +399,8 @@ def tf_source_files(root: Path, *, follow_within: str | None = None,
     repo is scanned but nothing else on the machine is). Never one into
     a `.terraform` or `.git` folder, inside `root` or out. A link to `root` or one of its parents (`up -> ..`,
     `/`) never is. Links not followed are appended to `skipped`; the
-    real paths of followed links that leave `root`, to `followed`.
+    real paths of followed links that leave `root`, to `followed`. Each
+    `.terraform` folder passed over is appended to `caches`.
     """
     tf: list[Path] = []
     tf_json: list[Path] = []
@@ -438,6 +440,8 @@ def tf_source_files(root: Path, *, follow_within: str | None = None,
                 try:
                     if e.is_dir():
                         if e.name in _SKIP_DIRS:
+                            if caches is not None and e.name == ".terraform":
+                                caches.append(Path(e.path))
                             continue
                         if not e.is_symlink():
                             subdirs.append(Path(e.path))

@@ -189,7 +189,7 @@ def _corpus_module_unused(c: CorpusCtx) -> list[dict]:
                 continue
             try:
                 target_dir = str((caller_dir / src).resolve())
-            except (OSError, ValueError):
+            except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             referenced_dirs.add(target_dir)
     target_root = str(c.target.resolve()) if isinstance(c.target, Path) else ""

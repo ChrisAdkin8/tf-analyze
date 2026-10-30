@@ -578,7 +578,7 @@ def _corpus_cross_module(c: CorpusCtx) -> list[dict]:
                 child_dir = (caller_dir / src).resolve()
                 if not child_dir.is_dir():
                     continue
-            except (OSError, ValueError):
+            except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             for am in arg_re.finditer(mblk["body"]):
                 child_arg = am.group(1)

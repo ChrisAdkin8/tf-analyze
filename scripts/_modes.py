@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from _diff import _run_git
+from _diff import GIT_RAW_PATHS, _run_git, split_git_paths
 from _output import _md_code
 
 
@@ -184,10 +184,10 @@ def trend_get_commits(target: Path, lookback_days: int) -> list[tuple[str, str]]
 
 def trend_tf_files_at_sha(target: Path, sha: str) -> list[str]:
     """List .tf files tracked at a given commit SHA."""
-    result = _run_git(["git", "ls-tree", "-r", "--name-only", sha], target, text=True)
+    result = _run_git(["git", *GIT_RAW_PATHS, "ls-tree", "-r", "-z", "--name-only", sha], target)
     if result is None or result.returncode != 0:
         return []
-    return [p for p in result.stdout.strip().splitlines() if p.endswith(".tf")]
+    return [p for p in split_git_paths(result.stdout) if p.endswith(".tf")]
 
 
 def trend_scan_at_sha(
