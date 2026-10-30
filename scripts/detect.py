@@ -113,6 +113,7 @@ from _versions import (
 # import back through `detect`.
 from _hcl import (
     LABEL_GAP,
+    _call_arguments,
     _string_end,
     arg_source,
     arg_value_span,
@@ -472,6 +473,12 @@ _PARTIAL_MODULES: set[str] = set()
 _TAG_ARGS = ("tags", "tags_all", "labels")
 _BARE_REF_RE = re.compile(r'[A-Za-z_][\w-]*(?:\.[\w-]+|\[[^\]"]*\])+')
 _PLAIN_INPUT_REF_RE = re.compile(r'(var|local)\.([\w-]+)')
+_OBJECT_ITEM_RE = re.compile(r'\s*(?:"[^"\n]*"|[\w-]+)\s*[=:]\s*(.*)', re.DOTALL)
+# Keys of the variable table the engine writes itself. A name from scanned
+# code (a tfvars key, a `variable` block, a caller's input) must not set one,
+# or `__aws_default_tags__ = "true"` in tfvars switches off the tag rules.
+_ENGINE_TABLE_KEYS = ("__local__", "__aws_default_tags__", "__aws_default_tags_providers__",
+                      "__repo_has__")
 
 
 def _top_level_assignments(body: str) -> dict[str, str]:
@@ -548,18 +555,46 @@ class _VarContext(dict):
     unknown_inputs: frozenset = frozenset()
 
 
+def _is_engine_key(name: str) -> bool:
+    """Whether `name` is reserved for the engine in the variable table."""
+    return name.startswith(_ENGINE_TABLE_KEYS)
+
+
+def _is_bare_reference(expr: str) -> bool:
+    """A reference nothing here resolves: `aws_x.y.id`, not a `var.X` or
+    `local.X` that may have a value."""
+    expr = unwrap_value(expr)
+    return bool(_BARE_REF_RE.fullmatch(expr)) and not expr.startswith(("var.", "local."))
+
+
+def _only_bare_references(expr: str) -> bool:
+    """Whether `expr` is a list or plain object holding nothing else."""
+    if len(expr) < 2 or expr[0] + expr[-1] not in ("[]", "{}"):
+        return False
+    items = [i for i in _call_arguments(expr[1:-1].replace("\n", ",")) if i.strip()]
+    if expr[0] == "{":
+        matches = [_OBJECT_ITEM_RE.fullmatch(i) for i in items]
+        if not all(matches):
+            return False
+        items = [m.group(1) for m in matches]
+    return bool(items) and all(_is_bare_reference(i) for i in items)
+
+
 def _input_is_unknown(source: str, resolved: str, parent_unknown: set[str]) -> bool:
     """Whether a caller's input is provably nothing a rule could judge, so
     its text (which differs per caller: ``aws_subnet.s7.id``) needn't keep
-    two contexts apart: its source is a bare reference, and resolving it
-    changed nothing. A `var.X` that its own caller passed as unknown is one
-    too. Anything else stays distinct, whatever it looks like: a conditional
-    may have folded to a value, and a local's quotes are gone by now."""
+    two contexts apart: its source is a bare reference, or a list or plain
+    object of nothing but those, and resolving it changed nothing. A
+    `var.X` that its own caller passed as unknown is one too. Anything else
+    stays distinct, whatever it looks like: a conditional may have folded
+    to a value, and a local's quotes are gone by now."""
     expr = unwrap_value(source)
     ref = _PLAIN_INPUT_REF_RE.fullmatch(expr)
     if ref:
         return ref.group(1) == "var" and ref.group(2) in parent_unknown
-    return bool(_BARE_REF_RE.fullmatch(expr)) and unwrap_value(resolved) == expr
+    if not (_BARE_REF_RE.fullmatch(expr) or _only_bare_references(expr)):
+        return False
+    return unwrap_value(resolved) == expr
 
 
 def _inputs_in_use(texts: list[str], *, skip_tags: bool) -> set[str]:
@@ -725,14 +760,17 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
         for blk in find_blocks(text, VARIABLE_START):
             default = block_arg_value(blk["body"], "default")
             if default is not None:
-                base.setdefault(dir_key, {})[blk["groups"][0]] = default
+                if not _is_engine_key(blk["groups"][0]):
+                    base.setdefault(dir_key, {})[blk["groups"][0]] = default
         for blk in find_blocks(text, LOCALS_START):
             for lname, lval in _top_level_assignments(blk["body"]).items():
                 base.setdefault(dir_key, {})["__local__" + lname] = lval
     for dir_key in sorted({str(Path(fp).parent) for fp in all_files_text}):
         tfvars = _tfvars_values(Path(dir_key))
         if tfvars:
-            base.setdefault(dir_key, {}).update(tfvars)
+            base.setdefault(dir_key, {}).update(
+                (k, v) for k, v in tfvars.items() if not _is_engine_key(k)
+            )
 
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
     # provider declares default_tags is recorded under the synthetic key
@@ -779,7 +817,10 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
             except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             assigns = _top_level_assignments(mblk["body"])
-            inputs = {k: v for k, v in assigns.items() if k not in _MODULE_META_ARGS}
+            inputs = {
+                k: v for k, v in assigns.items()
+                if k not in _MODULE_META_ARGS and not _is_engine_key(k)
+            }
             # A child uses the caller's default `aws` unless `providers = {
             # aws = aws.<alias> }` passes another configuration.
             m = re.search(r'(?<![\w.])aws\s*=\s*(aws(?:\.[\w-]+)?)\b', assigns.get("providers", ""))
@@ -868,7 +909,10 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
 def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
     """``{dir_path: context}`` — the first context of each directory from
     `_extract_var_contexts_by_dir`, for callers that scan with one
-    variable table (the LSP server)."""
+    variable table (the LSP server, which lives on between scans and has
+    no gate, so what one scan left out mustn't pile up)."""
+    for record in (UNSCANNED_CONTEXTS, UNSCANNED_COMBINATIONS, _PARTIAL_MODULES):
+        record.clear()
     return {d: ctxs[0] for d, ctxs in _extract_var_contexts_by_dir(all_files_text).items()}
 
 

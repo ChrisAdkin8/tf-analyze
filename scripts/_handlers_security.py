@@ -359,10 +359,10 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
         attrs = blk.get("attrs")
         where = f"{c.file_path}: {btype}.{bname}"
         docs = (
-            argument_policies(attrs, args, where, c.var_defaults) if attrs is not None
-            else text_argument_policies(blk["body"], args, where, c.var_defaults)
+            argument_policies(attrs, args, where) if attrs is not None
+            else text_argument_policies(blk["body"], args, where)
         )
-        if any(st.matches(check) for doc in docs for st in json_statements(doc, c.var_defaults)):
+        if any(st.matches(check) for doc in docs for st in json_statements(doc)):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),

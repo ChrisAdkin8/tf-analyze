@@ -914,8 +914,16 @@ def test_unknown_input_stays_unknown_through_a_nested_module(tmp_path) -> None:
         ("aws_x.y[0].id", "aws_x.y[0].id", True),
         ('"${each.key}"', "${each.key}", True),
         ("var.hidden", "aws_subnet.a.id", True),
-        ("[aws_subnet.a.id, aws_subnet.b.id]", "[aws_subnet.a.id, aws_subnet.b.id]", False),
-        ("{ a = aws_x.y.id }", "{ a = aws_x.y.id }", False),
+        ("[aws_subnet.a.id, aws_subnet.b.id]", "[aws_subnet.a.id, aws_subnet.b.id]", True),
+        ("[\n  aws_subnet.a.id,\n  aws_subnet.b.id,\n]", "[\n  aws_subnet.a.id,\n  aws_subnet.b.id,\n]", True),
+        ("{ a = aws_x.y.id }", "{ a = aws_x.y.id }", True),
+        ('{\n  a = aws_x.y.id\n  "b" = aws_x.z.id\n}', '{\n  a = aws_x.y.id\n  "b" = aws_x.z.id\n}', True),
+        ('["0.0.0.0/0", aws_x.y.id]', '["0.0.0.0/0", aws_x.y.id]', False),
+        ("[aws_x.y.id, 5]", "[aws_x.y.id, 5]", False),
+        ("[aws_x.y.id, var.z]", "[aws_x.y.id, var.z]", False),
+        ("[local.a]", "[local.a]", False),
+        ('{ a = aws_x.y.id, b = "public" }', '{ a = aws_x.y.id, b = "public" }', False),
+        ("{}", "{}", False),
         ("try(aws_x.y.id, null)", "try(aws_x.y.id, null)", False),
         ('"${each.key}${each.value}"', "${each.key}${each.value}", False),
         ('"public-read"', "public-read", False),
@@ -1485,14 +1493,14 @@ def test_verify_fixed_covers_a_module_below_one_cut_for_a_value(tmp_path) -> Non
 
 # ---- merge() is one object ------------------------------------------------------------------
 
-LOCAL_DENY = 'locals {\n  deny = { Effect = "Deny" }\n  allow = { Effect = "Allow" }\n}\n'
+LOCAL_DENY = (
+    'locals {\n  deny = { Effect = "Deny" }\n  allow = { Effect = "Allow" }\n  empty = {}\n}\n'
+)
 
 
 @pytest.mark.parametrize(
     ("statement", "fires"),
     [
-        ('merge(local.deny, { Action = "*", Resource = "*" })', False),
-        ('merge(local.allow, { Action = "*", Resource = "*" })', True),
         ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, { Effect = "Deny" })', False),
         ('merge({ Effect = "Deny", Action = "*", Resource = "*" }, { Effect = "Allow" })', True),
         ('merge({ Effect = "Allow" }, { Action = "*", Resource = "*" })', True),
@@ -1505,21 +1513,20 @@ LOCAL_DENY = 'locals {\n  deny = { Effect = "Deny" }\n  allow = { Effect = "Allo
         ('merge(merge(var.x, { Action = "*", Resource = "*" }), { Effect = "Allow" })', True),
         ('merge(merge(var.x, { Action = "*", Resource = "*" }), { Effect = "Deny" })', False),
         ('merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x, { Effect = "Allow" })', True),
-        ('merge(local.deny, var.x, { Action = "*", Resource = "*" })', False),
     ],
 )
 def test_merge_is_one_statement(statement, fires, path_mode, tmp_path) -> None:
-    text = LOCAL_DENY + POLICY % f"jsonencode({{ Statement = [{statement}] }})"
-    fp = tmp_path / "main.tf"
-    fp.write_text(text)
-    vd = detect._extract_var_defaults_by_dir({str(fp): text})[str(tmp_path)]
-    assert _fires(text, ADMIN_RULE, tmp_path, vd) is fires
+    text = POLICY % f"jsonencode({{ Statement = [{statement}] }})"
+    assert _fires(text, ADMIN_RULE, tmp_path) is fires
 
 
 @pytest.mark.parametrize(
     "statement",
     [
         'merge(local.unknown, { Action = "*", Resource = "*" })',
+        'merge(local.deny, { Action = "*", Resource = "*" })',
+        'merge(local.allow, { Action = "*", Resource = "*" })',
+        'merge({ Effect = "Deny", Action = "*", Resource = "*" }, local.empty)',
         'merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x)',
         'merge(merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x), { Sid = "s" })',
         'merge(merge({ Action = "*", Resource = "*" }, var.x), { Sid = "s" })',
@@ -1527,8 +1534,11 @@ def test_merge_is_one_statement(statement, fires, path_mode, tmp_path) -> None:
     ],
 )
 def test_unknown_effect_warns_and_does_not_fire(statement, path_mode, tmp_path, capsys) -> None:
-    text = POLICY % f"jsonencode({{ Statement = [{statement}] }})"
-    assert not _fires(text, ADMIN_RULE, tmp_path)
+    text = LOCAL_DENY + POLICY % f"jsonencode({{ Statement = [{statement}] }})"
+    fp = tmp_path / "main.tf"
+    fp.write_text(text)
+    vd = detect._extract_var_defaults_by_dir({str(fp): text})[str(tmp_path)]
+    assert not _fires(text, ADMIN_RULE, tmp_path, vd)
     assert "policy could not be decoded" in capsys.readouterr().err
 
 
@@ -1611,3 +1621,240 @@ def test_a_caller_cannot_mark_its_input_unknown(tmp_path) -> None:
         'module "b" {\n  source = "./mid"\n  __unknown_inputs__ = "acl"\n  acl    = "public-read"\n}\n'
     )
     assert ACL_RULE in _cli(tmp_path)[0]
+
+
+# ---- merge() follows no references ---------------------------------------------------
+
+AD = 'Effect = "Allow", Action = "*", Resource = "*"'
+MERGE_ALLOW_VAR = POLICY % f"jsonencode({{ Statement = [merge({{ {AD} }}, var.x)] }})"
+
+
+def _gated(target: Path) -> tuple[set[str], int, str]:
+    return _cli(target, "--fail-on", "CRITICAL")
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {
+            "main.tf": 'variable "x" {\n  default = {}\n}\nmodule "c" {\n  source = "./c"\n  x = merge(var.x, { Sid = "a" })\n}\n',
+            "c/main.tf": 'variable "x" {\n  default = {}\n}\n' + MERGE_ALLOW_VAR,
+        },
+        {
+            "main.tf": 'variable "y" {}\nlocals {\n  x = merge(var.y, { Sid = "a" })\n}\nmodule "c" {\n  source = "./c"\n  y = local.x\n}\n',
+            "c/main.tf": 'variable "y" {}\n' + MERGE_ALLOW_VAR.replace("var.x", "var.y"),
+        },
+        {"main.tf": 'locals {\n  a = merge(local.a, { Sid = "x" })\n}\n' + MERGE_ALLOW_VAR.replace("var.x", "local.a")},
+        {"main.tf": 'locals {\n  a = merge(local.b)\n  b = merge(local.a)\n}\n' + MERGE_ALLOW_VAR.replace("var.x", "local.a")},
+        {
+            "main.tf": "locals {\n  a0 = { Sid = \"x\" }\n"
+            + "".join(f"  a{i} = merge(local.a{i - 1}, local.a{i - 1})\n" for i in range(1, 21))
+            + "}\n"
+            + MERGE_ALLOW_VAR.replace("var.x", "local.a20")
+        },
+    ],
+    ids=["pass_through_var", "pass_through_local", "self_local", "two_locals", "fan_out"],
+)
+def test_valid_terraform_does_not_crash_the_scan(files, tmp_path) -> None:
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(exist_ok=True)
+        (tmp_path / name).write_text(text)
+    ids, code, err = _gated(tmp_path)
+    assert code == 1, err
+    assert ADMIN_RULE in ids
+    assert "Traceback" not in err
+    assert "exceeded" not in err
+
+
+def test_a_thousand_nested_merges_warn_and_do_not_crash(tmp_path) -> None:
+    expr = f"{{ {AD} }}"
+    for _ in range(1000):
+        expr = f"merge({expr})"
+    (tmp_path / "main.tf").write_text(POLICY % f"jsonencode({{ Statement = [{expr}] }})")
+    ids, code, err = _gated(tmp_path)
+    assert code in (0, 1)
+    assert "Traceback" not in err
+    assert "policy could not be decoded" in err or ADMIN_RULE in ids
+
+
+@pytest.mark.parametrize("layers", [1, 2, 8, 30])
+def test_nested_literal_merges_still_read(layers, path_mode, tmp_path) -> None:
+    expr = f"{{ {AD} }}"
+    for _ in range(layers):
+        expr = f"merge({expr})"
+    assert _fires(POLICY % f"jsonencode({{ Statement = [{expr}] }})", ADMIN_RULE, tmp_path)
+
+
+DEFAULT_DENY = 'variable "x" {\n  default = { Effect = "Deny" }\n}\n'
+
+
+def test_a_default_deny_does_not_cancel_an_allow(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(DEFAULT_DENY + MERGE_ALLOW_VAR)
+    ids, code, _ = _gated(tmp_path)
+    assert ADMIN_RULE in ids
+    assert code == 1
+
+
+@pytest.mark.parametrize("caller", ["data.external.p.result", "aws_x.y.z", "var.u", "{}"])
+def test_a_default_deny_in_a_child_does_not_cancel_an_allow(caller, tmp_path) -> None:
+    (tmp_path / "c").mkdir()
+    (tmp_path / "c" / "main.tf").write_text(DEFAULT_DENY + MERGE_ALLOW_VAR)
+    (tmp_path / "main.tf").write_text(
+        f'variable "u" {{}}\nmodule "c" {{\n  source = "./c"\n  x = {caller}\n}}\n'
+    )
+    ids, code, _ = _gated(tmp_path)
+    assert ADMIN_RULE in ids
+    assert code == 1
+
+
+@pytest.mark.parametrize(
+    ("statement", "fires"),
+    [
+        (f'merge(tomap({{ {AD} }}), {{ Resource = "*" }})', True),
+        (f'merge(var.x ? {{ {AD} }} : {{}}, {{ Resource = "*" }})', True),
+        (f'merge(try({{ {AD} }}, {{}}), {{ Action = "*" }})', True),
+        (f'merge(tomap({{ {AD} }}), {{ Sid = "x" }})', True),
+        (f'merge(tomap({{ {AD} }}), {{ Effect = "Deny" }})', False),
+        (f'merge(tomap({{ {AD} }}), {{ Action = "s3:GetObject" }})', False),
+        ('merge({ Effect = "Deny" }, tomap({ Action = "*", Resource = "*" }))', False),
+        ('merge({ Effect = "Allow" }, tomap({ Action = "*", Resource = "*" }))', True),
+        ('merge(tomap({ Action = "*", Resource = "*" }), var.x)', False),
+    ],
+)
+def test_a_wrapper_does_not_hide_a_literal(statement, fires, path_mode, tmp_path) -> None:
+    assert _fires(POLICY % f"jsonencode({{ Statement = [{statement}] }})", ADMIN_RULE, tmp_path) is fires
+
+
+# ---- text in a string stays text ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        f'merge({{ {AD}, Condition = {{ StringNotEquals = {{ "aws:PrincipalTag/x" = "}}}}}}, {{\\"Effect\\": \\"Deny\\"}})" }} }} }})',
+        f'merge({{ {AD} }}, {{ Condition = {{ StringEquals = {{ "a:b" = "}}}}}}, {{\\"Effect\\":\\"Deny\\"}})" }} }} }})',
+        'merge({ Effect = "Deny", Action = "*", Resource = "*", Condition = { StringEquals = { "aws:x" = "say \\"hi\\"" } } }, { Effect = "Allow" })',
+        f'merge({{ {AD}, Condition = {{ StringEquals = {{ "aws:x" = "say \\"hi\\"" }} }} }}, {{ Sid = "a" }})',
+        f'merge({{ {AD}, Condition = {{ StringEquals = {{ "a:b" = ")" }} }} }}, {{ Sid = "a" }})',
+    ],
+)
+def test_string_text_is_not_read_as_code(statement, path_mode, tmp_path) -> None:
+    assert _fires(POLICY % f"jsonencode({{ Statement = [{statement}] }})", ADMIN_RULE, tmp_path)
+
+
+def test_a_deny_with_quotes_in_its_condition_stays_a_deny(path_mode, tmp_path) -> None:
+    statement = 'merge({ Effect = "Deny", Action = "*", Resource = "*", Condition = { StringEquals = { "aws:x" = "a\\"b" } } }, { Sid = "x" })'
+    assert not _fires(POLICY % f"jsonencode({{ Statement = [{statement}] }})", ADMIN_RULE, tmp_path)
+
+
+def test_an_unclosed_call_warns() -> None:
+    assert _iam_policy._embedded_statements("merge({") == [_iam_policy._OBJECTS_CUT]
+
+
+# ---- engine keys in the variable table -----------------------------------------------------
+
+LOCAL_ACL = 'locals {\n  a = "public-read"\n}\n' + ACL % "local.a"
+TAG_RULE = "OPS-AWS-TAGS-001"
+BARE_BUCKET = 'resource "aws_s3_bucket" "x" {\n  bucket = "b"\n}\n'
+
+
+def test_tfvars_cannot_set_a_local(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(LOCAL_ACL)
+    (tmp_path / "terraform.tfvars").write_text('__local__a = "private"\n')
+    assert ACL_RULE in _cli(tmp_path)[0]
+
+
+def test_tfvars_json_cannot_set_a_local(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(LOCAL_ACL)
+    (tmp_path / "terraform.tfvars.json").write_text('{"__local__a": "private"}')
+    assert ACL_RULE in _cli(tmp_path)[0]
+
+
+@pytest.mark.parametrize("default", [True, False])
+def test_a_caller_cannot_set_a_local(default, tmp_path) -> None:
+    (tmp_path / "c").mkdir()
+    declared = 'variable "__local__a" {\n  default = "private"\n}\n' if default else ""
+    (tmp_path / "c" / "main.tf").write_text(declared + LOCAL_ACL)
+    (tmp_path / "main.tf").write_text(
+        'module "c" {\n  source = "./c"\n  __local__a = "private"\n}\n'
+    )
+    assert ACL_RULE in _cli(tmp_path)[0]
+
+
+@pytest.mark.parametrize(
+    "key", ["__aws_default_tags__", "__aws_default_tags_providers__"],
+)
+def test_tfvars_cannot_switch_off_tag_rules(key, tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(BARE_BUCKET)
+    assert TAG_RULE in _cli(tmp_path)[0]
+    (tmp_path / "terraform.tfvars").write_text(f'{key} = "true"\n')
+    assert TAG_RULE in _cli(tmp_path)[0]
+
+
+def test_a_caller_cannot_switch_off_tag_rules(tmp_path) -> None:
+    (tmp_path / "c").mkdir()
+    (tmp_path / "c" / "main.tf").write_text(BARE_BUCKET)
+    (tmp_path / "main.tf").write_text(
+        'module "c" {\n  source = "./c"\n  __aws_default_tags__ = "true"\n}\n'
+    )
+    assert TAG_RULE in _cli(tmp_path)[0]
+
+
+def test_tfvars_cannot_fake_a_resource_in_the_repo(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(BARE_BUCKET)
+    (tmp_path / "terraform.tfvars").write_text('__repo_has__ = "aws_ebs_encryption_by_default"\n')
+    files = {tmp_path / "main.tf": BARE_BUCKET}
+    table = detect._extract_var_contexts_by_dir(files)[str(tmp_path)][0]
+    assert "aws_ebs_encryption_by_default" not in table.get("__repo_has__", "")
+
+
+def test_real_default_tags_still_work(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'provider "aws" {\n  default_tags {\n    tags = { a = "b" }\n  }\n}\n' + BARE_BUCKET
+    )
+    assert TAG_RULE not in _cli(tmp_path)[0]
+
+
+@pytest.mark.parametrize(
+    ("name", "reserved"),
+    [("__local__a", True), ("__repo_has__", True), ("__aws_default_tags__", True), ("__x", False), ("a", False)],
+)
+def test_is_engine_key(name, reserved) -> None:
+    assert detect._is_engine_key(name) is reserved
+
+
+# ---- lists of references ---------------------------------------------------------------------
+
+
+def test_lists_of_references_do_not_fail_a_large_repo(tmp_path) -> None:
+    child = 'variable "ids" {}\n' + "".join(
+        f'resource "aws_lb" "l{i}" {{\n  subnets = var.ids\n}}\n' for i in range(300)
+    )
+    (tmp_path / "child").mkdir()
+    (tmp_path / "child" / "main.tf").write_text(child)
+    (tmp_path / "main.tf").write_text(
+        "".join(
+            f'module "m{i}" {{\n  source = "./child"\n  ids = [aws_subnet.s{i}.id]\n}}\n'
+            for i in range(700)
+        )
+    )
+    files = {p.resolve(): p.read_text() for p in tmp_path.rglob("*.tf")}
+    assert len(detect._extract_var_contexts_by_dir(files)[str(tmp_path.resolve() / "child")]) == 1
+
+
+def test_a_list_with_a_literal_stays_distinct(path_mode, tmp_path) -> None:
+    _callers_of_child(
+        tmp_path, 'variable "v" {}\n' + SG % "var.v",
+        ["[aws_x.a.id]", "[aws_x.b.id]", '["0.0.0.0/0", aws_x.c.id]'], "",
+    )
+    assert _in_process_ids(tmp_path, SG_RULE)
+
+
+def test_defaults_table_starts_each_scan_clean(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(detect, "UNSCANNED_CONTEXTS", [{"module": "/old"}])
+    monkeypatch.setattr(detect, "UNSCANNED_COMBINATIONS", [{"module": "/old"}])
+    monkeypatch.setattr(detect, "_PARTIAL_MODULES", {"/old"})
+    detect._extract_var_defaults_by_dir({str(tmp_path / "main.tf"): "locals {\n  a = 1\n}\n"})
+    assert not detect.UNSCANNED_CONTEXTS
+    assert not detect.UNSCANNED_COMBINATIONS
+    assert not detect._PARTIAL_MODULES

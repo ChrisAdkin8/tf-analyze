@@ -751,6 +751,26 @@ def arg_value_span(body: str, arg: str) -> tuple[int, int] | None:
     return m.end(), i
 
 
+def _call_arguments(text: str) -> list[str]:
+    """The top-level arguments of the text inside a call's parentheses."""
+    out: list[str] = []
+    depth, start, i, n = 0, 0, 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            i = _string_end(text, i)
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            out.append(text[start:i])
+            start = i + 1
+        i += 1
+    return [*out, text[start:]]
+
+
 def _top_level_arg_value(body: str, arg: str) -> str | None:
     """Alias of `block_arg_value`, which is top-level only since parser
     migration Step 5. Kept for `_network` and older imports."""
