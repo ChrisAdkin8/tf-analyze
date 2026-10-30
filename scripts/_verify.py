@@ -32,6 +32,7 @@ import re
 from pathlib import Path
 from typing import Callable
 
+from _diff import tracked_cache_files
 from _tfjson import remap_lines
 
 
@@ -173,7 +174,7 @@ def reprobe_finding(
 
     def _same(path: str) -> bool:
         p = Path(path)
-        return (p if p.is_absolute() else root / p).resolve() == target_file.resolve()
+        return _real(p if p.is_absolute() else root / p) == _real(target_file)
 
     same_file = [h for h in hits if _same(str(h.get("file", "")))]
     if same_file:
@@ -196,6 +197,14 @@ def reprobe_finding(
     return "RESOLVED"
 
 
+def _real(path: Path) -> Path:
+    """`path` resolved, or as it is when it has no real path."""
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError):  # RuntimeError: a symlink loop
+        return path
+
+
 def verify_fixed(
     prior_report: Path,
     target: Path,
@@ -210,19 +219,25 @@ def verify_fixed(
 
     A finding in one of `unreadable_files` is UNREADABLE: it could not be
     re-checked, and it used to come out RESOLVED. So is one in a file
-    that is still there under a `.terraform` folder this run skipped
-    (it was scanned when git could say it was tracked).
+    that is still there under a `.terraform` folder this run skipped:
+    not read, and git can't say it's tracked.
     """
     prior_findings = parse_prior_report(prior_report)
     unreadable = {Path(p).resolve() for p in unreadable_files}
     scanned = {Path(p).resolve() for p in all_files_text}
     real_target = Path(target).resolve()
+    tracked: list = []  # asked for once, if it matters
 
-    def skipped_cache_file(path: Path) -> bool:
-        return (
-            path not in scanned and path.is_file() and path.is_relative_to(real_target)
-            and ".terraform" in path.relative_to(real_target).parts
-        )
+    def skipped_cache_file(path: Path, real: Path) -> bool:
+        # `path` first: a linked-in folder's real path is outside the target.
+        if real in scanned or not path.is_file() or not any(
+            p.is_relative_to(top) and ".terraform" in p.relative_to(top).parts
+            for p, top in ((path, Path(target)), (real, real_target))
+        ):
+            return False
+        if not tracked:
+            tracked.append(tracked_cache_files(Path(target)))
+        return tracked[0] is None or real not in tracked[0]
 
     catalog_by_id = {e["id"]: e for e in entries}
     results: dict[str, list[dict]] = {
@@ -238,8 +253,9 @@ def verify_fixed(
     }
     for f in prior_findings:
         fp = Path(f["file"])
-        real = (fp if fp.is_absolute() else Path(target) / fp).resolve()
-        if real in unreadable or skipped_cache_file(real):
+        path = fp if fp.is_absolute() else Path(target) / fp
+        real = _real(path)
+        if real in unreadable or skipped_cache_file(path, real):
             results["UNREADABLE"].append(f)
             continue
         state = reprobe_finding(

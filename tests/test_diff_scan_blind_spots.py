@@ -1102,6 +1102,86 @@ def test_unused_output_check_follows_dot_dot_after_a_symlink(tmp_path) -> None:
     assert _hits(_scan(tmp_path), "ROB-UNUSED-002")
 
 
+# Final review: the text shown in a WARN must not be what gets parsed.
+
+
+def test_a_source_with_two_spaces_is_read_as_written(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r",
+        {"main.tf": 'module "n" {\n  source = "./modules/a  b"\n}\n', "modules/a  b/main.tf": "locals {}\n"},
+    )
+    _commit(repo, {"modules/a  b/main.tf": SG + "\n"})
+    _commit(repo, {"main.tf": 'module "n" {\n  source = "./modules/a  b"\n\n}\n'})
+    assert _diff.local_module_sources(repo / "main.tf", (repo / "main.tf").read_text()) == [
+        repo / "modules" / "a  b"
+    ]
+    assert _diff_scan(repo).returncode == 1
+
+
+def test_a_long_plain_source_is_still_plain(tmp_path) -> None:
+    url = "git::https://example.com/" + "a" * 120 + ".git?ref=" + "0" * 40
+    local = "./.terraform/" + "m" * 130
+    text = f'module "a" {{\n  source = "{url}"\n}}\nmodule "b" {{\n  source = "{local}"\n}}\n'
+    assert _diff.module_sources(Path("/r/main.tf"), text) == ([Path("/r") / local], [])
+
+
+def test_only_the_shown_text_of_a_source_is_cut_short(tmp_path) -> None:
+    text = f'module "a" {{\n  source = ("{"x" * 200}")\n}}\n'
+    assert len(_diff.module_sources(Path("/r/main.tf"), text)[1][0]) == 120
+
+
+def test_verify_fixed_re_checks_a_tracked_tfvars_in_dot_terraform(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r", {"variables.tf": PASSWORD_VAR, ".terraform/x/prod.tfvars": SECRET}
+    )
+    prior = tmp_path / "prior.json"
+    prior.write_text(_scan(repo).stdout)
+    _commit(repo, {".terraform/x/prod.tfvars": "a = 1\n"})
+    assert not json.loads(_verify(repo, prior).stdout)["results"]["UNREADABLE"]
+
+
+def test_verify_fixed_flags_a_skipped_cache_through_a_linked_folder(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"shared/.terraform/m/main.tf": SG, "infra/main.tf": "locals {}\n"})
+    (repo / "infra" / "net").symlink_to("../shared", target_is_directory=True)
+    target = repo / "infra"
+    prior = tmp_path / "prior.json"
+    prior.write_text(_scan(target).stdout)
+    assert _hits(_scan(target), SG_RULE)
+    shutil.rmtree(repo / ".git")
+    results = json.loads(_verify(target, prior).stdout)["results"]
+    assert not results["RESOLVED"] and results["UNREADABLE"]
+
+
+def test_verify_fixed_survives_a_symlink_loop_where_a_finding_was(tmp_path) -> None:
+    _write(tmp_path, {"main.tf": SG})
+    prior = tmp_path / "prior.json"
+    prior.write_text(_scan(tmp_path).stdout)
+    (tmp_path / "main.tf").unlink()
+    (tmp_path / "main.tf").symlink_to("main.tf")
+    _write(tmp_path, {"other.tf": "locals {}\n"})
+    assert "Traceback" not in _verify(tmp_path, prior).stderr
+
+
+def test_no_git_is_a_warning_when_probing_the_base_branch(tmp_path, monkeypatch, capsys) -> None:
+    def missing(*a, **kw):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(_diff, "_run_git", missing)
+    assert _diff.auto_detect_base_branch(tmp_path) == "main"
+    assert "git not available" in capsys.readouterr().err
+
+
+def test_warnings_keep_a_hostile_name_on_one_line(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n"})
+    (repo / "x\n::error::FORGED-DIR").symlink_to("/usr", target_is_directory=True)
+    (repo / "y\n::error::FORGED-FILE.tf").symlink_to("/etc/hosts")
+    bad = repo / "z\n::error::FORGED-UTF8.tf"
+    bad.write_bytes(b"# caf\xe9\nlocals {}\n")
+    stderr = _scan(repo).stderr
+    assert "FORGED-DIR" in stderr and "FORGED-FILE" in stderr and "FORGED-UTF8" in stderr
+    assert not [line for line in stderr.splitlines() if line.startswith("::")]
+
+
 # Finding 8: `.terraform` is judged from the target down.
 
 

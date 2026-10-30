@@ -164,7 +164,11 @@ def auto_detect_base_branch(target: Path) -> str:
     """
     failures: list[str] = []
     for branch in ("main", "master"):
-        result = _run_git(["git", "rev-parse", "--verify", branch], target)
+        try:
+            result = _run_git(["git", "rev-parse", "--verify", branch], target)
+        except OSError as e:  # git not installed
+            failures.append(f"git not available ({e})")
+            continue
         if result is None:
             continue
         if result.returncode == 0:
@@ -439,12 +443,12 @@ def module_sources(fp: Path, text: str) -> tuple[list[Path], list[str]]:
             # what a multi-line expression has on its later lines.
             after = _NEXT_ARG_RE.search(body, s.end())
             stop = after.start() if after else len(body)
-            # One line: this text reaches stderr, and a CI runner reads
-            # a line starting `::error::` as a command.
-            value = " ".join(code[m.end() + s.end():m.end() + stop].split())[:120]
+            value = code[m.end() + s.end():m.end() + stop].strip()
             plain = _PLAIN_STRING_RE.fullmatch(value)
             if plain is None:
-                opaque.append(value)
+                # One line: this text reaches stderr, and a CI runner reads
+                # a line starting `::error::` as a command.
+                opaque.append(" ".join(value.split())[:120])
             elif plain.group(1).startswith(("./", "../")):
                 local.append(Path(os.path.normpath(fp.parent / plain.group(1))))
     return local, opaque

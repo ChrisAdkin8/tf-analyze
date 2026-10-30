@@ -269,7 +269,7 @@ def _target_tf_files(target: Path, ignore_paths: list, *,
             f"that point outside {target}"
             f"{'' if contain_symlinks else ' and its git repository'}, "
             f"or to a parent of it, or into .terraform / .git: "
-            f"{', '.join(map(str, skipped_links[:5]))}"
+            f"{', '.join(repr(str(p)) for p in skipped_links[:5])}"
             f"{', ...' if len(skipped_links) > 5 else ''}",
             file=sys.stderr,
         )
@@ -314,8 +314,8 @@ def _path_is_ignored(path: Path, target: Path, ignore_paths: list,
         # — e.g. `x.tf -> ../.git/config` in CI — and `--apply-fixes`
         # would write through it. Always skipped.
         print(
-            f"WARN: skipping {path}: it resolves outside the target "
-            f"({path.resolve()})",
+            f"WARN: skipping {str(path)!r}: it resolves outside the target "
+            f"({str(path.resolve())!r})",
             file=sys.stderr,
         )
         return True
@@ -2388,7 +2388,7 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         try:
             all_text[fp] = _read_tf_source(fp)
         except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
     try:
         verify = verify_fixed(prior, target, all_text, entries, unreadable_files)
@@ -2797,7 +2797,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         try:
             text = _read_tf_source(fp)
         except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
             continue
         all_text[fp] = text
@@ -2826,7 +2826,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         try:
             extra_text[fp] = _read_normalized(fp)
         except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
 
     # Provider/Terraform-version-aware filter: an entry with `applies_when`
