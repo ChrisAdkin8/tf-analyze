@@ -225,14 +225,18 @@ def _target_tf_files(target: Path, ignore_paths: list, *,
     may be untrusted repos). A file symlink out is still always skipped
     (`_path_is_ignored`). Every link not followed gets a WARN.
 
-    `.terraform` folders aren't walked, but a file in one that a local
-    module `source` reaches is listed (`walk_tf_files`), subject to the
-    same `ignore_paths` and containment checks."""
+    `.terraform` folders aren't walked, but a file in one that git tracks
+    or a local module `source` reaches is listed (`walk_tf_files`), subject
+    to the same `ignore_paths` and containment checks. A module `source`
+    that can't be followed while a `.terraform` folder is there gets a
+    WARN: it may call code there."""
     from _diff import walk_tf_files
 
     root = target.resolve()
     skipped_links: list[Path] = []
     linked: list[str] = []
+    opaque: list[tuple[Path, str]] = []
+
     def scanned(p: Path) -> bool:
         return (
             not _path_is_ignored(p, target, ignore_paths, linked_roots=linked)
@@ -241,7 +245,13 @@ def _target_tf_files(target: Path, ignore_paths: list, *,
         )
 
     files = walk_tf_files(target, contain=contain_symlinks, skipped=skipped_links,
-                          followed=linked, keep=scanned)
+                          followed=linked, keep=scanned, opaque=opaque)
+    for fp, source in opaque:
+        print(
+            f"WARN: {fp}: cannot tell which folder module source {source} calls; "
+            f"code it calls in .terraform is scanned only if git tracks it",
+            file=sys.stderr,
+        )
     if skipped_links:
         print(
             f"WARN: not following {len(skipped_links)} symlinked folder(s) "
@@ -328,13 +338,18 @@ def _collect_extra_files(
     De-duplicates across rules so the same file is read once even when
     multiple catalogue entries share a glob. `.terraform/` is excluded
     so cached provider plugins never appear in the corpus, even in a
-    module scanned there: Terraform doesn't load a child's `.tfvars`.
+    module scanned there (Terraform doesn't load a child's `.tfvars`),
+    unless git tracks the file: `tracked_cache_files`. Paths are tested
+    from `target` down, so a target inside `.terraform` is scanned.
     ``ignore_paths``
     further filters via :func:`_path_is_ignored` so a workflow YAML living
     under an excluded directory (e.g. ``examples/.github/workflows/...``)
     doesn't contaminate the scan.
     """
+    from _diff import tracked_cache_files
+
     _ignore_paths = ignore_paths or []
+    tracked: set[Path] | None = None  # asked for once, if it matters
     extra_globs: set[str] = set()
     for entry in entries:
         for pat in entry.get("patterns", []) or []:
@@ -380,8 +395,11 @@ def _collect_extra_files(
             )
             continue
         for p in matches:
-            if ".terraform" in p.parts:
-                continue
+            if ".terraform" in p.relative_to(target).parts:
+                if tracked is None:
+                    tracked = tracked_cache_files(target)
+                if p not in tracked and p.resolve() not in tracked:
+                    continue
             if not p.is_file():
                 continue
             if _path_is_ignored(p, target, _ignore_paths):
@@ -551,7 +569,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             if not source or not source.startswith((".", "/")):
                 continue
             try:
-                child_dir = str((Path(parent_dir) / source).resolve())
+                child_dir = str(Path(os.path.normpath(Path(parent_dir) / source)).resolve())
             except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             assigns = _top_level_assignments(mblk["body"])
@@ -1054,7 +1072,7 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list,
             src = block_arg_value(mblk["body"], "source")
             if src and src.startswith("."):
                 try:
-                    child_dir = (caller_dir / src).resolve()
+                    child_dir = Path(os.path.normpath(caller_dir / src)).resolve()
                 except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                     continue
                 module_sources[mod_name] = str(child_dir)

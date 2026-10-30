@@ -18,6 +18,7 @@ Corpus handlers (4):
 from __future__ import annotations
 
 import math
+import os
 import re
 from pathlib import Path
 
@@ -575,7 +576,7 @@ def _corpus_cross_module(c: CorpusCtx) -> list[dict]:
             if not src or not src.startswith("."):
                 continue
             try:
-                child_dir = (caller_dir / src).resolve()
+                child_dir = Path(os.path.normpath(caller_dir / src)).resolve()
                 if not child_dir.is_dir():
                     continue
             except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop

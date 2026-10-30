@@ -59,8 +59,11 @@ change them for those runs, edit the fallback after `||` in the file.
   (including a changed `.tfvars` or workflow file), plus the rest of a
   folder whose `.tfvars`, `variable` or `locals` changed, the local
   modules they call, and the folders that call a changed folder as a
-  local module. `.terraform/` is skipped unless a scanned file calls a
-  module there with a local `source`.
+  local module. A changed folder symlink or submodule, or a module
+  `source` that isn't a plain string, scans everything instead, because
+  git can't say which files that changed. `.terraform/` is skipped,
+  except files committed there and a module a scanned file calls with a
+  local `source`.
   Failures are gated by the `fail-on` threshold (default `HIGH`).
 - **No Terraform found fails the job.** If there are no `.tf` /
   `.tf.json` files under `target` (a wrong path, or `ignore_paths`

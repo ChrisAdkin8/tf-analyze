@@ -6,6 +6,10 @@
   (`"caf\\303\\251/main.tf"`), named no file and was dropped.
 * A module in `.terraform/` was never scanned, even when a local `source`
   called it and real Terraform loaded it.
+
+Then what a review of those fixes found: anything committed under
+`.terraform/` is code, not a cache; a `source` that isn't a plain string;
+changes git can't name file by file (folder links, submodules).
 """
 
 from __future__ import annotations
@@ -531,21 +535,454 @@ def test_diff_reaches_callers_up_a_chain_through_dot_terraform(tmp_path) -> None
     assert (repo / "other" / "z.tf").resolve() not in files
 
 
-def test_a_changed_uncalled_dot_terraform_file_adds_nothing(tmp_path) -> None:
+def test_a_changed_uncalled_untracked_dot_terraform_file_adds_nothing(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n", "modules/net/main.tf": SG})
+    _write(repo, {".terraform/stale/main.tf": 'module "n" {\n  source = "../../modules/net"\n}\n'})
+    proc = _diff_scan(repo)
+    assert proc.returncode == 0, proc.stderr
+    assert not _hits(proc, SG_RULE)
+# ---- tracked files under .terraform are code, not a cache -------------------
+
+MANIFEST = (
+    '{"Modules":[{"Key":"","Source":"","Dir":"."},'
+    '{"Key":"%s","Source":"%s","Dir":".terraform/modules/%s"}]}'
+)
+REGISTRY_CALL = 'module "vpc" {\n  source  = "terraform-aws-modules/vpc/aws"\n  version = "5.0.0"\n}\n'
+
+
+def test_a_tracked_file_in_dot_terraform_is_scanned_though_nothing_calls_it(
+    tmp_path,
+) -> None:
+    repo = _repo(
+        tmp_path / "r", {"main.tf": "locals {}\n", ".terraform/stale/main.tf": SG}
+    )
+    assert _hits(_scan(repo), SG_RULE)
+    _commit(repo, {".terraform/stale/main.tf": SG + "\n"})
+    assert _hits(_diff_scan(repo), SG_RULE)
+
+
+def test_a_force_added_file_in_an_ignored_dot_terraform_is_tracked(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r", {"main.tf": "locals {}\n", ".gitignore": ".terraform/\n"}
+    )
+    _write(repo, {".terraform/m/main.tf": SG, ".terraform/m/untracked.tf": SG})
+    _git(repo, "add", "-f", ".terraform/m/main.tf")
+    _git(repo, "commit", "-qm", "pr")
+    assert [Path(f).name for f in _hits(_scan(repo), SG_RULE)] == ["main.tf"]
+
+
+def test_a_tracked_tfvars_in_dot_terraform_is_scanned(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r", {"variables.tf": PASSWORD_VAR, ".terraform/m/a.tfvars": SECRET}
+    )
+    assert _hits(_scan(repo), SECRET_RULE)
+    (repo / ".terraform" / "m" / "b.tfvars").write_text(SECRET)  # untracked
+    assert len(_hits(_scan(repo), SECRET_RULE)) == 1
+
+
+def test_ignore_paths_cover_a_tracked_file_in_dot_terraform(tmp_path) -> None:
     repo = _repo(
         tmp_path / "r",
         {
             "main.tf": "locals {}\n",
-            "modules/net/main.tf": SG,
-            ".terraform/stale/main.tf": 'module "n" {\n  source = "../../modules/net"\n}\n',
+            ".terraform/m/main.tf": SG,
+            ".tf-analyze.yaml": "ignore_paths:\n  - .terraform/\n",
         },
     )
+    assert not _hits(_scan(repo), SG_RULE)
+
+
+def test_a_tracked_file_in_a_linked_folders_dot_terraform_is_scanned(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r", {"shared/.terraform/m/main.tf": SG, "app/x.tf": "locals {}\n"}
+    )
+    (repo / "app" / "net").symlink_to(repo / "shared", target_is_directory=True)
+    hits = _hits(_scan(repo / "app"), SG_RULE)
+    assert hits == [
+        str((repo / "app").resolve() / "net" / ".terraform" / "m" / "main.tf")
+    ]
+
+
+def test_a_repo_with_no_dot_terraform_never_asks_git_for_tracked_files(
+    tmp_path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n"})
+    monkeypatch.setattr(
+        _diff, "tracked_cache_files", lambda *a: pytest.fail("asked git")
+    )
+    assert _diff.walk_tf_files(repo) == [repo / "main.tf"]
+
+
+# Finding 4: Terraform loads what a committed manifest points at.
+
+
+def test_a_committed_manifest_cannot_hide_a_registry_module(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": REGISTRY_CALL})
     _commit(
         repo,
         {
-            ".terraform/stale/main.tf": 'module "n" {\n  source = "../../modules/net"\n}\n\n'
+            ".terraform/modules/vpc/main.tf": SG,
+            ".terraform/modules/modules.json": MANIFEST
+            % ("vpc", "registry.terraform.io/terraform-aws-modules/vpc/aws", "vpc"),
         },
     )
+    assert _scan(repo).returncode == 1
+    assert _diff_scan(repo).returncode == 1
+
+
+def test_a_committed_manifest_cannot_redirect_a_local_source(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r",
+        {
+            "main.tf": 'module "n" {\n  source = "./good"\n}\n',
+            "good/main.tf": "locals {}\n",
+            ".terraform/modules/evil/main.tf": SG,
+            ".terraform/modules/modules.json": MANIFEST % ("n", "./good", "evil"),
+        },
+    )
+    assert _scan(repo).returncode == 1
+
+
+# Finding 1: a `source` that isn't a plain string.
+
+NOT_PLAIN = [
+    '("./.terraform/m")',
+    '(\n    "./.terraform/m"\n  )',
+    '"${"./.terraform/m"}"',
+    '"./.terraform/${"m"}"',
+    'true ? "./.terraform/m" : "./x"',
+    '"./.terraf\\u006frm/m"',
+]
+
+
+@pytest.mark.parametrize("source", NOT_PLAIN)
+def test_a_source_that_is_not_plain_cannot_hide_a_tracked_module(
+    tmp_path, source
+) -> None:
+    repo = _repo(
+        tmp_path / "r",
+        {
+            "main.tf": f'module "n" {{\n  source = {source}\n}}\n',
+            ".terraform/m/main.tf": SG,
+        },
+    )
+    assert _scan(repo).returncode == 1
+
+
+@pytest.mark.parametrize("source", NOT_PLAIN)
+def test_a_source_that_is_not_plain_gets_a_warn_without_git(tmp_path, source) -> None:
+    _write(
+        tmp_path,
+        {
+            "main.tf": f'module "n" {{\n  source = {source}\n}}\n',
+            ".terraform/m/main.tf": SG,
+        },
+    )
+    assert "cannot tell which folder module source" in _scan(tmp_path).stderr
+
+
+@pytest.mark.parametrize(
+    "source",
+    ['"./.terraform/m"', '"hashicorp/vpc/aws"', '"git::https://e.com/a.git?ref=$v"'],
+    ids=["local", "registry", "dollar"],
+)
+def test_a_plain_source_gets_no_warn(tmp_path, source) -> None:
+    _write(
+        tmp_path,
+        {"main.tf": f'module "n" {{\n  source = {source}\n}}\n', ".terraform/x": ""},
+    )
+    assert "module source" not in _scan(tmp_path).stderr
+
+
+def test_no_warn_without_a_dot_terraform_folder(tmp_path) -> None:
+    _write(tmp_path, {"main.tf": 'module "n" {\n  source = ("./x")\n}\n'})
+    assert "module source" not in _scan(tmp_path).stderr
+
+
+def test_a_comment_across_lines_in_the_block_header_hides_no_call(tmp_path) -> None:
+    text = 'module /* a\n */ "n" /* b\n */ {\n  source /* c */ = /* d */ "./m"\n}\n'
+    assert _diff.local_module_sources(Path("/r/main.tf"), text) == [Path("/r/m")]
+
+
+def test_the_argument_after_a_source_is_not_part_of_it(tmp_path) -> None:
+    text = 'module "n" {\n  source = "./a" # note\n  version = "1"\n  count = 1\n}\n'
+    assert _diff.module_sources(Path("/r/main.tf"), text) == ([Path("/r/a")], [])
+
+
+def test_diff_scans_everything_while_a_source_is_not_plain(tmp_path) -> None:
+    # The diff can't see that main.tf calls `net`, so narrowing would miss it.
+    call = 'module "n" {\n  source = ("./net")\n  c = "%s"\n}\n'
+    repo = _repo(tmp_path / "r", {"net/main.tf": SG, "main.tf": call % "a"})
+    _commit(repo, {"main.tf": call % "b"})
     proc = _diff_scan(repo)
+    assert "cannot narrow the diff" in proc.stderr
+    assert proc.returncode == 1, proc.stderr
+
+
+# Finding 5: Terraform cleans `..` as text, before following links.
+
+
+def test_dot_dot_after_a_symlink_is_cleaned_as_text(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {
+            "main.tf": 'module "n" {\n  source = "./lnk/../.terraform/m"\n}\n',
+            ".terraform/m/main.tf": SG,
+            "x/y/keep.txt": "",
+        },
+    )
+    (tmp_path / "lnk").symlink_to("x/y", target_is_directory=True)
+    assert _scan(tmp_path).returncode == 1
+
+
+def test_a_module_input_reaches_a_child_through_dot_dot_after_a_symlink(
+    tmp_path,
+) -> None:
+    child = SG.replace('["0.0.0.0/0"]', "[var.c]")
+    _write(
+        tmp_path,
+        {
+            "main.tf": 'module "n" {\n  source = "./lnk/../net"\n  c = "0.0.0.0/0"\n}\n',
+            "net/main.tf": 'variable "c" {}\n' + child,
+            "x/y/keep.txt": "",
+        },
+    )
+    (tmp_path / "lnk").symlink_to("x/y", target_is_directory=True)
+    assert _hits(_scan(tmp_path), SG_RULE)
+
+
+# Finding 6: a module in a linked folder keeps the link's spelling.
+
+
+def test_a_linked_folder_with_no_tf_files_of_its_own_reaches_dot_terraform(
+    tmp_path,
+) -> None:
+    repo = _repo(
+        tmp_path / "r",
+        {
+            "shared/app/main.tf": 'module "n" {\n  source = "../.terraform/m"\n}\n',
+            "infra/main.tf": "locals {}\n",
+            ".gitignore": ".terraform/\n",
+        },
+    )
+    _write(repo, {"shared/.terraform/m/main.tf": SG})
+    (repo / "infra" / "net").symlink_to("../shared", target_is_directory=True)
+    proc = _scan(repo / "infra")
+    want = (repo / "infra").resolve() / "net" / ".terraform" / "m" / "main.tf"
+    assert _hits(proc, SG_RULE) == [str(want)]
+    assert "resolves outside the target" not in proc.stderr
+
+
+# Finding 9: an ignored module calls nothing.
+
+
+def test_an_ignored_module_in_the_middle_of_a_chain_reaches_nothing(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {
+            "main.tf": 'module "n" {\n  source = "./vendor/mod"\n}\n',
+            "vendor/mod/main.tf": 'module "c" {\n  source = "../../.terraform/m"\n}\n',
+            ".terraform/m/main.tf": SG,
+            ".tf-analyze.yaml": "ignore_paths:\n  - vendor/\n",
+        },
+    )
+    proc = _scan(tmp_path)
     assert proc.returncode == 0, proc.stderr
     assert not _hits(proc, SG_RULE)
+
+
+# Findings 2, 3 and 10: a change git can't name file by file.
+
+
+def test_repointing_a_folder_symlink_scans_everything(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r",
+        {
+            "main.tf": 'module "n" {\n  source = "./modules/cur"\n}\n',
+            "modules/good/main.tf": "locals {}\n",
+            "modules/bad/main.tf": SG,
+        },
+    )
+    (repo / "modules" / "cur").symlink_to("good", target_is_directory=True)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "link")
+    (repo / "modules" / "cur").unlink()
+    (repo / "modules" / "cur").symlink_to("bad", target_is_directory=True)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pr")
+    assert _diff.get_diff_files(repo, "main") is None
+    proc = _diff_scan(repo)
+    assert "is a folder link or submodule" in proc.stderr
+    assert proc.returncode == 1, proc.stderr
+
+
+def test_a_new_folder_symlink_out_of_the_target_scans_everything(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r",
+        {
+            "infra/main.tf": 'module "n" {\n  source = "./net"\n}\n',
+            "shared/bad/main.tf": SG,
+        },
+    )
+    (repo / "infra" / "net").symlink_to("../shared/bad", target_is_directory=True)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pr")
+    assert _diff_scan(repo / "infra").returncode == 1
+
+
+def test_a_submodule_bump_scans_everything(tmp_path) -> None:
+    inner = _repo(tmp_path / "inner", {"main.tf": "locals {}\n"})
+    _git(inner, "switch", "-q", "main")
+    repo = _repo(
+        tmp_path / "outer", {"main.tf": 'module "n" {\n  source = "./mods/net"\n}\n'}
+    )
+    _git(repo, "switch", "-q", "main")
+    _git(
+        repo,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        str(inner),
+        "mods/net",
+    )
+    _git(repo, "commit", "-qm", "add")
+    _git(repo, "switch", "-qc", "bump")
+    (repo / "mods" / "net" / "main.tf").write_text(SG)
+    _git(repo / "mods" / "net", "config", "user.email", "t@example.com")
+    _git(repo / "mods" / "net", "config", "user.name", "t")
+    _git(repo / "mods" / "net", "commit", "-qam", "x")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "bump")
+    assert _diff.get_diff_files(repo, "main") is None
+    assert _diff_scan(repo).returncode == 1
+
+
+def test_an_untracked_git_checkout_in_dot_terraform_is_no_change(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n"})
+    nested = repo / ".terraform" / "modules" / "vpc"
+    nested.mkdir(parents=True)
+    _git(nested, "init", "-q")
+    _write(repo, {"a.tf": "locals {}\n"})
+    _git(repo, "add", "a.tf")
+    _git(repo, "commit", "-qm", "pr")
+    assert (repo / "a.tf").resolve() in _diff.get_diff_files(repo, "main")
+
+
+@pytest.mark.parametrize(
+    "links", [{"loop.tf": "loop.tf"}, {"la": "lb", "lb": "la"}], ids=["self", "pair"]
+)
+def test_a_symlink_loop_in_a_pr_cannot_break_diff_mode(tmp_path, links) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n"})
+    _write(repo, {"open.tf": SG})
+    for name, dest in links.items():
+        (repo / name).symlink_to(dest)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pr")
+    proc = _diff_scan(repo)
+    assert proc.returncode == 1, proc.stderr
+    assert _hits(proc, SG_RULE)
+
+
+def test_a_path_with_no_real_path_cannot_be_narrowed(tmp_path, monkeypatch) -> None:
+    # What Python 3.12 and older do with a symlink loop.
+    def loop(self, strict=False):
+        raise RuntimeError("Symlink loop")
+
+    monkeypatch.setattr(Path, "resolve", loop)
+    with pytest.raises(_diff._CannotNarrow):
+        _diff._changed_path(tmp_path / "gone.tf")
+
+
+# Finding 7: a failed `ls-files` is not an empty list.
+
+
+@pytest.mark.parametrize("failure", ["exit", "hang"])
+def test_a_failed_untracked_listing_scans_everything(
+    tmp_path, monkeypatch, failure
+) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n"})
+    real = _diff._run_git
+
+    def run(argv, target, **kw):
+        if "--others" not in argv:
+            return real(argv, target, **kw)
+        if failure == "hang":
+            return None
+        return subprocess.CompletedProcess(argv, 128, b"", b"fatal: broken\n")
+
+    monkeypatch.setattr(_diff, "_run_git", run)
+    assert _diff.get_diff_files(repo, "main") is None
+
+
+def test_a_failed_tracked_listing_warns_and_scans_on(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n", ".terraform/m/main.tf": SG})
+    real = _diff._run_git
+
+    def run(argv, target, **kw):
+        if "ls-files" in argv:
+            return subprocess.CompletedProcess(argv, 128, b"", b"fatal: broken\n")
+        return real(argv, target, **kw)
+
+    monkeypatch.setattr(_diff, "_run_git", run)
+    assert _diff.walk_tf_files(repo) == [repo / "main.tf"]
+    assert (
+        "cannot list files git tracks in .terraform: fatal: broken"
+        in capsys.readouterr().err
+    )
+
+
+# Finding 8: `.terraform` is judged from the target down.
+
+
+def test_a_target_inside_dot_terraform_scans_its_tfvars(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {".terraform/app/v.tf": PASSWORD_VAR, ".terraform/app/a.auto.tfvars": SECRET},
+    )
+    proc = _scan(tmp_path / ".terraform" / "app")
+    assert proc.returncode == 1, proc.stderr
+    assert _hits(proc, SECRET_RULE)
+
+
+def test_a_dot_terraform_below_such_a_target_is_still_skipped(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {
+            ".terraform/app/v.tf": PASSWORD_VAR,
+            ".terraform/app/.terraform/old/a.auto.tfvars": SECRET,
+        },
+    )
+    assert not _hits(_scan(tmp_path / ".terraform" / "app"), SECRET_RULE)
+
+
+# The two git arguments no test pinned down.
+
+
+def test_an_untracked_file_under_a_subfolder_target_is_named_from_the_repo_root(
+    tmp_path,
+) -> None:
+    repo = _repo(tmp_path / "r", {"infra/main.tf": "locals {}\n"})
+    _write(repo, {"infra/new.tf": SG})
+    assert (repo / "infra" / "new.tf").resolve() in _diff.get_diff_files(
+        repo / "infra", "main"
+    )
+    assert _hits(_diff_scan(repo / "infra"), SG_RULE)
+
+
+def test_a_change_in_a_folder_linked_from_outside_the_target_is_seen(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r", {"app/x.tf": "locals {}\n", "shared/main.tf": "locals {}\n"}
+    )
+    (repo / "app" / "net").symlink_to("../shared", target_is_directory=True)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "link")
+    _git(repo, "branch", "-f", "main", "HEAD")
+    _commit(repo, {"shared/main.tf": SG})
+    assert (repo / "shared" / "main.tf").resolve() in _diff.get_diff_files(
+        repo / "app", "main"
+    )
+    assert _hits(_diff_scan(repo / "app"), SG_RULE)
