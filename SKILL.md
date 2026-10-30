@@ -1193,11 +1193,14 @@ If `mode:verify-fixed` was specified, **do not perform a full re-scan**. Catalog
 | **MOVED** | The issue moved to a different file/line — provide the new location. |
 | **AMBIGUOUS** | The code around the original location has changed in a way that makes the original finding non-comparable. Operator should review. |
 | **STALE-LOCATION** | The original file or resource no longer exists. The finding may have been resolved by deletion, or the report itself may be out of date. |
+| **UNVERIFIABLE** | The finding could not be re-checked, so it is not reported as fixed: it came from a plan or state (`<plan>`, `<state>`), its file is outside what the scan reads (`ignore_paths`), or its rule has no offline check (`--check-registry`) or ran out of time. Re-run the scan that produced it. |
 
 4. Write a verification report to `reports/tf-analysis-verify-YYYY-MM-DD.md` with:
    - The path of the prior report being verified.
-   - A summary table: N still-present, N resolved, N moved, N ambiguous, N stale-location.
+   - A summary table: N still-present, N resolved, N moved, N ambiguous, N stale-location, N unverifiable.
    - A per-finding section with the new state, evidence (file:line excerpt), and recommended action.
+   The CLI (`--mode verify-fixed`) re-probes every file a scan reads: `.tf`, `.tf.json`, tfvars and workflow YAML. Under `--fail-on` it exits 1 on anything not shown to be gone: STILL-PRESENT, MOVED, UNVERIFIABLE, AMBIGUOUS, BROKEN-SYMLINK, and unreadable files.
+
 5. Do NOT introduce new findings in verify-fixed mode. If the agent notices a new issue while reading, log it as a note at the bottom of the verification report and recommend running a full `mode:static` scan.
 
 Verify-fixed mode is significantly cheaper than a full scan (~10× fewer file reads, no fresh discovery, no full security pass) and gives reproducible closure tracking.

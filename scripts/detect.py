@@ -1504,13 +1504,20 @@ def _file_scanner(all_files_text: dict) -> _Callable[[Path, str, list], list[dic
 
 
 def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
-                 entries: list[dict], unreadable_files: list[str] = ()) -> dict:
-    """Adapter passing the scan's file detector + detect_corpus to _verify."""
+                 entries: list[dict], unreadable_files: list[str] = (),
+                 extra_text: dict | None = None) -> dict:
+    """Adapter passing the scan's detectors to _verify: `_file_scanner` for
+    Terraform, plain `detect_in_file` for `extra_text`, as `_run_detection`
+    scans them."""
     return _verify_verify_fixed(
         prior_report, target, all_files_text, entries,
         detect_in_file=_file_scanner(all_files_text),
         detect_corpus=detect_corpus,
         unreadable_files=unreadable_files,
+        extra_text=extra_text,
+        scan_extra=detect_in_file,
+        known_kinds=frozenset(_INFILE_HANDLERS) | frozenset(_CORPUS_HANDLERS),
+        rule_timeouts=RULE_TIMEOUTS,
     )
 
 
@@ -2370,8 +2377,9 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     """Re-probe a prior report's findings and classify fixed/still-present.
 
     Extracted from main()'s `--mode verify-fixed` branch. Returns an exit
-    code: the `--fail-on` gate over STILL-PRESENT and MOVED findings (and
-    unreadable files), or 2 when the prior report cannot be read.
+    code: the `--fail-on` gate over every finding not shown to be gone
+    (STILL-PRESENT, MOVED, and those that could not be re-checked) and
+    unreadable files, or 2 when the prior report cannot be read.
     """
     prior = Path(args.prior_report) if args.prior_report else find_latest_prior(reports_dir, ".md")
     if not prior or not prior.exists():
@@ -2392,8 +2400,16 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         except Exception as e:
             print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
+    # The same non-Terraform files the scan reads (tfvars, workflow YAML).
+    extra_text: dict = {}
+    for fp in _collect_extra_files(target, entries, ignore_paths=_ignore_paths_vf):
+        try:
+            extra_text[fp] = _read_normalized(fp)
+        except Exception as e:
+            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            unreadable_files.append(str(fp))
     try:
-        verify = verify_fixed(prior, target, all_text, entries, unreadable_files)
+        verify = verify_fixed(prior, target, all_text, entries, unreadable_files, extra_text)
     except (OSError, ValueError) as e:
         print(f"ERROR: cannot read prior report: {e}", file=sys.stderr)
         return 2
@@ -2407,14 +2423,15 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         print(f"# wrote {out_path}")
         for state, rows in verify["results"].items():
             print(f"# {state}: {len(rows)}")
-    # Gate on what is still there (in place or moved) and on files that
+    # Gate on what is still there (in place or moved) and on anything that
     # could not be re-checked. This mode always exited 0.
     results = verify["results"]
-    still_open = results["STILL-PRESENT"] + results["MOVED"]
+    still_open = [f for state in ("STILL-PRESENT", "MOVED", "UNVERIFIABLE", "AMBIGUOUS",
+                                  "BROKEN-SYMLINK") for f in results[state]]
     unchecked = list(dict.fromkeys(
         [*unreadable_files, *(str(r["file"]) for r in results["UNREADABLE"])]
     ))
-    return _gate_exit_code(args, still_open, entries, [], unchecked)
+    return _gate_exit_code(args, still_open, entries, [], unchecked, RULE_TIMEOUTS)
 
 
 def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
@@ -3693,7 +3710,8 @@ def _add_comparison_args(ap: argparse.ArgumentParser) -> None:
         help="Report to verify (for --mode verify-fixed): a markdown report, or "
              "this CLI's --format json / text output. If omitted, picks the most "
              "recent tf-analysis-*.md under reports/. Exits 1 under --fail-on when "
-             "a STILL-PRESENT or MOVED finding meets the threshold.",
+             "a finding not shown to be gone (STILL-PRESENT, MOVED, or one that "
+             "could not be re-checked, such as UNVERIFIABLE) meets the threshold.",
     )
     ap.add_argument(
         "--reports-dir",
