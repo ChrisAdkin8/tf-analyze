@@ -33,6 +33,12 @@ class _CannotNarrow(Exception):
     everything. The message says why."""
 
 
+# `--ignore-submodules=none`: a `submodule.<name>.ignore = all` in
+# `.gitmodules`, a file the PR controls, would drop the submodule from
+# the list, and so hide its bump. Nothing else a PR commits changes which
+# names `--name-only` lists: `.gitattributes` diff drivers aren't run for it.
+_DIFF_FLAGS = ("-z", "--name-only", "--no-renames", "--ignore-submodules=none")
+
 # A commit named by its full SHA-1 or SHA-256 hash.
 _SHA_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
@@ -243,7 +249,8 @@ def walk_tf_files(target: Path, *, contain: bool = False,
                   skipped: list | None = None,
                   followed: list | None = None,
                   keep: Callable[[Path], bool] | None = None,
-                  opaque: list | None = None) -> list[Path]:
+                  opaque: list | None = None,
+                  unknown: list | None = None) -> list[Path]:
     """The one way every scan path lists a target's `.tf` / `.tf.json`
     files (static, fleet, verify-fixed, diff scope): `tf_source_files`
     with its symlink policy. A symlinked folder that leaves the target is
@@ -256,7 +263,9 @@ def walk_tf_files(target: Path, *, contain: bool = False,
     those a listed file calls as a local module. ``keep`` drops files
     from the list, so a file the scan won't read reaches nothing.
     ``opaque`` gets each `(file, source)` whose module folder can't be
-    told (`module_sources`) while a `.terraform` folder is there."""
+    told (`module_sources`) while a `.terraform` folder is there.
+    ``unknown`` gets each `.terraform` folder holding Terraform files when
+    git can't say which it tracks: code committed there went unlisted."""
     from _tfjson import tf_source_files  # local: _tfjson is engine-side
 
     linked: list[str] = [] if followed is None else followed
@@ -271,13 +280,13 @@ def walk_tf_files(target: Path, *, contain: bool = False,
     # No `.terraform` folder under the target: nothing to find, and no
     # second read of every file.
     if caches:
-        files += _cache_files_in_use(files, target, caches, linked, keep, opaque)
+        files += _cache_files_in_use(files, target, caches, linked, keep, opaque, unknown)
     return files
 
 
 def _cache_files_in_use(files: list[Path], target: Path, caches: list[Path],
                         linked: list[str], keep: Callable[[Path], bool] | None,
-                        opaque: list | None) -> list[Path]:
+                        opaque: list | None, unknown: list | None) -> list[Path]:
     """The `.tf` files under the `.terraform` folders `caches` that are
     code, not a cache: those git tracks (`tracked_cache_files`), and those
     the listed files reach through local module calls, directly or through
@@ -289,11 +298,13 @@ def _cache_files_in_use(files: list[Path], target: Path, caches: list[Path],
     a `source` with enough `../` to leave them is not read."""
     root = target.resolve()
     tracked = tracked_cache_files(target, linked)
+    if tracked is None and unknown is not None:
+        unknown.extend(cache for cache in caches if _holds_terraform(cache))
     listed: list[Path] = []
     for cache in caches:
         top = cache.resolve()
         listed.extend(
-            cache / fp.relative_to(top) for fp in sorted(tracked)
+            cache / fp.relative_to(top) for fp in sorted(tracked or ())
             if fp.is_relative_to(top) and _is_tf(fp) and fp.is_file()
         )
     if keep is not None:
@@ -320,27 +331,42 @@ def _tf_text(fp: Path) -> str | None:
         return None
 
 
-def tracked_cache_files(target: Path, linked: list[str] = ()) -> set[Path]:
+def _holds_terraform(folder: Path) -> bool:
+    """Is there a `.tf` or `.tfvars` file anywhere under ``folder``?"""
+    return any(
+        _is_tf(Path(name)) or _is_tfvars(Path(name))
+        for _dir, _subdirs, names in os.walk(folder) for name in names
+    )
+
+
+def tracked_cache_files(target: Path, linked: list[str] = ()) -> set[Path] | None:
     """Every file git tracks in a `.terraform` folder under ``target`` or
     the real folders ``linked`` into it, as real paths. Nothing is a cache
     once it is committed: a pull request brought it, and a committed
     `.terraform/modules/modules.json` makes Terraform load it for any
-    `source`, so it is scanned like other code. Empty outside a work tree
-    the scan can trust; a failed git call gets a WARN."""
+    `source`, so it is scanned like other code. ``None`` when git can't
+    say: no work tree the scan can trust, git missing, or a failed call.
+    The list is filtered here, not by a pathspec: a linked folder's name
+    can hold glob characters."""
     root, _err = verified_work_tree(target)
     if root is None:
-        return set()
+        return None
     real_target = target.resolve()
     tops = [".", *(os.path.relpath(d, real_target) for d in dict.fromkeys(linked))]
-    res = _run_git(
-        ["git", *GIT_RAW_PATHS, "ls-files", "-z", "--full-name", "--",
-         *(f":(glob){top}/**/.terraform/**" for top in tops)],
-        target,
-    )
+    try:
+        res = _run_git(
+            ["git", "--literal-pathspecs", *GIT_RAW_PATHS, "ls-files", "-z", "--full-name",
+             "--", *tops],
+            target,
+        )
+    except OSError:  # git not installed
+        return None
     if res is None or res.returncode != 0:
-        print(f"WARN: cannot list files git tracks in .terraform{_git_err(res)}", file=sys.stderr)
-        return set()
-    return {root / name for name in split_git_paths(res.stdout)}
+        return None
+    return {
+        root / name for name in split_git_paths(res.stdout)
+        if ".terraform" in Path(name).parts
+    }
 
 
 # The label may be quoted or bare: `module a { ... }` is valid HCL too.
@@ -413,7 +439,9 @@ def module_sources(fp: Path, text: str) -> tuple[list[Path], list[str]]:
             # what a multi-line expression has on its later lines.
             after = _NEXT_ARG_RE.search(body, s.end())
             stop = after.start() if after else len(body)
-            value = code[m.end() + s.end():m.end() + stop].strip()
+            # One line: this text reaches stderr, and a CI runner reads
+            # a line starting `::error::` as a command.
+            value = " ".join(code[m.end() + s.end():m.end() + stop].split())[:120]
             plain = _PLAIN_STRING_RE.fullmatch(value)
             if plain is None:
                 opaque.append(value)
@@ -482,22 +510,24 @@ def _with_local_children(files: set[Path]) -> set[Path]:
     return files | set(_reachable(list(files)))
 
 
-def _with_local_callers(files: set[Path], tf_files: list[Path]) -> set[Path]:
+def _with_local_callers(files: set[Path], tf_files: list[Path],
+                        ignored: Callable[[Path], bool] | None = None) -> set[Path]:
     """`files` plus the `.tf` files of every folder (of `tf_files`, the
     target's files from `walk_tf_files`) that calls a folder of `files` as
     a local module (`source = "../net"`), recursively up the call chain.
     A child's outputs feed its caller (`security_groups =
     [module.net.sg_id]`), so a change to the child can change the
     caller's findings. A `source` that isn't a plain string could call
-    any folder, so the scope can't be told: `_CannotNarrow`."""
+    any folder, so the scope can't be told: `_CannotNarrow`, unless the
+    scan won't read that file anyway (``ignored``)."""
     callers: dict[Path, set[Path]] = {}  # child folder -> caller folders
     for fp in tf_files:
         text = _tf_text(fp)
         if text is None:
             continue
         local, opaque = module_sources(fp, text)
-        if opaque:
-            raise _CannotNarrow(f"{fp}: module source {opaque[0]} is not a plain string")
+        if opaque and not (ignored is not None and ignored(fp)):
+            raise _CannotNarrow(f"{str(fp)!r}: module source {opaque[0]} is not a plain string")
         for src in local:
             try:
                 child = src.resolve()
@@ -523,14 +553,18 @@ def _changed_path(fp: Path) -> Path:
     only that, so the files that changed behind it are unknown. A symlink
     that loops has no real path. Both are `_CannotNarrow`."""
     try:
-        if not fp.is_dir():
-            return fp.resolve()
+        if fp.is_dir():
+            raise _CannotNarrow(f"{str(fp)!r} is a folder link or submodule")
+        try:
+            return fp.resolve(strict=True)  # only `strict` refuses a loop on every Python
+        except (FileNotFoundError, NotADirectoryError):
+            return fp.resolve()  # deleted
     except (OSError, RuntimeError, ValueError) as e:  # RuntimeError: a symlink loop
-        raise _CannotNarrow(f"{fp}: {e}") from e
-    raise _CannotNarrow(f"{fp} is a folder link or submodule")
+        raise _CannotNarrow(f"{str(fp)!r}: {e}") from e
 
 
-def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
+def get_diff_files(target: Path, diff_base: str,
+                   ignored: Callable[[Path], bool] | None = None) -> set[Path] | None:
     """Set of files to scan for the change between ``diff_base`` and HEAD:
     the changed ``.tf`` files, the folder-mates of a changed file that
     feeds them (`_module_siblings`), the local modules any of those call
@@ -542,7 +576,8 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
     (``--no-renames``), so the folder a file left is covered too. Nothing
     can be narrowed from a changed folder link or submodule, or while a
     module `source` isn't a plain string (`_CannotNarrow`): git names only
-    the link, and the files behind it changed unseen.
+    the link, and the files behind it changed unseen. ``ignored``
+    says which files the scan won't read (`ignore_paths`).
 
     Three sources are unioned:
 
@@ -569,15 +604,18 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         # `walk_tf_files`) needs its own: `../shared`. Changed files come
         # back as real paths; the scan matches them by resolved path.
         followed: list[str] = []
-        tf_files = walk_tf_files(target, followed=followed)
+        unknown: list[Path] = []
+        tf_files = walk_tf_files(target, followed=followed, unknown=unknown)
+        if unknown:
+            raise _CannotNarrow(f"cannot list the files git tracks in {str(unknown[0])!r}")
         real_target = target.resolve()
         pathspecs = [".", *(os.path.relpath(d, real_target) for d in dict.fromkeys(followed))]
         # All git calls below go through `_run_git`, which applies the
         # 30-second timeout. A None return means the call hung past
         # the cap — report the diff as failed (caller: full scan).
         result = _run_git(
-            ["git", *GIT_RAW_PATHS, "diff", "-z", "--name-only", "--no-renames",
-             f"{diff_base}...HEAD", "--", *pathspecs],
+            ["git", *GIT_RAW_PATHS, "diff", *_DIFF_FLAGS, f"{diff_base}...HEAD",
+             "--", *pathspecs],
             target,
         )
         if result is None:
@@ -585,8 +623,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         if result.returncode != 0:
             # Fall back to diff against working tree
             result = _run_git(
-                ["git", *GIT_RAW_PATHS, "diff", "-z", "--name-only", "--no-renames",
-                 diff_base, "--", *pathspecs],
+                ["git", *GIT_RAW_PATHS, "diff", *_DIFF_FLAGS, diff_base, "--", *pathspecs],
                 target,
             )
             if result is None:
@@ -641,7 +678,7 @@ def get_diff_files(target: Path, diff_base: str) -> set[Path] | None:
         base = files | _module_siblings(inputs)
         if not base:
             return others
-        return _with_local_children(base) | _with_local_callers(base, tf_files) | others
+        return _with_local_children(base) | _with_local_callers(base, tf_files, ignored) | others
     except _CannotNarrow as e:
         print(f"WARN: cannot narrow the diff: {e}", file=sys.stderr)
         return None

@@ -229,13 +229,16 @@ def _target_tf_files(target: Path, ignore_paths: list, *,
     or a local module `source` reaches is listed (`walk_tf_files`), subject
     to the same `ignore_paths` and containment checks. A module `source`
     that can't be followed while a `.terraform` folder is there gets a
-    WARN: it may call code there."""
+    WARN: it may call code there. So does a `.terraform` folder holding
+    Terraform files when git can't say which it tracks; they aren't
+    scanned, or `terraform init` outside a repo would flood the report."""
     from _diff import walk_tf_files
 
     root = target.resolve()
     skipped_links: list[Path] = []
     linked: list[str] = []
     opaque: list[tuple[Path, str]] = []
+    unknown: list[Path] = []
 
     def scanned(p: Path) -> bool:
         return (
@@ -245,11 +248,19 @@ def _target_tf_files(target: Path, ignore_paths: list, *,
         )
 
     files = walk_tf_files(target, contain=contain_symlinks, skipped=skipped_links,
-                          followed=linked, keep=scanned, opaque=opaque)
+                          followed=linked, keep=scanned, opaque=opaque, unknown=unknown)
     for fp, source in opaque:
         print(
-            f"WARN: {fp}: cannot tell which folder module source {source} calls; "
+            f"WARN: {str(fp)!r}: cannot tell which folder module source {source} calls; "
             f"code it calls in .terraform is scanned only if git tracks it",
+            file=sys.stderr,
+        )
+    if unknown:
+        print(
+            f"WARN: cannot tell which files git tracks in "
+            f"{', '.join(repr(str(c)) for c in unknown[:5])}"
+            f"{', ...' if len(unknown) > 5 else ''}: not scanning them unless "
+            f"a module calls them, so code committed there is unchecked",
             file=sys.stderr,
         )
     if skipped_links:
@@ -308,9 +319,12 @@ def _path_is_ignored(path: Path, target: Path, ignore_paths: list,
             file=sys.stderr,
         )
         return True
-    if not ignore_paths:
-        return False
-    rel_parts = rel.parts
+    return _in_ignore_paths(rel.parts, ignore_paths)
+
+
+def _in_ignore_paths(rel_parts: tuple, ignore_paths: list) -> bool:
+    """Does a path (its parts, from the scan target) fall under an
+    ``ignore_paths`` entry? See `_path_is_ignored`."""
     for raw in ignore_paths:
         pat = str(raw).strip().strip("/").replace("\\", "/")
         if not pat:
@@ -397,7 +411,7 @@ def _collect_extra_files(
         for p in matches:
             if ".terraform" in p.relative_to(target).parts:
                 if tracked is None:
-                    tracked = tracked_cache_files(target)
+                    tracked = tracked_cache_files(target) or set()
                 if p not in tracked and p.resolve() not in tracked:
                     continue
             if not p.is_file():
@@ -2395,7 +2409,10 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     # could not be re-checked. This mode always exited 0.
     results = verify["results"]
     still_open = results["STILL-PRESENT"] + results["MOVED"]
-    return _gate_exit_code(args, still_open, entries, [], unreadable_files)
+    unchecked = list(dict.fromkeys(
+        [*unreadable_files, *(str(r["file"]) for r in results["UNREADABLE"])]
+    ))
+    return _gate_exit_code(args, still_open, entries, [], unchecked)
 
 
 def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
@@ -3950,7 +3967,14 @@ def _main():
     diff_files = None
     if args.diff_base or args.mode == "diff":
         base = args.diff_base or _auto_detect_base_branch(target)
-        diff_files = get_diff_files(target, base)
+        _diff_ignores = project_config.get("ignore_paths") or []
+
+        def _diff_ignored(p: Path) -> bool:
+            return p.is_relative_to(target) and _in_ignore_paths(
+                p.relative_to(target).parts, _diff_ignores
+            )
+
+        diff_files = get_diff_files(target, base, _diff_ignored)
         if diff_files is None:
             # The diff itself failed: scanning "no changed files" would
             # pass the gate having checked nothing. Scan everything.

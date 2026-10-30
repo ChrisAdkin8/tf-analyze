@@ -63,7 +63,8 @@ change them for those runs, edit the fallback after `||` in the file.
   `source` that isn't a plain string, scans everything instead, because
   git can't say which files that changed. `.terraform/` is skipped,
   except files committed there and a module a scanned file calls with a
-  local `source`.
+  local `source`. If git can't say what is committed, the job warns and
+  committed code there goes unchecked.
   Failures are gated by the `fail-on` threshold (default `HIGH`).
 - **No Terraform found fails the job.** If there are no `.tf` /
   `.tf.json` files under `target` (a wrong path, or `ignore_paths`

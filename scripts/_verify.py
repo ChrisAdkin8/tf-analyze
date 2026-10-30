@@ -209,10 +209,21 @@ def verify_fixed(
     """Parse prior report, re-probe every finding, return a verification dict.
 
     A finding in one of `unreadable_files` is UNREADABLE: it could not be
-    re-checked, and it used to come out RESOLVED.
+    re-checked, and it used to come out RESOLVED. So is one in a file
+    that is still there under a `.terraform` folder this run skipped
+    (it was scanned when git could say it was tracked).
     """
     prior_findings = parse_prior_report(prior_report)
     unreadable = {Path(p).resolve() for p in unreadable_files}
+    scanned = {Path(p).resolve() for p in all_files_text}
+    real_target = Path(target).resolve()
+
+    def skipped_cache_file(path: Path) -> bool:
+        return (
+            path not in scanned and path.is_file() and path.is_relative_to(real_target)
+            and ".terraform" in path.relative_to(real_target).parts
+        )
+
     catalog_by_id = {e["id"]: e for e in entries}
     results: dict[str, list[dict]] = {
         "STILL-PRESENT": [],
@@ -227,7 +238,8 @@ def verify_fixed(
     }
     for f in prior_findings:
         fp = Path(f["file"])
-        if (fp if fp.is_absolute() else Path(target) / fp).resolve() in unreadable:
+        real = (fp if fp.is_absolute() else Path(target) / fp).resolve()
+        if real in unreadable or skipped_cache_file(real):
             results["UNREADABLE"].append(f)
             continue
         state = reprobe_finding(

@@ -15,6 +15,7 @@ changes git can't name file by file (folder links, submodules).
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -895,6 +896,13 @@ def test_a_path_with_no_real_path_cannot_be_narrowed(tmp_path, monkeypatch) -> N
         _diff._changed_path(tmp_path / "gone.tf")
 
 
+def test_a_changed_symlink_loop_scans_everything_on_every_python(tmp_path) -> None:
+    (tmp_path / "loop.tf").symlink_to("loop.tf")
+    with pytest.raises(_diff._CannotNarrow):
+        _diff._changed_path(tmp_path / "loop.tf")
+    assert _diff._changed_path(tmp_path / "deleted.tf") == (tmp_path / "deleted.tf").resolve()
+
+
 # Finding 7: a failed `ls-files` is not an empty list.
 
 
@@ -916,23 +924,182 @@ def test_a_failed_untracked_listing_scans_everything(
     assert _diff.get_diff_files(repo, "main") is None
 
 
-def test_a_failed_tracked_listing_warns_and_scans_on(
-    tmp_path, monkeypatch, capsys
-) -> None:
-    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n", ".terraform/m/main.tf": SG})
+# Round two: what the second review found.
+
+
+def _failing_tracked_listing(monkeypatch) -> None:
     real = _diff._run_git
 
     def run(argv, target, **kw):
-        if "ls-files" in argv:
-            return subprocess.CompletedProcess(argv, 128, b"", b"fatal: broken\n")
+        if "--literal-pathspecs" in argv:
+            return subprocess.CompletedProcess(argv, 128, b"", b"fatal: index corrupt\n")
         return real(argv, target, **kw)
 
     monkeypatch.setattr(_diff, "_run_git", run)
-    assert _diff.walk_tf_files(repo) == [repo / "main.tf"]
-    assert (
-        "cannot list files git tracks in .terraform: fatal: broken"
-        in capsys.readouterr().err
+
+
+def test_a_failed_tracked_listing_is_reported_not_taken_for_empty(tmp_path, monkeypatch) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n", ".terraform/m/main.tf": SG})
+    _failing_tracked_listing(monkeypatch)
+    unknown: list[Path] = []
+    assert _diff.walk_tf_files(repo, unknown=unknown) == [repo / "main.tf"]
+    assert unknown == [repo / ".terraform"]
+
+
+def test_a_failed_tracked_listing_scans_everything_in_diff_mode(tmp_path, monkeypatch) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n", ".terraform/m/main.tf": "locals {}\n"})
+    _commit(repo, {".terraform/m/main.tf": SG})
+    _failing_tracked_listing(monkeypatch)
+    assert _diff.get_diff_files(repo, "main") is None
+
+
+def test_no_git_warns_about_a_dot_terraform_with_code_and_scans_none_of_it(tmp_path) -> None:
+    _write(tmp_path, {"main.tf": "locals {}\n", ".terraform/modules/x/main.tf": SG})
+    proc = _scan(tmp_path)
+    assert proc.stderr.count("cannot tell which files git tracks in") == 1
+    assert str(tmp_path.resolve() / ".terraform") in proc.stderr
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_no_git_warn_covers_a_tfvars_only_cache(tmp_path) -> None:
+    _write(tmp_path, {"main.tf": "locals {}\n", ".terraform/x/a.tfvars": SECRET})
+    assert "cannot tell which files git tracks" in _scan(tmp_path).stderr
+
+
+def test_no_warn_for_a_dot_terraform_with_no_terraform_files(tmp_path) -> None:
+    _write(tmp_path, {"main.tf": "locals {}\n", ".terraform/providers/binary": "x"})
+    assert "cannot tell which files git tracks" not in _scan(tmp_path).stderr
+
+
+def test_a_broken_dot_git_file_gets_the_same_warn(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n", ".terraform/m/main.tf": SG})
+    shutil.rmtree(repo / ".git")
+    (repo / ".git").write_text("gitdir: /nonexistent/x\n")
+    assert "cannot tell which files git tracks" in _scan(repo).stderr
+
+
+def _verify(repo: Path, prior: Path) -> subprocess.CompletedProcess:
+    return _scan(repo, "--mode", "verify-fixed", "--prior-report", str(prior))
+
+
+def test_verify_fixed_does_not_resolve_a_finding_in_a_skipped_cache(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n", ".terraform/m/main.tf": SG})
+    prior = tmp_path / "prior.json"
+    prior.write_text(_scan(repo).stdout)
+    assert json.loads(_verify(repo, prior).stdout)["results"]["STILL-PRESENT"]
+    shutil.rmtree(repo / ".git")  # now nothing says it's tracked
+    proc = _verify(repo, prior)
+    results = json.loads(proc.stdout)["results"]
+    assert not results["RESOLVED"] and results["UNREADABLE"]
+    assert proc.returncode != 0
+    (repo / ".terraform" / "m" / "main.tf").unlink()  # really gone
+    assert not json.loads(_verify(repo, prior).stdout)["results"]["UNREADABLE"]
+
+
+def test_a_glob_character_in_a_linked_folder_hides_no_tracked_code(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r", {"sh[a]red/.terraform/m/main.tf": SG, "infra/x.tf": "locals {}\n"}
     )
+    (repo / "infra" / "net").symlink_to("../sh[a]red", target_is_directory=True)
+    assert _hits(_scan(repo / "infra"), SG_RULE)
+
+
+def test_gitmodules_cannot_hide_a_submodule_bump(tmp_path) -> None:
+    inner = _repo(tmp_path / "inner", {"main.tf": "locals {}\n"})
+    _git(inner, "switch", "-q", "main")
+    repo = _repo(tmp_path / "outer", {"main.tf": 'module "n" {\n  source = "./net"\n}\n'})
+    _git(repo, "switch", "-q", "main")
+    _git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(inner), "net")
+    _git(repo, "commit", "-qm", "add")
+    _git(repo, "switch", "-qc", "bump")
+    (repo / "net" / "main.tf").write_text(SG)
+    _git(repo / "net", "config", "user.email", "t@example.com")
+    _git(repo / "net", "config", "user.name", "t")
+    _git(repo / "net", "commit", "-qam", "x")
+    _git(repo, "add", "-A")
+    gitmodules = repo / ".gitmodules"
+    gitmodules.write_text(gitmodules.read_text() + "\tignore = all\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "bump")
+    assert _diff.get_diff_files(repo, "main") is None
+    assert _diff_scan(repo).returncode == 1
+
+
+def test_gitattributes_cannot_hide_a_change(tmp_path) -> None:
+    repo = _repo(tmp_path / "r", {"main.tf": "locals {}\n"})
+    _commit(repo, {".gitattributes": "*.tf -diff diff=nope\n", "main.tf": SG})
+    assert _diff_scan(repo).returncode == 1
+
+
+def test_an_ignored_file_cannot_turn_diff_mode_off(tmp_path) -> None:
+    repo = _repo(
+        tmp_path / "r",
+        {
+            ".tf-analyze.yaml": "ignore_paths:\n  - fixtures/\n",
+            "fixtures/x/main.tf": 'module "x" {\n  source = ("./y")\n}\n',
+            "legacy.tf": SG,
+            "app/main.tf": "locals {}\n",
+        },
+    )
+    _commit(repo, {"app/o.tf": "locals {}\n"})
+    proc = _diff_scan(repo)
+    assert proc.returncode == 0, proc.stderr
+    assert "cannot narrow" not in proc.stderr
+
+
+def test_a_source_that_is_not_plain_stays_on_one_line_in_the_warn(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {
+            "main.tf": 'module "a" {\n  source = (\n"::error::forged"\n)\n}\n',
+            ".terraform/x": "",
+        },
+    )
+    stderr = _scan(tmp_path).stderr
+    assert "forged" in stderr
+    assert not [line for line in stderr.splitlines() if line.startswith(('"::', "::"))]
+
+
+def _lnk(root: Path) -> None:
+    (root / "x" / "y").mkdir(parents=True)
+    (root / "lnk").symlink_to("x/y", target_is_directory=True)
+
+
+def test_sensitive_input_check_follows_dot_dot_after_a_symlink(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {
+            "main.tf": 'variable "p" {\n  sensitive = true\n}\n'
+            'module "n" {\n  source   = "./lnk/../net"\n  password = var.p\n}\n',
+            "net/main.tf": 'variable "password" {}\n',
+        },
+    )
+    _lnk(tmp_path)
+    assert _hits(_scan(tmp_path), "SEC-SENSITIVE-002")
+
+
+def test_unused_module_check_follows_dot_dot_after_a_symlink(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {
+            "main.tf": 'module "n" {\n  source = "./lnk/../net"\n}\n',
+            "net/main.tf": 'variable "a" {\n  default = 1\n}\n',
+        },
+    )
+    _lnk(tmp_path)
+    assert not _hits(_scan(tmp_path), "MOD-UNUSED-001")
+
+
+def test_unused_output_check_follows_dot_dot_after_a_symlink(tmp_path) -> None:
+    _write(
+        tmp_path,
+        {
+            "main.tf": 'module "n" {\n  source = "./lnk/../net"\n}\n',
+            "net/main.tf": 'output "o" {\n  value = 1\n}\n',
+        },
+    )
+    _lnk(tmp_path)
+    assert _hits(_scan(tmp_path), "ROB-UNUSED-002")
 
 
 # Finding 8: `.terraform` is judged from the target down.
