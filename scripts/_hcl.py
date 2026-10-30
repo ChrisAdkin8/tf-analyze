@@ -451,6 +451,14 @@ def _split_ternary(expr: str) -> tuple[str, str, str] | None:
     return None
 
 
+# Keys of the variable table the engine writes itself. NUL can't be in an HCL
+# identifier or a tfvars key that means anything, so no name from scanned code
+# is one of these, and `__local__acl` stays an ordinary variable.
+LOCAL_KEY_PREFIX = "\0local:"
+AWS_DEFAULT_TAGS_KEY = "\0aws_default_tags"
+AWS_DEFAULT_TAGS_PROVIDERS_KEY = "\0aws_default_tags_providers"
+REPO_HAS_KEY = "\0repo_has"
+
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 _FOR_EXPR_RE = re.compile(r"\[\s*for\b")
 _WRAPPED_STRUCTURE = ("${(", "${[", "${{")
@@ -581,13 +589,13 @@ def resolve_value_text(val: str, var_defaults: dict, _seen: frozenset = frozense
     ``"public-read"``. Wrappers may nest (`unwrap_value`). Anything else,
     including an unknown or cyclic reference, is returned unchanged. The
     one resolver behind `detect._resolve_var_ref` and `_network.resolve`.
-    Locals are stored as ``__local__<name>``."""
+    Locals are stored under `LOCAL_KEY_PREFIX`."""
     if len(_seen) > _MAX_RESOLVE_DEPTH:
         return val
     expr = unwrap_value(val)
     m = _PLAIN_REF_RE.match(expr)
     if m:
-        key = m.group(2) if m.group(1) == "var" else "__local__" + m.group(2)
+        key = m.group(2) if m.group(1) == "var" else LOCAL_KEY_PREFIX + m.group(2)
         raw = var_defaults.get(key)
         if raw is None or key in _seen:
             return val

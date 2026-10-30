@@ -23,10 +23,12 @@ value`` — so it is parsed again as HCL. Values that are expressions stay
 behind a variable is not reported (unknown at parse time), which is the
 conservative direction for these rules.
 
-A construct the parser rejects fails its whole file, usually far from any
-policy. The argument or block is then cut out of the text and parsed on
-its own (`text_argument_policies`, `document_block_subtree`), so a policy
-reads the same as on a clean file.
+A policy-valued argument is always cut out of the source text and parsed
+on its own (`text_argument_policies`). A construct the parser rejects fails
+its whole file, usually far from any policy, so this reads the same in a
+rejected file; and only the source shows where a string with escapes ends
+(`_mask_escaped_expressions`). A ``data`` block in a rejected file is read
+the same way (`document_block_statements`).
 """
 
 from __future__ import annotations
@@ -63,6 +65,7 @@ _STATEMENT_KEYS = frozenset({
 # Control markers beside parsed policy data. Private objects, never strings:
 # everything in a policy is text the scanned code chose, so a string marker
 # could be written into a policy to turn its analysis off.
+_MASKED_STRING = '"${masked.string}"'  # see `_mask_escaped_expressions`
 _EFFECT_UNKNOWN = object()  # dict key: a merge() whose Effect isn't known
 _UNREAD = object()  # dict key: a document with statements left unread
 _OBJECTS_CUT = object()  # list item: objects past `_MAX_OBJECTS_TRIED`
@@ -324,12 +327,22 @@ def _statement_objects(raw, depth: int = 0) -> list:
 
 def _next_object(text: str, start: int) -> tuple[int, str]:
     """Where the next ``{`` or ``merge(`` is in `text`, and which; -1 for
-    none."""
-    brace = text.find("{", start)
-    call = _MERGE_CALL_RE.search(text, start)
-    if call and (brace == -1 or call.start() < brace):
-        return call.start(), "merge"
-    return brace, "{"
+    none. Strings are stepped over: text in one is never a statement, and
+    ``${`` opens an expression, not an object."""
+    i, n = start, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            i = _string_end(text, i)
+        elif ch in "$%" and text.startswith("{", i + 1):
+            i += 2
+        elif ch == "{":
+            return i, "{"
+        elif ch == "m" and _MERGE_CALL_RE.match(text, i):
+            return i, "merge"
+        else:
+            i += 1
+    return -1, "{"
 
 
 def _merge_statements(inner: str, depth: int) -> list:
@@ -350,6 +363,7 @@ def _merge_statements(inner: str, depth: int) -> list:
     merged: dict = {}
     wrapped: list[dict] = []
     open_ended = False  # an unknown argument since the last `Effect`
+    cut = False
     pending = [(arg, 0) for arg in reversed(_call_arguments(inner))]
     while pending:
         arg, level = pending.pop()
@@ -359,7 +373,7 @@ def _merge_statements(inner: str, depth: int) -> list:
         call = _MERGE_CALL_RE.match(expr)
         if call and brace_walk(expr, call.end() - 1, opens="(", closes=")") == len(expr):
             if level >= _MAX_MERGE_DEPTH:
-                return [_OBJECTS_CUT]
+                return [merged, *wrapped, _OBJECTS_CUT]
             nested = _call_arguments(expr[call.end():-1])
             pending.extend((a, level + 1) for a in reversed(nested))
             continue
@@ -373,17 +387,21 @@ def _merge_statements(inner: str, depth: int) -> list:
             open_ended = open_ended and "Effect" not in obj
             continue
         open_ended = True
+        for st in wrapped:
+            if _effect(st.get("Effect")).lower() == "deny":
+                st[_EFFECT_UNKNOWN] = True
         if "{" in expr:
             for st in _embedded_statements(expr, depth + 1):
                 if st is _OBJECTS_CUT:
-                    return [_OBJECTS_CUT]
-                wrapped.append({**merged, **st})
+                    cut = True
+                else:
+                    wrapped.append({**merged, **st})
     for st in wrapped:
         if "Effect" not in st:
             st[_EFFECT_UNKNOWN] = True
     if open_ended and ("Effect" not in merged or _effect(merged["Effect"]).lower() == "deny"):
         merged[_EFFECT_UNKNOWN] = True
-    return [merged, *wrapped]
+    return [merged, *wrapped, *([_OBJECTS_CUT] if cut else [])]
 
 
 def _embedded_statements(text: str, depth: int = 0) -> list:
@@ -391,29 +409,31 @@ def _embedded_statements(text: str, depth: int = 0) -> list:
     ``{...}`` that reads as an object, whatever surrounds it, and each
     ``merge(...)`` taken as one object (`_merge_statements`). One that is a
     whole document counts for its statements. An object that doesn't read
-    is looked into, for those inside it. Past `_MAX_OBJECTS_TRIED` objects
-    or `_MAX_MERGE_DEPTH` layers the rest goes unread, and `_OBJECTS_CUT`
-    ends the list. So does a call whose end can't be found: better a WARN
-    than a guess at where its arguments stop."""
+    is looked into, for those inside it, but that is a partial read. So is
+    going past `_MAX_OBJECTS_TRIED` objects or `_MAX_MERGE_DEPTH` layers, or
+    a call whose end can't be found: `_OBJECTS_CUT` ends the list, for a
+    WARN rather than a guess."""
     if depth > _MAX_MERGE_DEPTH:
         return [_OBJECTS_CUT]
     out: list = []
     i, kind = _next_object(text, 0)
     tries = 0
+    partial = False
     while i != -1 and tries < _MAX_OBJECTS_TRIED:
         tries += 1
         if kind == "merge":
             opening = text.index("(", i)
             end = brace_walk(text, opening, opens="(", closes=")")
             if end is None:
-                out.append(_OBJECTS_CUT)
+                partial = True
                 i, kind = _next_object(text, i + 1)
                 continue
             found = _merge_statements(text[opening + 1:end - 1], depth)
         else:
             end = brace_walk(text, i)
             found = [_jsonencode_argument(text[i:end])] if end else []
-        read = False
+            partial = partial or not isinstance(found[0] if found else None, dict)
+        read = kind == "merge"  # its arguments were read: don't scan them again
         for obj in found:
             if obj is _OBJECTS_CUT or (isinstance(obj, dict) and _STATEMENT_KEYS & obj.keys()):
                 out.append(obj)
@@ -422,7 +442,7 @@ def _embedded_statements(text: str, depth: int = 0) -> list:
                 out.extend(_statement_objects(obj["Statement"], depth + 1))
                 read = True
         i, kind = _next_object(text, end if read else i + 1)
-    if i != -1:
+    if i != -1 or partial:
         out.append(_OBJECTS_CUT)
     return out
 
@@ -489,58 +509,79 @@ def _warn_undecoded(where: str) -> None:
     """Say that a policy went unread, once per place (each rule asks)."""
     if where not in _UNDECODED_WARNED:
         _UNDECODED_WARNED.add(where)
-        print(f"WARN: {where}: policy could not be decoded; it was not checked",
-              file=sys.stderr)
+        print(f"WARN: {where}: policy could not be decoded in full; "
+              "what could not be read was not checked", file=sys.stderr)
 
 
-def argument_policies(attrs: dict, args: list[str], where: str = "a resource") -> list[dict]:
-    """Decoded policy documents held by a resource's `args`, including
-    the ``policy`` of each ``inline_policy`` block (``aws_iam_role``). A
-    written-out document that can't be decoded gets a WARN naming
-    `where`."""
-    values = [attrs.get(a) for a in args]
-    for block in attrs.get("inline_policy") or []:
-        if isinstance(block, dict):
-            values.append(block.get("policy"))
+def _read_policies(values: list[tuple], where: str) -> list[dict]:
+    """Decoded documents of `values`, ``(value, partial)`` pairs. A document
+    written out but not read in full gets a WARN."""
     docs: list[dict] = []
-    for value in values:
+    for value, partial in values:
         doc = decode_policy(value)
         if doc is not None:
-            docs.append(doc)
-        if (_unread_statements(doc) if doc is not None
-                else _is_written_out(value)):
+            docs.append({**doc, _UNREAD: True} if partial else doc)
+        if partial or (_unread_statements(doc) if doc is not None else _is_written_out(value)):
             _warn_undecoded(where)
     return docs
 
 
-def _source_value(text: str | None):
-    """The value an argument's source text parses to, alone, so a construct
-    elsewhere in the file cannot stop it. When the value itself is what the
-    parser rejects, a ``jsonencode`` argument gets the regex rewrite, and
-    anything else stays text."""
+def _mask_escaped_expressions(expr: str) -> tuple[str, bool]:
+    """`expr` with each string inside it that holds both a ``${`` and a
+    backslash replaced by an opaque expression, and whether there were any.
+    The parser drops such a string's escapes when it renders a call, so
+    ``Sid = "${var.x}\\", \\"Effect\\": \\"Deny"`` comes back as text that
+    reads as extra JSON keys. Only the source shows where the string ends.
+    A string that is all of `expr` is left alone: it's a quoted policy."""
+    out: list[str] = []
+    i, last, depth, masked = 0, 0, 0, False
+    while i < len(expr):
+        ch = expr[i]
+        if ch == '"':
+            end = _string_end(expr, i)
+            if depth and "${" in expr[i:end] and "\\" in expr[i:end]:
+                out += [expr[last:i], _MASKED_STRING]
+                last, masked = end, True
+            i = end
+            continue
+        depth += (ch in "([{") - (ch in ")]}")
+        i += 1
+    return "".join([*out, expr[last:]]), masked
+
+
+def _source_value(text: str | None) -> tuple:
+    """``(value, partial)`` for an argument's source text: the value it
+    parses to, alone, so a construct elsewhere in the file cannot stop it,
+    and whether part of it had to be left unread. When the value itself is
+    what the parser rejects, a ``jsonencode`` argument gets the regex
+    rewrite, and anything else stays text."""
     if text is None:
-        return None
+        return None, False
     expr = unwrap_value(text)
-    tree, _err = parse_fragment("__v = " + expr + "\n")
+    masked, partial = _mask_escaped_expressions(expr)
+    tree, _err = parse_fragment("__v = " + masked + "\n")
+    if tree is None and partial:
+        tree, _err = parse_fragment("__v = " + expr + "\n")
     if tree is not None:
-        return tree.get("__v")
+        return tree.get("__v"), partial
     m = _JSONENCODE_RE.fullmatch(expr)
-    return (_hcl_object_to_json(m.group(1).strip()) if m else None) or expr
+    return (_hcl_object_to_json(m.group(1).strip()) if m else None) or expr, partial
 
 
 def text_argument_policies(body: str, args: list[str], where: str = "a resource") -> list[dict]:
-    """`argument_policies` for a resource without a parse tree: the same
-    attributes, read from its body text."""
-    attrs = {a: _source_value(arg_source(body, a)) for a in args}
+    """Policy documents of a resource, from its source text. This is the
+    one reader, with or without a parse tree for the file: only the source
+    shows where a string ends (`_mask_escaped_expressions`)."""
+    values = [_source_value(arg_source(body, a)) for a in args]
     blocks = block_bodies_at(body, "inline_policy")
     if blocks:
-        attrs["inline_policy"] = [
-            {"policy": _source_value(arg_source(b, "policy"))} for b in blocks
-        ]
+        values += [_source_value(arg_source(b, "policy")) for b in blocks]
     else:  # `inline_policy = [{...}]`
-        listed = literal_structure(_source_value(arg_source(body, "inline_policy")))
-        attrs["inline_policy"] = listed if isinstance(listed, list) else []
-    return argument_policies(attrs, args, where)
+        listed, partial = _source_value(arg_source(body, "inline_policy"))
+        listed = literal_structure(listed)
+        if isinstance(listed, list):
+            values += [(b.get("policy"), partial) for b in listed if isinstance(b, dict)]
+    return _read_policies(values, where)
 
 
 # ---- aws_iam_policy_document ------------------------------------------------

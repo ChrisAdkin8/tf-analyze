@@ -33,7 +33,6 @@ from _hcl import (
     unwrap_value,
 )
 from _iam_policy import (
-    argument_policies,
     document_block_statements,
     document_statements,
     json_statements,
@@ -336,9 +335,9 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
     policy-valued arguments, default ``[policy]``; e.g.
     ``assume_role_policy``). Each argument may hold ``jsonencode({...})``,
     a heredoc or a quoted JSON string; an ``inline_policy`` block's
-    ``policy`` is read too. Policies come from the parse tree
-    (``_iam_policy``); in a file that did not parse, each argument is cut
-    from the text and parsed on its own, so every form is still read.
+    ``policy`` is read too. Each argument is cut from the source text and
+    parsed on its own (``_iam_policy``), whether or not the file parsed, so
+    every form reads the same either way.
     """
     check = c.pat.get("check")
     resource_types = c.pat.get("resources") or [
@@ -356,12 +355,7 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
         btype, bname = blk["groups"]
         if btype not in resource_types:
             continue
-        attrs = blk.get("attrs")
-        where = f"{c.file_path}: {btype}.{bname}"
-        docs = (
-            argument_policies(attrs, args, where) if attrs is not None
-            else text_argument_policies(blk["body"], args, where)
-        )
+        docs = text_argument_policies(blk["body"], args, f"{c.file_path}: {btype}.{bname}")
         if any(st.matches(check) for doc in docs for st in json_statements(doc)):
             out.append({
                 "id": c.eid,

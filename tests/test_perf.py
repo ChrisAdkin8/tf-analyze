@@ -167,3 +167,15 @@ def test_unknown_inputs_are_one_context() -> None:
         ),
     }
     assert len(detect._extract_var_contexts_by_dir(files)["/r/child"]) == 1
+
+
+def test_nested_merges_in_conditionals_are_not_exponential() -> None:
+    """Rescanning an unread merge() went over its nested calls twice per layer."""
+    import _iam_policy
+
+    text = "{}"
+    for _ in range(26):
+        text = f"merge(var.x ? {{}} : {text})"
+    start = time.perf_counter()
+    _iam_policy._embedded_statements(text)
+    assert time.perf_counter() - start < 2.0

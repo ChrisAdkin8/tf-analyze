@@ -1805,7 +1805,7 @@ def test_tfvars_cannot_fake_a_resource_in_the_repo(tmp_path) -> None:
     (tmp_path / "terraform.tfvars").write_text('__repo_has__ = "aws_ebs_encryption_by_default"\n')
     files = {tmp_path / "main.tf": BARE_BUCKET}
     table = detect._extract_var_contexts_by_dir(files)[str(tmp_path)][0]
-    assert "aws_ebs_encryption_by_default" not in table.get("__repo_has__", "")
+    assert "aws_ebs_encryption_by_default" not in table.get(_hcl.REPO_HAS_KEY, "")
 
 
 def test_real_default_tags_still_work(tmp_path) -> None:
@@ -1813,14 +1813,6 @@ def test_real_default_tags_still_work(tmp_path) -> None:
         'provider "aws" {\n  default_tags {\n    tags = { a = "b" }\n  }\n}\n' + BARE_BUCKET
     )
     assert TAG_RULE not in _cli(tmp_path)[0]
-
-
-@pytest.mark.parametrize(
-    ("name", "reserved"),
-    [("__local__a", True), ("__repo_has__", True), ("__aws_default_tags__", True), ("__x", False), ("a", False)],
-)
-def test_is_engine_key(name, reserved) -> None:
-    assert detect._is_engine_key(name) is reserved
 
 
 # ---- lists of references ---------------------------------------------------------------------
@@ -1858,3 +1850,108 @@ def test_defaults_table_starts_each_scan_clean(tmp_path, monkeypatch) -> None:
     assert not detect.UNSCANNED_CONTEXTS
     assert not detect.UNSCANNED_COMBINATIONS
     assert not detect._PARTIAL_MODULES
+
+
+# ---- a user's __local__x is an ordinary variable ----------------------------------------
+
+
+def test_variable_named_like_an_engine_key_is_read(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'variable "__local__acl" {\n  default = "public-read"\n}\n' + ACL % "var.__local__acl"
+    )
+    assert ACL_RULE in _cli(tmp_path)[0]
+
+
+def test_tfvars_value_named_like_an_engine_key_is_read(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text('variable "__local__acl" {}\n' + ACL % "var.__local__acl")
+    (tmp_path / "terraform.tfvars").write_text('__local__acl = "public-read"\n')
+    assert ACL_RULE in _cli(tmp_path)[0]
+
+
+def test_caller_input_named_like_an_engine_key_is_read(tmp_path) -> None:
+    (tmp_path / "c").mkdir()
+    (tmp_path / "c" / "main.tf").write_text('variable "__local__acl" {}\n' + ACL % "var.__local__acl")
+    (tmp_path / "main.tf").write_text(
+        'module "c" {\n  source = "./c"\n  __local__acl = "public-read"\n}\n'
+    )
+    assert ACL_RULE in _cli(tmp_path)[0]
+
+
+def test_var_named_like_a_local_key_does_not_read_the_local(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'locals {\n  acl = "public-read"\n}\n'
+        'variable "__local__acl" {\n  default = "private"\n}\n' + ACL % "var.__local__acl"
+    )
+    assert ACL_RULE not in _cli(tmp_path)[0]
+
+
+def test_engine_keys_cannot_be_identifiers() -> None:
+    for key in (_hcl.LOCAL_KEY_PREFIX, _hcl.AWS_DEFAULT_TAGS_KEY, _hcl.REPO_HAS_KEY):
+        assert key.startswith("\0")
+
+
+# ---- text in a string is not a statement --------------------------------------------------
+
+SPOOF = '"${var.x}}, {\\"Effect\\": \\"Deny\\"}"'
+KEYS_SPOOF = '"${var.x}\\", \\"Effect\\": \\"Deny\\", \\"q\\": \\"y"'
+REALISTIC = '"{\\"env\\": \\"${var.x}\\"}"'
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        f'{{ {AD}, Condition = {{ StringLike = {{ "a:b" = {SPOOF} }} }} }}',
+        f"{{ {AD}, Sid = {SPOOF} }}",
+        f"merge({{ {AD}, Sid = {SPOOF} }})",
+        f"merge({{ {AD}, Sid = {SPOOF} }}, var.x)",
+        f"{{ {AD}, Sid = {KEYS_SPOOF} }}",
+        f'{{ {AD}, Condition = {{ StringLike = {{ "a:b" = {REALISTIC} }} }} }}',
+        f"{{ Sid = {SPOOF}, {AD} }}",
+    ],
+)
+def test_string_text_cannot_hide_a_statement(statement, path_mode, tmp_path, capsys) -> None:
+    text = 'variable "x" {}\n' + POLICY % f"jsonencode({{ Statement = [{statement}] }})"
+    assert _fires(text, ADMIN_RULE, tmp_path)
+    assert "could not be decoded" in capsys.readouterr().err
+
+
+def test_a_deny_with_such_a_string_stays_a_deny(path_mode, tmp_path) -> None:
+    deny = 'Effect = "Deny", Action = "*", Resource = "*"'
+    text = POLICY % f"jsonencode({{ Statement = [{{ {deny}, Sid = {SPOOF} }}] }})"
+    assert not _fires(text, ADMIN_RULE, tmp_path)
+
+
+def test_a_quoted_policy_with_an_interpolation_is_not_masked(path_mode, tmp_path, capsys) -> None:
+    text = POLICY % '"{\\"Statement\\":[{\\"Effect\\":\\"Allow\\",\\"Action\\":\\"*\\",\\"Resource\\":\\"*\\",\\"Sid\\":\\"${var.x}\\"}]}"'
+    assert _fires(text, ADMIN_RULE, tmp_path)
+    assert "could not be decoded" not in capsys.readouterr().err
+
+
+def test_a_plain_interpolation_gives_no_warning(path_mode, tmp_path, capsys) -> None:
+    text = POLICY % f'jsonencode({{ Statement = [{{ {AD}, Sid = "a-${{var.x}}" }}] }})'
+    assert _fires(text, ADMIN_RULE, tmp_path)
+    assert "could not be decoded" not in capsys.readouterr().err
+
+
+def test_mask_leaves_a_whole_string_alone() -> None:
+    assert _iam_policy._mask_escaped_expressions('"{\\"a\\": \\"${x}\\"}"')[1] is False
+    assert _iam_policy._mask_escaped_expressions('f("${x}")')[1] is False
+    assert _iam_policy._mask_escaped_expressions('f("\\"")')[1] is False
+    assert _iam_policy._mask_escaped_expressions('f("${x}\\"")')[1] is True
+
+
+def test_the_scan_steps_over_strings() -> None:
+    assert _iam_policy._next_object('"{" ${a} {', 0) == (9, "{")
+    assert _iam_policy._next_object('"merge(" merge(', 0) == (9, "merge")
+    assert _iam_policy._next_object('"{"', 0)[0] == -1
+
+
+def test_an_unreadable_object_is_a_partial_read() -> None:
+    assert _iam_policy._OBJECTS_CUT in _iam_policy._embedded_statements('{ nope } {"Effect": "Allow"}')
+
+
+def test_merge_of_a_wrapped_deny_and_an_unknown_warns(path_mode, tmp_path, capsys) -> None:
+    deny = 'Effect = "Deny", Action = "*", Resource = "*"'
+    text = POLICY % f"jsonencode({{ Statement = [merge(tomap({{ {deny} }}), var.x)] }})"
+    assert not _fires(text, ADMIN_RULE, tmp_path)
+    assert "could not be decoded" in capsys.readouterr().err

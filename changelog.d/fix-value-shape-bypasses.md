@@ -69,8 +69,13 @@
   not save a scan with callers left out.
 - **Engine keys in the variable table**: `__aws_default_tags__ = "true"` in a
   tfvars file removed the tag rules, and `__local__a` set from tfvars or a
-  caller changed what `local.a` read. Names from scanned code can no longer
-  set these.
-- **Escaped quotes in expressions**: a string inside a `jsonencode`
-  expression lost its escapes, so its text could read as code and turn an
-  admin Allow into a Deny.
+  caller changed what `local.a` read. The engine's own keys now hold a NUL,
+  so no name from scanned code can be one, and a variable called
+  `__local__acl` is an ordinary variable.
+- **Text in a string is not a statement**: a string holding both `${` and an
+  escaped quote comes back from the parser without its escapes, so its text
+  could read as JSON and hide or replace a written-out admin Allow, with
+  no WARN. Policies are now read from the source, with or without a parse
+  tree for the file. Such a string is treated as an unknown value, the rest
+  of the statement is analysed, and the scan gives a WARN. A scan into
+  unreadable text never takes a string's contents for a statement.

@@ -32,6 +32,8 @@ from _hcl import (
     block_has_nested_path,
     resource_block_contents,
     resource_has_path,
+    AWS_DEFAULT_TAGS_KEY,
+    REPO_HAS_KEY,
     resource_values_at,
     mask_comments,
     mask_comments_and_heredocs,
@@ -147,9 +149,9 @@ def _repo_has(pat: dict, var_defaults: dict) -> bool:
     settings that change what a resource rule means (e.g.
     ``aws_ebs_encryption_by_default`` encrypts every new volume), which
     usually live in another module. The types present are recorded under
-    ``__repo_has__`` when the variable contexts are built."""
+    `REPO_HAS_KEY` when the variable contexts are built."""
     rtype = pat.get("unless_repo_has")
-    return bool(rtype) and rtype in var_defaults.get("__repo_has__", "").split()
+    return bool(rtype) and rtype in var_defaults.get(REPO_HAS_KEY, "").split()
 
 
 @_register_infile("resource_arg")
@@ -345,7 +347,7 @@ def _detect_resource_missing_arg(c: InFileCtx) -> list[dict]:
     if (
         rt.startswith("aws_")
         and (arg_path == "tags" or arg_path.startswith("tags."))
-        and c.var_defaults.get("__aws_default_tags__") == "true"
+        and c.var_defaults.get(AWS_DEFAULT_TAGS_KEY) == "true"
     ):
         return []
     suppress_if = pat.get("suppress_if")

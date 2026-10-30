@@ -22,10 +22,10 @@ VD = {
     "prod": "true",
     "enc": "true",
     "arn": "arn:aws:kms:eu-west-2:111122223333:key/abc",
-    "__local__enc": "var.enc",
-    "__local__deep": "local.enc",
-    "__local__a": "local.b",
-    "__local__b": "local.a",
+    "\0local:enc": "var.enc",
+    "\0local:deep": "local.enc",
+    "\0local:a": "local.b",
+    "\0local:b": "local.a",
 }
 
 

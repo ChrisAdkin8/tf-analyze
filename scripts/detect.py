@@ -112,7 +112,11 @@ from _versions import (
 # `_cross_resource.py` could import it cleanly without a circular
 # import back through `detect`.
 from _hcl import (
+    AWS_DEFAULT_TAGS_KEY,
+    AWS_DEFAULT_TAGS_PROVIDERS_KEY,
     LABEL_GAP,
+    LOCAL_KEY_PREFIX,
+    REPO_HAS_KEY,
     _call_arguments,
     _string_end,
     arg_source,
@@ -474,11 +478,6 @@ _TAG_ARGS = ("tags", "tags_all", "labels")
 _BARE_REF_RE = re.compile(r'[A-Za-z_][\w-]*(?:\.[\w-]+|\[[^\]"]*\])+')
 _PLAIN_INPUT_REF_RE = re.compile(r'(var|local)\.([\w-]+)')
 _OBJECT_ITEM_RE = re.compile(r'\s*(?:"[^"\n]*"|[\w-]+)\s*[=:]\s*(.*)', re.DOTALL)
-# Keys of the variable table the engine writes itself. A name from scanned
-# code (a tfvars key, a `variable` block, a caller's input) must not set one,
-# or `__aws_default_tags__ = "true"` in tfvars switches off the tag rules.
-_ENGINE_TABLE_KEYS = ("__local__", "__aws_default_tags__", "__aws_default_tags_providers__",
-                      "__repo_has__")
 
 
 def _top_level_assignments(body: str) -> dict[str, str]:
@@ -553,11 +552,6 @@ class _VarContext(dict):
     caller (`__unknown_inputs__ = "acl"`) to hide its own value."""
 
     unknown_inputs: frozenset = frozenset()
-
-
-def _is_engine_key(name: str) -> bool:
-    """Whether `name` is reserved for the engine in the variable table."""
-    return name.startswith(_ENGINE_TABLE_KEYS)
 
 
 def _is_bare_reference(expr: str) -> bool:
@@ -701,7 +695,7 @@ def _limit_var_contexts(d: str, contexts: list[dict], texts: list[str], limit: i
     if len(contexts) <= limit and not cut_short:
         return contexts
     used = _inputs_in_use(texts, skip_tags=not tag_values_read)
-    unused = {k for ctx in contexts for k in ctx if not k.startswith("__")} - used
+    unused = {k for ctx in contexts for k in ctx if not k.startswith("\0")} - used
     contexts = _distinct_in_use(contexts, unused)
     picked = _pick_var_contexts(contexts, limit, unused)
     if len(picked) == len(contexts) and not cut_short:
@@ -741,7 +735,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
     A context holds variable defaults, then values from the directory's
     auto-loaded ``.tfvars`` files, then — for a child module — the inputs
     its caller passes (``module "x" { source = "./child"; foo = bar }``
-    sets the child's ``foo``). Locals are stored under ``__local__<name>``
+    sets the child's ``foo``). Locals are stored under `LOCAL_KEY_PREFIX`
     in the same dict, so one lookup table serves both namespaces.
 
     Variable scope in Terraform is per-directory, so most directories have
@@ -760,35 +754,32 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
         for blk in find_blocks(text, VARIABLE_START):
             default = block_arg_value(blk["body"], "default")
             if default is not None:
-                if not _is_engine_key(blk["groups"][0]):
-                    base.setdefault(dir_key, {})[blk["groups"][0]] = default
+                base.setdefault(dir_key, {})[blk["groups"][0]] = default
         for blk in find_blocks(text, LOCALS_START):
             for lname, lval in _top_level_assignments(blk["body"]).items():
-                base.setdefault(dir_key, {})["__local__" + lname] = lval
+                base.setdefault(dir_key, {})[LOCAL_KEY_PREFIX + lname] = lval
     for dir_key in sorted({str(Path(fp).parent) for fp in all_files_text}):
         tfvars = _tfvars_values(Path(dir_key))
         if tfvars:
-            base.setdefault(dir_key, {}).update(
-                (k, v) for k, v in tfvars.items() if not _is_engine_key(k)
-            )
+            base.setdefault(dir_key, {}).update(tfvars)
 
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
     # provider declares default_tags is recorded under the synthetic key
-    # __aws_default_tags__. Tag-related findings in that dir are then
+    # AWS_DEFAULT_TAGS_KEY. Tag-related findings in that dir are then
     # suppressed (the provider injects the tags downstream). Which provider
     # configurations carry them (`aws`, `aws.<alias>`) is kept under
-    # __aws_default_tags_providers__ so child modules inherit them below.
+    # AWS_DEFAULT_TAGS_PROVIDERS_KEY so child modules inherit them below.
     for fp, text in all_files_text.items():
         for pblk in find_blocks(text, PROVIDER_START):
             # A real `default_tags` block, not the word in a comment or
             # string (`# TODO: add default_tags` silenced every AWS tag rule).
             if pblk["groups"][0] == "aws" and block_has_arg(pblk["body"], "default_tags"):
                 ctx = base.setdefault(str(Path(fp).parent), {})
-                ctx["__aws_default_tags__"] = "true"
+                ctx[AWS_DEFAULT_TAGS_KEY] = "true"
                 alias = (block_arg_value(pblk["body"], "alias") or "").strip().strip('"')
-                names = set(ctx.get("__aws_default_tags_providers__", "").split())
+                names = set(ctx.get(AWS_DEFAULT_TAGS_PROVIDERS_KEY, "").split())
                 names.add(f"aws.{alias}" if alias else "aws")
-                ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
+                ctx[AWS_DEFAULT_TAGS_PROVIDERS_KEY] = " ".join(sorted(names))
 
     # Resource types present anywhere in the scan, minus ones switched off
     # with `enabled = false`, for `unless_repo_has` (account-level settings
@@ -801,7 +792,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
     })
     if present:
         for dir_key in {str(Path(fp).parent) for fp in all_files_text}:
-            base.setdefault(dir_key, {})["__repo_has__"] = " ".join(present)
+            base.setdefault(dir_key, {})[REPO_HAS_KEY] = " ".join(present)
 
     # Module calls, in a stable order: (caller dir, child dir, inputs, the
     # caller's provider configuration the child's default `aws` is).
@@ -817,10 +808,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
             except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             assigns = _top_level_assignments(mblk["body"])
-            inputs = {
-                k: v for k, v in assigns.items()
-                if k not in _MODULE_META_ARGS and not _is_engine_key(k)
-            }
+            inputs = {k: v for k, v in assigns.items() if k not in _MODULE_META_ARGS}
             # A child uses the caller's default `aws` unless `providers = {
             # aws = aws.<alias> }` passes another configuration.
             m = re.search(r'(?<![\w.])aws\s*=\s*(aws(?:\.[\w-]+)?)\b', assigns.get("providers", ""))
@@ -860,10 +848,10 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
                 unknown: list[str] = []
                 # Provider default_tags reach the child's resources through
                 # the configuration it is given, so its tag rules see them.
-                if aws_provider in parent_ctx.get("__aws_default_tags_providers__", "").split():
-                    ctx["__aws_default_tags__"] = "true"
-                    names = set(ctx.get("__aws_default_tags_providers__", "").split()) | {"aws"}
-                    ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
+                if aws_provider in parent_ctx.get(AWS_DEFAULT_TAGS_PROVIDERS_KEY, "").split():
+                    ctx[AWS_DEFAULT_TAGS_KEY] = "true"
+                    names = set(ctx.get(AWS_DEFAULT_TAGS_PROVIDERS_KEY, "").split()) | {"aws"}
+                    ctx[AWS_DEFAULT_TAGS_PROVIDERS_KEY] = " ".join(sorted(names))
                 for k, raw in inputs.items():
                     # Only literal values flow (after resolving the caller's
                     # own var./local. references); an unresolved expression
