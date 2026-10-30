@@ -42,27 +42,25 @@ from _tfjson import remap_lines
 _NOT_FILES = ("<plan>", "<state>")
 _NOT_REPROBED_KINDS = frozenset({"registry_check"})
 
-# A report row's file: anything a scan reads (`.tf`, `.tf.json`, tfvars,
-# workflow YAML, a committed state) or the plan / state marker. Only
-# `.tf` used to match, so a row for any other file vanished from the
-# prior findings and was never checked.
-_REPORT_FILE = (
-    r'(?:[\w./-]+\.(?:tfvars(?:\.json)?|tfstate(?:\.backup)?|tf(?:\.json)?|ya?ml)|<plan>|<state>)'
-)
-
 # A catalogue ID: a 2–6 letter family (SEC … CUSTOM), then dash-separated
 # parts that may hold digits (`S3`, `K8S`), then a 3-digit number. Parts
 # were letters-only, so 23 rules (SEC-AWS-S3-001, every SEC-K8S-*) and all
 # CUSTOM-* rules were silently dropped from verification.
+_ID = r'[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3}'
 _FINDING_ROW_RE = re.compile(
-    r'^\|\s*(?P<id>[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3})'
+    rf'^\|\s*(?P<id>{_ID})'
     r'(?:#\d+)?\s*\|'         # optional instance number
-    r'(?P<middle>.*?)\|'       # skip urgency column(s)
-    r'\s*`?(?P<file>' + _REPORT_FILE + r')`?'
-    r'[:\s]*(?P<line>\d+)?'
-    r'.*\|',
-    re.MULTILINE,
+    r'(?P<cells>.*)\|\s*$',
 )
+# A table cell holding a report's location. A file is anything a scan reads
+# (`.tf`, `.tf.json`, tfvars, workflow YAML, a committed state), or the plan
+# / state marker, with or without a line; or any path followed by `:<line>`,
+# which is how a repository-level finding reads (`.:0`).
+_FILE_CELL_RE = re.compile(
+    r'^`?(?P<file>.+?\.(?:tfvars(?:\.json)?|tfstate(?:\.backup)?|tf(?:\.json)?|ya?ml)'
+    r'|<plan>|<state>)`?(?:[:\s]+`?(?P<line>\d+))?\b'
+)
+_PATH_CELL_RE = re.compile(r'^`?(?P<file>[^`]*[./][^`]*?):(?P<line>\d+)`?$')
 
 
 def parse_markdown_report(path: Path) -> list[dict]:
@@ -89,22 +87,68 @@ def parse_markdown_report(path: Path) -> list[dict]:
         m = _FINDING_ROW_RE.match(line)
         if not m:
             continue
-        rows.append({
+        location = next(filter(None, (
+            _FILE_CELL_RE.match(cell) or _PATH_CELL_RE.match(cell)
+            for cell in map(str.strip, m.group("cells").split("|"))
+        )), None)
+        rows.append(_unparsed_row(m.group("id"), line) if location is None else {
             "id": m.group("id"),
-            "file": m.group("file"),
-            "line": int(m.group("line")) if m.group("line") else 0,
+            "file": location.group("file"),
+            "line": int(location.group("line") or 0),
             "resource": "",
         })
     return rows
 
 
-# One `--format text` finding line: `<ID> <file>:<line> <resource>`. The
-# file is whatever precedes `:<line>`, a folder for a repository-level rule.
+def _unparsed_row(rule_id: str, line: str) -> dict:
+    """A row that names a finding but not where. It can't be re-probed, and
+    dropping it would read as nothing left to verify: `verify_fixed` keeps
+    it as UNVERIFIABLE and counts it."""
+    return {"id": rule_id, "file": "", "line": 0, "resource": "", "unparsed": line.strip()}
+
+
+# One `--format text` finding line: `[🔥 KEV ]<ID> <file>:<line> <resource>`.
+# The file is whatever precedes `:<line>`, a folder for a repository-level
+# rule, and may hold a space; so may the resource (`<absent: aws_x>`).
 _TEXT_ROW_RE = re.compile(
-    r'^(?P<id>[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3}) '
-    r'(?P<file>\S+):(?P<line>\d+)(?: (?P<resource>\S+))?',
-    re.MULTILINE,
+    rf'^(?:🔥 KEV )?(?P<id>{_ID}) '
+    r'(?P<file>.+?):(?P<line>\d+)(?: (?P<resource>.*))?$'
 )
+_TEXT_LOOKS_LIKE_ROW_RE = re.compile(rf'^(?:\S+ ){{0,2}}(?P<id>{_ID})\b')
+_TEXT_HEADER_RE = re.compile(r'(?m)^# tf-analyze: [^\n]*$')
+_TEXT_COUNTS_RE = re.compile(r'(\d+) CRITICAL · (\d+) HIGH · (\d+) MEDIUM · (\d+) LOW')
+# Markdown only states "nothing found" in words, and only then is a report
+# with no rows a clean one rather than one this parser can't read.
+_MARKDOWN_CLEAN_RE = re.compile(
+    r'(?im)^[\W_]*(?:clean\b.*\bno findings\b|no findings\b|(?:total )?findings\W+0\b|0 findings\b)'
+)
+
+
+def _parse_text_report(text: str, header: str) -> list[dict]:
+    """The rows of a `--format text` report. Fewer rows than the header
+    counts means some were lost: those come back as unparsed rows."""
+    rows: list[dict] = []
+    for line in text.splitlines():
+        if line.startswith(("#", " ")):
+            continue
+        m = _TEXT_ROW_RE.match(line)
+        if m:
+            rows.append({
+                "id": m.group("id"),
+                "file": m.group("file"),
+                "line": int(m.group("line")),
+                "resource": m.group("resource") or "",
+            })
+        elif (loose := _TEXT_LOOKS_LIKE_ROW_RE.match(line)):
+            rows.append(_unparsed_row(loose.group("id"), line))
+    counts = _TEXT_COUNTS_RE.search(header)
+    if counts is None:
+        if not rows:
+            raise ValueError("text report states no counts and lists no findings")
+        return rows
+    missing = sum(map(int, counts.groups())) - len(rows)
+    rows.extend(_unparsed_row("UNKNOWN-RULE-000", header) for _ in range(max(missing, 0)))
+    return rows
 
 
 def parse_prior_report(path: Path) -> list[dict]:
@@ -113,7 +157,9 @@ def parse_prior_report(path: Path) -> list[dict]:
 
     Only markdown used to be read, so the CLI's own JSON and text reports
     parsed to zero findings and verification "passed". A report in a
-    format with no finding rows to read (SARIF, HTML) raises ValueError.
+    format with no finding rows to read (SARIF, HTML) raises ValueError,
+    and so does one that yields no rows and doesn't state that it found
+    nothing: `--format pr-summary`, an empty file, a truncated report.
     """
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     try:
@@ -124,6 +170,11 @@ def parse_prior_report(path: Path) -> list[dict]:
         rows = data.get("findings") if isinstance(data, dict) else data
         if not isinstance(rows, list):
             raise ValueError(f"{path} is JSON but not a tf-analyze --format json report")
+        counts = (data.get("summary") or {}).get("counts") if isinstance(data, dict) else None
+        if not rows and not (isinstance(counts, dict) and not any(
+            n for tier, n in counts.items() if tier != "INFO"
+        )):
+            raise ValueError(f"{path} lists no findings and no counts saying there are none")
         return [
             {
                 "id": f["id"],
@@ -132,21 +183,25 @@ def parse_prior_report(path: Path) -> list[dict]:
                 "resource": f.get("resource", ""),
                 "urgency": f.get("urgency"),
             }
-            for f in rows if isinstance(f, dict) and f.get("id")
+            if isinstance(f, dict) and f.get("id")
+            else _unparsed_row("UNKNOWN-RULE-000", json.dumps(f))
+            for f in rows
         ]
-    if text.startswith("# tf-analyze:"):
-        return [
-            {
-                "id": m.group("id"),
-                "file": m.group("file"),
-                "line": int(m.group("line")),
-                "resource": m.group("resource") or "",
-            }
-            for m in _TEXT_ROW_RE.finditer(text)
-        ]
+    header = _TEXT_HEADER_RE.search(text)
+    if header:
+        try:
+            return _parse_text_report(text, header.group())
+        except ValueError as e:
+            raise ValueError(f"{path}: {e}") from None
     if text.lstrip().startswith("<"):
         raise ValueError(f"{path} is HTML; pass a json, text or markdown report")
-    return parse_markdown_report(path)
+    rows = parse_markdown_report(path)
+    if not rows and not _MARKDOWN_CLEAN_RE.search(text):
+        raise ValueError(
+            f"{path} has no finding rows and doesn't say it found nothing; "
+            f"pass a json, text or markdown report"
+        )
+    return rows
 
 
 def reprobe_finding(
@@ -312,6 +367,9 @@ def verify_fixed(
         "UNVERIFIABLE": [],
     }
     for f in prior_findings:
+        if f.get("unparsed"):
+            results["UNVERIFIABLE"].append(f)
+            continue
         fp = Path(f["file"])
         path = fp if fp.is_absolute() else Path(target) / fp
         real = _real(path)
@@ -332,6 +390,7 @@ def verify_fixed(
     return {
         "prior_report": str(prior_report),
         "total_prior": len(prior_findings),
+        "unparsed_rows": sum(1 for f in prior_findings if f.get("unparsed")),
         "results": results,
     }
 

@@ -2438,7 +2438,17 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     unchecked = list(dict.fromkeys(
         [*unreadable_files, *(str(r["file"]) for r in results["UNREADABLE"])]
     ))
-    return _gate_exit_code(args, still_open, entries, [], unchecked, RULE_TIMEOUTS)
+    code = _gate_exit_code(args, still_open, entries, [], unchecked, RULE_TIMEOUTS)
+    # A row that couldn't be read says nothing about its urgency.
+    if verify["unparsed_rows"]:
+        print(
+            f"{'ERROR' if args.fail_on else 'WARN'}: {verify['unparsed_rows']} row(s) of "
+            f"{prior} look like findings but could not be read, so were not verified",
+            file=sys.stderr,
+        )
+        if args.fail_on:
+            return code or 1
+    return code
 
 
 def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
