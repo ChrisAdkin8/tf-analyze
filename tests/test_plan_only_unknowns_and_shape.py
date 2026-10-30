@@ -521,21 +521,11 @@ def test_a_state_of_an_unknown_format_fails_closed(tmp_path) -> None:
 
 
 def test_template_syntax_is_escaped() -> None:
-    text, _ = render_resources_hcl(
-        [
-            _res(
-                "aws_x",
-                "y",
-                {
-                    "a": "${aws:username}",
-                    "b": "%{ if x }",
-                    "c": '{"k": "${v}"}',
-                },
-            )
-        ]
-    )
+    text, _ = render_resources_hcl([_res("aws_x", "y", {
+        "a": "${aws:username}", "b": "%{ if x }", "c": '{"k": "${v}"}',
+    })])
     assert '"$${aws:username}"' in text and '"%%{ if x }"' in text
-    assert '"k": "$${v}"' in text
+    assert '"k": "\\u0024{v}"' in text
 
 
 def test_a_value_holding_the_heredoc_marker_cannot_end_it() -> None:
@@ -639,12 +629,8 @@ def test_only_resources_a_rule_can_act_on_are_rendered(tmp_path) -> None:
         },
     ]
     detect_in_plan(path, entries, scan)
-    assert '"wild"' in seen[0] and '"open"' in seen[0]
-    assert (
-        '"narrow"' not in seen[0]
-        and '"closed"' not in seen[0]
-        and "aws_instance" not in seen[0]
-    )
+    assert '"wild"' in seen[0] and '"open"' in seen[0] and '"closed"' in seen[0]
+    assert '"narrow"' not in seen[0] and "aws_instance" not in seen[0]
 
 
 @pytest.mark.parametrize(

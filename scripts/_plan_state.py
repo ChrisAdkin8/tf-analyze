@@ -547,16 +547,26 @@ def _inline_value(value) -> str:
     return "null"
 
 
+_JSON_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f"}
+
+
 def _json_document(value: str) -> str | None:
     """`value` pretty-printed, when it is a JSON object or list. A plan
     holds ``jsonencode(...)`` as one compact string; the rules read JSON
-    documents the way a person writes them, one key per line."""
+    documents the way a person writes them, one key per line.
+
+    It goes into a heredoc, where the parser mangles ``\\"`` and ``\\n``, and
+    a policy that no longer decodes is a policy no rule sees. So every
+    escape, and the ``${`` / ``%{`` a heredoc would expand, is written as
+    ``\\uXXXX``, which passes through untouched and decodes to the same text."""
     if not value.lstrip().startswith(("{", "[")):
         return None
     try:
-        return json.dumps(json.loads(value), indent=2, ensure_ascii=False)
+        text = json.dumps(json.loads(value), indent=2)
     except ValueError:
         return None
+    text = re.sub(r"\\([^u])", lambda m: f"\\u{ord(_JSON_ESCAPES.get(m[1], m[1])):04x}", text)
+    return _TEMPLATE_RE.sub(lambda m: f"\\u{ord(m[1]):04x}{{", text)
 
 
 def _render_attr(key: str, value, indent: str) -> list[str]:
@@ -716,8 +726,8 @@ def _has_unknown(value) -> bool:
 
 
 def _configured_args(plan: dict) -> dict[str, set[str]]:
-    """``{address: arguments the configuration sets}``, index-free. An
-    unknown value the author never set is just a computed attribute."""
+    """``{address: arguments the configuration sets}``, index-free. Terraform
+    leaves `dynamic` blocks out, so this can rule an argument in, not out."""
     out: dict[str, set[str]] = {}
 
     def walk(module: dict | None, prefix: str) -> None:
@@ -751,11 +761,14 @@ def unknown_arguments(plan: dict, entries: list[dict]) -> list[dict]:
         address = str(change.get("address", ""))
         want = relevant[change["type"]]
         set_in_config = configured.get(_INDEX_RE.sub("", address))
+        # A bare `true` the configuration doesn't set is a provider-computed
+        # attribute. Anything with a shape (`[{"policy": true}]`) is a block
+        # that exists, whether the configuration shows it or not.
         args = sorted(
             arg for arg, value in unknown.items()
             if _has_unknown(value)
             and (want is None or arg in want)
-            and (set_in_config is None or arg in set_in_config)
+            and (value is not True or set_in_config is None or arg in set_in_config)
         )
         if args:
             out.append({"resource": address, "arguments": args})
@@ -763,11 +776,11 @@ def unknown_arguments(plan: dict, entries: list[dict]) -> list[dict]:
 
 
 # Cheap tests that keep most resources away from the HCL parser, the slow
-# part of a large plan. A firewall rule fires only on a /0 source (for Azure,
-# `*` or a service tag), a policy check only on a `*` or a Not* element; a
-# `\\u` escape could be hiding either.
+# part of a large plan. Every `Statement.matches` check needs a `*` or a
+# Not* element, and a `\\u` escape could be hiding either. A prefilter must
+# never be stricter than its rule, so firewalls have none: too many spellings
+# are open to the world (no source on GCP, `/0`, a hostmask, a service tag).
 _PREFILTERS = {
-    "firewall_open_port": re.compile(r"(?i)/0+\b|\*|internet|\bany\b"),
     "iam_json_policy_analysis": re.compile(r"(?i)\*|not_?(?:action|resource)|\\u"),
     "iam_policy_analysis": re.compile(r"(?i)\*|not_?(?:action|resource)|\\u"),
 }
@@ -866,11 +879,12 @@ class PlanInputError(ValueError):
 
 def _check_format(document: dict, path: Path) -> None:
     """Refuse a format this reader wasn't written for: its sections may
-    mean something else, and reading nothing from them looks like a pass."""
+    mean something else, and reading nothing from them looks like a pass.
+    Terraform before 1.1 writes 0.1 and 0.2, with the same sections."""
     version = document.get("format_version")
-    if version is not None and str(version).split(".")[0] != "1":
+    if version is not None and str(version).split(".")[0] not in ("0", "1"):
         raise PlanInputError(
-            f"{path}: format_version {version} is not supported (expected 1.x)"
+            f"{path}: format_version {version} is not supported (expected 0.x or 1.x)"
         )
 
 

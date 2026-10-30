@@ -146,10 +146,65 @@ def test_a_clean_report_still_verifies(tmp_path) -> None:
         assert json.loads(res.stdout)["total_prior"] == 0
 
 
-def test_a_clean_markdown_report_still_verifies(tmp_path) -> None:
+@pytest.mark.parametrize("line", [
+    "✅ Clean — no findings at default scoring tiers.",
+    "No findings in the rules that ran.",
+])
+def test_a_clean_pr_summary_still_verifies(tmp_path, line) -> None:
     prior = tmp_path / "p.md"
-    prior.write_text("# Terraform analysis\n\nNo findings.\n")
+    prior.write_text(f"## tf-analyze: 100 (A)\n\n{line}\n")
     assert parse_prior_report(prior) == []
+
+
+@pytest.mark.parametrize("text", [
+    "# Report\n\n_No findings appear in more than one repository._\n",
+    "(no findings)\n",
+    "# Terraform analysis\n\nNo findings.\n",
+    "Clean run, no findings here\n",
+    "Findings: 0\n",
+])
+def test_a_loose_statement_is_not_a_clean_report(tmp_path, text) -> None:
+    prior = tmp_path / "p.md"
+    prior.write_text(text)
+    with pytest.raises(ValueError):
+        parse_prior_report(prior)
+
+
+def test_a_fleet_report_is_refused(tmp_path) -> None:
+    repo = tmp_path / "r"
+    repo.mkdir()
+    (repo / "main.tf").write_text('resource "aws_s3_bucket" "b" {\n  bucket = "x"\n}\n')
+    report = _run("--mode", "fleet", "--target", str(repo), "--format", "text").stdout
+    assert "No findings appear in more than one" in report
+    prior = tmp_path / "fleet.md"
+    prior.write_text(report)
+    assert _verify(repo, prior, "--fail-on", "HIGH", "--format", "json").returncode == 2
+
+
+def test_a_filtered_mitre_view_is_refused(target, tmp_path) -> None:
+    prior = tmp_path / "m.txt"
+    prior.write_text(_run("--target", str(target), "--format", "mitre",
+                          "--mitre-tactic", "Impact").stdout)
+    assert _verify(target, prior, "--fail-on", "HIGH", "--format", "json").returncode == 2
+
+
+def test_backticked_ids_are_read(tmp_path) -> None:
+    prior = tmp_path / "p.md"
+    prior.write_text(
+        "| ID | Urgency | Location | Res |\n|---|---|---|---|\n"
+        "| `ROB-AWS-RDS-001` | CRITICAL | `a/main.tf`:99 | `aws_db_instance.d` |\n"
+        "| SEC-X-001 | HIGH | b.tf:3 | r |\n"
+    )
+    assert [(r["id"], r["file"], r["line"]) for r in parse_prior_report(prior)] == [
+        ("ROB-AWS-RDS-001", "a/main.tf", 99), ("SEC-X-001", "b.tf", 3),
+    ]
+
+
+@pytest.mark.parametrize("report", sorted((REPO / "reports").glob("tf-analysis-*.md")),
+                         ids=lambda p: p.name)
+def test_the_repos_own_reports_parse(report) -> None:
+    rows = parse_prior_report(report)
+    assert rows and not [r for r in rows if r.get("unparsed")]
 
 
 def test_json_with_counts_but_no_rows_is_refused(tmp_path) -> None:

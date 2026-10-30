@@ -48,7 +48,7 @@ _NOT_REPROBED_KINDS = frozenset({"registry_check"})
 # CUSTOM-* rules were silently dropped from verification.
 _ID = r'[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3}'
 _FINDING_ROW_RE = re.compile(
-    rf'^\|\s*(?P<id>{_ID})'
+    rf'^\|\s*`?(?P<id>{_ID})`?'
     r'(?:#\d+)?\s*\|'         # optional instance number
     r'(?P<cells>.*)\|\s*$',
 )
@@ -117,11 +117,14 @@ _TEXT_ROW_RE = re.compile(
 _TEXT_LOOKS_LIKE_ROW_RE = re.compile(rf'^(?:\S+ ){{0,2}}(?P<id>{_ID})\b')
 _TEXT_HEADER_RE = re.compile(r'(?m)^# tf-analyze: [^\n]*$')
 _TEXT_COUNTS_RE = re.compile(r'(\d+) CRITICAL · (\d+) HIGH · (\d+) MEDIUM · (\d+) LOW')
-# Markdown only states "nothing found" in words, and only then is a report
-# with no rows a clean one rather than one this parser can't read.
+# With no rows, a markdown report is clean only if it says so for the whole
+# scan: the exact lines `--format pr-summary` prints. A looser match took
+# "no findings appear in more than one repository" and a filtered MITRE
+# view's "(no findings)" for a clean scan.
 _MARKDOWN_CLEAN_RE = re.compile(
-    r'(?im)^[\W_]*(?:clean\b.*\bno findings\b|no findings\b|(?:total )?findings\W+0\b|0 findings\b)'
+    r'(?m)^(?:✅ Clean — no findings at default scoring tiers\.|No findings in the rules that ran\.)$'
 )
+_FLEET_HEADER_RE = re.compile(r'(?m)^# Fleet Scan Report\s*$')
 
 
 def _parse_text_report(text: str, header: str) -> list[dict]:
@@ -187,6 +190,10 @@ def parse_prior_report(path: Path) -> list[dict]:
             else _unparsed_row("UNKNOWN-RULE-000", json.dumps(f))
             for f in rows
         ]
+    # Its paths are cut to two segments and its rows to 50 per repository,
+    # so it can't be re-probed.
+    if _FLEET_HEADER_RE.search(text):
+        raise ValueError(f"{path} is a fleet report; verify each repository's own report")
     header = _TEXT_HEADER_RE.search(text)
     if header:
         try:
