@@ -57,7 +57,8 @@ def _engine_fingerprint() -> str:
     return h.hexdigest()
 
 
-def corpus_hash(all_files_text: dict, entries: list, disk_inputs: list = ()) -> str:
+def corpus_hash(all_files_text: dict, entries: list, disk_inputs: list = (),
+                max_module_contexts: int | None = None) -> str:
     """Stable 16-hex-char hash over .tf file contents + catalogue rules.
 
     Used by the ``--cache`` path to determine whether a full re-scan is
@@ -67,7 +68,8 @@ def corpus_hash(all_files_text: dict, entries: list, disk_inputs: list = ()) -> 
 
     ``disk_inputs`` are the paths corpus checks find by walking the disk
     rather than reading scanned text (``*.tfstate*``, ``*.tftest.hcl``):
-    adding one changes a finding, so it has to change the key too.
+    adding one changes a finding, so it has to change the key too. So
+    does ``max_module_contexts``: it decides which callers get scanned.
     """
     fh = hashlib.sha256()
     for fp_raw in sorted(all_files_text.keys(), key=str):
@@ -76,6 +78,7 @@ def corpus_hash(all_files_text: dict, entries: list, disk_inputs: list = ()) -> 
         fh.update(content.encode() if isinstance(content, str) else content)
     for p in sorted(str(p) for p in disk_inputs):
         fh.update(b"\0disk\0" + p.encode())
+    fh.update(f"\0contexts\0{max_module_contexts}".encode())
     ch = hashlib.sha256()
     # Audit follow-up #11 — previously this hashed only the first 200
     # chars of the `patterns` field. Two catalogue entries whose

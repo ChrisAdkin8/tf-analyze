@@ -160,6 +160,10 @@ When a catalogue entry carries a `fix_hcl` snippet, render it alongside each fin
 
 Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
 
+### `--max-module-contexts`
+
+Scan a local module with more than N distinct sets of caller inputs in N of them, in place of the default budget (contexts x resources: 200,000 a module, 1,000,000 a repo). --fail-on fails if a value of an input the module reads was not scanned
+
 ### `--fail-on-parse-error`
 
 Exit with code 1 if any .tf file could not be parsed and was scanned in the less precise regex fallback mode

@@ -125,7 +125,7 @@ def test_literal_count_zero_skips() -> None:
 def test_count_from_a_variable_default_is_still_checked() -> None:
     """tfvars / -var can override a default at apply time, so a resource
     whose count resolves to 0 only through a default is not skipped."""
-    vd = {"enabled": "false", "n": "0", "__local__n": "0"}
+    vd = {"enabled": "false", "n": "0", "\0local:n": "0"}
     assert not detect._resource_is_count_zero('  count = var.enabled ? 1 : 0\n', vd)
     assert not detect._resource_is_count_zero('  count = var.n\n', vd)
     assert not detect._resource_is_count_zero('  count = local.n\n', vd)

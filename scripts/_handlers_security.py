@@ -28,14 +28,16 @@ from _hcl import (
     brace_walk,
     mask_comments_and_heredocs,
     parse_tf,
+    resolve_value_text,
     strip_hcl_context,
-    _hcl_object_to_json,
+    unwrap_value,
 )
 from _iam_policy import (
-    argument_policies,
+    document_block_statements,
     document_statements,
     json_statements,
     policy_document_subtrees,
+    text_argument_policies,
 )
 from _tfjson import is_tf_source
 from detect import (
@@ -81,7 +83,7 @@ def _detect_variable_credential_pattern(c: InFileCtx) -> list[dict]:
         var_name = blk["groups"][0]
         if not name_re.match(var_name):
             continue
-        if re.search(r"(?m)^\s*sensitive\s*=\s*true\s*$", blk["body"]):
+        if SENSITIVE_TRUE_RE.search(blk["body"]):
             continue
         out.append({
             "id": c.eid,
@@ -109,8 +111,9 @@ def _detect_iam_policy_analysis(c: InFileCtx) -> list[dict]:
     * ``not_action_or_not_resource`` — uses NotAction/NotResource
 
     Statements come from the parse tree (``_iam_policy``), which also
-    sees ``dynamic "statement"`` blocks. A file that did not parse, or a
-    document name seen twice, falls back to the text walk below.
+    sees ``dynamic "statement"`` blocks. In a file that did not parse, or
+    for a document name seen twice, the block is parsed on its own; only
+    a block that does not parse even then gets the text walk below.
     """
     check = c.pat.get("check")
     if not check:
@@ -123,8 +126,12 @@ def _detect_iam_policy_analysis(c: InFileCtx) -> list[dict]:
         if dtype != "aws_iam_policy_document":
             continue
         subtrees = documents.get(dname, [])
-        if len(subtrees) == 1:
-            for st in document_statements(subtrees[0]):
+        statements = (
+            document_statements(subtrees[0]) if len(subtrees) == 1
+            else document_block_statements(dname, dblk["start_line"], dblk["body"])
+        )
+        if statements is not None:
+            for st in statements:
                 if st.matches(check):
                     out.append({
                         "id": c.eid,
@@ -141,7 +148,7 @@ def _legacy_policy_document(
     c: InFileCtx, check: str, dblk: dict, dname: str,
 ) -> list[dict]:
     """Text walk of one ``aws_iam_policy_document`` block — the regex
-    fallback for a file the parser could not read."""
+    fallback for a block the parser could not read."""
     out: list[dict] = []
     body = dblk["body"]
     for sm in re.finditer(r'(?m)^\s*statement\s*\{', body):
@@ -240,7 +247,7 @@ def _helm_literal_value(value) -> str | None:
     An expression's value is unknown here, so no pattern may judge it."""
     if value is None or isinstance(value, (dict, list)):
         return None
-    text = str(value)
+    text = resolve_value_text(str(value), {})
     return None if "${" in text else text
 
 
@@ -265,6 +272,7 @@ def _helm_text_value(item_body: str) -> str | None:
     raw = _helm_text_attr(item_body, "value")
     if raw is None:
         return None
+    raw = unwrap_value(raw)
     if raw.startswith('"') and raw.endswith('"') and len(raw) >= 2:
         text = raw[1:-1]
         return None if "${" in text else text
@@ -284,7 +292,10 @@ def _helm_set_pairs(blk: dict) -> list[tuple[str, str | None]]:
         if isinstance(sets, dict):
             sets = [sets]
         return [
-            (str(item.get("name", "")), _helm_literal_value(item.get("value")))
+            (
+                resolve_value_text(str(item.get("name", "")), {}),
+                _helm_literal_value(item.get("value")),
+            )
             for item in sets if isinstance(item, dict)
         ]
     body = blk["body"]
@@ -306,7 +317,10 @@ def _helm_set_pairs(blk: dict) -> list[tuple[str, str | None]]:
             spans.append((j + 1, item_end - 1))
             i = item_end
     return [
-        ((_helm_text_attr(body[a:b], "name") or "").strip('"'), _helm_text_value(body[a:b]))
+        (
+            unwrap_value(_helm_text_attr(body[a:b], "name") or "").strip('"'),
+            _helm_text_value(body[a:b]),
+        )
         for a, b in spans
     ]
 
@@ -321,9 +335,9 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
     policy-valued arguments, default ``[policy]``; e.g.
     ``assume_role_policy``). Each argument may hold ``jsonencode({...})``,
     a heredoc or a quoted JSON string; an ``inline_policy`` block's
-    ``policy`` is read too. Policies come from the parse tree
-    (``_iam_policy``); a file that did not parse falls back to the text
-    path below, which reads ``policy = jsonencode(...)`` only.
+    ``policy`` is read too. Each argument is cut from the source text and
+    parsed on its own (``_iam_policy``), whether or not the file parsed, so
+    every form reads the same either way.
     """
     check = c.pat.get("check")
     resource_types = c.pat.get("resources") or [
@@ -341,34 +355,8 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
         btype, bname = blk["groups"]
         if btype not in resource_types:
             continue
-        attrs = blk.get("attrs")
-        if attrs is not None:
-            if any(
-                st.matches(check)
-                for doc in argument_policies(attrs, args)
-                for st in json_statements(doc)
-            ):
-                out.append({
-                    "id": c.eid,
-                    "file": str(c.file_path),
-                    "line": blk["start_line"],
-                    "resource": f"{btype}.{bname}",
-                })
-            continue
-        body = blk["body"]
-        arg_re = "|".join(re.escape(a) for a in args)
-        pm = re.search(rf'(?m)^\s*(?:{arg_re})\s*=\s*jsonencode\(', body)
-        if not pm:
-            continue
-        end_after = brace_walk(body, pm.end() - 1, opens="(", closes=")")
-        if end_after is None:
-            continue
-        end = end_after - 1
-        raw = body[pm.end():end].strip()
-        parsed = _hcl_object_to_json(raw)
-        if parsed is None:
-            continue
-        if any(st.matches(check) for st in json_statements(parsed)):
+        docs = text_argument_policies(blk["body"], args, f"{c.file_path}: {btype}.{bname}")
+        if any(st.matches(check) for doc in docs for st in json_statements(doc)):
             out.append({
                 "id": c.eid,
                 "file": str(c.file_path),
@@ -600,7 +588,7 @@ def _corpus_cross_module(c: CorpusCtx) -> list[dict]:
                         if cblk["groups"][0] != child_arg:
                             continue
                         child_found = True
-                        if re.search(r'(?m)^\s*sensitive\s*=\s*true\s*$', cblk["body"]):
+                        if SENSITIVE_TRUE_RE.search(cblk["body"]):
                             child_marked = True
                         break
                 if child_found and not child_marked:

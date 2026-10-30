@@ -86,3 +86,96 @@ def test_corpus_scan_within_budget() -> None:
         f"{PERF_BUDGET_SECONDS}s budget. Likely O(n^2) regression in "
         f"detect_in_file or graph_check."
     )
+
+
+LEADING_OPERATOR = "locals {\n  x = (var.a\n    || var.b)\n}\n"
+
+
+@pytest.mark.skipif(
+    os.environ.get("TF_ANALYZE_SKIP_PERF") == "1",
+    reason="Performance test skipped (TF_ANALYZE_SKIP_PERF=1)",
+)
+def test_rejected_file_with_many_policies(tmp_path, monkeypatch) -> None:
+    """A rejected file parses each policy on its own: linear in the number
+    of policies, once per policy rather than once per rule. Padding each
+    block's fragment to its line in the file made this quadratic, and
+    1,100 documents ran six rules out of time (30s, finding lost)."""
+    monkeypatch.setattr(detect, "RULE_TIMEOUTS", [])
+    pairs = "".join(
+        f'data "aws_iam_policy_document" "d{i}" {{\n  statement {{\n'
+        f'    actions   = ["s3:Get{i}"]\n    resources = ["x"]\n  }}\n}}\n'
+        f'resource "aws_iam_policy" "p{i}" {{\n  policy = <<P\n'
+        f'{{"Statement":[{{"Effect":"Allow","Action":"s3:Get{i}","Resource":"x"}}]}}\nP\n}}\n'
+        for i in range(1100)
+    )
+    admin = (
+        'data "aws_iam_policy_document" "admin" {\n  statement {\n'
+        '    actions   = ["*"]\n    resources = ["*"]\n  }\n}\n'
+    )
+    text = LEADING_OPERATOR + pairs + admin
+    entries = [
+        e for e in detect.load_catalog(CATALOG_DIR)
+        if any(str(p.get("kind", "")).startswith("iam_") for p in e.get("patterns") or [])
+    ]
+    fp = tmp_path / "main.tf"
+    fp.write_text(text)
+    start = time.perf_counter()
+    found = detect.detect_in_file(fp, text, entries)
+    elapsed = time.perf_counter() - start
+    assert "SEC-AWS-IAM-POLICY-005" in {f["id"] for f in found}
+    assert not detect.RULE_TIMEOUTS
+    assert elapsed < 20.0, f"{elapsed:.1f}s"
+
+
+def test_deep_parentheses_are_linear() -> None:
+    """Stripping one layer per pass over the text was quadratic: 30,000
+    layers took 30s."""
+    import _hcl
+
+    text = "(" * 30000 + '"x"' + ")" * 30000
+    start = time.perf_counter()
+    assert _hcl._strip_parens(text) == '"x"'
+    assert time.perf_counter() - start < 2.0
+
+
+def test_block_header_does_not_backtrack() -> None:
+    """Each comment between labels has one way to match: a lazy `.*?` let
+    runs of comments split many ways (1.1s at 24, doubling each time)."""
+    text = "resource " + "/* c */ " * 200 + "x\n"
+    start = time.perf_counter()
+    assert detect.RESOURCE_START.search(text) is None
+    assert detect.DATA_START.search(text.replace("resource", "data")) is None
+    assert time.perf_counter() - start < 1.0
+
+
+def test_list_literal_regex_does_not_backtrack() -> None:
+    """A `$` matched two alternatives of the string pattern, so an
+    unterminated string of them was exponential."""
+    import _network
+
+    start = time.perf_counter()
+    assert _network.parse_literal('["' + "$" * 200 + "]")
+    assert time.perf_counter() - start < 1.0
+
+
+def test_unknown_inputs_are_one_context() -> None:
+    """1,000 callers passing their own subnet scan the module once."""
+    files = {
+        Path("/r/child/main.tf"): 'variable "s" {}\nresource "aws_instance" "i" {\n  subnet_id = var.s\n}\n',
+        Path("/r/main.tf"): "".join(
+            f'module "m{i}" {{\n  source = "./child"\n  s = aws_subnet.s{i}.id\n}}\n' for i in range(1000)
+        ),
+    }
+    assert len(detect._extract_var_contexts_by_dir(files)["/r/child"]) == 1
+
+
+def test_nested_merges_in_conditionals_are_not_exponential() -> None:
+    """Rescanning an unread merge() went over its nested calls twice per layer."""
+    import _iam_policy
+
+    text = "{}"
+    for _ in range(26):
+        text = f"merge(var.x ? {{}} : {text})"
+    start = time.perf_counter()
+    _iam_policy._embedded_statements(text)
+    assert time.perf_counter() - start < 2.0

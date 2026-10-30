@@ -92,7 +92,7 @@ class TestResolveVarRef:
         assert detect._resolve_var_ref(val, {"x": "true"}) == val
 
     def test_rvr_local_ref(self):
-        assert detect._resolve_var_ref("local.enc", {"__local__enc": "true"}) == "true"
+        assert detect._resolve_var_ref("local.enc", {"\0local:enc": "true"}) == "true"
 
     def test_rvr_ternary_true_branch(self):
         # `var.x ? "a" : "b"` with var.x = true → "a"

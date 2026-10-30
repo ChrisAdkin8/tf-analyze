@@ -147,7 +147,7 @@ def parse_literal(text: str):
             lit = None
         if isinstance(lit, list) and all(isinstance(i, (str, int)) for i in lit):
             return lit
-        items = re.findall(r'"(?:[^"\\]|\\.)*"|[^,\s\[\]][^,\[\]]*', t[1:-1])
+        items = re.findall(r'"(?:\$\{[^}]*\}|\$(?!\{)|[^"\\$]|\\.)*"|[^,\s\[\]][^,\[\]]*', t[1:-1])
         return [_scalar(i) for i in items if i.strip()]
     return _scalar(t)
 

@@ -68,6 +68,7 @@ existing call sites and tests need no migration.
 
 from __future__ import annotations
 
+import ast
 import bisect
 import codecs
 import functools
@@ -282,6 +283,18 @@ def parse_tf(text: str) -> tuple[dict | None, str | None]:
     return _parse_tf_cached(text)
 
 
+# A rejected file with thousands of policies has one fragment per policy per
+# rule, so these get their own, larger cache: in `_parse_tf_cached`'s they
+# pushed each other out and every rule parsed every policy again.
+@functools.lru_cache(maxsize=65536)
+def parse_fragment(text: str) -> tuple[dict | None, str | None]:
+    """`parse_tf` for one block or one ``x = value`` cut out of a file. A
+    construct the parser rejects fails its whole file, so the fallback
+    reads what it can piece by piece. The test-only switch stands for that
+    rejected file, not for the pieces, so it does not apply here."""
+    return _parse_tf_cached.__wrapped__(text)
+
+
 def normalise_attrs(body: dict) -> dict:
     """Return a copy of a resource/block subtree with every
     ``dynamic "X" { content { ... } }`` folded in as a plain ``X`` block,
@@ -289,18 +302,15 @@ def normalise_attrs(body: dict) -> dict:
     Values that come from ``for_each`` (``${X.value}``) are unknown at
     parse time, so the block is folded in once; it keeps its ``for_each``
     and iterator name under ``__for_each__`` / ``__iterator__`` for
-    callers that can evaluate them (`_network.expand_dynamic`)."""
+    callers that can evaluate them (`_network.expand_dynamic`). A list or
+    object in parentheses becomes the data it is (`literal_structure`), so
+    every reader of the tree sees ``ingress = ([{...}])`` as the plain
+    form."""
     out: dict = {}
     dynamic = body.get("dynamic")
     for k, v in body.items():
-        if k == "dynamic":
-            continue
-        if isinstance(v, list):
-            out[k] = [normalise_attrs(i) if isinstance(i, dict) else i for i in v]
-        elif isinstance(v, dict):
-            out[k] = normalise_attrs(v)
-        else:
-            out[k] = v
+        if k != "dynamic":
+            out[k] = _normalise_value(v)
     for item in dynamic or []:
         if not isinstance(item, dict):
             continue
@@ -320,6 +330,17 @@ def normalise_attrs(body: dict) -> dict:
                     if isinstance(out[name], list):
                         out[name].append(folded)
     return out
+
+
+def _normalise_value(value):
+    """One value of `normalise_attrs`."""
+    if isinstance(value, str) and value.startswith(_WRAPPED_STRUCTURE):
+        value = literal_structure(value)
+    if isinstance(value, list):
+        return [_normalise_value(v) for v in value]
+    if isinstance(value, dict):
+        return normalise_attrs(value)
+    return value
 
 
 def resource_subtrees(tree: dict | None) -> dict[tuple[str, str], list[dict]]:
@@ -430,26 +451,63 @@ def _split_ternary(expr: str) -> tuple[str, str, str] | None:
     return None
 
 
+# Keys of the variable table the engine writes itself. NUL can't be in an HCL
+# identifier or a tfvars key that means anything, so no name from scanned code
+# is one of these, and `__local__acl` stays an ordinary variable.
+LOCAL_KEY_PREFIX = "\0local:"
+AWS_DEFAULT_TAGS_KEY = "\0aws_default_tags"
+AWS_DEFAULT_TAGS_PROVIDERS_KEY = "\0aws_default_tags_providers"
+REPO_HAS_KEY = "\0repo_has"
+
+_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+_FOR_EXPR_RE = re.compile(r"\[\s*for\b")
+_WRAPPED_STRUCTURE = ("${(", "${[", "${{")
+# Each `("${...}")` layer costs a pass over the text; nobody writes this many.
+_MAX_UNWRAP_LAYERS = 64
+# What `ast.literal_eval` raises on text that is not a Python literal.
+_NOT_A_LITERAL = (ValueError, TypeError, SyntaxError, MemoryError, RecursionError)
+# A `/* */` comment may sit between block labels (`resource "a" /* x */ "b"`).
+# `[^*]|\*(?!/)` gives each comment one way to match, so a run of comments
+# cannot backtrack.
+LABEL_GAP = r'(?:\s|/\*(?:[^*]|\*(?!/))*\*/)+'
+_KEYWORD_LITERALS = {
+    "true": "true", "True": "true",
+    "false": "false", "False": "false",
+    "null": "null", "None": "null",
+}
+
+
 def _strip_parens(expr: str) -> str:
-    """`expr` without parentheses that wrap all of it: ``(a ? b : c)``."""
-    while expr.startswith("(") and expr.endswith(")"):
-        depth, i, n = 0, 0, len(expr)
-        while i < n:
-            ch = expr[i]
-            if ch == '"':
-                i = _string_end(expr, i)
-                continue
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth == 0:
-                    break
-            i += 1
-        if i != n - 1:
-            return expr
-        expr = expr[1:-1].strip()
-    return expr
+    """`expr` without parentheses that wrap all of it: ``(a ? b : c)``,
+    however many layers, in one pass over the text."""
+    if not (expr.startswith("(") and expr.endswith(")")):
+        return expr
+    closer: dict[int, int] = {}
+    stack: list[int] = []
+    i, n = 0, len(expr)
+    while i < n:
+        ch = expr[i]
+        if ch == '"':
+            i = _string_end(expr, i)
+            continue
+        if ch == "(":
+            stack.append(i)
+        elif ch == ")":
+            if not stack:
+                return expr
+            closer[stack.pop()] = i
+        i += 1
+    if stack:
+        return expr
+    lo, hi = 0, n - 1
+    while lo < hi and expr[lo] == "(" and closer.get(lo) == hi:
+        lo += 1
+        hi -= 1
+        while lo <= hi and expr[lo].isspace():
+            lo += 1
+        while hi >= lo and expr[hi].isspace():
+            hi -= 1
+    return expr[lo:hi + 1]
 
 
 def _unquote_literal(text: str) -> str:
@@ -461,30 +519,89 @@ def _unquote_literal(text: str) -> str:
     return t
 
 
+def unwrap_value(expr: str) -> str:
+    """`expr` without what wraps all of it and does not change its value,
+    however nested: ``(...)``, one whole ``${...}``, and the ``"..."``
+    around one whole ``${...}``. ``("${(var.x)}")`` gives ``var.x``."""
+    expr = expr.strip()
+    # Raw text from a file the parser rejected can hold comments
+    # (`( # why`). A parse-tree value has none, but may print a list with
+    # Python's repr, where `#` or `//` is string text: a comment that could
+    # be closed here needs a newline or a `*/`, which repr text lacks.
+    if expr.startswith("(") and ("\n" in expr or "*/" in expr):
+        expr = strip_hcl_context(expr).strip()
+    for _ in range(_MAX_UNWRAP_LAYERS):
+        inner = single_interpolation(expr)
+        if inner is None:
+            text = _unquote_literal(expr)
+            inner = text if text != expr and single_interpolation(text) is not None else expr
+        unwrapped = _strip_parens(inner.strip())
+        if unwrapped == expr:
+            break
+        expr = unwrapped
+    return expr
+
+
+def literal_structure(value):
+    """A list or object that parentheses turned into text, as data, else
+    `value` as is. python-hcl2 prints one inside an expression with
+    Python's repr: ``([{ a = 1 }])`` arrives as ``${([{'a': 1}])}``."""
+    if isinstance(value, str):
+        try:
+            lit = ast.literal_eval(unwrap_value(value))
+        except _NOT_A_LITERAL:
+            return value
+        if isinstance(lit, (list, dict)):
+            return lit
+    return value
+
+
+def _literal_text(expr: str) -> str | None:
+    """The text a bare literal `expr` has once its wrappers are gone (what
+    `render_hcl` gives for the same literal written plainly), or None when
+    `expr` is not a literal. python-hcl2 prints a literal inside an
+    expression in Python's spelling: ``(true)`` is ``${(True)}``,
+    ``(["a"])`` is ``${(['a'])}``."""
+    if expr in _KEYWORD_LITERALS:
+        return _KEYWORD_LITERALS[expr]
+    if _NUMBER_RE.fullmatch(expr):
+        return expr
+    if expr.startswith('"'):
+        text = _unquote_literal(expr)
+        return None if text == expr else text
+    if expr.startswith(("[", "{")):
+        lit = literal_structure(expr)
+        if isinstance(lit, (list, dict)):
+            return render_hcl(lit)
+        # A list holding references (text path); `[for ...]` is not a literal.
+        if (expr[0] == "[" and not _FOR_EXPR_RE.match(expr)
+                and brace_walk(expr, 0, opens="[", closes="]") == len(expr)):
+            return expr
+    return None
+
+
 def resolve_value_text(val: str, var_defaults: dict, _seen: frozenset = frozenset()) -> str:
     """The value of an HCL expression, as text, when it is known statically:
-    a plain ``var.X`` / ``local.X`` (bare or one ``${...}``) is replaced by
-    its default, following chains (``local.a = var.b``); ``cond ? a : b``
-    folds when ``cond`` resolves to ``true`` / ``false``. Anything else,
+    a plain ``var.X`` / ``local.X`` is replaced by its default, following
+    chains (``local.a = var.b``); ``cond ? a : b`` folds when ``cond``
+    resolves to ``true`` / ``false``; a literal behind parentheses or
+    ``${...}`` loses them, so ``("public-read")`` reads like
+    ``"public-read"``. Wrappers may nest (`unwrap_value`). Anything else,
     including an unknown or cyclic reference, is returned unchanged. The
     one resolver behind `detect._resolve_var_ref` and `_network.resolve`.
-    Locals are stored as ``__local__<name>``."""
+    Locals are stored under `LOCAL_KEY_PREFIX`."""
     if len(_seen) > _MAX_RESOLVE_DEPTH:
         return val
-    expr = val.strip()
-    inner = single_interpolation(expr)
-    if inner is not None:
-        expr = inner.strip()
-    expr = _strip_parens(expr)
+    expr = unwrap_value(val)
     m = _PLAIN_REF_RE.match(expr)
     if m:
-        key = m.group(2) if m.group(1) == "var" else "__local__" + m.group(2)
+        key = m.group(2) if m.group(1) == "var" else LOCAL_KEY_PREFIX + m.group(2)
         raw = var_defaults.get(key)
         if raw is None or key in _seen:
             return val
         resolved = resolve_value_text(raw, var_defaults, _seen | {key})
         # A cycle (local.a = local.b = local.a) never settles: keep `val`.
-        return val if _PLAIN_REF_RE.match(_strip_parens(resolved.strip())) and \
+        return val if _PLAIN_REF_RE.match(unwrap_value(resolved)) and \
             resolved.strip() != raw.strip() else resolved
     parts = _split_ternary(expr)
     if parts:
@@ -493,6 +610,12 @@ def resolve_value_text(val: str, var_defaults: dict, _seen: frozenset = frozense
         if c in ("true", "false"):
             branch = then_b if c == "true" else else_b
             return _unquote_literal(resolve_value_text(branch, var_defaults, _seen))
+    # `render_hcl` already took a `${...}` off, leaving `"text"`, so a
+    # quoted string counts as wrapped even with nothing left to remove.
+    if expr != val.strip() or expr.startswith('"'):
+        literal = _literal_text(expr)
+        if literal is not None:
+            return literal
     return val
 
 
@@ -588,6 +711,72 @@ def _is_block_list(value) -> bool:
         isinstance(value, list) and bool(value)
         and all(isinstance(v, dict) and "__start_line__" in v for v in value)
     )
+
+
+def arg_source(body: str, arg: str) -> str | None:
+    """The source text of a top-level argument's whole value, comments
+    removed: quotes and escapes kept, a heredoc with its markers, a
+    multi-line value to its closer. `block_arg_value` gives a value to
+    read; this gives one to parse on its own (`parse_fragment`)."""
+    span = arg_value_span(body, arg)
+    return None if span is None else strip_hcl_context(body[span[0]:span[1]]).strip()
+
+
+def arg_value_span(body: str, arg: str) -> tuple[int, int] | None:
+    """Where a top-level argument's value lies in `body`."""
+    m = re.search(
+        rf'(?m)^[ \t]*{re.escape(arg)}[ \t]*=(?!=)', _mask_to_top_level(body),
+    )
+    if not m:
+        return None
+    i, n, depth = m.end(), len(body), 0
+    while i < n:
+        ch = body[i]
+        nxt = body[i + 1] if i + 1 < n else ""
+        if ch == '"':
+            i = _string_end(body, i)
+            continue
+        if ch == "#" or (ch == "/" and nxt == "/"):
+            j = body.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if ch == "/" and nxt == "*":
+            j = body.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if ch == "<" and nxt == "<" and (hd := _HEREDOC_START_RE.match(body, i)):
+            term = re.compile(rf'(?m)^[ \t]*{re.escape(hd.group(1))}[ \t]*\r?$')
+            t = term.search(body, hd.end())
+            i = n if t is None else t.end()
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "\n" and depth <= 0:
+            break
+        i += 1
+    return m.end(), i
+
+
+def _call_arguments(text: str) -> list[str]:
+    """The top-level arguments of the text inside a call's parentheses."""
+    out: list[str] = []
+    depth, start, i, n = 0, 0, 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            i = _string_end(text, i)
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            out.append(text[start:i])
+            start = i + 1
+        i += 1
+    return [*out, text[start:]]
 
 
 def _top_level_arg_value(body: str, arg: str) -> str | None:

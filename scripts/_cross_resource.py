@@ -57,6 +57,7 @@ import re
 from pathlib import Path
 
 from _hcl import (
+    LABEL_GAP,
     find_blocks,
     block_arg_value,
     block_has_arg,
@@ -69,7 +70,7 @@ from _hcl import (
 # detect.py top-level module-load order. The two compiled regexes are
 # semantically identical; binding identity is not part of the contract.
 _RESOURCE_START = re.compile(
-    r'^\s*resource\s+"([\w-]+)"\s+"([\w-]+)"\s*\{', re.MULTILINE
+    rf'^\s*resource{LABEL_GAP}"([\w-]+)"{LABEL_GAP}"([\w-]+)"\s*\{{', re.MULTILINE
 )
 
 

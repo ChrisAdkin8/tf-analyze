@@ -112,6 +112,16 @@ from _versions import (
 # `_cross_resource.py` could import it cleanly without a circular
 # import back through `detect`.
 from _hcl import (
+    AWS_DEFAULT_TAGS_KEY,
+    AWS_DEFAULT_TAGS_PROVIDERS_KEY,
+    LABEL_GAP,
+    LOCAL_KEY_PREFIX,
+    REPO_HAS_KEY,
+    _call_arguments,
+    _string_end,
+    arg_source,
+    arg_value_span,
+    unwrap_value,
     resolve_value_text,
     _LINE_COMMENT_RE,
     _BLOCK_COMMENT_RE,
@@ -173,8 +183,10 @@ def _read_tf_source(path: Path) -> str:
 
 # ---- Resource block extraction ------------------------------------------
 
+# The parser rejects a comment between labels, so such a block is read from
+# text, and a header that didn't match lost it entirely.
 RESOURCE_START = re.compile(
-    r'^\s*resource\s+"([\w-]+)"\s+"([\w-]+)"\s*\{', re.MULTILINE
+    rf'^\s*resource{LABEL_GAP}"([\w-]+)"{LABEL_GAP}"([\w-]+)"\s*\{{', re.MULTILINE
 )
 MODULE_START = re.compile(r'^\s*module\s+"([\w-]+)"\s*\{', re.MULTILINE)
 VARIABLE_START = re.compile(r'^\s*variable\s+"([\w-]+)"\s*\{', re.MULTILINE)
@@ -185,14 +197,14 @@ REMOVED_START = re.compile(r'^\s*removed\s*\{', re.MULTILINE)
 CHECK_START = re.compile(r'^\s*check\s+"([\w-]+)"\s*\{', re.MULTILINE)
 OUTPUT_START = re.compile(r'^\s*output\s+"([\w-]+)"\s*\{', re.MULTILINE)
 DATA_START = re.compile(
-    r'^\s*data\s+"([\w-]+)"\s+"([\w-]+)"\s*\{', re.MULTILINE
+    rf'^\s*data{LABEL_GAP}"([\w-]+)"{LABEL_GAP}"([\w-]+)"\s*\{{', re.MULTILINE
 )
 PROVIDER_START = re.compile(r'^\s*provider\s+"([\w-]+)"\s*\{', re.MULTILINE)
 
 # Hot-path patterns — used inside per-block loops, hoisted out of detector
 # branches so they compile once per process, not once per catalog-entry hit.
 DESC_RE = re.compile(r'(?m)^\s*description\s*=')
-SENSITIVE_TRUE_RE = re.compile(r'(?m)^\s*sensitive\s*=\s*true\s*$')
+SENSITIVE_TRUE_RE = re.compile(r'(?m)^\s*sensitive\s*=\s*\(*\s*true\s*\)*\s*$')
 COUNT_ATTR_RE = re.compile(r'(?m)^\s*count\s*=')
 FOREACH_ATTR_RE = re.compile(r'(?m)^\s*for_each\s*=')
 VALIDATION_BLOCK_RE = re.compile(r'(?m)^\s*validation\s*\{')
@@ -442,8 +454,30 @@ _MODULE_META_ARGS = frozenset({
     "lifecycle",
 })
 # One child module called from many places is scanned once per distinct
-# set of caller inputs, up to this many.
-_MAX_VAR_CONTEXTS = 8
+# set of caller inputs. A scan costs 0.2-0.8 ms per resource per context, so
+# what is bounded is contexts x resources: per module, and over the repo so
+# many shared modules can't stack up. A module always gets
+# `_MIN_VAR_CONTEXTS`, however big. `--max-module-contexts` replaces all of
+# this with a plain count per module.
+MODULE_CONTEXT_BUDGET = 200_000
+REPO_CONTEXT_BUDGET = 1_000_000
+_MIN_VAR_CONTEXTS = 8
+MAX_MODULE_CONTEXTS: int | None = None
+# Module nesting multiplies contexts: past this many tried for one module,
+# the rest are not looked at, and count as unscanned values.
+_MAX_CONTEXTS_TRIED = 1_000_000
+# Modules with sets of inputs left out (`_limit_var_contexts`). A value of an
+# input no scanned context has: a scan that skipped it has not passed it, so
+# `--fail-on` fails, as for `RULE_TIMEOUTS`. Every value scanned, in some
+# combinations only: a WARN and `UNSCANNED_COMBINATIONS`.
+UNSCANNED_CONTEXTS: list[dict] = []
+UNSCANNED_COMBINATIONS: list[dict] = []
+# Those modules and all they call: what they pass down was cut short too.
+_PARTIAL_MODULES: set[str] = set()
+_TAG_ARGS = ("tags", "tags_all", "labels")
+_BARE_REF_RE = re.compile(r'[A-Za-z_][\w-]*(?:\.[\w-]+|\[[^\]"]*\])+')
+_PLAIN_INPUT_REF_RE = re.compile(r'(var|local)\.([\w-]+)')
+_OBJECT_ITEM_RE = re.compile(r'\s*(?:"[^"\n]*"|[\w-]+)\s*[=:]\s*(.*)', re.DOTALL)
 
 
 def _top_level_assignments(body: str) -> dict[str, str]:
@@ -511,21 +545,208 @@ def _tfvars_values(directory: Path) -> dict[str, str]:
     return out
 
 
-def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
+class _VarContext(dict):
+    """A module's variable table, plus which inputs in it hold an unknown
+    expression (`_input_is_unknown`). An attribute, not a key: every key is
+    a name the scanned code chose, so a marker there could be set by a
+    caller (`__unknown_inputs__ = "acl"`) to hide its own value."""
+
+    unknown_inputs: frozenset = frozenset()
+
+
+def _is_bare_reference(expr: str) -> bool:
+    """A reference nothing here resolves: `aws_x.y.id`, not a `var.X` or
+    `local.X` that may have a value."""
+    expr = unwrap_value(expr)
+    return bool(_BARE_REF_RE.fullmatch(expr)) and not expr.startswith(("var.", "local."))
+
+
+def _only_bare_references(expr: str) -> bool:
+    """Whether `expr` is a list or plain object holding nothing else."""
+    if len(expr) < 2 or expr[0] + expr[-1] not in ("[]", "{}"):
+        return False
+    items = [i for i in _call_arguments(expr[1:-1].replace("\n", ",")) if i.strip()]
+    if expr[0] == "{":
+        matches = [_OBJECT_ITEM_RE.fullmatch(i) for i in items]
+        if not all(matches):
+            return False
+        items = [m.group(1) for m in matches]
+    return bool(items) and all(_is_bare_reference(i) for i in items)
+
+
+def _input_is_unknown(source: str, resolved: str, parent_unknown: set[str]) -> bool:
+    """Whether a caller's input is provably nothing a rule could judge, so
+    its text (which differs per caller: ``aws_subnet.s7.id``) needn't keep
+    two contexts apart: its source is a bare reference, or a list or plain
+    object of nothing but those, and resolving it changed nothing. A
+    `var.X` that its own caller passed as unknown is one too. Anything else
+    stays distinct, whatever it looks like: a conditional may have folded
+    to a value, and a local's quotes are gone by now."""
+    expr = unwrap_value(source)
+    ref = _PLAIN_INPUT_REF_RE.fullmatch(expr)
+    if ref:
+        return ref.group(1) == "var" and ref.group(2) in parent_unknown
+    if not (_BARE_REF_RE.fullmatch(expr) or _only_bare_references(expr)):
+        return False
+    return unwrap_value(resolved) == expr
+
+
+def _inputs_in_use(texts: list[str], *, skip_tags: bool) -> set[str]:
+    """Each ``var.X`` a module's files read; with `skip_tags`, not counting
+    a resource's own tags (see `_rules_read_tag_values`). Commented-out
+    code does not count; anything else that names the variable does, so a
+    value that reaches a local, an output or a nested module keeps its
+    input."""
+    used: set[str] = set()
+    for text in texts:
+        code = mask_comments(text)
+        cuts: list[tuple[int, int]] = []
+        for blk in find_blocks(code, RESOURCE_START) if skip_tags else ():
+            body_at = blk["end_pos"] - 1 - len(blk["body"])
+            for arg in _TAG_ARGS:
+                span = arg_value_span(blk["body"], arg)
+                if span:
+                    cuts.append((body_at + span[0], body_at + span[1]))
+        for start, end in sorted(cuts, reverse=True):
+            code = code[:start] + code[end:]
+        used.update(VAR_REF_RE.findall(code))
+    return used
+
+
+def _rules_read_tag_values(entries: list[dict]) -> bool:
+    """Whether a loaded rule looks at what a resource's own tags or labels
+    say, not just that they are set. The built-in rules don't, so an input
+    used only there can't change a finding, unless a custom rule says
+    otherwise. A nested ``metadata.labels`` is not cut by `_inputs_in_use`,
+    so doesn't count; nor do kinds that match source text, which see no
+    caller's value."""
+    for entry in entries:
+        for pat in entry.get("patterns") or []:
+            if pat.get("kind") == "policy" and re.search(r"\b(?:tags|labels)\b", str(pat)):
+                return True
+            fields = [pat.get("suppress_if")]
+            if pat.get("kind") in ("resource_arg", "hcl_attr"):
+                fields += [pat.get("arg"), pat.get("path"), pat.get("nested_path")]
+            for f in fields:
+                for spec in (f if isinstance(f, list) else [f]):
+                    arg = spec.get("arg") if isinstance(spec, dict) else spec
+                    if arg and str(arg).split(".")[0] in _TAG_ARGS:
+                        return True
+    return False
+
+
+def _distinct_in_use(contexts: list[dict], unused: set[str]) -> list[dict]:
+    """`contexts` with those that differ only in `unused` inputs dropped."""
+    out: dict[frozenset, dict] = {}
+    for ctx in contexts:
+        out.setdefault(frozenset(i for i in ctx.items() if i[0] not in unused), ctx)
+    return list(out.values())
+
+
+def _pick_var_contexts(contexts: list[dict], limit: int,
+                       ignore: set[str] = frozenset()) -> list[dict]:
+    """At most `limit` of `contexts`, chosen so each value of each input
+    is in at least one of them while the limit allows (rather than the
+    first `limit` callers, which lost a lone `acl = "public-read"` caller
+    behind eight others with different names).
+
+    Inputs with the fewest distinct values go first: a setting such as
+    ``acl`` has a few, while a ``name`` that differs on every call takes a
+    context each and would use up the limit. Room left after that goes
+    to the other contexts, in caller order, for their combinations of
+    values. A limit too small for every value loses the last in line.
+    Inputs in `ignore` need no covering."""
+    if len(contexts) <= limit:
+        return contexts
+    keys = {k for ctx in contexts for k in ctx} - ignore
+    values = {k: {ctx.get(k) for ctx in contexts} for k in keys}
+    picked: list[dict] = []
+    covered: set[tuple] = set()
+    for key in sorted(keys, key=lambda k: (len(values[k]), k)):
+        for ctx in contexts:
+            if len(picked) == limit:
+                return picked
+            pair = (key, ctx.get(key))
+            if pair not in covered:
+                picked.append(ctx)
+                covered.update((k, ctx.get(k)) for k in keys)
+    rest = [ctx for ctx in contexts if not any(ctx is p for p in picked)]
+    return picked + rest[:limit - len(picked)]
+
+
+def _context_limit(resources: int, repo_left: int) -> int:
+    """How many contexts a module of `resources` resources may be scanned
+    in, with `repo_left` of the repo's budget unspent."""
+    if MAX_MODULE_CONTEXTS is not None:
+        return MAX_MODULE_CONTEXTS
+    per_resource = max(resources, 1)
+    return max(_MIN_VAR_CONTEXTS, min(MODULE_CONTEXT_BUDGET, repo_left) // per_resource)
+
+
+def _limit_var_contexts(d: str, contexts: list[dict], texts: list[str], limit: int,
+                        *, tag_values_read: bool, cut_short: bool) -> list[dict]:
+    """The contexts to scan a module in: all of them up to `limit`. Past
+    that, sets that differ only in inputs its code doesn't read count as
+    one, and `_pick_var_contexts` chooses from the rest. What is left out
+    gets a WARN. Only a value no scanned context has fails ``--fail-on``
+    (`UNSCANNED_CONTEXTS`): if every value was scanned, what may be missed
+    is a finding needing two values from different callers together
+    (`UNSCANNED_COMBINATIONS`)."""
+    if len(contexts) <= limit and not cut_short:
+        return contexts
+    used = _inputs_in_use(texts, skip_tags=not tag_values_read)
+    unused = {k for ctx in contexts for k in ctx if not k.startswith("\0")} - used
+    contexts = _distinct_in_use(contexts, unused)
+    picked = _pick_var_contexts(contexts, limit, unused)
+    if len(picked) == len(contexts) and not cut_short:
+        return picked
+    keys = {k for ctx in contexts for k in ctx} - unused
+    seen = {(k, ctx.get(k)) for ctx in picked for k in keys}
+    missing = {(k, ctx.get(k)) for ctx in contexts for k in keys} - seen
+    entry = {"module": d, "scanned": len(picked), "distinct": len(contexts)}
+    if missing or cut_short:
+        print(
+            f"WARN: module {d}: {len(contexts) - len(picked)} of {len(contexts)} distinct "
+            f"sets of caller inputs not scanned, leaving {len(missing)} input value(s) "
+            f"unchecked; raise --max-module-contexts (--fail-on fails on this)",
+            file=sys.stderr,
+        )
+        entry["unscanned_values"] = len(missing)
+        entry["inputs"] = sorted({k for k, _ in missing})
+        record = UNSCANNED_CONTEXTS
+    else:
+        print(
+            f"WARN: module {d}: {len(contexts) - len(picked)} of {len(contexts)} distinct "
+            f"sets of caller inputs not scanned; every input value was, but not "
+            f"every combination of them. Raise --max-module-contexts to scan all",
+            file=sys.stderr,
+        )
+        record = UNSCANNED_COMBINATIONS
+    if not any(e["module"] == d for e in record):
+        record.append(entry)
+    return picked
+
+
+def _extract_var_contexts_by_dir(all_files_text: dict,
+                                 tag_values_read: bool = True) -> dict[str, list[dict]]:
     """Return ``{dir_path: [context, ...]}``: the values `var.X` /
     `local.X` resolve to when a directory's files are scanned.
 
     A context holds variable defaults, then values from the directory's
     auto-loaded ``.tfvars`` files, then — for a child module — the inputs
     its caller passes (``module "x" { source = "./child"; foo = bar }``
-    sets the child's ``foo``). Locals are stored under ``__local__<name>``
+    sets the child's ``foo``). Locals are stored under `LOCAL_KEY_PREFIX`
     in the same dict, so one lookup table serves both namespaces.
 
     Variable scope in Terraform is per-directory, so most directories have
     one context. A child module called from several places with different
     inputs has one context per distinct set, so a rule sees each caller's
     values — with a single merged dict, whichever caller came last hid the
-    others (a `public = true` caller behind a `public = false` one).
+    others (a `public = true` caller behind a `public = false` one). An
+    input that is an unknown expression (`_input_is_unknown`) keeps the
+    first one seen, so a thousand callers passing their own
+    ``aws_subnet.x.id`` are one context, not a thousand. Past the budget
+    (`_context_limit`), see `_limit_var_contexts`.
     """
     base: dict[str, dict[str, str]] = {}
     for fp, text in all_files_text.items():
@@ -536,7 +757,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
                 base.setdefault(dir_key, {})[blk["groups"][0]] = default
         for blk in find_blocks(text, LOCALS_START):
             for lname, lval in _top_level_assignments(blk["body"]).items():
-                base.setdefault(dir_key, {})["__local__" + lname] = lval
+                base.setdefault(dir_key, {})[LOCAL_KEY_PREFIX + lname] = lval
     for dir_key in sorted({str(Path(fp).parent) for fp in all_files_text}):
         tfvars = _tfvars_values(Path(dir_key))
         if tfvars:
@@ -544,21 +765,21 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
 
     # AWS provider `default_tags { tags = { ... } }`: any dir whose AWS
     # provider declares default_tags is recorded under the synthetic key
-    # __aws_default_tags__. Tag-related findings in that dir are then
+    # AWS_DEFAULT_TAGS_KEY. Tag-related findings in that dir are then
     # suppressed (the provider injects the tags downstream). Which provider
     # configurations carry them (`aws`, `aws.<alias>`) is kept under
-    # __aws_default_tags_providers__ so child modules inherit them below.
+    # AWS_DEFAULT_TAGS_PROVIDERS_KEY so child modules inherit them below.
     for fp, text in all_files_text.items():
         for pblk in find_blocks(text, PROVIDER_START):
             # A real `default_tags` block, not the word in a comment or
             # string (`# TODO: add default_tags` silenced every AWS tag rule).
             if pblk["groups"][0] == "aws" and block_has_arg(pblk["body"], "default_tags"):
                 ctx = base.setdefault(str(Path(fp).parent), {})
-                ctx["__aws_default_tags__"] = "true"
+                ctx[AWS_DEFAULT_TAGS_KEY] = "true"
                 alias = (block_arg_value(pblk["body"], "alias") or "").strip().strip('"')
-                names = set(ctx.get("__aws_default_tags_providers__", "").split())
+                names = set(ctx.get(AWS_DEFAULT_TAGS_PROVIDERS_KEY, "").split())
                 names.add(f"aws.{alias}" if alias else "aws")
-                ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
+                ctx[AWS_DEFAULT_TAGS_PROVIDERS_KEY] = " ".join(sorted(names))
 
     # Resource types present anywhere in the scan, minus ones switched off
     # with `enabled = false`, for `unless_repo_has` (account-level settings
@@ -571,11 +792,11 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
     })
     if present:
         for dir_key in {str(Path(fp).parent) for fp in all_files_text}:
-            base.setdefault(dir_key, {})["__repo_has__"] = " ".join(present)
+            base.setdefault(dir_key, {})[REPO_HAS_KEY] = " ".join(present)
 
     # Module calls, in a stable order: (caller dir, child dir, inputs, the
     # caller's provider configuration the child's default `aws` is).
-    calls: list[tuple[str, str, dict[str, str], str]] = []
+    calls: list[tuple[str, str, dict[str, str], str, dict[str, str]]] = []
     for fp in sorted(all_files_text, key=str):
         parent_dir = str(Path(fp).parent)
         for mblk in find_blocks(all_files_text[fp], MODULE_START):
@@ -591,16 +812,22 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             # A child uses the caller's default `aws` unless `providers = {
             # aws = aws.<alias> }` passes another configuration.
             m = re.search(r'(?<![\w.])aws\s*=\s*(aws(?:\.[\w-]+)?)\b', assigns.get("providers", ""))
-            calls.append((parent_dir, child_dir, inputs, m.group(1) if m else "aws"))
+            sources = {k: arg_source(mblk["body"], k) or v for k, v in inputs.items()}
+            calls.append((parent_dir, child_dir, inputs, m.group(1) if m else "aws", sources))
 
     contexts: dict[str, list[dict]] = {}
     in_progress: set[str] = set()
+    texts_by_dir: dict[str, list[str]] = {}
+    for fp, text in all_files_text.items():
+        texts_by_dir.setdefault(str(Path(fp).parent), []).append(text)
+    repo_left = REPO_CONTEXT_BUDGET
 
     def contexts_of(d: str) -> list[dict]:
+        nonlocal repo_left
         if d in contexts:
             return contexts[d]
         own = base.get(d, {})
-        incoming = [(p, inputs, aws) for p, c, inputs, aws in calls if c == d]
+        incoming = [(p, inputs, aws, src) for p, c, inputs, aws, src in calls if c == d]
         if d in in_progress:  # a call cycle: stop at this module's own values
             return [dict(own)]
         if not incoming:  # a root module
@@ -608,15 +835,23 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             return contexts[d]
         in_progress.add(d)
         found: list[dict] = []
-        for parent_dir, inputs, aws_provider in incoming:
+        distinct: set[tuple] = set()
+        representative: dict[str, str] = {}
+        tried = 0
+        for parent_dir, inputs, aws_provider, sources in incoming:
             for parent_ctx in contexts_of(parent_dir):
-                ctx = dict(own)
+                tried += 1
+                if tried > _MAX_CONTEXTS_TRIED:
+                    break
+                ctx = _VarContext(own)
+                parent_unknown = getattr(parent_ctx, "unknown_inputs", frozenset())
+                unknown: list[str] = []
                 # Provider default_tags reach the child's resources through
                 # the configuration it is given, so its tag rules see them.
-                if aws_provider in parent_ctx.get("__aws_default_tags_providers__", "").split():
-                    ctx["__aws_default_tags__"] = "true"
-                    names = set(ctx.get("__aws_default_tags_providers__", "").split()) | {"aws"}
-                    ctx["__aws_default_tags_providers__"] = " ".join(sorted(names))
+                if aws_provider in parent_ctx.get(AWS_DEFAULT_TAGS_PROVIDERS_KEY, "").split():
+                    ctx[AWS_DEFAULT_TAGS_KEY] = "true"
+                    names = set(ctx.get(AWS_DEFAULT_TAGS_PROVIDERS_KEY, "").split()) | {"aws"}
+                    ctx[AWS_DEFAULT_TAGS_PROVIDERS_KEY] = " ".join(sorted(names))
                 for k, raw in inputs.items():
                     # Only literal values flow (after resolving the caller's
                     # own var./local. references); an unresolved expression
@@ -624,22 +859,48 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
                     resolved = _resolve_var_ref(raw, parent_ctx)
                     resolved = resolved.strip().strip('"').strip("'")
                     if resolved and not resolved.startswith(("var.", "local.", "data.")):
+                        if _input_is_unknown(sources[k], resolved, parent_unknown):
+                            # Not the default: the caller did set something.
+                            resolved = representative.setdefault(k, resolved)
+                            unknown.append(k)
                         ctx[k] = resolved
-                if ctx not in found and len(found) < _MAX_VAR_CONTEXTS:
+                ctx.unknown_inputs = frozenset(unknown)
+                key = (frozenset(ctx.items()), ctx.unknown_inputs)
+                if key not in distinct:
+                    distinct.add(key)
                     found.append(ctx)
         in_progress.discard(d)
-        contexts[d] = found
-        return found
+        texts = texts_by_dir.get(d, [])
+        resources = sum(len(find_blocks(t, RESOURCE_START)) for t in texts)
+        contexts[d] = _limit_var_contexts(
+            d, found, texts, _context_limit(resources, repo_left),
+            tag_values_read=tag_values_read, cut_short=tried > _MAX_CONTEXTS_TRIED,
+        )
+        if len(contexts[d]) > 1:
+            repo_left -= len(contexts[d]) * resources
+        return contexts[d]
 
-    for d in sorted(set(base) | {c for _, c, _, _ in calls}):
+    for d in sorted(set(base) | {c[1] for c in calls}):
         contexts_of(d)
+    pending = [
+        str(Path(e["module"]).resolve()) for e in (*UNSCANNED_CONTEXTS, *UNSCANNED_COMBINATIONS)
+    ]
+    while pending:
+        module = pending.pop()
+        if module not in _PARTIAL_MODULES:
+            _PARTIAL_MODULES.add(module)
+            pending += [str(Path(c[1]).resolve()) for c in calls
+                        if str(Path(c[0]).resolve()) == module]
     return contexts
 
 
 def _extract_var_defaults_by_dir(all_files_text: dict) -> dict:
     """``{dir_path: context}`` — the first context of each directory from
     `_extract_var_contexts_by_dir`, for callers that scan with one
-    variable table (the LSP server)."""
+    variable table (the LSP server, which lives on between scans and has
+    no gate, so what one scan left out mustn't pile up)."""
+    for record in (UNSCANNED_CONTEXTS, UNSCANNED_COMBINATIONS, _PARTIAL_MODULES):
+        record.clear()
     return {d: ctxs[0] for d, ctxs in _extract_var_contexts_by_dir(all_files_text).items()}
 
 
@@ -1468,7 +1729,8 @@ def reprobe_finding(finding: dict, catalog_by_id: dict,
     )
 
 
-def _file_scanner(all_files_text: dict) -> _Callable[[Path, str, list], list[dict]]:
+def _file_scanner(all_files_text: dict,
+                  entries: list | None = None) -> _Callable[[Path, str, list], list[dict]]:
     """`scan(fp, text, entries)`: `detect_in_file` the way a full scan runs
     it, in the corpus's context. Plain `var.X` / `local.X` values are
     resolved from the folder's variable table, once per caller for a child
@@ -1478,7 +1740,9 @@ def _file_scanner(all_files_text: dict) -> _Callable[[Path, str, list], list[dic
     Shared by the scan and by `--mode verify-fixed`, which re-probed
     without either, so a finding on `publicly_accessible = var.public`
     could never fire again and came out RESOLVED."""
-    var_contexts_by_dir = _extract_var_contexts_by_dir(all_files_text)
+    var_contexts_by_dir = _extract_var_contexts_by_dir(
+        all_files_text, entries is None or _rules_read_tag_values(entries),
+    )
     module_resources_by_dir: dict[str, list[dict]] = {}
     for fp, text in all_files_text.items():
         module_resources_by_dir.setdefault(str(fp.parent), []).extend(
@@ -1504,13 +1768,24 @@ def _file_scanner(all_files_text: dict) -> _Callable[[Path, str, list], list[dic
 
 def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
                  entries: list[dict], unreadable_files: list[str] = ()) -> dict:
-    """Adapter passing the scan's file detector + detect_corpus to _verify."""
-    return _verify_verify_fixed(
+    """Adapter passing the scan's file detector + detect_corpus to _verify.
+    A finding gone from a module with callers left out, or from one below
+    it, was not shown to be fixed: only the scanned callers were checked,
+    so it is not RESOLVED."""
+    scan_file = _file_scanner(all_files_text, entries)
+    verify = _verify_verify_fixed(
         prior_report, target, all_files_text, entries,
-        detect_in_file=_file_scanner(all_files_text),
+        detect_in_file=scan_file,
         detect_corpus=detect_corpus,
         unreadable_files=unreadable_files,
     )
+    results = verify["results"]
+    for f in list(results["RESOLVED"]):
+        fp = Path(f["file"])
+        if str((fp if fp.is_absolute() else Path(target) / fp).resolve().parent) in _PARTIAL_MODULES:
+            results["RESOLVED"].remove(f)
+            results["UNREADABLE"].append(f)
+    return verify
 
 
 # ---- Diff-mode file filtering -------------------------------------------
@@ -1876,11 +2151,20 @@ def _report_target(args: object) -> Path | None:
     return Path(targets[0]).resolve() if targets else None
 
 
+def _positive_int(text: str) -> int:
+    """argparse type: an integer of at least 1."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, not {text}")
+    return value
+
+
 def _gate_exit_code(
     args: object, findings: list[dict], entries: list[dict],
     parse_fallback_files: list[dict],
     unreadable_files: list[str] = (),
     rule_timeouts: list[dict] = (),
+    unscanned_contexts: list[dict] = (),
 ) -> int:
     """CI gate: 1 when a finding is at or above ``--fail-on``, when
     ``--fail-on`` is set and an input file could not be read at all (a
@@ -1913,6 +2197,15 @@ def _gate_exit_code(
                 f"and were skipped (--fail-on)",
                 file=sys.stderr,
             )
+            return 1
+        if unscanned_contexts:
+            for e in unscanned_contexts:
+                print(
+                    f"ERROR: module {e['module']}: {e['unscanned_values']} input value(s) "
+                    f"of its callers were not scanned (--fail-on); raise "
+                    f"--max-module-contexts (now {e['scanned']} contexts here)",
+                    file=sys.stderr,
+                )
             return 1
     if args.fail_on_parse_error and parse_fallback_files:
         print(
@@ -2300,6 +2593,10 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     # ran out of time, as --fail-on does.
     if RULE_TIMEOUTS:
         fleet_result["rule_timeouts"] = list(RULE_TIMEOUTS)
+    if UNSCANNED_CONTEXTS:
+        fleet_result["unscanned_contexts"] = list(UNSCANNED_CONTEXTS)
+    if UNSCANNED_COMBINATIONS:
+        fleet_result["unscanned_combinations"] = list(UNSCANNED_COMBINATIONS)
     total = sum(fleet_result["summary"].values())
     print(f"# fleet: {len(fleet_targets)} repos, {total} total findings, {len(fleet_result['fleet_wide'])} fleet-wide", file=sys.stderr)
     all_findings = [f for fs in fleet_result["by_target"].values() for f in fs]
@@ -2337,7 +2634,8 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
         out_file.close()
     return _gate_exit_code(args, all_findings, entries,
                            fleet_result["parse_fallback_files"],
-                           fleet_result["unreadable_files"], RULE_TIMEOUTS)
+                           fleet_result["unreadable_files"], RULE_TIMEOUTS,
+                           UNSCANNED_CONTEXTS)
 
 
 def _mode_trend(args: object, entries: list, emit, out_file) -> int:
@@ -2412,7 +2710,8 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     unchecked = list(dict.fromkeys(
         [*unreadable_files, *(str(r["file"]) for r in results["UNREADABLE"])]
     ))
-    return _gate_exit_code(args, still_open, entries, [], unchecked)
+    return _gate_exit_code(args, still_open, entries, [], unchecked,
+                           RULE_TIMEOUTS, UNSCANNED_CONTEXTS)
 
 
 def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
@@ -2555,7 +2854,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     """
     # Pass 2 — run per-file detection with the filtered ruleset, in the
     # corpus's variable and module context (`_file_scanner`).
-    scan_file = _file_scanner(all_text)
+    scan_file = _file_scanner(all_text, entries)
 
     # Incremental cache: if --cache is set and the corpus hash matches the
     # stored cache, return the cached findings immediately (skipping the full
@@ -2581,7 +2880,9 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             p for d in sorted({fp.parent for fp in all_text})
             for p in _handlers_modules.module_test_files(d)
         ]
-        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries, _disk_inputs)
+        _corpus_hash_val = _corpus_hash(
+            {**all_text, **extra_text}, entries, _disk_inputs, MAX_MODULE_CONTEXTS,
+        )
         _cache_path = (
             Path(args.cache_file).resolve()
             if getattr(args, "cache_file", None)
@@ -2687,8 +2988,11 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         # Persist the per-file + corpus findings only: plan / state
         # findings depend on external inputs, and a later run without them
         # would otherwise replay them from the cache.
-        # Not when a rule check timed out: the result is incomplete.
-        if _cache_path and _corpus_hash_val and not RULE_TIMEOUTS:
+        # Not when a rule check timed out or a caller was left out: the
+        # result is incomplete, and a later run must not be served it.
+        if _cache_path and _corpus_hash_val and not (
+            RULE_TIMEOUTS or UNSCANNED_CONTEXTS or UNSCANNED_COMBINATIONS
+        ):
             _save_scan_cache(_cache_path, _corpus_hash_val,
                              [f for f in findings if id(f) not in external_ids],
                              parse_fallback_files=parse_fallback_files)
@@ -3352,6 +3656,17 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
         ),
     )
     ap.add_argument(
+        "--max-module-contexts",
+        type=_positive_int,
+        metavar="N",
+        help=(
+            "Scan a local module with more than N distinct sets of caller "
+            "inputs in N of them, in place of the default budget (contexts x "
+            "resources: 200,000 a module, 1,000,000 a repo). --fail-on fails "
+            "if a value of an input the module reads was not scanned"
+        ),
+    )
+    ap.add_argument(
         "--fail-on-parse-error",
         action="store_true",
         help=(
@@ -3886,6 +4201,9 @@ def _main():
         )
         sys.exit(2)
 
+    global MAX_MODULE_CONTEXTS
+    MAX_MODULE_CONTEXTS = args.max_module_contexts
+
     entries = load_catalog(
         catalog_dir,
         include_stubs=args.include_stubs,
@@ -3988,6 +4306,12 @@ def _main():
     # Read, detect, filter and suppress — see _scan_target (shared with
     # --mode fleet so the two cannot drift apart again).
     _scan = _scan_target(args, target, entries, project_config, diff_files)
+    if diff_files is not None:
+        # A change that doesn't touch a module or its callers can't be
+        # asked to answer for that module's coverage.
+        _touched = {str(p.parent) for p in diff_files}
+        for _record in (UNSCANNED_CONTEXTS, UNSCANNED_COMBINATIONS):
+            _record[:] = [e for e in _record if str(Path(e["module"]).resolve()) in _touched]
     findings = _scan["findings"]
     suppressed_findings = _scan["suppressed_findings"]
     parse_fallback_files = _scan["parse_fallback_files"]
@@ -4172,7 +4496,7 @@ def _main():
         if _out_file is not None:
             _out_file.close()
         sys.exit(_gate_exit_code(args, findings, entries, parse_fallback_files,
-                                 unreadable_files, RULE_TIMEOUTS))
+                                 unreadable_files, RULE_TIMEOUTS, UNSCANNED_CONTEXTS))
 
     # Threat-intel enrichment (R30.2 — KEV + EPSS exploitability ranking).
     # Cross-references each rule's `cwe:` tags with CISA KEV's CWE set
@@ -4231,6 +4555,11 @@ def _main():
     # Likewise only when a rule check ran out of time (`_call_with_budget`).
     if RULE_TIMEOUTS:
         summary["rule_timeouts"] = list(RULE_TIMEOUTS)
+    # And when a shared module's callers were left out (`_limit_var_contexts`).
+    if UNSCANNED_CONTEXTS:
+        summary["unscanned_contexts"] = list(UNSCANNED_CONTEXTS)
+    if UNSCANNED_COMBINATIONS:
+        summary["unscanned_combinations"] = list(UNSCANNED_COMBINATIONS)
     # And when a .tf file couldn't be read: --fail-on fails on it, so the
     # GitHub Action's later gate step needs to see it too.
     if unreadable_files:
@@ -4298,7 +4627,7 @@ def _main():
 
     # Exit code for CI gating
     _rc = _gate_exit_code(args, _gate_findings, entries, parse_fallback_files,
-                          unreadable_files, RULE_TIMEOUTS)
+                          unreadable_files, RULE_TIMEOUTS, UNSCANNED_CONTEXTS)
     if _rc:
         sys.exit(_rc)
 
