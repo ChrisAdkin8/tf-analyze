@@ -49,8 +49,30 @@ which a plan does not record:
 - **`graph_check` rules** (they follow references, and an unknown value has
   none) and `lifecycle` (`OPS-ENV-001`), which a plan does not include.
 
-A value that is unknown until apply (`policy = aws_x.y.json` on a resource
-not created yet) can't be judged either: the plan has nothing to read.
+### Values unknown until apply
+
+A value that depends on something not created yet is not in the plan, and
+what a plan keeps of it varies:
+
+- **A data source read at apply** keeps its known parts, so it is judged.
+  An `aws_iam_policy_document` with `principals { identifiers = ["*"] }` and
+  `resources = ["${aws_s3_bucket.b.arn}/*"]` is still reported as public, and
+  an unknown value in a `condition` doesn't hide `actions = ["*"]`.
+- **`jsonencode({...})` with one unknown value is one unknown string.** The
+  plan holds no part of it, not the `"*"` beside the reference, and its
+  `configuration` section keeps only the reference. No rule can judge that
+  policy from a plan.
+
+So a resource with an unknown value in an argument that a rule reads, and
+that the configuration sets, is named in `summary.coverage.unknown_values`
+and in the Run Task message:
+
+```
+PARTIAL SCAN: ... Unknown until apply, so not judged: aws_s3_bucket_policy.p (policy), ...
+```
+
+Write such policies with `aws_iam_policy_document` for a plan-time check, or
+rely on the scan of the source.
 
 So keep scanning the source in CI (`detect.py --target .`): the two together
 cover everything. The numbers for a given run are in the engine's JSON, as
@@ -65,7 +87,11 @@ cover everything. The numbers for a given run are in the engine's JSON, as
   "rules_partly_evaluated": 0,
   "rules_not_evaluated": 72,
   "not_evaluated_critical_high": 15,
-  "not_evaluated_rules": ["CI-TEST-001", "..."]
+  "not_evaluated_rules": ["CI-TEST-001", "..."],
+  "resources_with_unknown_values": 1,
+  "unknown_values": [
+    {"resource": "aws_s3_bucket_policy.p", "arguments": ["policy"]}
+  ]
 }
 ```
 
@@ -74,15 +100,23 @@ cover everything. The numbers for a given run are in the engine's JSON, as
 | Result | Status | Message |
 |---|---|---|
 | A finding at or above `TFA_RUN_TASK_FAIL_ON` | `failed` | `... Blocked HIGH+ findings. PARTIAL SCAN: ...` |
+| A rule check ran out of time, or the engine's gate failed some other way | `failed` | `... 1 rule check(s) ran out of time and were skipped. ...` |
 | No such finding | `passed` | `... No HIGH+ findings in the rules evaluated. PARTIAL SCAN: plan only, no Terraform source. 72 of 352 rules not evaluated (15 CRITICAL/HIGH). ...` |
 
-The status stays `passed` when nothing breached the threshold. A task
+The status stays `passed` when nothing breached the threshold and every
+check that could run finished. A task
 result is `passed` or `failed`, there is no third value, and every plan has
 rules that can't run: returning `failed` for that would block every apply
 under mandatory enforcement, and the task would be switched off. Instead
 the message says what `passed` covers. Read it as "nothing found by the
 rules that ran", not "this plan is safe". A score of 100 (A) on a plan-only
 scan means the same, and every report format carries the `PARTIAL SCAN` line.
+Compliance output goes further: a control with a rule that could not run is
+`NOT-EVALUATED`, in text, HTML, PDF and OSCAL, never `PASS`.
+
+A plan the engine can't trust is not scanned: an unknown `format_version`
+major, or `resource_changes` creating something `planned_values` doesn't
+have, exits 2 and the task returns `failed`.
 
 ## Quick start
 

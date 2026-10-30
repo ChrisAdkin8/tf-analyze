@@ -76,7 +76,15 @@ PLAN_RENDERED_KINDS = frozenset({
 # `grep` rules that read a JSON document in a value, not the way the
 # source is written. ECS sends `container_definitions` to the API as
 # plain text, so a secret in there is a finding wherever it came from.
+# Only there: rendered, a secret's own value (`aws_ssm_parameter.value`)
+# reads the same, and that one is where a secret belongs.
 PLAN_RENDERED_GREP_RULES = frozenset({"SEC-AWS-ECS-001", "SEC-AWS-ECS-002"})
+_ECS_TYPE, _ECS_ARG = "aws_ecs_task_definition", "container_definitions"
+# The default of `iam_json_policy_analysis`'s `resources`.
+_IAM_JSON_TYPES = (
+    "aws_iam_policy", "aws_iam_role_policy", "aws_iam_user_policy",
+    "aws_iam_group_policy", "aws_iam_role",
+)
 
 
 def walk_plan_resources(planned: dict) -> list[dict]:
@@ -258,37 +266,58 @@ def config_references(plan: dict) -> dict[str, dict[str, list[str]]]:
     return out
 
 
-def _has_companion(
-    r: dict, spec: dict, resources: list[dict],
-    references: dict[str, dict[str, list[str]]],
-) -> bool:
-    """Plan/state counterpart of `_handlers_generic._has_companion`: a
-    resource of type ``spec["resource"]`` in the same module points at `r`
-    through its ``spec["via"]`` argument (a list means any of them) — by
-    equal value (always known in state): `r`'s own value for that argument
-    or its ``id`` / ``arn``; or by reference in the plan configuration,
-    which counts ``for_each = aws_s3_bucket.x`` too."""
-    ctype, via = spec.get("resource"), spec.get("via", "bucket")
-    vias = via if isinstance(via, list) else [via]
-    own_addr = _INDEX_RE.sub("", r.get("address", ""))
-    own = r.get("values") or {}
-    module = _module_prefix(own_addr)
-    for cand in resources:
-        if cand.get("type") != ctype:
-            continue
-        cand_addr = _INDEX_RE.sub("", cand.get("address", ""))
-        if _module_prefix(cand_addr) != module:
-            continue
-        refs = references.get(cand_addr, {})
-        for arg in vias:
-            value = (cand.get("values") or {}).get(arg)
-            mine = [own.get(k) for k in (arg, "id", "arn")]
-            if value is not None and value in mine:
-                return True
-            if any(ref == own_addr or ref.startswith(own_addr + ".")
-                   for ref in [*refs.get(arg, []), *refs.get("for_each", [])]):
-                return True
-    return False
+class _Companions:
+    """What resources of a type point at, per (type, via), built once: a
+    plan of thousands of buckets and as many companions asked "who points
+    at this one?" by walking every companion, for every bucket and rule."""
+
+    def __init__(self, resources: list[dict], references: dict) -> None:
+        self.references = references
+        self.by_type: dict[str, list[dict]] = {}
+        for r in resources:
+            self.by_type.setdefault(r.get("type"), []).append(r)
+        self.links: dict[tuple, tuple[set, set]] = {}
+
+    def _links(self, ctype: str, vias: list[str]) -> tuple[set, set]:
+        key = (ctype, tuple(vias))
+        if key in self.links:
+            return self.links[key]
+        values: set[tuple] = set()
+        refs: set[str] = set()
+        for cand in self.by_type.get(ctype, ()):
+            addr = _INDEX_RE.sub("", cand.get("address", ""))
+            module = _module_prefix(addr)
+            config = self.references.get(addr, {})
+            for arg in vias:
+                value = (cand.get("values") or {}).get(arg)
+                if isinstance(value, (str, int)):
+                    values.add((module, arg, value))
+                for ref in (*config.get(arg, ()), *config.get("for_each", ())):
+                    parts = _INDEX_RE.sub("", ref).split(".")
+                    refs.update(".".join(parts[:i]) for i in range(1, len(parts) + 1))
+        self.links[key] = (values, refs)
+        return values, refs
+
+    def has(self, r: dict, spec: dict) -> bool:
+        """Plan/state counterpart of `_handlers_generic._has_companion`: a
+        resource of type ``spec["resource"]`` in the same module points at
+        `r` through its ``spec["via"]`` argument (a list means any of them)
+        — by equal value (always known in state): `r`'s own value for that
+        argument or its ``id`` / ``arn``; or by reference in the plan
+        configuration, which counts ``for_each = aws_s3_bucket.x`` too."""
+        via = spec.get("via", "bucket")
+        vias = via if isinstance(via, list) else [via]
+        values, refs = self._links(spec.get("resource"), vias)
+        address = _INDEX_RE.sub("", r.get("address", ""))
+        if address in refs:
+            return True
+        own = r.get("values") or {}
+        module = _module_prefix(address)
+        return any(
+            isinstance(mine, (str, int)) and (module, arg, mine) in values
+            for arg in vias
+            for mine in (own.get(arg), own.get("id"), own.get("arn"))
+        )
 
 
 def evaluate_against_resources(
@@ -311,6 +340,7 @@ def evaluate_against_resources(
     files; `data_sources` is what ``data_source_present`` looks at.
     """
     findings: list[dict] = []
+    companions = _Companions(resources, references or {})
     for entry in entries:
         eid = entry["id"]
         for pat in entry.get("patterns") or []:
@@ -381,9 +411,7 @@ def evaluate_against_resources(
                     rvals = r.get("values") or {}
                     if not _plan_name_selected(pat, r):
                         continue
-                    if companion and _has_companion(
-                        r, companion, resources, references or {},
-                    ):
+                    if companion and companions.has(r, companion):
                         continue
                     if not plan_has_path(rvals, arg_path, every=every):
                         if _plan_suppressed(suppress_if, rvals):
@@ -470,9 +498,9 @@ def evaluate_against_resources(
                 for r in resources:
                     if r.get("type") != rt:
                         continue
-                    if _has_companion(r, spec, resources, references or {}):
+                    if companions.has(r, spec):
                         continue
-                    if exempt and _has_companion(r, exempt, resources, references or {}):
+                    if exempt and companions.has(r, exempt):
                         continue
                     findings.append({
                         "id": eid,
@@ -564,26 +592,40 @@ def _render_body(values: dict, indent: str) -> list[str]:
 
 
 def render_resources_hcl(
-    resources: list[dict], data_sources: list[dict] = (),
+    resources: list[dict],
+    data_sources: list[dict] = (),
+    wanted: dict | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Plan / state resources as HCL text, and the address of each rendered
     ``type.label`` (``data.type.label`` for a data source). Labels are
-    made unique, since instances and modules repeat a name."""
+    made unique, since instances and modules repeat a name. `wanted`
+    (`relevant_args`) leaves out what no rule reads: a large plan's text is
+    parsed in full, and a Run Task has 120 seconds."""
     lines: list[str] = []
     addresses: dict[str, str] = {}
+    next_suffix: dict[str, int] = {}
 
     def block(keyword: str, r: dict, prefix: str) -> None:
         rtype = r.get("type")
         if not isinstance(rtype, str) or not _RENDER_KEY_RE.match(rtype):
             return
+        if wanted is not None and rtype not in wanted:
+            return
         name = _RENDER_LABEL_BAD_RE.sub("_", str(r.get("name") or "r")) or "r"
-        label, n = name, 0
+        stem = f"{prefix}{rtype}.{name}"
+        n = next_suffix.get(stem, 0)
+        label = f"{name}__{n}" if n else name
         while f"{prefix}{rtype}.{label}" in addresses:
             n += 1
             label = f"{name}__{n}"
-        addresses[f"{prefix}{rtype}.{label}"] = str(r.get("address") or f"{prefix}{rtype}.{name}")
+        next_suffix[stem] = n + 1
+        addresses[f"{prefix}{rtype}.{label}"] = str(r.get("address") or stem)
+        values = r.get("values") or {}
+        keep = wanted[rtype] if wanted is not None else None
+        if keep is not None:
+            values = {k: v for k, v in values.items() if k in keep}
         lines.append(f'{keyword} "{rtype}" "{label}" {{')
-        lines.extend(_render_body(r.get("values") or {}, "  "))
+        lines.extend(_render_body(values, "  "))
         lines.append("}")
 
     for r in resources:
@@ -597,7 +639,11 @@ def _rendered_entries(entries: list[dict]) -> list[dict]:
     """`entries` cut down to the patterns the rendered text can answer."""
     out = []
     for entry in entries:
-        patterns = [p for p in entry.get("patterns") or [] if _renders(entry["id"], p)]
+        patterns = [
+            {**p, "scope": "resource_body", "resource": _ECS_TYPE}
+            if p.get("kind") == "grep" else p
+            for p in entry.get("patterns") or [] if _renders(entry["id"], p)
+        ]
         if patterns:
             out.append({**entry, "patterns": patterns})
     return out
@@ -606,6 +652,146 @@ def _rendered_entries(entries: list[dict]) -> list[dict]:
 def _renders(rule_id: str, pat: dict) -> bool:
     kind = pat.get("kind", "")
     return kind in PLAN_RENDERED_KINDS or (kind == "grep" and rule_id in PLAN_RENDERED_GREP_RULES)
+
+
+def _runs(rule_id: str, pat: dict) -> bool:
+    """Whether this pattern is evaluated on a scan with no source files."""
+    return pat.get("kind") in PLAN_SUPPORTED_KINDS | PLAN_ONLY_KINDS or _renders(rule_id, pat)
+
+
+def relevant_args(entries: list[dict]) -> dict[str, set[str] | None]:
+    """``{resource type: top-level arguments}`` the rules that run on a plan
+    read; None for a type whose rules read the whole block. A resource's
+    other arguments can't change a result."""
+    out: dict[str, set[str] | None] = {}
+
+    def note(types, args) -> None:
+        for rtype in types:
+            for alias in kubernetes_type_aliases(str(rtype)):
+                if args is None or out.get(alias, ()) is None:
+                    out[alias] = None
+                else:
+                    out.setdefault(alias, set()).update(str(a).split(".")[0] for a in args if a)
+
+    for entry in entries:
+        for pat in entry.get("patterns") or []:
+            if not _runs(entry["id"], pat):
+                continue
+            kind = pat.get("kind")
+            if kind == "grep":
+                types, args = [_ECS_TYPE], [_ECS_ARG]
+            elif kind == "firewall_open_port":
+                types, args = [pat.get("resource", "google_compute_firewall")], None
+            elif kind == "iam_json_policy_analysis":
+                types = pat.get("resources") or _IAM_JSON_TYPES
+                args = [*(pat.get("args") or ["policy"]), "inline_policy"]
+            elif kind == "iam_policy_analysis":
+                types, args = ["aws_iam_policy_document"], None
+            elif kind == "helm_set_value":
+                types, args = ["helm_release"], None
+            elif kind == "deprecated_datasource":
+                types, args = (pat.get("types") or "template_file").split(","), None
+            elif kind == "ip_range_span":
+                types, args = [pat.get("resource")], [pat.get("start_arg"), pat.get("end_arg")]
+            elif pat.get("resource") and any(k in pat for k in ("arg", "path", "nested_path")):
+                types = [pat["resource"]]
+                args = [pat.get("nested_path") or pat.get("path") or pat.get("arg")]
+            else:
+                continue
+            note(types, args)
+            note(types, [
+                key
+                for rule in entry.get("escalation") or [] if isinstance(rule, dict)
+                for key in rule.get("match") or () if key != "ports"
+            ] if isinstance(args, list) else None)
+    return out
+
+
+def _has_unknown(value) -> bool:
+    if isinstance(value, dict):
+        return any(map(_has_unknown, value.values()))
+    if isinstance(value, list):
+        return any(map(_has_unknown, value))
+    return value is True
+
+
+def _configured_args(plan: dict) -> dict[str, set[str]]:
+    """``{address: arguments the configuration sets}``, index-free. An
+    unknown value the author never set is just a computed attribute."""
+    out: dict[str, set[str]] = {}
+
+    def walk(module: dict | None, prefix: str) -> None:
+        for r in (module or {}).get("resources") or []:
+            out[prefix + r.get("address", "")] = set(r.get("expressions") or {})
+        for name, call in ((module or {}).get("module_calls") or {}).items():
+            walk((call or {}).get("module"), f"{prefix}module.{name}.")
+
+    walk((plan.get("configuration") or {}).get("root_module"), "")
+    return out
+
+
+def unknown_arguments(plan: dict, entries: list[dict]) -> list[dict]:
+    """``[{resource, arguments}]``: resources whose configured arguments
+    that a rule reads are unknown until apply (``after_unknown``). A plan
+    has nothing to judge there: ``policy = jsonencode({... aws_x.y.arn ...})``
+    is one unknown string, the `"*"` beside the reference included, and the
+    configuration keeps only the reference. What a plan does keep, a data
+    source's statements, is judged all the same (`render_resources_hcl`).
+    A result that can't see a value must say so."""
+    relevant = relevant_args(entries)
+    configured = _configured_args(plan)
+    changes = plan.get("resource_changes")
+    out: list[dict] = []
+    for change in changes if isinstance(changes, list) else []:
+        if not isinstance(change, dict) or change.get("type") not in relevant:
+            continue
+        unknown = (change.get("change") or {}).get("after_unknown")
+        if not isinstance(unknown, dict):
+            continue
+        address = str(change.get("address", ""))
+        want = relevant[change["type"]]
+        set_in_config = configured.get(_INDEX_RE.sub("", address))
+        args = sorted(
+            arg for arg, value in unknown.items()
+            if _has_unknown(value)
+            and (want is None or arg in want)
+            and (set_in_config is None or arg in set_in_config)
+        )
+        if args:
+            out.append({"resource": address, "arguments": args})
+    return out
+
+
+# Cheap tests that keep most resources away from the HCL parser, the slow
+# part of a large plan. A firewall rule fires only on a /0 source (for Azure,
+# `*` or a service tag), a policy check only on a `*` or a Not* element; a
+# `\\u` escape could be hiding either.
+_PREFILTERS = {
+    "firewall_open_port": re.compile(r"(?i)/0+\b|\*|internet|\bany\b"),
+    "iam_json_policy_analysis": re.compile(r"(?i)\*|not_?(?:action|resource)|\\u"),
+    "iam_policy_analysis": re.compile(r"(?i)\*|not_?(?:action|resource)|\\u"),
+}
+
+
+def _prefilters(rendered: list[dict]) -> dict:
+    """``{type: regex}`` for the types only prefiltered kinds read: a
+    resource of that type whose values miss the regex can't fire."""
+    filters: dict = {}
+    unfiltered: set[str] = set()
+    for entry in rendered:
+        for pat in entry["patterns"]:
+            regex = _PREFILTERS.get(pat.get("kind"))
+            for rtype in relevant_args([{"id": entry["id"], "patterns": [pat]}]):
+                if regex is None:
+                    unfiltered.add(rtype)
+                else:
+                    filters[rtype] = regex
+    return {t: regex for t, regex in filters.items() if t not in unfiltered}
+
+
+def _may_fire(r: dict, filters: dict) -> bool:
+    regex = filters.get(r.get("type"))
+    return regex is None or bool(regex.search(json.dumps(r.get("values"), ensure_ascii=False)))
 
 
 def _scan_values_as_hcl(
@@ -622,7 +808,12 @@ def _scan_values_as_hcl(
     refuses would fall back to weaker handlers, so a clean result could
     not be trusted: that is an error, not a pass."""
     rendered = _rendered_entries(entries)
-    text, addresses = render_resources_hcl(resources, data_sources)
+    filters = _prefilters(rendered)
+    text, addresses = render_resources_hcl(
+        [r for r in resources if _may_fire(r, filters)],
+        [r for r in data_sources if _may_fire(r, filters)],
+        relevant_args(rendered),
+    )
     if not (text and rendered):
         return []
     error = parse_tf(text)[1]
@@ -635,17 +826,17 @@ def _scan_values_as_hcl(
     return findings
 
 
-def plan_coverage(entries: list[dict], source: str) -> dict:
+def plan_coverage(entries: list[dict], source: str, unknown: list[dict] = ()) -> dict:
     """What a scan of plan or state values alone (`source`: ``plan`` /
     ``state``), with no source files, covered: how many rules were
     evaluated, partly evaluated (some patterns only) or not evaluated at
-    all, and which. Emitted as ``summary.coverage``."""
-    ran = PLAN_SUPPORTED_KINDS | PLAN_ONLY_KINDS
+    all, and which; and the resources they could not fully judge
+    (`unknown_arguments`). Emitted as ``summary.coverage``."""
     rules = [e for e in entries if e.get("patterns")]
     evaluated = partly = 0
     skipped: list[dict] = []
     for entry in rules:
-        hits = [p.get("kind") in ran or _renders(entry["id"], p) for p in entry["patterns"]]
+        hits = [_runs(entry["id"], p) for p in entry["patterns"]]
         if all(hits):
             evaluated += 1
         elif any(hits):
@@ -662,6 +853,8 @@ def plan_coverage(entries: list[dict], source: str) -> dict:
         "rules_not_evaluated": len(skipped),
         "not_evaluated_critical_high": len(serious),
         "not_evaluated_rules": sorted(e["id"] for e in skipped),
+        "resources_with_unknown_values": len(unknown),
+        "unknown_values": list(unknown[:50]),
     }
 
 
@@ -671,10 +864,41 @@ class PlanInputError(ValueError):
     wrong-kind file passed a `--fail-on` gate having checked nothing."""
 
 
+def _check_format(document: dict, path: Path) -> None:
+    """Refuse a format this reader wasn't written for: its sections may
+    mean something else, and reading nothing from them looks like a pass."""
+    version = document.get("format_version")
+    if version is not None and str(version).split(".")[0] != "1":
+        raise PlanInputError(
+            f"{path}: format_version {version} is not supported (expected 1.x)"
+        )
+
+
+def _check_sections_agree(plan: dict, resources: list[dict], path: Path) -> None:
+    """Everything `resource_changes` creates or updates must be among the
+    planned resources. If not, this reader has lost them, and a plan full
+    of changes would score 100."""
+    planned = {r.get("address") for r in resources}
+    changes = plan.get("resource_changes")
+    lost = [
+        str(c.get("address"))
+        for c in (changes if isinstance(changes, list) else [])
+        if isinstance(c, dict) and c.get("mode", "managed") == "managed"
+        and not c.get("deposed") and c.get("address") not in planned
+        and {"create", "update"} & set((c.get("change") or {}).get("actions") or [])
+    ]
+    if lost:
+        raise PlanInputError(
+            f"{path}: resource_changes has {len(lost)} resource(s) missing from "
+            f"planned_values, such as {lost[0]}; the plan's format may have changed"
+        )
+
+
 def detect_in_plan(
     plan_json_path: Path,
     entries: list[dict],
     scan_rendered: Callable[[str, list[dict]], list[dict]] | None = None,
+    unknown: list[dict] | None = None,
 ) -> list[dict]:
     """Re-evaluate applicable rules against ``terraform show -json`` plan output.
 
@@ -685,7 +909,8 @@ def detect_in_plan(
 
     `scan_rendered` (``scan(hcl_text, entries)``) marks a scan with no
     source files: the rules that can read the plan's values as HCL run
-    through it, and `PLAN_ONLY_KINDS` run here.
+    through it, and `PLAN_ONLY_KINDS` run here. `unknown`, if given, is
+    filled with `unknown_arguments`.
     """
     # Round-5 audit fix #7 — differentiate "file missing" from
     # "file present but unparseable". The prior broad `except Exception`
@@ -720,7 +945,11 @@ def detect_in_plan(
             f"{plan_json_path} is not `terraform show -json` plan output "
             f"(no planned_values).{hint}"
         )
+    _check_format(plan, plan_json_path)
     resources = walk_plan_resources(plan.get("planned_values") or {})
+    _check_sections_agree(plan, resources, plan_json_path)
+    if unknown is not None:
+        unknown.extend(unknown_arguments(plan, entries))
     references = config_references(plan)
     if scan_rendered is None:
         return evaluate_against_resources(
@@ -793,6 +1022,7 @@ def detect_in_state(
         raise PlanInputError(
             f"{state_json_path} is not `terraform show -json` state output.{hint}"
         )
+    _check_format(state, state_json_path)
     root = state.get("values") or {}
     resources = walk_plan_resources(root)
     if scan_rendered is None:

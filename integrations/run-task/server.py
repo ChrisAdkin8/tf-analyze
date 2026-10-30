@@ -322,6 +322,7 @@ def _compliance_summary(data: dict, framework: str) -> str:
         return ""
     total = 0
     failing = 0
+    unproven = 0
     for _fw, controls in section.items():
         if not isinstance(controls, list):
             continue
@@ -329,9 +330,14 @@ def _compliance_summary(data: dict, framework: str) -> str:
             total += 1
             if ctrl.get("status") == "FAIL":
                 failing += 1
+            elif ctrl.get("status") == "NOT-EVALUATED":
+                unproven += 1
     if total == 0:
         return ""
-    return f"compliance: {framework} {failing}/{total} controls failing."
+    return (
+        f"compliance: {framework} {failing}/{total} controls failing"
+        + (f", {unproven} not evaluated" if unproven else "") + "."
+    )
 
 
 def _coverage_summary(data: dict) -> str:
@@ -348,26 +354,47 @@ def _coverage_summary(data: dict) -> str:
         f"not evaluated ({coverage['not_evaluated_critical_high']} CRITICAL/HIGH)"
         + (f", {partly} only in part" if partly else "")
         + ". Run tf-analyze on the source as well; this result is not a full review."
+        + _unknown_values_summary(coverage)
     )
 
 
-def _format_status_body(data: dict, threshold: str) -> dict:
+def _unknown_values_summary(coverage: dict) -> str:
+    """Resources whose values a rule needs and the plan doesn't hold yet.
+    The server imports nothing from the engine, so the engine's wording in
+    `_output.unknown_values_note` is repeated here in short."""
+    count = coverage.get("resources_with_unknown_values", 0)
+    if not count:
+        return ""
+    named = [
+        f"{u.get('resource')} ({', '.join(u.get('arguments') or [])})"
+        for u in (coverage.get("unknown_values") or [])[:3]
+    ]
+    more = f", +{count - len(named)} more" if count > len(named) else ""
+    return f" Unknown until apply, so not judged: {', '.join(named)}{more}."
+
+
+def _format_status_body(data: dict, threshold: str, exit_code: int = 0) -> dict:
     """Build the HCP Run Task callback payload from the engine JSON.
 
-    The status is `failed` only for a finding at `threshold` or above.
-    Rules that could not run do not fail the task: HCP offers `passed` or
-    `failed`, every plan has such rules, and failing them all would make
-    the task block every apply under mandatory enforcement. So a pass says
-    what it means instead: no finding in the rules that ran, with the
-    rules that didn't run counted beside it (`_coverage_summary`).
+    The status is `failed` for a finding at `threshold` or above, for a
+    rule check that ran out of time, and for any other reason the engine's
+    `--fail-on` gate failed (`exit_code`): both were read from findings
+    alone, so a scan that gave up on a check came back `passed`.
+    Rules that can't run on a plan do not fail the task: HCP offers
+    `passed` or `failed`, every plan has such rules, and failing them all
+    would make the task block every apply under mandatory enforcement. So
+    a pass says what it means instead: no finding in the rules that ran,
+    with the rules that didn't run counted beside it (`_coverage_summary`).
     """
     findings = data.get("findings") or []
+    timeouts = (data.get("summary") or {}).get("rule_timeouts") or []
     breach = [
         f for f in findings
         if URGENCY_RANK.get(f.get("urgency", "LOW"), 0)
         >= URGENCY_RANK.get(threshold, 3)
     ]
-    status = "failed" if breach else "passed"
+    gate_failed = bool(timeouts or exit_code)
+    status = "failed" if breach or gate_failed else "passed"
     counts = {u: sum(1 for f in findings if f.get("urgency") == u) for u in URGENCY_RANK}
     parts = [
         f"tf-analyze: {len(findings)} finding(s) "
@@ -377,6 +404,10 @@ def _format_status_body(data: dict, threshold: str) -> dict:
         f"{'' if breach else ' in the rules evaluated'}.",
         _coverage_summary(data),
     ]
+    if timeouts:
+        parts.insert(1, f"{len(timeouts)} rule check(s) ran out of time and were skipped.")
+    elif gate_failed and not breach:
+        parts.insert(1, f"The engine's gate failed (exit {exit_code}); see the server log.")
     if COMPLIANCE_FRAMEWORK:
         compliance_line = _compliance_summary(data, COMPLIANCE_FRAMEWORK)
         if compliance_line:
@@ -503,8 +534,8 @@ def _process_run_task(plan_url: str, callback_url: str, access_token: str) -> No
         with tempfile.TemporaryDirectory() as td:
             plan_path = Path(td) / "plan.json"
             plan_path.write_bytes(b"".join(plan_chunks))
-            data, _ = _run_detect(plan_path)
-        _callback(callback_url, headers, _format_status_body(data, FAIL_ON))
+            data, exit_code = _run_detect(plan_path)
+        _callback(callback_url, headers, _format_status_body(data, FAIL_ON, exit_code))
     except Exception:  # noqa: BLE001 — report, never leave the run hanging
         LOG.exception("run task failed")
         try:

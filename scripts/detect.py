@@ -2580,10 +2580,11 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                    ignore_paths: list = ()) -> tuple[list, list]:
     """Core scan: per-file + corpus detection over the loaded corpus, with the
     incremental cache, plus --plan-json and --state-json (drift) findings merged
-    in. Returns ``(findings, parse_fallback_files)``: the second is one
-    ``{"file", "reason"}`` per scanned `.tf` file python-hcl2 could not parse
-    (scanned with the regex fallback instead; tasks/hcl-parser-migration.md
-    §4.8). It is cached alongside the findings.
+    in. Returns ``(findings, parse_fallback_files, unknown)``: the second is
+    one ``{"file", "reason"}`` per scanned `.tf` file python-hcl2 could not
+    parse (scanned with the regex fallback instead;
+    tasks/hcl-parser-migration.md §4.8), cached alongside the findings; the
+    third is `_plan_state.unknown_arguments` of a scan with no source files.
 
     Extracted verbatim from main(). `entries` is the provider-filtered ruleset
     (main() runs that filter first, since downstream consumers reuse the same
@@ -2653,6 +2654,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         return (detect_in_file(fp, text, rendered_entries)
                 + detect_corpus(target, {fp: text}, rendered_entries))
     _rendered_scan = None if all_text else _scan_rendered
+    unknown: list[dict] = []
 
     # Plan-mode rule re-evaluation. Findings are merged into the same
     # list so suppression, comparison, and reporting all see them; the
@@ -2666,7 +2668,9 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             )
             sys.exit(2)
         try:
-            plan_findings = detect_in_plan(plan_path, entries, _rendered_scan)
+            plan_findings = detect_in_plan(
+                plan_path, entries, _rendered_scan, unknown if _rendered_scan else None,
+            )
         except PlanInputError as e:
             # Exit like a missing file: no findings is not a pass.
             print(f"ERROR: {e}", file=sys.stderr)
@@ -2737,7 +2741,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                              [f for f in findings if id(f) not in external_ids],
                              parse_fallback_files=parse_fallback_files)
 
-    return findings, parse_fallback_files
+    return findings, parse_fallback_files, unknown
 
 
 def _finding_dir(finding: dict, target: Path, scanned_dirs: set) -> str:
@@ -2926,7 +2930,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     # Pass 2 — per-file + corpus detection (with the incremental cache),
     # plus --plan-json and --state-json (drift) findings merged in.
     # See _run_detection. `entries` is already provider-filtered above.
-    findings, parse_fallback_files = _run_detection(
+    findings, parse_fallback_files, _unknown = _run_detection(
         args, all_text, extra_text, entries, diff_files, target, _ignore_paths,
     )
     if gated_dirs:
@@ -2940,7 +2944,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     # the report has to say so (`coverage_notice`).
     coverage = None
     if not all_text and (args.plan_json or args.state_json):
-        coverage = plan_coverage(entries, "plan" if args.plan_json else "state")
+        coverage = plan_coverage(entries, "plan" if args.plan_json else "state", _unknown)
         print(f"WARN: {coverage_notice({'coverage': coverage})}", file=sys.stderr)
     for _pf in parse_fallback_files:
         print(
@@ -3076,6 +3080,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 _emit(f"# No catalogue entries mapped to compliance framework "
                       f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             _emit(_render_mitre(findings, entries,
                                 tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
@@ -3168,6 +3174,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                 _emit(f"# No catalogue entries mapped to compliance framework "
                       f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             _emit(_render_mitre(findings, entries,
                                 tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
@@ -3728,7 +3736,9 @@ def _add_comparison_args(ap: argparse.ArgumentParser) -> None:
              "this CLI's --format json / text output. If omitted, picks the most "
              "recent tf-analysis-*.md under reports/. Exits 1 under --fail-on when "
              "a finding not shown to be gone (STILL-PRESENT, MOVED, or one that "
-             "could not be re-checked, such as UNVERIFIABLE) meets the threshold.",
+             "could not be re-checked, such as UNVERIFIABLE) meets the threshold, "
+             "or a row of the report can't be read. Exits 2 on a report with no "
+             "rows that doesn't state it found nothing.",
     )
     ap.add_argument(
         "--reports-dir",
@@ -4136,11 +4146,16 @@ def _main():
     compliance_report: dict | None = None
     if getattr(args, "compliance", False) or args.format == "compliance" or getattr(args, "pdf_output", None):
         fw_arg = getattr(args, "compliance_framework", "cis") or "cis"
-        compliance_report = _compliance_gap_report(findings, entries, framework=fw_arg)
+        _coverage = _scan.get("coverage") or {}
+        compliance_report = _compliance_gap_report(
+            findings, entries, framework=fw_arg,
+            not_evaluated=_coverage.get("not_evaluated_rules", ()),
+        )
         if getattr(args, "oscal", None):
             oscal_data = _compliance_to_oscal(
                 compliance_report,
                 str(args.targets[0]) if args.targets else "",
+                coverage_notice({"coverage": _coverage}),
             )
             oscal_path = Path(args.oscal)
             oscal_path.write_text(json.dumps(oscal_data, indent=2))
@@ -4150,6 +4165,7 @@ def _main():
         # can take to an audit. weasyprint is an optional dep — print
         # an install hint when missing rather than failing silently.
         if getattr(args, "pdf_output", None):
+            from html import escape as _html_escape
             try:
                 from weasyprint import HTML, CSS  # type: ignore
             except ImportError:
@@ -4183,6 +4199,7 @@ def _main():
                 f"<body><h1>tf-analyze · Compliance Gap Report</h1>"
                 f"<p style='color:#666;font-size:9pt'>Framework: <code>{fw_arg}</code>"
                 f" · Generated {os.environ.get('TFA_PDF_GEN_TIMESTAMP') or ''}</p>"
+                f"<p><strong>{_html_escape(coverage_notice({'coverage': _coverage}))}</strong></p>"
                 f"{_comp_html_body}"
                 f"<hr style='margin-top:18pt;border:none;border-top:1px solid #ccc'/>"
                 f"<p style='font-size:8pt;color:#888'>Generated by "
