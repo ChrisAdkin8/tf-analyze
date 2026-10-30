@@ -156,6 +156,10 @@ Write report output to PATH instead of stdout. The file is created or overwritte
 
 When a catalogue entry carries a `fix_hcl` snippet, render it alongside each finding. HTML: syntax-highlighted block inside the finding detail. Text: indented snippet below the finding line.
 
+### `--fix-suggestions`
+
+Add fix_suggestion to JSON findings: the text that may replace the finding's line as a one-click PR suggestion. Tries the patcher per finding, so it is off unless something will paste the result. --mode pr-review always does this.
+
 ### `--show-info`
 
 Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.

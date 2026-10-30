@@ -2197,10 +2197,17 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
             })
         return findings
 
+    def _suggester(path: Path, findings: list[dict], entries: list[dict],
+                   text: str | None) -> None:
+        # Asked per code action, not per keystroke: see annotate_fix_blockers.
+        annotate_fix_blockers(findings, entries,
+                              None if text is None else {str(path): text}, suggestions=True)
+
     _lsp_run(
         catalog_dir, project_config,
         scanner=_scanner,
         load_catalog=load_catalog,
+        suggester=_suggester,
     )
 
 
@@ -2324,7 +2331,7 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     # finding that wasn't escalated, so it passed a CRITICAL.
     _enrich_findings_for_output(all_findings, entries)
     _enrich_findings_for_output(fleet_result["fleet_wide"], entries)
-    annotate_fix_blockers(all_findings, entries)
+    annotate_fix_blockers(all_findings, entries, suggestions=args.fix_suggestions)
     # SARIF, HTML and the PR summary render every target's findings with
     # the static scan's renderers; they all used to emit the Markdown
     # fleet report, which code scanning rejects and a browser shows as text.
@@ -3402,6 +3409,16 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
         ),
     )
     ap.add_argument(
+        "--fix-suggestions",
+        action="store_true",
+        help=(
+            "Add fix_suggestion to JSON findings: the text that may replace "
+            "the finding's line as a one-click PR suggestion. Tries the "
+            "patcher per finding, so it is off unless something will paste "
+            "the result. --mode pr-review always does this."
+        ),
+    )
+    ap.add_argument(
         "--show-info",
         action="store_true",
         help=(
@@ -4227,7 +4244,9 @@ def _main():
     # narratives, fix snippets, and MITRE tags without re-loading the
     # catalogue themselves.
     _enrich_findings_for_output(findings, entries)
-    annotate_fix_blockers(findings, entries)
+    annotate_fix_blockers(
+        findings, entries, suggestions=args.fix_suggestions or args.mode == "pr-review",
+    )
 
     # Baseline mode: filter findings against a prior snapshot before
     # everything downstream (output, exit-code, attack-graph). Suppressed

@@ -580,8 +580,10 @@ def test_scan_step_marks_the_workspace_safe_for_git(tmp_path: Path) -> None:
     ):
         i = first_run.index(kv)
         assert first_run[i - 1] == "-e"
-    # The env flags go to docker, before the image name.
-    assert first_run.index("GIT_CONFIG_COUNT=1") < first_run.index("img")
+    # The env flags go to docker, before the image name. (`--help` is a
+    # probe of the image, run first.)
+    scan = first_run[len(first_run) - 1 - first_run[::-1].index("run"):]
+    assert scan.index("GIT_CONFIG_COUNT=1") < scan.index("img")
 
 
 def test_scan_step_surfaces_untrusted_and_dropped_counts(tmp_path: Path) -> None:

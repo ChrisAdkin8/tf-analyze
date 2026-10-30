@@ -24,7 +24,7 @@ from _apply_fixes import annotate_fix_blockers
 from _hcl import parse_tf
 
 
-def _report(target: Path) -> list[dict]:
+def _report(target: Path, *flags: str) -> list[dict]:
     out = subprocess.run(
         [
             sys.executable,
@@ -35,6 +35,7 @@ def _report(target: Path) -> list[dict]:
             "json",
             "--no-threat-intel",
             "--no-suppress",
+            *flags,
         ],
         capture_output=True,
         text=True,
@@ -57,7 +58,7 @@ def test_a_missing_argument_keeps_the_real_header(tmp_path) -> None:
                            "arg": "deletion_protection"}]}
     finding = {"id": "X-Y-001", "file": str(tmp_path / "main.tf"), "line": 1,
                "resource": "aws_db_instance.mine"}
-    annotate_fix_blockers([finding], [entry])
+    annotate_fix_blockers([finding], [entry], suggestions=True)
     assert finding["fix_suggestion"] == (
         'resource "aws_db_instance" "mine" {\n  deletion_protection = true'
     )
@@ -69,7 +70,7 @@ def test_a_change_on_another_line_is_advice(tmp_path) -> None:
     entry = {"id": "X-Y-001", "fix_hcl": "public = false",
              "patterns": [{"kind": "resource_arg", "resource": "aws_x", "arg": "public"}]}
     finding = {"id": "X-Y-001", "file": str(tmp_path / "main.tf"), "line": 1, "resource": "aws_x.y"}
-    annotate_fix_blockers([finding], [entry])
+    annotate_fix_blockers([finding], [entry], suggestions=True)
     assert "fix_suggestion" not in finding
 
 
@@ -107,7 +108,7 @@ def test_no_suggestion_without_a_patch_the_patcher_would_make(tmp_path, entry) -
         "line": 1,
         "resource": "aws_x.y",
     }
-    annotate_fix_blockers([finding], [entry])
+    annotate_fix_blockers([finding], [entry], suggestions=True)
     assert "fix_suggestion" not in finding
 
 
@@ -117,7 +118,7 @@ def test_an_inline_block_becomes_a_valid_block(tmp_path) -> None:
     entry = {"id": "X-Y-001", "fix_hcl": "a = 1",
              "patterns": [{"kind": "resource_missing_arg", "resource": "aws_x", "arg": "a"}]}
     finding = {"id": "X-Y-001", "file": str(path), "line": 1, "resource": "aws_x.y"}
-    annotate_fix_blockers([finding], [entry])
+    annotate_fix_blockers([finding], [entry], suggestions=True)
     assert parse_tf(_accept(path, 1, finding["fix_suggestion"]))[1] is None
 
 
@@ -131,7 +132,7 @@ def test_an_unsaved_buffer_is_what_counts(tmp_path) -> None:
     }
     finding = {"id": "X-Y-001", "file": str(path), "line": 1, "resource": "aws_x.y"}
     annotate_fix_blockers(
-        [finding], [entry], {str(path): 'resource "aws_x" "y" {\n}\n'}
+        [finding], [entry], {str(path): 'resource "aws_x" "y" {\n}\n'}, suggestions=True,
     )
     assert finding["fix_suggestion"] == 'resource "aws_x" "y" {\n  a = 1'
 
@@ -140,7 +141,7 @@ def test_an_unsaved_buffer_is_what_counts(tmp_path) -> None:
 def test_terragoat_suggestions_all_apply_cleanly(tmp_path, cloud) -> None:
     copy = tmp_path / cloud
     shutil.copytree(REPO / "examples" / "terragoat" / cloud, copy)
-    suggested = [f for f in _report(copy) if f.get("fix_suggestion")]
+    suggested = [f for f in _report(copy, "--fix-suggestions") if f.get("fix_suggestion")]
     assert suggested
     for f in suggested:
         path = Path(f["file"])
@@ -155,7 +156,7 @@ def test_terragoat_suggestions_all_apply_cleanly(tmp_path, cloud) -> None:
 def test_every_fixture_suggestion_is_header_or_value(tmp_path) -> None:
     copy = tmp_path / "fixtures"
     shutil.copytree(REPO / "fixtures", copy)
-    for f in _report(copy):
+    for f in _report(copy, "--fix-suggestions"):
         text = f.get("fix_suggestion")
         if text:
             assert "fix_manual_reason" not in f
@@ -283,3 +284,22 @@ def test_the_quick_fix_replaces_the_line_with_the_suggestion(tmp_path) -> None:
             'resource "aws_cloudwatch_log_group" "lg" {\n'
         )
         assert "example" not in edit["newText"]
+
+
+def test_a_plain_scan_computes_no_suggestions(tmp_path) -> None:
+    (tmp_path / "main.tf").write_text('resource "aws_cloudwatch_log_group" "lg" {\n  name = "x"\n}\n')
+    assert not [f for f in _report(tmp_path) if "fix_suggestion" in f]
+    assert [f for f in _report(tmp_path, "--fix-suggestions") if "fix_suggestion" in f]
+
+
+@pytest.mark.parametrize("char", ["\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"])
+def test_only_line_endings_end_a_line(tmp_path, char) -> None:
+    """`str.splitlines` breaks on these too, and the fix then missed its line."""
+    path = tmp_path / "main.tf"
+    text = f'locals {{\n  a = "x{char}y"\n}}\n\nresource "aws_x" "y" {{\n  name = "n"\n}}\n'
+    entry = {"id": "X-Y-001", "fix_hcl": "a = 1",
+             "patterns": [{"kind": "resource_missing_arg", "resource": "aws_x", "arg": "a"}]}
+    finding = {"id": "X-Y-001", "file": str(path), "line": 5, "resource": "aws_x.y"}
+    path.write_text("")
+    annotate_fix_blockers([finding], [entry], {str(path): text}, suggestions=True)
+    assert finding["fix_suggestion"] == 'resource "aws_x" "y" {\n  a = 1'

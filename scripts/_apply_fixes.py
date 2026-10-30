@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import difflib
 import functools
+import io
 import os
 import re
 import shutil
@@ -186,13 +187,16 @@ def code_lines(lines: list[str]) -> list[str]:
     return result
 
 
-def find_block_end_in_lines(lines: list[str], start: int) -> int | None:
+def find_block_end_in_lines(
+    lines: list[str], start: int, code: list[str] | None = None,
+) -> int | None:
     """0-based index of the line containing the closing ``}`` of the block
     that opens at or after ``start``. Handles nested braces; braces in
-    comments, strings and heredocs do not count (`code_lines`).
+    comments, strings and heredocs do not count (`code_lines`). `code` is
+    `code_lines(lines)`, if the caller has it.
     """
     depth = 0
-    code = code_lines(lines)
+    code = code_lines(lines) if code is None else code
     for i in range(start, len(lines)):
         for ch in code[i]:
             if ch == '{':
@@ -509,21 +513,37 @@ def _pattern_answers(entry: dict, resource_type: str, declared: set[str]) -> lis
     return answers
 
 
-def _file_lines(path: str, texts: dict | None, cache: dict) -> list[str] | None:
-    """The lines of `path` (from `texts`, an editor's unsaved buffers, if
-    there), once; None if unreadable or not patchable."""
+def _file_lines(path: str, texts: dict | None, cache: dict) -> tuple[list[str], list[str]] | None:
+    """``(lines, code_lines(lines))`` of `path` (from `texts`, an editor's
+    unsaved buffers, if there), once; None if unreadable or not patchable.
+    Lines end at line endings only: `str.splitlines` also breaks on form
+    feeds and U+2028, and a quick fix would then miss its line."""
     if path not in cache:
         lines = None
         if texts and path in texts:
-            lines = texts[path].splitlines(keepends=True)
+            lines = io.StringIO(texts[path], newline="").readlines()
         elif not path.endswith(".tf.json"):
             try:
                 with open(path, encoding="utf-8", newline="") as fh:
                     lines = fh.readlines()
             except (OSError, ValueError):
                 pass
-        cache[path] = lines
+        cache[path] = None if lines is None else (lines, code_lines(lines))
     return cache[path]
+
+
+def _finding_block(
+    finding: dict, path_lines: tuple[list[str], list[str]],
+) -> tuple[list[str], dict] | None:
+    """The lines from the finding's line to the end of its block, and the
+    finding renumbered to match: a patch tried on those alone costs its
+    block, not the file, so a file's findings stay linear in its size."""
+    lines, code = path_lines
+    index = int(finding.get("line") or 0) - 1
+    if not 0 <= index < len(lines):
+        return None
+    end = find_block_end_in_lines(lines, index, code)
+    return None if end is None else (lines[index:end + 1], {**finding, "line": 1})
 
 
 def _suggestion(finding: dict, entry: dict, declared: set[str], lines: list[str]) -> str | None:
@@ -568,12 +588,14 @@ def _scope_of(path: Path, cache: dict) -> set[str]:
 
 def annotate_fix_blockers(
     findings: list[dict], entries: list[dict], texts: dict | None = None,
+    suggestions: bool = False,
 ) -> None:
     """Set ``fix_manual_reason`` on each finding whose fix can't be taken in
-    its module, and ``fix_suggestion`` on each that can be taken in one
-    click (`_suggestion`). Every path that offers a fix as one click (the
-    PR suggestions of ``--mode pr-review``, the GitHub Action and its
-    template, the editor's quick fix) pastes ``fix_suggestion`` or nothing.
+    its module, and with `suggestions`, ``fix_suggestion`` on each that can
+    be taken in one click (`_suggestion`). Every path that offers a fix as
+    one click (``--mode pr-review``, the GitHub Action and its template via
+    ``--fix-suggestions``, the editor's quick fix on request) pastes
+    ``fix_suggestion`` or nothing; only they pay for running the patcher.
     `texts`: ``{path: text}`` where the file on disk isn't the one scanned."""
     entry_map = {e["id"]: e for e in entries}
     cache: dict = {}
@@ -597,13 +619,16 @@ def annotate_fix_blockers(
                 else fix_refusal(entry, resource_type, scope)
             )
         reason = reasons[key]
-        lines = _file_lines(str(f.get("file", "")), texts, files)
-        if reason == _IT_DEPENDS:
-            reason = _attempt_fix(lines[:], f, entry, scope, "\n")[1] if lines else None
+        block = None
+        if reason is _IT_DEPENDS or (suggestions and not reason):
+            path_lines = _file_lines(str(f.get("file", "")), texts, files)
+            block = _finding_block(f, path_lines) if path_lines else None
+        if reason is _IT_DEPENDS:
+            reason = _attempt_fix(block[0][:], block[1], entry, scope, "\n")[1] if block else None
         if reason:
             f["fix_manual_reason"] = reason
-        elif lines and not entry.get("fix_hcl_example"):
-            suggestion = _suggestion(f, entry, scope, lines)
+        elif suggestions and block:
+            suggestion = _suggestion(block[1], entry, scope, block[0])
             if suggestion:
                 f["fix_suggestion"] = suggestion
 

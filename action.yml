@@ -494,9 +494,17 @@ runs:
           # crash) would end the step here, skipping the annotation, the
           # other formats and the outputs. Catch the code instead.
           local rc=0
+          # The inline-suggestion step pastes `fix_suggestion`, which only the
+          # JSON report needs. An older `image:` doesn't know the flag.
+          local suggest=()
+          if [ "$fmt" = "json" ]; then
+            case "$(docker run --rm "${TFA_IMAGE}" --help 2>/dev/null || true)" in
+              *--fix-suggestions*) suggest=(--fix-suggestions) ;;
+            esac
+          fi
           docker run --rm "${MOUNTS[@]}" "${GIT_ENV[@]}" \
             "${TFA_IMAGE}" \
-            "${BASE_ARGS[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
+            "${BASE_ARGS[@]}" "${suggest[@]}" --format "$fmt" --cache --cache-file /tmp/tf-analyze-cache.json \
             > "$out" 2>"$err" || rc=$?
           # The gate step needs the JSON scan's own verdict: a gate passed
           # in extra-args (--fail-on, --fail-on-parse-error, ...) exits 1

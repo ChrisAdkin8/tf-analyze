@@ -16,7 +16,9 @@ times slower, not 45%.
 """
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -86,3 +88,60 @@ def test_corpus_scan_within_budget() -> None:
         f"{PERF_BUDGET_SECONDS}s budget. Likely O(n^2) regression in "
         f"detect_in_file or graph_check."
     )
+
+
+# ---- Suggestions -------------------------------------------------------------
+# Trying the patcher per finding once cost findings x file size in every scan:
+# 480 KB with 3,000 findings went from 4.6s to 357s. Scan time here is mostly
+# detection, so the budgets are generous; the old cost is many times over them.
+SUGGESTION_TABLES = 2000  # about 300 KB, about 2,000 fixable findings
+SCAN_BUDGET_SECONDS = 15.0
+SUGGESTED_SCAN_BUDGET_SECONDS = 20.0
+
+
+def _timed_scan(target: Path, *flags: str) -> tuple[float, dict]:
+    best, report = float("inf"), {}
+    for _ in range(PERF_ATTEMPTS):
+        t0 = time.perf_counter()
+        res = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "detect.py"), "--target", str(target),
+             "--no-threat-intel", "--format", "json", *flags],
+            capture_output=True, text=True, check=False,
+        )
+        best = min(best, time.perf_counter() - t0)
+        report = json.loads(res.stdout)
+        if best < SCAN_BUDGET_SECONDS:
+            break
+    return best, report
+
+
+@pytest.fixture
+def large_file(tmp_path: Path) -> Path:
+    (tmp_path / "main.tf").write_text("\n".join(
+        f'resource "aws_dynamodb_table" "t{i}" {{\n  name = "t{i}"\n  hash_key = "id"\n'
+        f'  billing_mode = "PAY_PER_REQUEST"\n  attribute {{\n    name = "id"\n'
+        f'    type = "S"\n  }}\n}}\n'
+        for i in range(SUGGESTION_TABLES)
+    ))
+    return tmp_path
+
+
+@pytest.mark.skipif(
+    os.environ.get("TF_ANALYZE_SKIP_PERF") == "1",
+    reason="Performance test skipped (TF_ANALYZE_SKIP_PERF=1)",
+)
+def test_a_plain_scan_does_not_pay_for_suggestions(large_file: Path) -> None:
+    elapsed, report = _timed_scan(large_file)
+    assert not [f for f in report["findings"] if "fix_suggestion" in f]
+    assert elapsed < SCAN_BUDGET_SECONDS
+
+
+@pytest.mark.skipif(
+    os.environ.get("TF_ANALYZE_SKIP_PERF") == "1",
+    reason="Performance test skipped (TF_ANALYZE_SKIP_PERF=1)",
+)
+def test_suggestions_stay_close_to_linear(large_file: Path) -> None:
+    """The Action's JSON run; `--mode pr-review` takes the same path."""
+    elapsed, report = _timed_scan(large_file, "--fix-suggestions")
+    assert len([f for f in report["findings"] if "fix_suggestion" in f]) >= SUGGESTION_TABLES
+    assert elapsed < SUGGESTED_SCAN_BUDGET_SECONDS
