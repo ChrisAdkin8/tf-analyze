@@ -913,6 +913,11 @@ runs:
         if summary.get("rule_timeouts") or summary.get("unreadable_files"):
             print(f"::error::tf-analyze: {len(summary.get('rule_timeouts') or [])} rule check(s) ran out of time and {len(summary.get('unreadable_files') or [])} file(s) could not be read; those were not checked.", file=sys.stderr)
             sys.exit(1)
+        # A shared module with more distinct callers than the scan covers
+        # (`--fail-on` fails on this too).
+        if summary.get("unscanned_contexts"):
+            print(f"::error::tf-analyze: {len(summary['unscanned_contexts'])} module(s) have callers that were not scanned; see summary.unscanned_contexts.", file=sys.stderr)
+            sys.exit(1)
         threshold = rank.get(fail_on, 3)
         breach = [f for f in findings if rank.get(f.get("urgency",""), 0) >= threshold]
         if breach:

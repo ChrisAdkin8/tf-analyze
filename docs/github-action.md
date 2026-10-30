@@ -77,9 +77,10 @@ change them for those runs, edit the fallback after `||` in the file.
   report has nothing at the action's `fail-on` level. An engine crash
   (exit 2 or more) fails the job too.
 - **Unchecked input fails the job.** If a rule check ran out of time
-  (`summary.rule_timeouts`) or a file couldn't be read
-  (`summary.unreadable_files`), part of the target wasn't checked, so the
-  job fails, as `--fail-on` does on the command line.
+  (`summary.rule_timeouts`), a file couldn't be read
+  (`summary.unreadable_files`), or a local module has more distinct callers
+  than the scan covers (`summary.unscanned_contexts`), part of the target
+  wasn't checked, so the job fails, as `--fail-on` does on the command line.
 - **The composite action's gate reads every report shape.** `mode:
   fleet` reports findings per target (`by_target`), and the gate fails on
   them, and on a fleet's unreadable files, as it does for one target;

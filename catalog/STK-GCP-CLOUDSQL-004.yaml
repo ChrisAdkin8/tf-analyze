@@ -31,12 +31,16 @@ patterns:
   - kind: resource_missing_arg
     resource: google_sql_database_instance
     nested_path: settings.ip_configuration.require_ssl
-    suppress_if_body_contains: 'ssl_mode = "ENCRYPTED_ONLY"'
+    suppress_if:
+      arg: settings.ip_configuration.ssl_mode
+      regex: '^(ENCRYPTED_ONLY|TRUSTED_CLIENT_CERTIFICATE_REQUIRED)$'
   - kind: hcl_attr
     resource: google_sql_database_instance
     path: settings.ip_configuration.require_ssl
     not_equal: true
-    suppress_if_body_contains: 'ssl_mode = "ENCRYPTED_ONLY"'
+    suppress_if:
+      arg: settings.ip_configuration.ssl_mode
+      regex: '^(ENCRYPTED_ONLY|TRUSTED_CLIENT_CERTIFICATE_REQUIRED)$'
 recommendation: |
   Set `require_ssl = true` in the `ip_configuration` block:
 

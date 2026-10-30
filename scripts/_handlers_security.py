@@ -34,7 +34,7 @@ from _hcl import (
 )
 from _iam_policy import (
     argument_policies,
-    document_block_subtree,
+    document_block_statements,
     document_statements,
     json_statements,
     policy_document_subtrees,
@@ -84,7 +84,7 @@ def _detect_variable_credential_pattern(c: InFileCtx) -> list[dict]:
         var_name = blk["groups"][0]
         if not name_re.match(var_name):
             continue
-        if re.search(r"(?m)^\s*sensitive\s*=\s*true\s*$", blk["body"]):
+        if SENSITIVE_TRUE_RE.search(blk["body"]):
             continue
         out.append({
             "id": c.eid,
@@ -127,11 +127,12 @@ def _detect_iam_policy_analysis(c: InFileCtx) -> list[dict]:
         if dtype != "aws_iam_policy_document":
             continue
         subtrees = documents.get(dname, [])
-        subtree = subtrees[0] if len(subtrees) == 1 else document_block_subtree(
-            dname, dblk["start_line"], dblk["body"],
+        statements = (
+            document_statements(subtrees[0]) if len(subtrees) == 1
+            else document_block_statements(dname, dblk["start_line"], dblk["body"])
         )
-        if subtree is not None:
-            for st in document_statements(subtree):
+        if statements is not None:
+            for st in statements:
                 if st.matches(check):
                     out.append({
                         "id": c.eid,
@@ -356,9 +357,10 @@ def _detect_iam_json_policy_analysis(c: InFileCtx) -> list[dict]:
         if btype not in resource_types:
             continue
         attrs = blk.get("attrs")
+        where = f"{c.file_path}: {btype}.{bname}"
         docs = (
-            argument_policies(attrs, args) if attrs is not None
-            else text_argument_policies(blk["body"], args)
+            argument_policies(attrs, args, where) if attrs is not None
+            else text_argument_policies(blk["body"], args, where)
         )
         if any(st.matches(check) for doc in docs for st in json_statements(doc)):
             out.append({
@@ -592,7 +594,7 @@ def _corpus_cross_module(c: CorpusCtx) -> list[dict]:
                         if cblk["groups"][0] != child_arg:
                             continue
                         child_found = True
-                        if re.search(r'(?m)^\s*sensitive\s*=\s*true\s*$', cblk["body"]):
+                        if SENSITIVE_TRUE_RE.search(cblk["body"]):
                             child_marked = True
                         break
                 if child_found and not child_marked:

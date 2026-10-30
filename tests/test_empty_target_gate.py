@@ -167,6 +167,23 @@ def test_action_gate_fails_when_a_file_could_not_be_read(tmp_path) -> None:
     assert "could not be read" in res.stderr
 
 
+UNSCANNED = {
+    "findings": [],
+    "summary": {"unscanned_contexts": [{"module": "/m", "scanned": 64, "distinct": 70}]},
+}
+
+
+def test_action_gate_fails_when_callers_went_unscanned(tmp_path) -> None:
+    res = _gate(tmp_path, UNSCANNED)
+    assert res.returncode == 1
+    assert "callers that were not scanned" in res.stderr
+
+
+def test_action_gate_fails_on_a_fleet_with_callers_unscanned(tmp_path) -> None:
+    report = {"by_target": {}, "unscanned_contexts": UNSCANNED["summary"]["unscanned_contexts"]}
+    assert _gate(tmp_path, report).returncode == 1
+
+
 def _template_gate_script() -> str:
     text = (REPO / "integrations" / "github-action.yml").read_text()
     m = re.search(r'python3 -c "\n(.*?)\n\s*" \| tee', text, re.DOTALL)
@@ -190,6 +207,10 @@ def test_template_gate_fails_on_unchecked_input(tmp_path) -> None:
     empty.mkdir()
     assert _template_gate(tmp_path, _engine_report(empty)).returncode == 1
     assert _template_gate(tmp_path, _unreadable_report(tmp_path)).returncode == 1
+
+
+def test_template_gate_fails_when_callers_went_unscanned(tmp_path) -> None:
+    assert _template_gate(tmp_path, UNSCANNED).returncode == 1
 
 
 def test_template_gate_passes_a_clean_scan(tmp_path) -> None:

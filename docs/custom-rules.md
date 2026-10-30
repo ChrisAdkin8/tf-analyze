@@ -186,7 +186,7 @@ regex) is evaluated by the engine; see
 
 Pattern kinds support these suppression mechanisms:
 
-- `suppress_if: { arg: <name>, equals: <value> }` — resource_arg / resource_missing_arg
+- `suppress_if: { arg: <name>, equals: <value> }` — resource_arg / resource_missing_arg / hcl_attr
 - `suppress_if_body_contains: '<substring>'` — resource_arg / resource_missing_arg / hcl_attr
 - `unless_repo_has: <resource type>` — resource_arg / resource_missing_arg: skip when a
   resource of that type (not `enabled = false`) is anywhere in the scan, e.g. an

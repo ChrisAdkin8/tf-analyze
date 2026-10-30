@@ -537,7 +537,8 @@ def test_pick_prefers_settings_to_identifiers_at_a_tight_limit() -> None:
     }
 
 
-def test_nested_modules_stay_within_the_limit(tmp_path, capsys) -> None:
+def test_nested_modules_stay_within_the_limit(tmp_path, capsys, monkeypatch) -> None:
+    monkeypatch.setattr(detect, "UNSCANNED_CONTEXTS", [])
     (tmp_path / "mid").mkdir()
     (tmp_path / "leaf").mkdir()
     root = tmp_path / "main.tf"
@@ -556,8 +557,273 @@ def test_nested_modules_stay_within_the_limit(tmp_path, capsys) -> None:
             for i in range(40)
         )
     )
-    leaf.write_text('variable "n" {}\nvariable "m" {}\n')
+    leaf.write_text('variable "n" {}\nvariable "m" {}\nlocals {\n  v = "${var.n}-${var.m}"\n}\n')
     files = {p: p.read_text() for p in (root, mid, leaf)}
     contexts = detect._extract_var_contexts_by_dir(files)
     assert len(contexts[str(tmp_path.resolve() / "leaf")]) == detect._MAX_VAR_CONTEXTS
     assert capsys.readouterr().err.count("not scanned") == 1
+
+
+# ---- one odd field never loses a policy ------------------------------------------
+
+ADMIN_STMT = '{ Effect = "Allow", Action = "*", Resource = "*" }'
+COND_LIST = '{ Effect = "Allow", Action = var.w ? ["a"] : ["b"], Resource = "x" }'
+
+
+@pytest.mark.parametrize(
+    "statements",
+    [
+        f'{{ Sid = format("s-%s", var.n), Effect = "Allow", Action = "*", Resource = "*" }}, {COND_LIST}',
+        f'{{ Sid = lookup(var.m, "k"), Effect = "Allow", Action = "*", Resource = "*" }}, {COND_LIST}',
+        f'{{ Effect = var.e ? "Allow" : "Deny", Action = "a", Resource = "x" }}, {COND_LIST}, {ADMIN_STMT}',
+        '{ Effect = ("Allow"), Action = "*", Resource = (["*"]) }',
+        '{ Effect = ("Allow"), Action = ("*"), Resource = (["*"]) }',
+        '{ Sid = format("}"), Effect = ("Allow"), Action = "*", Resource = (["*"]) }',
+    ],
+)
+def test_mixed_expression_quotes_keep_the_policy(statements, path_mode, tmp_path) -> None:
+    text = POLICY % f"jsonencode({{ Statement = [{statements}] }})"
+    assert _fires(text, ADMIN_RULE, tmp_path)
+
+
+def test_mixed_quotes_public_principal(path_mode, tmp_path) -> None:
+    text = """resource "aws_s3_bucket_policy" "p" {
+  bucket = "b"
+  policy = jsonencode({
+    Statement = [{ Effect = ("Allow"), Principal = ({ AWS = ("*") }), Action = "a", Resource = "x" }]
+  })
+}
+"""
+    assert _fires(text, "SEC-AWS-IAM-JSON-004", tmp_path)
+
+
+def test_mixed_quotes_deny_stays_a_deny(path_mode, tmp_path) -> None:
+    text = POLICY % 'jsonencode({ Statement = [{ Effect = ("Deny"), Action = "*", Resource = (["*"]) }] })'
+    assert not _fires(text, ADMIN_RULE, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("value", "warns"),
+    [
+        ("<<POL\n{ not json\nPOL", True),
+        ('jsonencode({ Statement = ["${(]" })', False),  # the parser rejects it: no value
+        ("data.aws_iam_policy_document.d.json", False),
+        ('file("p.json")', False),
+        ("jsonencode(var.p)", False),
+        ("var.p", False),
+    ],
+)
+def test_warn_when_a_written_out_policy_cannot_be_decoded(value, warns, tmp_path, capsys) -> None:
+    fp = tmp_path / "main.tf"
+    text = POLICY % value
+    fp.write_text(text)
+    detect.detect_in_file(fp, text, [CATALOG[ADMIN_RULE], CATALOG["SEC-AWS-IAM-JSON-001"]])
+    err = capsys.readouterr().err
+    assert err.count("policy could not be decoded") == (1 if warns else 0), err
+    if warns:
+        assert "aws_iam_policy.p" in err
+
+
+def test_warn_in_a_rejected_file(tmp_path, capsys) -> None:
+    text = TRIGGERS["leading_operator"] + POLICY % '"${jsonencode({ Statement = [ ) })}"'
+    fp = tmp_path / "main.tf"
+    fp.write_text(text)
+    detect.detect_in_file(fp, text, [CATALOG[ADMIN_RULE]])
+    assert "policy could not be decoded" in capsys.readouterr().err
+
+
+# ---- `inline_policy = [{...}]` and parenthesised objects -------------------------
+
+ROLE_LIST = """resource "aws_iam_role" "r" {
+  assume_role_policy = "{}"
+  inline_policy = %s
+}
+"""
+LISTED = f'[{{ name = "i", policy = jsonencode({{ {ADMIN} }}) }}]'
+
+
+@pytest.mark.parametrize("value", [LISTED, f"({LISTED})"])
+def test_inline_policy_list(value, path_mode, tmp_path) -> None:
+    assert _fires(ROLE_LIST % value, ADMIN_RULE, tmp_path)
+
+
+def test_inline_policy_list_heredoc_in_a_rejected_file(tmp_path) -> None:
+    text = TRIGGERS["leading_operator"] + ROLE_LIST % f'[{{ name = "i", policy = {HEREDOC}\n  }}]'
+    assert _hcl.parse_tf(text)[0] is None
+    assert _fires(text, ADMIN_RULE, tmp_path)
+
+
+INSTANCE = 'resource "aws_instance" "x" {\n  ami = "a"\n  instance_type = "t3.micro"\n  metadata_options = (%s)\n}\n'
+
+
+def test_parenthesised_object_at_resource_level(tmp_path) -> None:
+    assert _fires(INSTANCE % '{ http_tokens = "optional" }', "SEC-AWS-SSRF-001", tmp_path)
+    assert not _fires(INSTANCE % '{ http_tokens = "required" }', "SEC-AWS-SSRF-001", tmp_path)
+
+
+@pytest.mark.parametrize("cidr", ['["0.0.0.0/0"]', '(["0.0.0.0/0"])'])
+def test_parenthesised_list_of_objects_at_resource_level(cidr, tmp_path) -> None:
+    text = (
+        'resource "aws_security_group" "x" {\n'
+        f'  ingress = ([{{ from_port = 22, to_port = 22, protocol = ("tcp"), cidr_blocks = {cidr} }}])\n'
+        "}\n"
+    )
+    assert _fires(text, SG_RULE, tmp_path)
+
+
+def test_normalise_leaves_expressions_alone() -> None:
+    attrs = {"a": "${(var.x)}", "b": "${(['a'])[0]}", "c": "${(['a'])}", "d": ["${({'k': 1})}"]}
+    assert _hcl.normalise_attrs(attrs) == {
+        "a": "${(var.x)}",
+        "b": "${(['a'])[0]}",
+        "c": ["a"],
+        "d": [{"k": 1}],
+    }
+
+
+# ---- false positives on wrapped values --------------------------------------------
+
+
+def test_parenthesised_sensitive_counts(tmp_path) -> None:
+    text = 'variable "db_password" {\n  sensitive = (true)\n}\n'
+    assert not _fires(text, "SEC-SENSITIVE-PATTERN-001", tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("line", "fires"),
+    [
+        ('ssl_mode     = ("ENCRYPTED_ONLY")', False),
+        ('ssl_mode = "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"', False),
+        ('# ssl_mode = "ENCRYPTED_ONLY"', True),
+        ('ssl_mode = "ALLOW_UNENCRYPTED_AND_ENCRYPTED"', True),
+    ],
+)
+def test_cloudsql_ssl_mode_is_read_not_grepped(line, fires, path_mode, tmp_path) -> None:
+    text = (
+        'resource "google_sql_database_instance" "x" {\n  settings {\n'
+        f"    ip_configuration {{\n      {line}\n    }}\n  }}\n}}\n"
+    )
+    assert _fires(text, "STK-GCP-CLOUDSQL-004", tmp_path) is fires
+
+
+# ---- callers past the limit fail the gate ------------------------------------------
+
+CHILD = """variable "name" {}
+variable "public" {
+  default = false
+}
+variable "acl" {
+  default = "private"
+}
+variable "cidr" {
+  default = "10.0.0.0/8"
+}
+resource "aws_s3_bucket_acl" "x" {
+  bucket = var.name
+  acl    = var.public ? var.acl : "private"
+}
+resource "aws_security_group" "s" {
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.cidr]
+  }
+}
+"""
+
+
+def _write_callers(root: Path, child: str, calls: list[str]) -> None:
+    (root / "child").mkdir()
+    (root / "child" / "main.tf").write_text(child)
+    (root / "main.tf").write_text(
+        "".join(
+            f'module "b{i}" {{\n  source = "./child"\n  {c}\n}}\n' for i, c in enumerate(calls)
+        )
+    )
+
+
+def _report(target: Path, *args: str) -> tuple[dict, int, str]:
+    env = {k: v for k, v in os.environ.items() if k != "TF_ANALYZE_TEST_FORCE_FALLBACK"}
+    out = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "detect.py"), "--target", str(target),
+         "--format", "json", *args],
+        capture_output=True, text=True, check=False, env=env,
+    )
+    return json.loads(out.stdout), out.returncode, out.stderr
+
+
+def test_high_cardinality_input_past_the_limit_fails_the_gate(tmp_path) -> None:
+    calls = [f'name = "n{i}"\n  cidr = "10.{i}.0.0/16"' for i in range(100)]
+    calls[90] = 'name = "n90"\n  cidr = "0.0.0.0/0"'
+    _write_callers(tmp_path, CHILD, calls)
+    report, code, err = _report(tmp_path, "--fail-on", "CRITICAL")
+    assert code == 1
+    assert "not scanned (--fail-on)" in err
+    entry = report["summary"]["unscanned_contexts"][0]
+    assert entry["module"] == str((tmp_path / "child").resolve())
+    assert (entry["scanned"], entry["distinct"]) == (detect._MAX_VAR_CONTEXTS, 100)
+
+
+def test_combination_past_the_limit_fails_the_gate(tmp_path) -> None:
+    calls = [
+        f'name = "n{i}"\n  public = {"true" if i % 2 else "false"}\n'
+        f'  acl = "{"public-read" if i % 4 == 0 else "private"}"'
+        for i in range(99)
+    ]
+    calls.append('name = "n99"\n  public = true\n  acl = "public-read"')
+    _write_callers(tmp_path, CHILD, calls)
+    report, code, _ = _report(tmp_path, "--fail-on", "CRITICAL")
+    assert code == 1
+    assert report["summary"]["unscanned_contexts"]
+
+
+def test_warm_cache_still_fails_the_gate(tmp_path) -> None:
+    calls = [f'name = "n{i}"\n  cidr = "10.{i}.0.0/16"' for i in range(70)]
+    _write_callers(tmp_path, CHILD, calls)
+    cache = tmp_path / "scan.cache"
+    for _ in range(2):
+        _, code, _ = _report(tmp_path, "--cache", "--cache-file", str(cache), "--fail-on", "CRITICAL")
+        assert code == 1
+
+
+def test_input_only_a_tag_reads_does_not_count(tmp_path) -> None:
+    child = (
+        'variable "name" {}\nvariable "acl" {\n  default = "private"\n}\n'
+        'resource "aws_s3_bucket_acl" "x" {\n  bucket = "b"\n  acl    = var.acl\n'
+        "  tags = {\n    Name = var.name\n  }\n}\n"
+    )
+    calls = [f'name = "n{i}"' for i in range(100)]
+    calls[70] += '\n  acl = "public-read"'
+    _write_callers(tmp_path, child, calls)
+    report, code, err = _report(tmp_path, "--fail-on", "CRITICAL")
+    assert ACL_RULE in {f["id"] for f in report["findings"]}
+    assert code == 0
+    assert "unscanned_contexts" not in report["summary"]
+    assert "not scanned" not in err
+
+
+def test_inputs_in_use() -> None:
+    text = """# var.commented
+variable "v" {
+  default = "x"
+}
+resource "a" "b" {
+  x    = var.kept
+  foo  = var.both
+  tags = merge(var.tags, { Name = var.both })
+  labels = {
+    a = var.label
+  }
+  nested {
+    tags = var.nested
+  }
+}
+locals {
+  l = var.local_use
+}
+module "m" {
+  n = var.passed
+}
+"""
+    assert detect._inputs_in_use([text]) == {"kept", "both", "nested", "local_use", "passed"}

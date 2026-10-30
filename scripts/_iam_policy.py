@@ -34,13 +34,17 @@ from __future__ import annotations
 import ast
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 
 from _hcl import (
+    _NOT_A_LITERAL,
     _hcl_object_to_json,
+    _string_end,
     arg_source,
     block_bodies_at,
     brace_walk,
+    literal_structure,
     normalise_attrs,
     parse_fragment,
     resolve_value_text,
@@ -133,17 +137,6 @@ def _strings(value) -> list[str]:
     return []
 
 
-def _structure(value):
-    """A statement list, statement or principal map that parentheses turned
-    into text (``Statement = ([{...}])``), as data; anything else as is."""
-    if isinstance(value, str):
-        try:
-            return ast.literal_eval(unwrap_value(value))
-        except (ValueError, SyntaxError, MemoryError, RecursionError):
-            pass
-    return value
-
-
 def _effect(value) -> str:
     """A statement's effect; IAM's default when it is not a string."""
     strings = _strings(value)
@@ -193,17 +186,48 @@ def decode_policy(value) -> dict | None:
 
 def _jsonencode_argument(arg: str):
     """The value of a ``jsonencode(...)`` argument: the parser's JSON text,
-    the Python repr it prints when the argument has parentheses of its own
-    (``jsonencode(({...}))``), or HCL."""
+    the same with `_escape_expression_quotes`, the Python repr it prints
+    when the argument has parentheses of its own (``jsonencode(({...}))``),
+    or HCL."""
     try:
-        return json.loads(arg)
-    except ValueError:
+        for text in (arg, _escape_expression_quotes(arg)):
+            try:
+                return json.loads(text, strict=False)
+            except ValueError:
+                pass
+    except RecursionError:
         pass
     try:
         return ast.literal_eval(arg)
-    except (ValueError, SyntaxError, MemoryError, RecursionError):
+    except _NOT_A_LITERAL:
         tree, _err = parse_fragment("x = " + arg + "\n")
         return (tree or {}).get("x")
+
+
+_RAW_QUOTE_RE = re.compile(r'\\.|"', re.DOTALL)
+
+
+def _escape_expression_quotes(text: str) -> str:
+    """`text` with each string's inner quotes escaped. The parser prints an
+    expression as a ``"${...}"`` string without escaping the expression's
+    own quotes: ``"Sid": "${format("s-%s", var.n)}"``. A list or object in
+    an expression comes out with Python's quotes instead, so both kinds in
+    one policy made it neither JSON, Python nor HCL, and one odd field lost
+    every statement beside it."""
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != '"':
+            out.append(text[i])
+            i += 1
+            continue
+        end = _string_end(text, i)
+        inner = _RAW_QUOTE_RE.sub(
+            lambda m: '\\"' if m.group() == '"' else m.group(), text[i + 1:end - 1],
+        )
+        out.append(f'"{inner}"')
+        i = end
+    return "".join(out)
 
 
 def _quote_bare_interpolations(text: str) -> str:
@@ -240,15 +264,15 @@ def _quote_bare_interpolations(text: str) -> str:
 def json_statements(doc: dict) -> list[Statement]:
     """Statements of a JSON policy document (``Statement`` may be one
     object or a list)."""
-    raw = _structure(doc.get("Statement")) or []
+    raw = literal_structure(doc.get("Statement")) or []
     if isinstance(raw, dict):
         raw = [raw]
     out: list[Statement] = []
     for st in raw if isinstance(raw, list) else []:
-        st = _structure(st)
+        st = literal_structure(st)
         if not isinstance(st, dict):
             continue
-        principal = _structure(st.get("Principal"))
+        principal = literal_structure(st.get("Principal"))
         if isinstance(principal, dict):
             principals = [v for vals in principal.values() for v in _strings(vals)]
         else:
@@ -266,36 +290,77 @@ def json_statements(doc: dict) -> list[Statement]:
     return out
 
 
-def argument_policies(attrs: dict, args: list[str]) -> list[dict]:
+def _is_written_out(value) -> bool:
+    """Whether a policy value holds a document in the source itself, so
+    failing to decode it is a miss. ``data.x.json``, ``file(...)`` or
+    ``jsonencode(var.p)`` hold none: those are unknown here, not unread."""
+    if not isinstance(value, str):
+        return False
+    expr = unwrap_value(value)
+    m = _JSONENCODE_RE.fullmatch(expr)
+    if m is not None:
+        expr = unwrap_value(m.group(1))
+    return expr.lstrip('"').startswith("{")
+
+
+_UNDECODED_WARNED: set[str] = set()
+
+
+def _warn_undecoded(where: str) -> None:
+    """Say that a policy went unread, once per place (each rule asks)."""
+    if where not in _UNDECODED_WARNED:
+        _UNDECODED_WARNED.add(where)
+        print(f"WARN: {where}: policy could not be decoded; it was not checked",
+              file=sys.stderr)
+
+
+def argument_policies(attrs: dict, args: list[str], where: str = "a resource") -> list[dict]:
     """Decoded policy documents held by a resource's `args`, including
-    the ``policy`` of each ``inline_policy`` block (``aws_iam_role``)."""
+    the ``policy`` of each ``inline_policy`` block (``aws_iam_role``). A
+    written-out document that can't be decoded gets a WARN naming
+    `where`."""
     values = [attrs.get(a) for a in args]
     for block in attrs.get("inline_policy") or []:
         if isinstance(block, dict):
             values.append(block.get("policy"))
-    return [d for d in (decode_policy(v) for v in values) if d is not None]
+    docs: list[dict] = []
+    for value in values:
+        doc = decode_policy(value)
+        if doc is not None:
+            docs.append(doc)
+        elif _is_written_out(value):
+            _warn_undecoded(where)
+    return docs
 
 
-def _decode_source(text: str) -> dict | None:
-    """`decode_policy` for an argument's source text. Only the value is
-    parsed, so a construct elsewhere in the file cannot stop it; when the
-    value itself is what the parser rejects, a ``jsonencode`` argument
-    still gets the regex rewrite."""
+def _source_value(text: str | None):
+    """The value an argument's source text parses to, alone, so a construct
+    elsewhere in the file cannot stop it. When the value itself is what the
+    parser rejects, a ``jsonencode`` argument gets the regex rewrite, and
+    anything else stays text."""
+    if text is None:
+        return None
     expr = unwrap_value(text)
     tree, _err = parse_fragment("__v = " + expr + "\n")
     if tree is not None:
-        return decode_policy(tree.get("__v"))
+        return tree.get("__v")
     m = _JSONENCODE_RE.fullmatch(expr)
-    return _hcl_object_to_json(m.group(1).strip()) if m else None
+    return (_hcl_object_to_json(m.group(1).strip()) if m else None) or expr
 
 
-def text_argument_policies(body: str, args: list[str]) -> list[dict]:
-    """`argument_policies` for a resource without a parse tree, from its
-    body text."""
-    sources = [arg_source(body, a) for a in args]
-    for block in block_bodies_at(body, "inline_policy"):
-        sources.append(arg_source(block, "policy"))
-    return [d for d in (_decode_source(v) for v in sources if v) if d is not None]
+def text_argument_policies(body: str, args: list[str], where: str = "a resource") -> list[dict]:
+    """`argument_policies` for a resource without a parse tree: the same
+    attributes, read from its body text."""
+    attrs = {a: _source_value(arg_source(body, a)) for a in args}
+    blocks = block_bodies_at(body, "inline_policy")
+    if blocks:
+        attrs["inline_policy"] = [
+            {"policy": _source_value(arg_source(b, "policy"))} for b in blocks
+        ]
+    else:  # `inline_policy = [{...}]`
+        listed = literal_structure(_source_value(arg_source(body, "inline_policy")))
+        attrs["inline_policy"] = listed if isinstance(listed, list) else []
+    return argument_policies(attrs, args, where)
 
 
 # ---- aws_iam_policy_document ------------------------------------------------
@@ -327,15 +392,20 @@ def document_statements(body: dict) -> list[Statement]:
     return out
 
 
-def document_block_subtree(name: str, start_line: int, body: str) -> dict | None:
-    """The subtree of one ``data "aws_iam_policy_document"`` block, parsed
+def document_block_statements(name: str, start_line: int, body: str) -> list[Statement] | None:
+    """Statements of one ``data "aws_iam_policy_document"`` block, parsed
     on its own from its text (`policy_document_subtrees` needs the whole
-    file to parse, and a name to be used once). Blank lines in front keep
-    `document_statements` line numbers right for the file. None when the
-    block itself does not parse."""
-    text = "\n" * (start_line - 1) + f'data "aws_iam_policy_document" "{name}" {{{body}}}\n'
-    subtrees = policy_document_subtrees(parse_fragment(text)[0]).get(name)
-    return subtrees[0] if subtrees else None
+    file to parse, and a name to be used once), with line numbers for the
+    file. None when the block itself does not parse."""
+    tree = parse_fragment(f'data "aws_iam_policy_document" "{name}" {{{body}}}\n')[0]
+    subtrees = policy_document_subtrees(tree).get(name)
+    if not subtrees:
+        return None
+    statements = document_statements(subtrees[0])
+    for st in statements:
+        if st.line:
+            st.line += start_line - 1
+    return statements
 
 
 def policy_document_subtrees(tree: dict | None) -> dict[str, list[dict]]:

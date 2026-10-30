@@ -502,7 +502,8 @@ def _detect_hcl_attr(c: InFileCtx) -> list[dict]:
 
     Used for rules like "the
     ``server_side_encryption_configuration.rule.apply_server_side_encryption_by_default.sse_algorithm``
-    must be ``aws:kms``". Honours ``suppress_if_body_contains``. The
+    must be ``aws:kms``". Honours ``suppress_if`` and
+    ``suppress_if_body_contains``. The
     path is walked top-level like ``nested_path`` (parse tree, or the
     regex fallback with the same rules); through a repeated block the
     rule fires if any instance's value differs.
@@ -520,6 +521,8 @@ def _detect_hcl_attr(c: InFileCtx) -> list[dict]:
         if btype != rt:
             continue
         if suppress_body_contains and suppress_body_contains in blk["body"]:
+            continue
+        if _suppressed_by(pat.get("suppress_if"), blk, c.var_defaults):
             continue
         if not_equal is None:
             continue
