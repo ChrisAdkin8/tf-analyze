@@ -19,11 +19,13 @@
   read, because the parser prints the first with raw double quotes and the
   second with Python's single quotes, so an admin statement beside them
   was never checked and nothing said so. Such a policy is now read.
-  Statement objects written out inside `concat(...)`, `merge(...)`,
-  `flatten(...)`, a conditional or `tostring(...)` are analysed too. A policy
-  written out in the source that still can't be read, in whole or in part,
-  gets a WARN. `data.x.json`, `file(...)` and `jsonencode(var.p)` hold no
-  document, so they get none.
+  Statement objects written out inside `concat(...)`, `flatten(...)`, a
+  conditional or `tostring(...)` are analysed too. A `merge(...)` counts as
+  one object, later keys winning, with `var.X` / `local.X` resolved where
+  known; if an unknown argument could set `Effect`, the statement gets a
+  WARN and no finding. A policy written out in the source that still can't
+  be read, in whole or in part, gets a WARN. `data.x.json`, `file(...)` and
+  `jsonencode(var.p)` hold no document, so they get none.
 - **Parenthesised objects**: `ingress = ([{...}])`,
   `metadata_options = ({...})` and `inline_policy = ([{...}])` now read
   like the plain forms in every rule on the parse-tree path.
@@ -46,8 +48,8 @@
   exited 0. Every set is now scanned, within a budget of contexts x resources
   (about 200,000 a module and 1,000,000 a repo; `--max-module-contexts N`,
   or the Action's `max-module-contexts` input, sets a plain count instead).
-  Inputs holding only unknown expressions (`aws_subnet.a.id`) no longer make
-  a set distinct. Past the budget, inputs the module doesn't read stop
+  An input that is a bare unresolved reference (`aws_subnet.a.id`) no longer
+  makes a set distinct. Past the budget, inputs the module doesn't read stop
   counting, and the sets are chosen so each value of each input is scanned.
   A value left out fails `--fail-on` and the Action's gate, naming the
   module (`summary.unscanned_contexts`); in `--mode diff`, only for modules
@@ -56,5 +58,7 @@
   (`summary.unscanned_combinations`), so a finding needing two values from
   different callers together can be missed.
 - **`--mode verify-fixed`**: a finding gone from a module with callers left
-  out came out RESOLVED while still live. It is now UNREADABLE, and the mode
-  gates on left-out values and on rule checks that ran out of time.
+  out, or from a module below it, came out RESOLVED while still live. It is
+  now UNREADABLE, and the mode gates on left-out values and on rule checks
+  that ran out of time. `--cache` keys on `--max-module-contexts` and does
+  not save a scan with callers left out.

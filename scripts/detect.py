@@ -467,10 +467,12 @@ _MAX_CONTEXTS_TRIED = 1_000_000
 # combinations only: a WARN and `UNSCANNED_COMBINATIONS`.
 UNSCANNED_CONTEXTS: list[dict] = []
 UNSCANNED_COMBINATIONS: list[dict] = []
+# Those modules and all they call: what they pass down was cut short too.
+_PARTIAL_MODULES: set[str] = set()
 _TAG_ARGS = ("tags", "tags_all", "labels")
 # Which inputs a context got an unknown expression for (`_input_is_unknown`).
 _UNKNOWN_INPUTS_KEY = "__unknown_inputs__"
-_BARE_LITERAL_RE = re.compile(r'\b(?:true|false)\b|(?<![\w.\[-])-?\d')
+_BARE_REF_RE = re.compile(r'[A-Za-z_][\w-]*(?:\.[\w-]+|\[[^\]"]*\])+')
 _PLAIN_INPUT_REF_RE = re.compile(r'(var|local)\.([\w-]+)')
 
 
@@ -539,46 +541,18 @@ def _tfvars_values(directory: Path) -> dict[str, str]:
     return out
 
 
-def _has_literal(source: str) -> bool:
-    """Whether an expression's source holds any known value: text in a
-    string (``"${...}"`` alone has none), a number, ``true`` / ``false``, an
-    empty collection, a heredoc. ``aws_subnet.a.id``, ``[module.x.id]`` and
-    ``"${each.key}"`` have none."""
-    if source.lstrip().startswith("<<"):
-        return True
-    rest: list[str] = []
-    template = False
-    i, n = 0, len(source)
-    while i < n:
-        if source[i] != '"':
-            rest.append(source[i])
-            i += 1
-            continue
-        end = _string_end(source, i)
-        inner = source[i + 1:end - 1]
-        while (at := inner.find("${")) != -1:
-            close = brace_walk(inner, at + 1)
-            if close is None:
-                return True
-            inner = inner[:at] + inner[close:]
-            template = True
-        if inner.strip():
-            return True
-        i = end
-    code = "".join(rest)
-    return bool(_BARE_LITERAL_RE.search(code)) or not (template or re.search(r"[A-Za-z_]", code))
-
-
-def _input_is_unknown(source: str, parent_unknown: set[str]) -> bool:
-    """Whether a caller's input holds no known value, so its text (which
-    differs per caller: ``aws_subnet.s7.id``) can't change what a rule
-    finds. `var.X` / `local.X` depend on what they resolved to: a value
-    that came from the caller's own caller as unknown stays unknown, and a
-    local counts as known, since its quotes are gone by now."""
-    ref = _PLAIN_INPUT_REF_RE.fullmatch(unwrap_value(source))
+def _input_is_unknown(source: str, resolved: str, parent_unknown: set[str]) -> bool:
+    """Whether a caller's input is provably nothing a rule could judge, so
+    its text (which differs per caller: ``aws_subnet.s7.id``) needn't keep
+    two contexts apart: its source is a bare reference, and resolving it
+    changed nothing. A `var.X` that its own caller passed as unknown is one
+    too. Anything else stays distinct, whatever it looks like: a conditional
+    may have folded to a value, and a local's quotes are gone by now."""
+    expr = unwrap_value(source)
+    ref = _PLAIN_INPUT_REF_RE.fullmatch(expr)
     if ref:
         return ref.group(1) == "var" and ref.group(2) in parent_unknown
-    return not _has_literal(source)
+    return bool(_BARE_REF_RE.fullmatch(expr)) and unwrap_value(resolved) == expr
 
 
 def _inputs_in_use(texts: list[str], *, skip_tags: bool) -> set[str]:
@@ -850,7 +824,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
                     resolved = _resolve_var_ref(raw, parent_ctx)
                     resolved = resolved.strip().strip('"').strip("'")
                     if resolved and not resolved.startswith(("var.", "local.", "data.")):
-                        if _input_is_unknown(sources[k], parent_unknown):
+                        if _input_is_unknown(sources[k], resolved, parent_unknown):
                             # Not the default: the caller did set something.
                             resolved = representative.setdefault(k, resolved)
                             unknown.append(k)
@@ -874,6 +848,15 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
 
     for d in sorted(set(base) | {c[1] for c in calls}):
         contexts_of(d)
+    pending = [
+        str(Path(e["module"]).resolve()) for e in (*UNSCANNED_CONTEXTS, *UNSCANNED_COMBINATIONS)
+    ]
+    while pending:
+        module = pending.pop()
+        if module not in _PARTIAL_MODULES:
+            _PARTIAL_MODULES.add(module)
+            pending += [str(Path(c[1]).resolve()) for c in calls
+                        if str(Path(c[0]).resolve()) == module]
     return contexts
 
 
@@ -1749,8 +1732,9 @@ def _file_scanner(all_files_text: dict,
 def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
                  entries: list[dict], unreadable_files: list[str] = ()) -> dict:
     """Adapter passing the scan's file detector + detect_corpus to _verify.
-    A finding gone from a module with callers left out was not shown to be
-    fixed: only the scanned callers were checked, so it is not RESOLVED."""
+    A finding gone from a module with callers left out, or from one below
+    it, was not shown to be fixed: only the scanned callers were checked,
+    so it is not RESOLVED."""
     scan_file = _file_scanner(all_files_text, entries)
     verify = _verify_verify_fixed(
         prior_report, target, all_files_text, entries,
@@ -1758,14 +1742,10 @@ def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
         detect_corpus=detect_corpus,
         unreadable_files=unreadable_files,
     )
-    partial = {
-        str(Path(e["module"]).resolve())
-        for e in (*UNSCANNED_CONTEXTS, *UNSCANNED_COMBINATIONS)
-    }
     results = verify["results"]
     for f in list(results["RESOLVED"]):
         fp = Path(f["file"])
-        if str((fp if fp.is_absolute() else Path(target) / fp).resolve().parent) in partial:
+        if str((fp if fp.is_absolute() else Path(target) / fp).resolve().parent) in _PARTIAL_MODULES:
             results["RESOLVED"].remove(f)
             results["UNREADABLE"].append(f)
     return verify
@@ -2837,7 +2817,6 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
     """
     # Pass 2 — run per-file detection with the filtered ruleset, in the
     # corpus's variable and module context (`_file_scanner`).
-    # Before the cache: contexts left out are reported on a cache hit too.
     scan_file = _file_scanner(all_text, entries)
 
     # Incremental cache: if --cache is set and the corpus hash matches the
@@ -2864,7 +2843,9 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             p for d in sorted({fp.parent for fp in all_text})
             for p in _handlers_modules.module_test_files(d)
         ]
-        _corpus_hash_val = _corpus_hash({**all_text, **extra_text}, entries, _disk_inputs)
+        _corpus_hash_val = _corpus_hash(
+            {**all_text, **extra_text}, entries, _disk_inputs, MAX_MODULE_CONTEXTS,
+        )
         _cache_path = (
             Path(args.cache_file).resolve()
             if getattr(args, "cache_file", None)
@@ -2970,8 +2951,11 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
         # Persist the per-file + corpus findings only: plan / state
         # findings depend on external inputs, and a later run without them
         # would otherwise replay them from the cache.
-        # Not when a rule check timed out: the result is incomplete.
-        if _cache_path and _corpus_hash_val and not RULE_TIMEOUTS:
+        # Not when a rule check timed out or a caller was left out: the
+        # result is incomplete, and a later run must not be served it.
+        if _cache_path and _corpus_hash_val and not (
+            RULE_TIMEOUTS or UNSCANNED_CONTEXTS or UNSCANNED_COMBINATIONS
+        ):
             _save_scan_cache(_cache_path, _corpus_hash_val,
                              [f for f in findings if id(f) not in external_ids],
                              parse_fallback_files=parse_fallback_files)

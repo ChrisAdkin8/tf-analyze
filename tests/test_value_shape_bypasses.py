@@ -905,33 +905,36 @@ def test_unknown_input_stays_unknown_through_a_nested_module(tmp_path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("source", "unknown"),
+    ("source", "resolved", "unknown"),
     [
-        ("aws_subnet.a.id", True),
-        ("module.x.id", True),
-        ("[aws_subnet.a.id, aws_subnet.b.id]", True),
-        ('"${aws_subnet.a.id}"', True),
-        ('"${each.key}${each.value}"', True),
-        ("{ a = aws_x.y.id }", True),
-        ("try(aws_x.y.id, null)", True),
-        ("aws_x.y[0].id", True),
-        ('"public-read"', False),
-        ('"a.b"', False),
-        ('"svc-${var.env}"', False),
-        ("5", False),
-        ("true", False),
-        ("[]", False),
-        ("{}", False),
-        ('["0.0.0.0/0", aws_x.y.id]', False),
-        ('format("svc-%s", aws_x.y.id)', False),
-        ("<<EOT\naws_x.y\nEOT", False),
-        ("local.x", False),
-        ("var.known", False),
-        ("var.hidden", True),
+        ("aws_subnet.a.id", "aws_subnet.a.id", True),
+        ("module.x.id", "module.x.id", True),
+        ('"${aws_subnet.a.id}"', "${aws_subnet.a.id}", True),
+        ("(aws_subnet.a.id)", "(aws_subnet.a.id)", True),
+        ("aws_x.y[0].id", "aws_x.y[0].id", True),
+        ('"${each.key}"', "${each.key}", True),
+        ("var.hidden", "aws_subnet.a.id", True),
+        ("[aws_subnet.a.id, aws_subnet.b.id]", "[aws_subnet.a.id, aws_subnet.b.id]", False),
+        ("{ a = aws_x.y.id }", "{ a = aws_x.y.id }", False),
+        ("try(aws_x.y.id, null)", "try(aws_x.y.id, null)", False),
+        ('"${each.key}${each.value}"', "${each.key}${each.value}", False),
+        ('"public-read"', "public-read", False),
+        ('"a.b"', "a.b", False),
+        ('"${"a.b"}"', "a.b", False),
+        ('"svc-${var.env}"', "svc-${var.env}", False),
+        ("5", "5", False),
+        ("1.5", "1.5", False),
+        ("true", "true", False),
+        ("[]", "[]", False),
+        ("local.x", "aws_subnet.a.id", False),
+        ("var.known", "public-read", False),
+        ('var.p ? "public-read" : "private"', "public-read", False),
+        ("var.p ? aws_a.b.c : aws_d.e.f", "var.p ? aws_a.b.c : aws_d.e.f", False),
+        ('"${var.p ? "public-read" : "private"}"', "public-read", False),
     ],
 )
-def test_input_is_unknown(source, unknown) -> None:
-    assert detect._input_is_unknown(source, {"hidden"}) is unknown
+def test_input_is_unknown(source, resolved, unknown) -> None:
+    assert detect._input_is_unknown(source, resolved, {"hidden"}) is unknown
 
 
 def test_many_bucket_callers_fit_the_budget(tmp_path) -> None:
@@ -1187,7 +1190,6 @@ D_STMT = '{Effect="Deny",Action="*",Resource="*"}'
         f"jsonencode({{Statement=concat(local.b,[{A_STMT}])}})",
         f"jsonencode(merge(var.x,{{Statement=[{A_STMT}]}}))",
         f"jsonencode({{Statement=flatten([[{A_STMT}]])}})",
-        f"jsonencode({{Statement=[merge({A_STMT},var.x)]}})",
         'jsonencode({Statement=[{Sid=format("\\"%s",var.n),Effect="Allow",Action="*",Resource="*"}]})',
         'jsonencode({Statement=[{Sid=replace(var.n,"/[\\"]/",""),Effect="Allow",Action="*",Resource="*"}]})',
         f'var.a ? jsonencode({{Statement=[{A_STMT}]}}) : "{{}}"',
@@ -1267,3 +1269,266 @@ def test_action_passes_max_module_contexts_to_the_engine() -> None:
     assert "max-module-contexts:\n" in action
     assert "TFA_MAX_MODULE_CONTEXTS: ${{ inputs.max-module-contexts }}" in action
     assert 'ARGS+=(--max-module-contexts "${TFA_MAX_MODULE_CONTEXTS}")' in action
+
+
+# ---- a folded value is a value, not an unknown ---------------------------------------
+
+REF_CALLER = "aws_thing.x.val"
+FOLDED = [
+    '"${var.public ? "public-read" : "private"}"',
+    'var.public ? "public-read" : "private"',
+    "local.t ? local.a : local.b",
+    "var.vt ? var.va : var.vb",
+    "(var.public ? local.a : local.b)",
+    '"${var.vt ? var.va : var.vb}"',
+    '"${true ? "public-read" : "private"}"',
+    '"${"public-read"}"',
+    '("${"public-read"}")',
+    '("public-read")',
+]
+ROOT_VARS = """variable "public" {
+  default = true
+}
+variable "vt" {
+  default = true
+}
+variable "va" {
+  default = "public-read"
+}
+variable "vb" {
+  default = "private"
+}
+locals {
+  t = true
+  a = "public-read"
+  b = "private"
+}
+"""
+
+
+def _callers_of_child(root: Path, child: str, values: list[str], preamble: str = ROOT_VARS) -> None:
+    (root / "child").mkdir(parents=True)
+    (root / "child" / "main.tf").write_text(child)
+    (root / "main.tf").write_text(
+        preamble
+        + "".join(
+            f'module "m{i}" {{\n  source = "./child"\n  v = {v}\n}}\n' for i, v in enumerate(values)
+        )
+    )
+
+
+def _in_process_ids(root: Path, rule: str) -> bool:
+    files = {p.resolve(): p.read_text() for p in root.rglob("*.tf")}
+    scan = detect._file_scanner(files, [CATALOG[rule]])
+    return any(f["id"] == rule for fp, text in files.items() for f in scan(fp, text, [CATALOG[rule]]))
+
+
+@pytest.mark.parametrize("value", FOLDED)
+@pytest.mark.parametrize("order", ["ref_first", "ref_last"])
+def test_a_folded_value_beside_a_reference_is_scanned(value, order, path_mode, tmp_path) -> None:
+    values = [REF_CALLER, value] if order == "ref_first" else [value, REF_CALLER]
+    _callers_of_child(tmp_path, 'variable "v" {}\n' + ACL % "var.v", values)
+    assert _in_process_ids(tmp_path, ACL_RULE)
+
+
+def test_conditional_on_a_list_beside_a_reference(path_mode, tmp_path) -> None:
+    preamble = 'locals {\n  t  = true\n  cl = ["0.0.0.0/0"]\n}\n'
+    _callers_of_child(
+        tmp_path, 'variable "v" {}\n' + SG % "var.v", [REF_CALLER, "local.t ? local.cl : []"], preamble,
+    )
+    assert _in_process_ids(tmp_path, SG_RULE)
+
+
+@pytest.mark.parametrize("swap", [False, True])
+def test_conditionals_do_not_merge_with_each_other(swap, path_mode, tmp_path) -> None:
+    preamble = 'locals {\n  pub = true\n  a   = "public-read"\n  b   = "private"\n}\n'
+    values = ["local.pub ? local.b : local.a", "local.pub ? local.a : local.b"]
+    _callers_of_child(tmp_path, 'variable "v" {}\n' + ACL % "var.v", values[::-1] if swap else values, preamble)
+    assert _in_process_ids(tmp_path, ACL_RULE)
+
+
+def test_issue_input_exits_one(tmp_path) -> None:
+    _callers_of_child(
+        tmp_path, 'variable "v" {}\n' + ACL % "var.v",
+        [REF_CALLER, '"${var.public ? "public-read" : "private"}"'],
+    )
+    assert ACL_RULE in _cli(tmp_path)[0]
+
+
+@pytest.mark.parametrize(
+    ("value", "regex"),
+    [
+        ("5", "^5$"),
+        ("true", "^true$"),
+        ('tomap({ class = "public" })', "public"),
+        ('{ class = "public" }', "public"),
+        ('["a", "public"]', "public"),
+    ],
+)
+def test_values_flow_through_a_real_caller(value, regex, path_mode, tmp_path) -> None:
+    entry = {
+        "id": "X-FLOW-001",
+        "patterns": [{"kind": "resource_arg", "resource": "aws_s3_bucket", "arg": "tags", "regex": regex}],
+    }
+    child = 'variable "v" {}\nresource "aws_s3_bucket" "b" {\n  bucket = "b"\n  tags   = var.v\n}\n'
+    _callers_of_child(tmp_path, child, [REF_CALLER, value], "")
+    files = {p.resolve(): p.read_text() for p in tmp_path.rglob("*.tf")}
+    scan = detect._file_scanner(files, [entry])
+    assert any(scan(fp, text, [entry]) for fp, text in files.items())
+    values = [c.get("v") for c in detect._extract_var_contexts_by_dir(files)[str(tmp_path.resolve() / "child")]]
+    assert len(values) == 2
+
+
+# ---- --cache and a limit ----------------------------------------------------------------
+
+
+def _six_callers(root: Path) -> list[str]:
+    calls = _names(6)
+    calls[5] += '\n  acl = "public-read"'
+    _shared_module(root, calls)
+    return ["--cache", "--cache-file", str(root / "c.json")]
+
+
+def test_a_partial_scan_is_not_cached(tmp_path) -> None:
+    flags = _six_callers(tmp_path)
+    _report(tmp_path, *flags, "--max-module-contexts", "1")
+    assert not (tmp_path / "c.json").exists()
+
+
+def test_a_scan_missing_only_combinations_is_not_cached(tmp_path) -> None:
+    calls = [
+        'name = "b"\n  public = true\n  acl = "private"',
+        'name = "b"\n  public = false\n  acl = "public-read"',
+        'name = "b"\n  public = true\n  acl = "public-read"',
+    ]
+    _write_callers(tmp_path, CHILD, calls)
+    cache = tmp_path / "c.json"
+    report, _, _ = _report(
+        tmp_path, "--cache", "--cache-file", str(cache), "--max-module-contexts", "2",
+    )
+    assert report["summary"]["unscanned_combinations"]
+    assert not cache.exists()
+
+
+def test_raising_the_limit_is_not_a_cache_hit(tmp_path) -> None:
+    flags = _six_callers(tmp_path)
+    report, _, _ = _report(tmp_path, *flags, "--max-module-contexts", "1")
+    assert report["summary"]["unscanned_contexts"]
+    report, _, err = _report(tmp_path, *flags, "--max-module-contexts", "100")
+    assert "cache hit" not in err
+    assert ACL_RULE in {f["id"] for f in report["findings"]}
+
+
+def test_the_limit_is_part_of_the_cache_key(tmp_path) -> None:
+    flags = _six_callers(tmp_path)
+    _report(tmp_path, *flags, "--max-module-contexts", "100")
+    assert (tmp_path / "c.json").exists()
+    assert "cache hit" in _report(tmp_path, *flags, "--max-module-contexts", "100")[2]
+    assert "cache hit" not in _report(tmp_path, *flags, "--max-module-contexts", "50")[2]
+
+
+# ---- verify-fixed below a cut module -------------------------------------------------------
+
+MID = """variable "acl" {
+  default = "private"
+}
+variable "public" {
+  default = false
+}
+module "l" {
+  source = "../leaf"
+  acl    = var.public ? var.acl : "private"
+}
+"""
+LEAF = 'variable "acl" {}\n' + ACL % "var.acl"
+BAD_CALLER = 'module "z" {\n  source = "./mid"\n  acl    = "public-read"\n  public = true\n}\n'
+
+
+def _nested_verify(root: Path, callers: str, limit: str) -> dict:
+    target = root / "tf"
+    (target / "mid").mkdir(parents=True)
+    (target / "leaf").mkdir()
+    (target / "mid" / "main.tf").write_text(MID)
+    (target / "leaf" / "main.tf").write_text(LEAF)
+    (target / "main.tf").write_text(BAD_CALLER)
+    prior = root / "prior.json"
+    prior.write_text(json.dumps(_report(target, "--no-suppress")[0]))
+    (target / "main.tf").write_text(callers + BAD_CALLER)
+    env = {k: v for k, v in os.environ.items() if k != "TF_ANALYZE_TEST_FORCE_FALLBACK"}
+    out = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "detect.py"), "--target", str(target),
+         "--mode", "verify-fixed", "--prior-report", str(prior), "--format", "json",
+         "--max-module-contexts", limit],
+        capture_output=True, text=True, check=False, env=env,
+    )
+    return json.loads(out.stdout)["results"]
+
+
+def test_verify_fixed_covers_a_module_below_one_cut_for_a_combination(tmp_path) -> None:
+    callers = (
+        'module "x" {\n  source = "./mid"\n  acl    = "public-read"\n  public = false\n}\n'
+        'module "y" {\n  source = "./mid"\n  acl    = "private"\n  public = true\n}\n'
+    )
+    results = _nested_verify(tmp_path, callers, "2")
+    assert ACL_RULE not in {f["id"] for f in results["RESOLVED"]}
+    assert ACL_RULE in {f["id"] for f in results["UNREADABLE"]}
+
+
+def test_verify_fixed_covers_a_module_below_one_cut_for_a_value(tmp_path) -> None:
+    callers = "".join(
+        f'module "m{i}" {{\n  source = "./mid"\n  acl    = "a{i}"\n  public = true\n}}\n'
+        for i in range(5)
+    )
+    results = _nested_verify(tmp_path, callers, "1")
+    assert ACL_RULE not in {f["id"] for f in results["RESOLVED"]}
+
+
+# ---- merge() is one object ------------------------------------------------------------------
+
+LOCAL_DENY = 'locals {\n  deny = { Effect = "Deny" }\n  allow = { Effect = "Allow" }\n}\n'
+
+
+@pytest.mark.parametrize(
+    ("statement", "fires"),
+    [
+        ('merge(local.deny, { Action = "*", Resource = "*" })', False),
+        ('merge(local.allow, { Action = "*", Resource = "*" })', True),
+        ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, { Effect = "Deny" })', False),
+        ('merge({ Effect = "Deny", Action = "*", Resource = "*" }, { Effect = "Allow" })', True),
+        ('merge({ Effect = "Allow" }, { Action = "*", Resource = "*" })', True),
+        ('merge({ Action = "*", Resource = "*" }, { Effect = "Deny" })', False),
+        ('merge(merge({ Effect = "Deny" }, { Action = "*" }), { Resource = "*" })', False),
+        ('merge(var.x, { Effect = "Allow", Action = "*", Resource = "*" })', True),
+    ],
+)
+def test_merge_is_one_statement(statement, fires, path_mode, tmp_path) -> None:
+    text = LOCAL_DENY + POLICY % f"jsonencode({{ Statement = [{statement}] }})"
+    fp = tmp_path / "main.tf"
+    fp.write_text(text)
+    vd = detect._extract_var_defaults_by_dir({str(fp): text})[str(tmp_path)]
+    assert _fires(text, ADMIN_RULE, tmp_path, vd) is fires
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        'merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x)',
+        'merge(local.unknown, { Action = "*", Resource = "*" })',
+        'merge({ Action = "*", Resource = "*" }, var.x)',
+    ],
+)
+def test_unknown_effect_warns_and_does_not_fire(statement, path_mode, tmp_path, capsys) -> None:
+    text = POLICY % f"jsonencode({{ Statement = [{statement}] }})"
+    assert not _fires(text, ADMIN_RULE, tmp_path)
+    assert "policy could not be decoded" in capsys.readouterr().err
+
+
+def test_call_arguments() -> None:
+    assert _iam_policy._call_arguments('{"a": "x,y"}, f(1, 2), [3, 4]') == [
+        '{"a": "x,y"}', " f(1, 2)", " [3, 4]",
+    ]
+
+
+def test_a_merge_of_nothing_written_out_stays_quiet(tmp_path, capsys) -> None:
+    assert not _fires(POLICY % "jsonencode(merge(var.a, var.b))", ADMIN_RULE, tmp_path)
+    assert "could not be decoded" not in capsys.readouterr().err
