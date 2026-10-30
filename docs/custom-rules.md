@@ -123,6 +123,13 @@ values a person has to replace, such as tag owners or project names.
 The snippet is still shown in reports and PR comments, but
 `--apply-fixes` (and so the auto-remediation bot) never pastes it.
 
+`--apply-fixes` also refuses, per module, a snippet that references
+something the module does not declare (`aws_kms_key.logs`, `var.x`) or
+holds a placeholder (`projects/example/...`, `203.0.113.0/24`), and lists it
+for the user. Keep `fix_disruption: none` for a fix that needs neither:
+the bot applies that tier unattended. A fix that needs another resource
+is `plan_required` at least.
+
 ## Pattern kinds
 
 The most useful kinds for custom rules:

@@ -701,7 +701,9 @@ runs:
 
           const byLoc = new Map();
           for (const f of findings) {
-            if (!f.fix_hcl) { skipReasons.no_fix_hcl++; continue; }
+            // `fix_manual_reason`: the fix can't be taken as it stands (see
+            // annotate_fix_blockers), so it gets no Apply-suggestion button.
+            if (!f.fix_hcl || f.fix_manual_reason) { skipReasons.no_fix_hcl++; continue; }
             if (f.line == null) { skipReasons.no_line++; continue; }
             const key = `${f.file}:${f.line}:${f.id}`;
             const existing = byLoc.get(key);

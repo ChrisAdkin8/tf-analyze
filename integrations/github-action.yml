@@ -307,7 +307,8 @@ jobs:
             // Deduplicate: one comment per (file, line) using highest-urgency finding
             const byLocation = new Map();
             for (const f of findings) {
-              if (!f.fix_hcl) continue;
+              // `fix_manual_reason`: the fix can't be taken as it stands.
+              if (!f.fix_hcl || f.fix_manual_reason) continue;
               const key = `${f.file}:${f.line}`;
               const existing = byLocation.get(key);
               if (!existing || urgencyRank(f.urgency) > urgencyRank(existing.urgency)) {

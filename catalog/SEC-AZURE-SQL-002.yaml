@@ -73,7 +73,7 @@ fix_hcl: |
     start_ip_address = "203.0.113.10"
     end_ip_address   = "203.0.113.10"
   }
-fix_disruption: none
+fix_disruption: plan_required
 # The IP range is an example; a person picks the real allowed range.
 fix_hcl_example: true
 fixtures:

@@ -68,6 +68,6 @@ fix_hcl: |
       application_insights_connection_string = azurerm_application_insights.example.connection_string
     }
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - azure_function_no_insights

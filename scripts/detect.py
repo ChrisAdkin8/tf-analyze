@@ -2060,7 +2060,11 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
             recommendation,
         ]
         fix_hcl = (entry.get("fix_hcl") or "").strip()
-        if fix_hcl:
+        if fix_hcl and f.get("fix_manual_reason"):
+            # One click must not commit a fix that can't work as it stands.
+            body_lines += ["", f"**Fix needs manual work:** {_md_text(f['fix_manual_reason'])}",
+                           "", *_md_fence(fix_hcl, "hcl")]
+        elif fix_hcl:
             body_lines += ["", *_md_fence(fix_hcl, "suggestion")]
         disruption = entry.get("fix_disruption", "")
         if disruption:
@@ -2146,6 +2150,7 @@ from _apply_fixes import (
     find_block_end_in_lines as _find_block_end_in_lines,
     block_indent as _block_indent,
     handle_apply_fixes as _handle_apply_fixes,
+    annotate_fix_blockers,
 )
 
 
@@ -2175,6 +2180,7 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
         findings = detect_in_file(
             path, text, entries, var_defaults.get(str(target_dir), {}),
         )
+        annotate_fix_blockers(findings, entries)
         # A file the HCL parser can't read is still scanned (regex
         # fallback); tell the user once, as an Information diagnostic.
         _parse_error = parse_tf(text)[1] if path.suffix == ".tf" else None
@@ -2317,6 +2323,7 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     # finding that wasn't escalated, so it passed a CRITICAL.
     _enrich_findings_for_output(all_findings, entries)
     _enrich_findings_for_output(fleet_result["fleet_wide"], entries)
+    annotate_fix_blockers(all_findings, entries)
     # SARIF, HTML and the PR summary render every target's findings with
     # the static scan's renderers; they all used to emit the Markdown
     # fleet report, which code scanning rejects and a browser shows as text.
@@ -3762,7 +3769,10 @@ def _add_fix_args(ap: argparse.ArgumentParser) -> None:
             "'dry-run' prints a unified diff to stdout without writing files. "
             "'apply' writes the patched files to disk (creates .bak backups). "
             "Only resource_missing_arg and resource_arg/hcl_attr patterns are "
-            "patched; patterns without fix_hcl are skipped. "
+            "patched; patterns without fix_hcl are skipped. A fix that names "
+            "a resource, variable, local or module the file's module does not "
+            "declare, or holds a placeholder value, is never pasted: every fix "
+            "left undone is listed on stderr with its reason. "
             "Always review dry-run output before applying. "
             "'apply' exits 0 after patching and does not apply --fail-on: "
             "re-run the scan to gate on what is left."
@@ -4189,6 +4199,7 @@ def _main():
     # narratives, fix snippets, and MITRE tags without re-loading the
     # catalogue themselves.
     _enrich_findings_for_output(findings, entries)
+    annotate_fix_blockers(findings, entries)
 
     # Baseline mode: filter findings against a prior snapshot before
     # everything downstream (output, exit-code, attack-graph). Suppressed

@@ -79,6 +79,7 @@ fix_hcl: |
       }
     }
   }
-fix_disruption: none
+fix_hcl_example: true
+fix_disruption: plan_required
 fixtures:
   - azure_webapp_public

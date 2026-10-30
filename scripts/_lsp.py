@@ -338,7 +338,7 @@ def run_lsp_server(
                         continue
                     entry = id_map.get(f["id"], {})
                     fix_hcl = entry.get("fix_hcl")
-                    if not fix_hcl:
+                    if not fix_hcl or f.get("fix_manual_reason"):
                         continue
                     actions.append({
                         "title": f"tf-analyze fix: {f['id']}",

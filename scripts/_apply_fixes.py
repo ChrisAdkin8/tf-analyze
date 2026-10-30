@@ -18,10 +18,15 @@ pipeline:
   that opens at index ``start``.
 * :func:`block_indent` — detect the indentation string used by
   attributes inside an HCL block.
+* :func:`fix_blocker` — why a snippet must not be pasted into a module:
+  it names something the module does not declare, or holds a placeholder.
+  :func:`annotate_fix_blockers` records that on findings, for the paths
+  that offer a fix as one click (PR suggestions, editor quick fixes).
 * :func:`handle_apply_fixes` — top-level driver. Groups fixable
   findings by file, processes in reverse line order so later
   insertions don't shift earlier positions, writes ``.bak`` backups
-  before mutating on disk (unless ``dry_run``).
+  before mutating on disk (unless ``dry_run``), and lists what it left
+  for a person.
 
 Extracted from ``detect.py`` as the **fourteenth modularisation seam**.
 Pure-functional except for ``handle_apply_fixes``, which is the only
@@ -37,7 +42,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from _hcl import _string_end, brace_walk, mask_comments_and_heredocs
+from _hcl import _read_normalized, _string_end, brace_walk, mask_comments_and_heredocs
+from _tfjson import is_tf_source, read_tf_source
 
 
 def fix_hcl_body(fix_hcl: str) -> str:
@@ -270,6 +276,168 @@ def _value_end_line(lines: list[str], code: list[str], li: int) -> int:
     return li
 
 
+# ---- What a fix may not paste -------------------------------------------------
+
+_DECL_RE = re.compile(
+    r'(?m)^[ \t]*(?:(resource|data)[ \t]+"([\w-]+)"[ \t]+"([\w-]+)"'
+    r'|(variable|module)[ \t]+"([\w-]+)")'
+)
+_LOCALS_RE = re.compile(r'(?m)^[ \t]*locals\s*\{')
+_LOCAL_NAME_RE = re.compile(r'^\s*([\w-]+)\s*=')
+
+# What an expression can reference. A resource type always holds a `_`,
+# which keeps out `each.key`, `count.index`, `path.module`, `self.id`.
+_REFERENCE_RE = re.compile(
+    r'(?<![\w.-])(?:(var|local|module)\.([\w-]+)'
+    r'|data\.([\w-]+)\.([\w-]+)'
+    r'|([a-z][a-z0-9]*_[\w-]*)\.([A-Za-z_][\w-]*))'
+)
+_INTERPOLATION_RE = re.compile(r'(?<!\$)\$\{([^}]*)\}')
+_STRING_RE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+_BLOCK_HEADER_RE = re.compile(r'(?m)^[ \t]*(?:resource|data|module|variable|output|provider)[ \t]+".*$')
+
+# A value that stands in for one the user has to supply: the word `example`
+# as a path or name segment (`projects/example/...`), the IP ranges kept for
+# documentation (RFC 5737), and the usual fill-me-in markers.
+_PLACEHOLDER_RE = re.compile(
+    r'(?i)(?<![a-z0-9])example(?![a-z0-9])'
+    r'|\b(?:192\.0\.2|198\.51\.100|203\.0\.113)\.'
+    r'|(?<![a-z0-9])(?:change|replace)[-_]?me(?![a-z0-9])'
+    r'|(?<![a-z0-9])your[-_]'
+    r'|<[^<>${}]+>|\bTODO\b|\bx{4,}\b|\b(?:123456789012|0{12})\b|\b0{8}-0{4}-'
+)
+
+_EXAMPLE_REASON = "its values are examples: choose your own"
+
+
+def declared_names(text: str) -> set[str]:
+    """Everything `text` (HCL) declares, as references spell it:
+    ``aws_kms_key.logs``, ``data.aws_ami.a``, ``var.x``, ``local.y``,
+    ``module.z``. Comments and heredocs do not declare anything."""
+    code = mask_comments_and_heredocs(text)
+    names: set[str] = set()
+    for m in _DECL_RE.finditer(code):
+        kind, rtype, rname, single, sname = m.groups()
+        if kind:
+            names.add(f"{'data.' if kind == 'data' else ''}{rtype}.{rname}")
+        else:
+            names.add(f"{'var' if single == 'variable' else 'module'}.{sname}")
+    for m in _LOCALS_RE.finditer(code):
+        end = brace_walk(code, m.end() - 1)
+        if end is None:
+            continue
+        depth = 0
+        for line in code_lines(code[m.end():end - 1].splitlines(keepends=True)):
+            name = _LOCAL_NAME_RE.match(line) if depth == 0 else None
+            if name:
+                names.add(f"local.{name.group(1)}")
+            depth += sum(line.count(c) for c in "[{(") - sum(line.count(c) for c in "]})")
+    return names
+
+
+def module_declarations(directory: Path) -> set[str]:
+    """`declared_names` of a Terraform module: every source file directly
+    in `directory`. A file that can't be read declares nothing, which can
+    only hold a fix back."""
+    names: set[str] = set()
+    try:
+        files = sorted(p for p in directory.iterdir() if p.is_file() and is_tf_source(p))
+    except OSError:
+        return names
+    for path in files:
+        try:
+            names |= declared_names(read_tf_source(path, _read_normalized))
+        except (OSError, ValueError):
+            continue
+    return names
+
+
+def undeclared_references(snippet: str, declared: set[str]) -> list[str]:
+    """What `snippet` references, in its expressions and in ``${...}`` in
+    its strings, that is declared neither in `declared` nor by `snippet`
+    itself. Plain string contents are not expressions."""
+    text = "".join(code_lines(snippet.splitlines(keepends=True)))
+    text += " " + " ".join(_INTERPOLATION_RE.findall(mask_comments_and_heredocs(snippet)))
+    known = declared | declared_names(snippet)
+    found: dict[str, None] = {}
+    for m in _REFERENCE_RE.finditer(text):
+        prefix, name, dtype, dname, rtype, rname = m.groups()
+        if prefix:
+            ref = f"{prefix}.{name}"
+        elif dtype:
+            ref = f"data.{dtype}.{dname}"
+        else:
+            ref = f"{rtype}.{rname}"
+        if ref not in known:
+            found[ref] = None
+    return list(found)
+
+
+def placeholder_values(snippet: str) -> list[str]:
+    """String values in `snippet` that stand in for a real one. A block's
+    labels (``resource "aws_x" "example"``) are names, not values."""
+    code = _BLOCK_HEADER_RE.sub("", mask_comments_and_heredocs(snippet))
+    return [m.group(1) for m in _STRING_RE.finditer(code) if _PLACEHOLDER_RE.search(m.group(1))]
+
+
+def fix_blocker(snippet: str, declared: set[str]) -> str | None:
+    """Why `snippet` must not go into a module declaring `declared`, or
+    None. Terraform rejects a reference to something undeclared, and a
+    made-up value is not a fix even when it validates."""
+    missing = undeclared_references(snippet, declared)
+    if missing:
+        return f"references {', '.join(missing)}, not declared in this module"
+    placeholders = placeholder_values(snippet)
+    if placeholders:
+        return f"holds the placeholder value {placeholders[0]!r}: use a real one"
+    return None
+
+
+def _scope_of(path: Path, cache: dict) -> set[str]:
+    """`module_declarations` of the folder `path` is in (or is), once."""
+    folder = path if path.is_dir() else path.parent
+    if folder not in cache:
+        cache[folder] = module_declarations(folder)
+    return cache[folder]
+
+
+def annotate_fix_blockers(findings: list[dict], entries: list[dict]) -> None:
+    """Set ``fix_manual_reason`` on each finding whose `fix_hcl` can't be
+    taken as it stands in its module. Every path that offers a fix as one
+    click (the PR suggestions of ``--mode pr-review``, the GitHub Action
+    and its template, the editor's quick fix) reads it and shows the fix
+    as advice instead."""
+    entry_map = {e["id"]: e for e in entries}
+    cache: dict = {}
+    reasons: dict[tuple, str | None] = {}
+    for f in findings:
+        entry = entry_map.get(f["id"]) or {}
+        fix = entry.get("fix_hcl")
+        if not fix:
+            continue
+        path = Path(str(f.get("file", "")))
+        key = (f["id"], path.parent)
+        if key not in reasons:
+            reasons[key] = (
+                _EXAMPLE_REASON if entry.get("fix_hcl_example")
+                else fix_blocker(fix, _scope_of(path, cache))
+            )
+        if reasons[key]:
+            f["fix_manual_reason"] = reasons[key]
+
+
+def _nested_in_fix(fix_hcl: str, arg: str) -> bool:
+    """Whether `arg` sits inside a nested block of the snippet. Its line
+    means nothing at the top of the resource: Athena's `encryption_option`
+    pasted there is "Unsupported argument"."""
+    body = fix_hcl_body(fix_hcl)
+    start = re.search(rf'(?m)^\s*{re.escape(arg)}\s*[={{]', body)
+    if not start:
+        return False
+    code = "".join(code_lines(body[:start.start()].splitlines(keepends=True)))
+    return sum(code.count(c) for c in "[{(") > sum(code.count(c) for c in "]})")
+
+
 def _write_atomic(path: Path, text: str) -> None:
     """Write `text` to `path` as UTF-8 through a temporary file in the same
     directory and `os.replace`, keeping the file's permissions. An
@@ -359,14 +527,18 @@ def _split_inline_block(lines: list[str], start: int, eol: str) -> None:
 
 def _apply_pattern(
     modified: list[str], start_idx: int, kind: str, arg: str, fix_hcl: str, eol: str,
+    vet=None,
 ) -> bool:
     """Apply one pattern's fix to the resource block opening at
     `start_idx`, editing `modified` in place. True if it changed it. An
     inline block is split onto its own lines first (`_split_inline_block`),
-    and kept split only when the fix then changes it."""
+    and kept split only when the fix then changes it.
+
+    `vet(snippet, nested)` sees the exact text about to go in, and returns
+    False to refuse it; `nested` says it belongs in a nested block."""
     trial = modified[:]
     _split_inline_block(trial, start_idx, eol)
-    if not _apply_pattern_to_block(trial, start_idx, kind, arg, fix_hcl, eol):
+    if not _apply_pattern_to_block(trial, start_idx, kind, arg, fix_hcl, eol, vet):
         return False
     modified[:] = trial
     return True
@@ -374,6 +546,7 @@ def _apply_pattern(
 
 def _apply_pattern_to_block(
     modified: list[str], start_idx: int, kind: str, arg: str, fix_hcl: str, eol: str,
+    vet=None,
 ) -> bool:
     """`_apply_pattern` for a block whose braces are on their own lines."""
     block_end = find_block_end_in_lines(modified, start_idx)
@@ -388,13 +561,14 @@ def _apply_pattern_to_block(
             return False
         indent = block_indent(modified, start_idx, block_end)
         raw = fix_line_for_arg(fix_hcl, arg) or fix_block_for_nested_arg(fix_hcl, arg)
-        if not raw:
+        nested = bool(raw) and _nested_in_fix(fix_hcl, arg)
+        if not raw or (vet and not vet(raw, nested)) or nested:
             return False
         modified[block_end:block_end] = reindent_fix_snippet(raw, indent, eol, unit=indent)
         return True
     if kind in ("resource_arg", "hcl_attr") and arg:
         fix_line = fix_line_for_arg(fix_hcl, arg)
-        if not fix_line:
+        if not fix_line or (vet and not vet(fix_line, False)):
             return False
         # Prefer the resource's own (depth-1) attribute so a same-named
         # key inside a nested block isn't clobbered. Fall back to the
@@ -457,10 +631,17 @@ def handle_apply_fixes(
     it's the stripped-down patch snippet without the surrounding
     resource declaration, which makes the regex-based insert/replace
     below more reliable on complex rules.
+
+    A snippet goes in only if `fix_blocker` passes it for the file's own
+    module. Everything left undone is reported, one
+    ``# apply-fixes: manual: ...`` line each with its reason, so the
+    "applied N" count is what really happened and the rest can be picked up
+    by hand. That goes for ``dry_run`` too.
     """
     entry_map = {e["id"]: e for e in entries}
     roots = [Path(t) for t in getattr(args, "targets", None) or []]
 
+    manual: list[tuple[dict, str]] = []
     by_file: dict[str, list[dict]] = {}
     for f in findings:
         fp = f.get("file", "")
@@ -472,10 +653,13 @@ def handle_apply_fixes(
         # Example values (`fix_hcl_example: true`) need a person to choose
         # the real ones; pasting `Owner = "platform-team"` is not a fix.
         if entry.get("fix_hcl_example"):
+            manual.append((f, _EXAMPLE_REASON))
             continue
         by_file.setdefault(fp, []).append(f)
 
     total_applied = 0
+    files_changed = 0
+    scopes: dict = {}
 
     for file_path in sorted(by_file):
         path = Path(file_path)
@@ -486,14 +670,19 @@ def handle_apply_fixes(
         # file. exists() returned True for those and we'd fall through
         # to open(), which then raised IsADirectoryError.
         if not path.is_file():
+            manual.extend((f, "no file to patch: the fix is a new resource")
+                          for f in by_file[file_path])
             continue
         # A `.tf.json` file is scanned as rendered HCL; an HCL fix snippet
         # cannot be spliced into JSON, so it is reported but not patched.
         if path.name.endswith(".tf.json"):
+            manual.extend((f, "HCL fixes can't be patched into JSON syntax")
+                          for f in by_file[file_path])
             continue
         unsafe = _unsafe_write_reason(path, roots)
         if unsafe:
             print(f"WARN: apply-fixes: skipping {file_path}: {unsafe}", file=sys.stderr)
+            manual.extend((f, unsafe) for f in by_file[file_path])
             continue
 
         # Terraform source is UTF-8; the locale's encoding (cp1252 on
@@ -503,7 +692,9 @@ def handle_apply_fixes(
                 original_lines = fh.readlines()
         except UnicodeDecodeError:
             print(f"WARN: apply-fixes: skipping {file_path}: not UTF-8", file=sys.stderr)
+            manual.extend((f, "file is not UTF-8") for f in by_file[file_path])
             continue
+        scope = _scope_of(path, scopes)
         modified = original_lines[:]
         crlf = sum(line.endswith("\r\n") for line in original_lines)
         eol = "\r\n" if crlf * 2 > len(original_lines) else "\n"
@@ -527,6 +718,7 @@ def handle_apply_fixes(
                 if pat.get("resource", "") == resource_type
             ]
             if not patterns:
+                manual.append((finding, "no automatic patch for this check"))
                 continue
 
             # `line` is the resource keyword's line; the opening `{` can
@@ -541,18 +733,41 @@ def handle_apply_fixes(
             # next resource, when finding.line pointed at a preceding blank
             # line). Only vetoes a clear resource-address mismatch.
             if not _line_opens_finding_resource(modified[start_idx], resource_addr):
+                manual.append((finding, "could not locate the resource block"))
                 continue
+
+            refused: list[str] = []
+
+            def vet(snippet: str, nested: bool) -> bool:
+                reason = ("it belongs in a nested block: add it by hand" if nested
+                          else fix_blocker(snippet, scope))
+                if reason:
+                    refused.append(reason)
+                return reason is None
 
             for pat in patterns:
                 if _apply_pattern(
                     modified, start_idx, pat.get("kind", ""), pat.get("arg", ""),
-                    fix_hcl, eol,
+                    fix_hcl, eol, vet,
                 ):
                     total_applied += 1
                     break
+            else:
+                # Another rule's fix in this run may have added the same
+                # argument: that one is done, not left over.
+                block_end = find_block_end_in_lines(modified, start_idx)
+                done = block_end is not None and any(
+                    pat.get("kind") == "resource_missing_arg" and pat.get("arg")
+                    and _block_has_top_level_arg(modified, start_idx, block_end, pat["arg"])
+                    for pat in patterns
+                )
+                if not done:
+                    manual.append((finding, refused[0] if refused
+                                   else "no automatic patch for this check"))
 
         if modified == original_lines:
             continue
+        files_changed += 1
 
         if dry_run:
             # Lines keep their own endings, so the default lineterm gives
@@ -573,6 +788,15 @@ def handle_apply_fixes(
 
     action = "would apply" if dry_run else "applied"
     print(
-        f"# apply-fixes: {action} {total_applied} fix(es) across {len(by_file)} file(s)",
+        f"# apply-fixes: {action} {total_applied} fix(es) across {files_changed} file(s)",
         file=sys.stderr,
     )
+    if manual:
+        print(f"# apply-fixes: {len(manual)} fix(es) left for you to do by hand:",
+              file=sys.stderr)
+    for f, reason in manual:
+        print(
+            f"# apply-fixes: manual: {f['id']} {f.get('file', '')}:{f.get('line', 0)} "
+            f"{f.get('resource', '')}: {reason}",
+            file=sys.stderr,
+        )

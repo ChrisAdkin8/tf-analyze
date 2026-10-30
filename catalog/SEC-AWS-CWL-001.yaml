@@ -51,6 +51,6 @@ fix_hcl: |
     retention_in_days = 90
     kms_key_id        = aws_kms_key.logs.arn
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - aws_cwl_no_kms

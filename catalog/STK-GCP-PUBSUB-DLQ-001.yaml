@@ -48,6 +48,6 @@ fix_hcl: |
       max_delivery_attempts = 5
     }
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - gcp_pubsub_no_dlq

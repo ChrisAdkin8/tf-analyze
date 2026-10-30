@@ -47,7 +47,7 @@ on:
 
 A rule is bot-eligible when:
 1. Its catalogue entry has a `fix_hcl` (or `fix_hcl_minimal`) snippet that can be applied via the engine's regex-based patcher.
-2. Its `fix_disruption` field is `none` (or `≤ max-disruption` input).
+2. Its `fix_disruption` field is `none` (or `≤ max-disruption` input). A fix that references something your module doesn't declare, or holds a placeholder value, is never applied: the PR body lists it under **Needs manual work**.
 3. The detection produced enough context (file + line) to anchor the patch.
 
 Today that's roughly **174 of 353 active rules**. Every fix the bot applies is also documented at the per-rule docs site (`chrisadkin8.github.io/tf-analyze/rules/<RULE-ID>/`) so reviewers can read the rationale before approving.
