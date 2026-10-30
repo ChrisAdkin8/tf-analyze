@@ -62,6 +62,7 @@ _STATEMENT_KEYS = frozenset({
     "Effect", "Action", "NotAction", "Resource", "NotResource", "Principal", "NotPrincipal",
 })
 _EFFECT_UNKNOWN_KEY = "__effect_unknown__"
+_OBJECTS_CUT_KEY = "__objects_cut__"
 _POLICY_FIELD_RE = re.compile(r'\b(?:Statement|Effect)"?\s*[=:]')
 # A pathological expression can't turn into one parse per brace for ever.
 _MAX_OBJECTS_TRIED = 1000
@@ -334,9 +335,12 @@ def _call_arguments(text: str) -> list[str]:
 def _merged_object(args: list[str], var_defaults: dict | None) -> dict:
     """What ``merge(...)`` of `args` gives: the objects in order, a later
     key winning, as Terraform does; `var.X` / `local.X` are resolved where
-    known. An argument still unknown could set any key, so unless a later
-    object sets it, ``Effect`` is unknown (`_EFFECT_UNKNOWN_KEY`)."""
+    known. An ``Effect`` written out stands unless a later known object
+    overrides it: an unknown argument never removes one, or a written-out
+    admin statement would pass. Only when no argument gives one is it
+    unknown (`_EFFECT_UNKNOWN_KEY`)."""
     merged: dict = {}
+    unresolved = False
     for arg in args:
         expr = unwrap_value(resolve_value_text(arg.strip(), var_defaults or {}))
         call = _MERGE_CALL_RE.match(expr)
@@ -347,11 +351,11 @@ def _merged_object(args: list[str], var_defaults: dict | None) -> dict:
         else:
             obj = None
         if isinstance(obj, dict):
-            if "Effect" in obj:
-                merged.pop(_EFFECT_UNKNOWN_KEY, None)
             merged.update(obj)
         else:
-            merged[_EFFECT_UNKNOWN_KEY] = True
+            unresolved = True
+    if unresolved and "Effect" not in merged:
+        merged[_EFFECT_UNKNOWN_KEY] = True
     return merged
 
 
@@ -360,7 +364,8 @@ def _embedded_statements(text: str, var_defaults: dict | None = None) -> list[di
     ``{...}`` that reads as an object, whatever surrounds it, and each
     ``merge(...)`` taken as one object (`_merged_object`). One that is a
     whole document counts for its statements. An object that doesn't read
-    is looked into, for those inside it."""
+    is looked into, for those inside it. Past `_MAX_OBJECTS_TRIED` the rest
+    goes unread, marked with an `_OBJECTS_CUT_KEY` entry."""
     out: list[dict] = []
     i, kind = _next_object(text, 0)
     tries = 0
@@ -381,6 +386,8 @@ def _embedded_statements(text: str, var_defaults: dict | None = None) -> list[di
             i, kind = _next_object(text, i + 1)
             continue
         i, kind = _next_object(text, end)
+    if i != -1:
+        out.append({_OBJECTS_CUT_KEY: True})
     return out
 
 
@@ -389,7 +396,8 @@ def _unread_statements(doc: dict, var_defaults: dict | None = None) -> bool:
     or whose effect is unknown."""
     if doc.get("__unread__"):
         return True
-    if any(_EFFECT_UNKNOWN_KEY in st for st in _statement_objects(doc.get("Statement"), var_defaults)):
+    statements = _statement_objects(doc.get("Statement"), var_defaults)
+    if any(_EFFECT_UNKNOWN_KEY in st or _OBJECTS_CUT_KEY in st for st in statements):
         return True
     raw = literal_structure(doc.get("Statement"))
     return any(
@@ -405,6 +413,8 @@ def json_statements(doc: dict, var_defaults: dict | None = None) -> list[Stateme
     statement is built from."""
     out: list[Statement] = []
     for st in _statement_objects(doc.get("Statement"), var_defaults):
+        if _OBJECTS_CUT_KEY in st:
+            continue
         principal = literal_structure(st.get("Principal"))
         if isinstance(principal, dict):
             principals = [v for vals in principal.values() for v in _strings(vals)]

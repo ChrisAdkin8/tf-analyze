@@ -1499,6 +1499,11 @@ LOCAL_DENY = 'locals {\n  deny = { Effect = "Deny" }\n  allow = { Effect = "Allo
         ('merge({ Action = "*", Resource = "*" }, { Effect = "Deny" })', False),
         ('merge(merge({ Effect = "Deny" }, { Action = "*" }), { Resource = "*" })', False),
         ('merge(var.x, { Effect = "Allow", Action = "*", Resource = "*" })', True),
+        ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x)', True),
+        ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x, local.other)', True),
+        ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x, { Effect = "Deny" })', False),
+        ('merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x)', False),
+        ('merge(local.deny, var.x, { Action = "*", Resource = "*" })', False),
     ],
 )
 def test_merge_is_one_statement(statement, fires, path_mode, tmp_path) -> None:
@@ -1512,7 +1517,6 @@ def test_merge_is_one_statement(statement, fires, path_mode, tmp_path) -> None:
 @pytest.mark.parametrize(
     "statement",
     [
-        'merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x)',
         'merge(local.unknown, { Action = "*", Resource = "*" })',
         'merge({ Action = "*", Resource = "*" }, var.x)',
     ],
@@ -1532,3 +1536,28 @@ def test_call_arguments() -> None:
 def test_a_merge_of_nothing_written_out_stays_quiet(tmp_path, capsys) -> None:
     assert not _fires(POLICY % "jsonencode(merge(var.a, var.b))", ADMIN_RULE, tmp_path)
     assert "could not be decoded" not in capsys.readouterr().err
+
+
+def test_a_written_out_deny_merged_with_an_unknown_gives_no_warning(tmp_path, capsys) -> None:
+    text = POLICY % 'jsonencode({ Statement = [merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x)] })'
+    assert not _fires(text, ADMIN_RULE, tmp_path)
+    assert "could not be decoded" not in capsys.readouterr().err
+
+
+def test_hitting_the_object_limit_warns(path_mode, tmp_path, capsys) -> None:
+    empties = ",".join(["{}"] * 1100)
+    statements = f'concat([{empties}],[{{ Effect = "Allow", Action = "*", Resource = "*" }}])'
+    _fires(POLICY % f"jsonencode({{ Statement = {statements} }})", ADMIN_RULE, tmp_path)
+    assert "policy could not be decoded" in capsys.readouterr().err
+
+
+def test_under_the_object_limit_does_not_warn(tmp_path, capsys) -> None:
+    empties = ",".join(["{}"] * 900)
+    statements = f'concat([{empties}],[{{ Effect = "Allow", Action = "*", Resource = "*" }}])'
+    assert _fires(POLICY % f"jsonencode({{ Statement = {statements} }})", ADMIN_RULE, tmp_path)
+    assert "could not be decoded" not in capsys.readouterr().err
+
+
+def test_the_limit_marker_is_not_a_statement() -> None:
+    doc = {"Statement": [{"__objects_cut__": True}, {"Effect": "Allow", "Action": "*"}]}
+    assert len(_iam_policy.json_statements(doc)) == 1
