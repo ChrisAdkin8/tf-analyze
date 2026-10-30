@@ -42,7 +42,7 @@ Execution mode. fleet: multi-repo scan. trend: risk trajectory over git history.
 
 ### `--prior-report PRIOR_REPORT`
 
-Report to verify (for --mode verify-fixed): a markdown report, or this CLI's --format json / text output. If omitted, picks the most recent tf-analysis-*.md under reports/. Exits 1 under --fail-on when a STILL-PRESENT or MOVED finding meets the threshold.
+Report to verify (for --mode verify-fixed): a markdown report, or this CLI's --format json / text output. If omitted, picks the most recent tf-analysis-*.md under reports/. Exits 1 under --fail-on when a finding not shown to be gone (STILL-PRESENT, MOVED, or one that could not be re-checked, such as UNVERIFIABLE) meets the threshold, or a row of the report can't be read. Exits 2 on a report with no rows that doesn't state it found nothing.
 
 ### `--diff-base DIFF_BASE`
 
@@ -50,7 +50,7 @@ Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files and
 
 ### `--plan-json PATH`
 
-Path to `terraform show -json plan.tfplan` output. When supplied, the catalogue's resource_arg / resource_missing_arg / resource_present / hcl_attr / data_source_present rules are re-evaluated against resolved values from the plan. Static findings still run; plan findings are tagged with mode='plan' so the report can disambiguate. Required for catching variable-resolved violations (e.g. tfvars setting an IAM role to a forbidden value).
+Path to `terraform show -json plan.tfplan` output. When supplied, the catalogue's resource_arg / resource_missing_arg / resource_present / hcl_attr / data_source_present rules are re-evaluated against resolved values from the plan. Static findings still run; plan findings are tagged with mode='plan' so the report can disambiguate. With no source files more rules read the plan's values, the rest cannot run, and the report says how many (summary.coverage). Required for catching variable-resolved violations (e.g. tfvars setting an IAM role to a forbidden value).
 
 
 ## Filtering
@@ -156,6 +156,10 @@ Write report output to PATH instead of stdout. The file is created or overwritte
 
 When a catalogue entry carries a `fix_hcl` snippet, render it alongside each finding. HTML: syntax-highlighted block inside the finding detail. Text: indented snippet below the finding line.
 
+### `--fix-suggestions`
+
+Add fix_suggestion to JSON findings: the text that may replace the finding's line as a one-click PR suggestion. Tries the patcher per finding, so it is off unless something will paste the result. --mode pr-review always does this.
+
 ### `--show-info`
 
 Include INFO-tier findings (advisory; e.g. module-reuse suggestions) in output. Default off — INFO findings are counted in the summary but not rendered.
@@ -250,7 +254,7 @@ Override the cache file path used by --cache (default: a per-target file under t
 
 ### `--apply-fixes`
 
-Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. Always review dry-run output before applying. 'apply' exits 0 after patching and does not apply --fail-on: re-run the scan to gate on what is left.
+Auto-apply fix_hcl patches for fixable findings. 'dry-run' prints a unified diff to stdout without writing files. 'apply' writes the patched files to disk (creates .bak backups). Only resource_missing_arg and resource_arg/hcl_attr patterns are patched; patterns without fix_hcl are skipped. A fix that names a resource, variable, local or module the file's module does not declare, or holds a placeholder value, is never pasted: every fix left undone is listed on stderr with its reason. Always review dry-run output before applying. 'apply' exits 0 after patching and does not apply --fail-on: re-run the scan to gate on what is left.
 
 ### `--apply-fixes-max-disruption`
 

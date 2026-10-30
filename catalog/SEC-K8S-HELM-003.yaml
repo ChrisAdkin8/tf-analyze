@@ -82,6 +82,7 @@ fix_hcl: |
     verify     = true
     keyring    = "/etc/helm/keyring.gpg"
   }
+fix_hcl_example: true
 fix_disruption: plan_required
 fix_disruption_note: "Enabling `verify` and pinning `version` may fail the next apply if the keyring is missing or the chart was floating. Stage the keyring first, then bump version."
 fixtures:

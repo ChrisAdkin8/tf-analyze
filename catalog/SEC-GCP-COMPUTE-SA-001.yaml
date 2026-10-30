@@ -73,6 +73,6 @@ fix_hcl: |
       scopes = ["cloud-platform"]
     }
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - compute_default_sa

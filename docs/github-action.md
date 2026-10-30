@@ -87,7 +87,9 @@ change them for those runs, edit the fallback after `||` in the file.
   `empty_targets`, even when the other targets are clean. Fleet SARIF,
   HTML and `pr-summary` output are the real formats, over every
   target's findings. `mode: plan` is a static scan of the
-  `plan-json` input (required). `mode: trend` is refused: it is a
+  `plan-json` input (required). With no Terraform source in the target
+  it is a partial scan: `summary.coverage` and the report say how many
+  rules could not run. `mode: trend` is refused: it is a
   history table with nothing to gate. `mode: pr-review` is refused too:
   the action posts the inline suggestions itself (`post-pr-comment`). The `section` input is passed as
   `--focus`.

@@ -60,6 +60,6 @@ fix_hcl: |
       }
     }
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - aws_athena_no_encryption

@@ -51,6 +51,6 @@ fix_hcl: |
       log_analytics_workspace_id = azurerm_log_analytics_workspace.example.id
     }
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - azure_aks_no_oms

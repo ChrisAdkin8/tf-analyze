@@ -197,7 +197,10 @@ def find_latest_prior(reports_dir: Path, suffix: str = ".md") -> Path | None:
         except OSError:
             return -1.0
     candidates = sorted(
-        (p for p in reports_dir.glob(f"tf-analysis-*{suffix}") if _mtime_safe(p) >= 0),
+        # `tf-analysis-verify-*`: a verification report is not a report of
+        # findings. Picked up as one, a re-run saw nothing to verify and passed.
+        (p for p in reports_dir.glob(f"tf-analysis-*{suffix}")
+         if _mtime_safe(p) >= 0 and not p.name.startswith("tf-analysis-verify-")),
         key=_mtime_safe,
         reverse=True,
     )

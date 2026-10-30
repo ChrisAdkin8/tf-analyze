@@ -51,6 +51,7 @@ fix_hcl: |
       kms_key_name = "projects/example/locations/us-central1/keyRings/r/cryptoKeys/k"
     }
   }
+fix_hcl_example: true
 fix_disruption: forces_replacement
 fixtures:
   - gcp_spanner_no_cmek

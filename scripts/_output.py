@@ -548,12 +548,48 @@ def parse_fallback_notice(summary: dict | None) -> str:
     )
 
 
+def coverage_notice(summary: dict | None) -> str:
+    """One line saying a plan-only (or state-only) scan did not run every
+    rule, or "" for any other scan. A score on its own would read as a
+    clean bill of health. Shared by every renderer and the stderr WARN."""
+    cov = (summary or {}).get("coverage")
+    if not cov:
+        return ""
+    partly = cov.get("rules_partly_evaluated", 0)
+    return (
+        f"PARTIAL SCAN: {cov['source']} only, no Terraform source. "
+        f"{cov['rules_not_evaluated']} of {cov['rules_total']} rules were not "
+        f"evaluated ({cov['not_evaluated_critical_high']} of them CRITICAL/HIGH)"
+        + (f" and {partly} only in part" if partly else "")
+        + ". The score covers only what ran: it is not a clean bill of health."
+        + unknown_values_note(cov)
+    )
+
+
+def unknown_values_note(coverage: dict) -> str:
+    """The resources a plan could not show the rules in full, by name:
+    ``policy`` unknown until apply reads as a pass on that policy."""
+    count = coverage.get("resources_with_unknown_values", 0)
+    if not count:
+        return ""
+    named = [
+        f"{u['resource']} ({', '.join(u['arguments'])})"
+        for u in coverage.get("unknown_values", [])[:5]
+    ]
+    more = f", +{count - len(named)} more" if count > len(named) else ""
+    return (
+        f" {count} resource(s) have values the rules need that are unknown "
+        f"until apply: {', '.join(named)}{more}."
+    )
+
+
 def to_sarif(
     findings: list[dict],
     entries: list[dict],
     parse_fallback_files: list[dict] | None = None,
     *,
     source_root: Path | None = None,
+    coverage: str = "",
 ) -> dict:
     """Convert findings to SARIF v2.1.0 format with proper taxonomies.
 
@@ -563,7 +599,8 @@ def to_sarif(
 
     Files the HCL parser could not read are tool diagnostics, not results:
     each becomes a ``toolExecutionNotifications`` entry on the run's
-    invocation, so it never shows up as a code-scanning alert.
+    invocation, so it never shows up as a code-scanning alert. So does
+    `coverage` (`coverage_notice`).
     """
     rules = []
     rule_index = {}
@@ -740,7 +777,7 @@ def to_sarif(
             {"name": t["name"], "guid": t["guid"]} for t in taxonomies
         ]
         run["taxonomies"] = taxonomies
-    if parse_fallback_files:
+    if parse_fallback_files or coverage:
         run["invocations"] = [{
             "executionSuccessful": True,
             "toolExecutionNotifications": [
@@ -758,8 +795,8 @@ def to_sarif(
                         },
                     }],
                 }
-                for pf in parse_fallback_files
-            ],
+                for pf in parse_fallback_files or []
+            ] + ([{"level": "warning", "message": {"text": coverage}}] if coverage else []),
         }]
 
     return {
@@ -1137,15 +1174,19 @@ def _compliance_gap_report(
     findings: list[dict],
     entries: list[dict],
     framework: str = "cis",
+    not_evaluated: list[str] = (),
 ) -> dict:
     """Map compliance controls against fired findings; return {framework: [control_dicts]}.
 
-    Each control dict: {control, rules, status ('PASS'|'FAIL'), failed_rules}.
-    Controls with no catalogue coverage are omitted (NOT-ASSESSABLE).
+    Each control dict: {control, rules, status ('PASS'|'FAIL'|'NOT-EVALUATED'),
+    failed_rules}. Controls with no catalogue coverage are omitted
+    (NOT-ASSESSABLE). `not_evaluated` lists rules that could not run (a
+    plan-only scan): a control is not PASS while one of its rules didn't run.
 
     framework: 'cis' (default), 'pci_dss', 'soc2', or 'all' (combines all three).
     """
     fired_ids = {f["id"] for f in findings}
+    skipped_ids = set(not_evaluated)
     control_map: dict[str, dict] = {}
 
     want_cis    = framework in ("cis", "all")
@@ -1274,7 +1315,8 @@ def _compliance_gap_report(
     for item in control_map.values():
         failed = [r for r in item["rules"] if r in fired_ids]
         item["failed_rules"] = failed
-        item["status"] = "FAIL" if failed else "PASS"
+        unproven = skipped_ids.intersection(item["rules"])
+        item["status"] = "FAIL" if failed else "NOT-EVALUATED" if unproven else "PASS"
 
     by_fw: dict[str, list[dict]] = {}
     for item in control_map.values():
@@ -1491,6 +1533,7 @@ def _render_pr_summary_minimal_fallback(summary: dict, *, reason: str = "") -> s
     counts = summary.get("counts", {})
     lines = [
         f"## tf-analyze: {score} ({grade})",
+        *([f"**{coverage_notice(summary)}**"] if coverage_notice(summary) else []),
         "",
         "| Urgency | Count |",
         "|---------|------:|",
@@ -1607,10 +1650,16 @@ def _render_pr_summary_impl(
     _fallback = parse_fallback_notice(summary)
     if _fallback:
         parts.append(f"⚠️ {_fallback}")
+    _coverage = coverage_notice(summary)
+    if _coverage:
+        parts.append(f"⚠️ **{_coverage}**")
     parts.append("")
 
     if not findings:
-        parts.append("✅ Clean — no findings at default scoring tiers.")
+        parts.append(
+            "No findings in the rules that ran." if _coverage
+            else "✅ Clean — no findings at default scoring tiers."
+        )
         # Even on a clean repo, surface the attack graph if one was
         # built — the picture itself is shareable content.
         if attack_graph and attack_graph.get("edges"):
@@ -1787,9 +1836,13 @@ def _render_compliance_text(by_fw: dict) -> str:
         controls = by_fw[fw]
         total = len(controls)
         passed = sum(1 for c in controls if c["status"] == "PASS")
-        failed = total - passed
+        failed = sum(1 for c in controls if c["status"] == "FAIL")
+        unproven = total - passed - failed
         lines.append(f"### {fw}")
-        lines.append(f"Coverage: {passed}/{total} PASS, {failed} FAIL")
+        lines.append(
+            f"Coverage: {passed}/{total} PASS, {failed} FAIL"
+            + (f", {unproven} NOT-EVALUATED" if unproven else "")
+        )
         lines.append("")
         # Auto-size the Control column to the widest label in this
         # framework. Numeric IDs (`1.2.3`, `CC6.1`) need ~14 cols; the
@@ -1797,7 +1850,8 @@ def _render_compliance_text(by_fw: dict) -> str:
         # Distribute / Secrets Detection`) that are 30-50 cols. Pad
         # at least 14 so existing CIS/PCI/SOC2 layouts don't change.
         ctrl_w = max(14, max((len(c["control"]) for c in controls), default=14) + 2)
-        lines.append(f"{'Control':<{ctrl_w}}{'Status':<10}Rules")
+        status_w = 15 if unproven else 10
+        lines.append(f"{'Control':<{ctrl_w}}{'Status':<{status_w}}Rules")
         lines.append("-" * (ctrl_w + 60))
         for ctrl in controls:
             rules_str = ", ".join(ctrl["rules"])
@@ -1806,14 +1860,14 @@ def _render_compliance_text(by_fw: dict) -> str:
                 if ctrl["failed_rules"] else ""
             )
             lines.append(
-                f"{ctrl['control']:<{ctrl_w}}{ctrl['status']:<10}{rules_str}{fail_str}"
+                f"{ctrl['control']:<{ctrl_w}}{ctrl['status']:<{status_w}}{rules_str}{fail_str}"
             )
             # For each failed rule, print the docs URL on its own line.
             # Terminals auto-link these; users can click to read the
             # explanation, why-it-fired, and fix without leaving the
             # CI log.
             for r in ctrl["failed_rules"]:
-                lines.append(f"{'':<{ctrl_w + 10}}↳ {RULE_DOCS_URL_BASE.format(id=r)}")
+                lines.append(f"{'':<{ctrl_w + status_w}}↳ {RULE_DOCS_URL_BASE.format(id=r)}")
         lines.append("")
     return "\n".join(lines)
 
@@ -1824,7 +1878,8 @@ def _render_compliance_html(by_fw: dict) -> str:
         controls = by_fw[fw]
         total = len(controls)
         passed = sum(1 for c in controls if c["status"] == "PASS")
-        failed = total - passed
+        failed = sum(1 for c in controls if c["status"] == "FAIL")
+        unproven = total - passed - failed
         pct = int(100 * passed / total) if total else 0
         bar_color = "#27ae60" if pct >= 80 else ("#c27a00" if pct >= 50 else "#b02a2a")
         rows: list[str] = []
@@ -1833,6 +1888,9 @@ def _render_compliance_html(by_fw: dict) -> str:
                 "<span style='background:#27ae60;color:#fff;padding:1px 8px;"
                 "border-radius:3px;font-size:11px;font-weight:600'>PASS</span>"
                 if ctrl["status"] == "PASS" else
+                "<span style='background:#777;color:#fff;padding:1px 8px;"
+                "border-radius:3px;font-size:11px;font-weight:600'>NOT-EVALUATED</span>"
+                if ctrl["status"] == "NOT-EVALUATED" else
                 "<span style='background:#b02a2a;color:#fff;padding:1px 8px;"
                 "border-radius:3px;font-size:11px;font-weight:600'>FAIL</span>"
             )
@@ -1858,7 +1916,8 @@ def _render_compliance_html(by_fw: dict) -> str:
         sections.append(
             f"<h3>{_h(str(fw))}</h3>"
             f"<p style='color:#555;font-size:13px'>"
-            f"{passed}/{total} controls PASS ({pct}%) — {failed} FAIL</p>"
+            f"{passed}/{total} controls PASS ({pct}%) — {failed} FAIL"
+            + (f" — {unproven} NOT-EVALUATED" if unproven else "") + "</p>"
             f"<div style='background:#eee;border-radius:4px;height:8px;margin-bottom:.8em'>"
             f"<div style='background:{bar_color};width:{pct}%;height:8px;border-radius:4px'>"
             f"</div></div>"
@@ -1871,13 +1930,16 @@ def _render_compliance_html(by_fw: dict) -> str:
         "<p style='color:#555;font-size:13px;margin-bottom:.8em'>"
         "Controls derived from catalogue <code>cis:</code> fields. "
         "PASS = no finding fired. FAIL = at least one finding fired. "
+        "NOT-EVALUATED = a rule of the control could not run on this input. "
         "Controls without catalogue coverage are NOT-ASSESSABLE and omitted.</p>"
         + "".join(sections)
     )
 
 
-def _compliance_to_oscal(by_fw: dict, target_dir: str = "") -> dict:
-    """Produce a minimal OSCAL Assessment Results JSON structure."""
+def _compliance_to_oscal(by_fw: dict, target_dir: str = "", notice: str = "") -> dict:
+    """Produce a minimal OSCAL Assessment Results JSON structure. `notice`
+    (`coverage_notice`) goes into the metadata remarks: a control whose
+    rule could not run is ``not-evaluated`` here, never ``pass``."""
     import datetime as _dt
     ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     findings_oscal: list[dict] = []
@@ -1899,7 +1961,8 @@ def _compliance_to_oscal(by_fw: dict, target_dir: str = "") -> dict:
                 "last-modified": ts,
                 "version": "1.0",
                 "oscal-version": "1.1.2",
-                "remarks": f"Generated by tf-analyze for target: {target_dir}",
+                "remarks": f"Generated by tf-analyze for target: {target_dir}"
+                           + (f". {notice}" if notice else ""),
             },
             "results": [
                 {
@@ -2130,6 +2193,13 @@ def to_html(
                 f"<div style='background:#fff3cd;border-left:6px solid #b07d00;"
                 f"padding:.4em 1em;margin-bottom:1em;font-size:13px'>"
                 f"&#9888; {_h(_fallback)}</div>"
+            )
+        _coverage = coverage_notice(summary)
+        if _coverage:
+            summary_banner += (
+                f"<div style='background:#fff3cd;border-left:6px solid #b07d00;"
+                f"padding:.4em 1em;margin-bottom:1em;font-size:13px'>"
+                f"&#9888; <strong>{_h(_coverage)}</strong></div>"
             )
 
     tab_bar = ""

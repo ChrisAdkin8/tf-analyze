@@ -10,7 +10,7 @@ modularisation seam**:
   template's optional columns. Skips "Resolved since…" sections.
 * :func:`reprobe_finding` — re-run a single catalogue entry against the
   current corpus to classify a prior finding as STILL-PRESENT,
-  RESOLVED, MOVED, STALE-LOCATION, or AMBIGUOUS.
+  RESOLVED, MOVED, STALE-LOCATION, AMBIGUOUS, or UNVERIFIABLE.
 * :func:`verify_fixed` — top-level driver; parse + re-probe every prior
   finding, return the bucketed result dict.
 * :func:`write_verification_report` — markdown rendering of the
@@ -36,19 +36,31 @@ from _diff import tracked_cache_files
 from _tfjson import remap_lines
 
 
+# Where a finding can live that the re-probe does not reach (`reprobe_finding`):
+# the plan / state a finding came from isn't part of the corpus, and
+# `registry_check` findings need the registry (`--check-registry`).
+_NOT_FILES = ("<plan>", "<state>")
+_NOT_REPROBED_KINDS = frozenset({"registry_check"})
+
 # A catalogue ID: a 2–6 letter family (SEC … CUSTOM), then dash-separated
 # parts that may hold digits (`S3`, `K8S`), then a 3-digit number. Parts
 # were letters-only, so 23 rules (SEC-AWS-S3-001, every SEC-K8S-*) and all
 # CUSTOM-* rules were silently dropped from verification.
+_ID = r'[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3}'
 _FINDING_ROW_RE = re.compile(
-    r'^\|\s*(?P<id>[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3})'
+    rf'^\|\s*`?(?P<id>{_ID})`?'
     r'(?:#\d+)?\s*\|'         # optional instance number
-    r'(?P<middle>.*?)\|'       # skip urgency column(s)
-    r'\s*`?(?P<file>[\w./-]+\.tf(?:\.json)?)`?'
-    r'[:\s]*(?P<line>\d+)?'
-    r'.*\|',
-    re.MULTILINE,
+    r'(?P<cells>.*)\|\s*$',
 )
+# A table cell holding a report's location. A file is anything a scan reads
+# (`.tf`, `.tf.json`, tfvars, workflow YAML, a committed state), or the plan
+# / state marker, with or without a line; or any path followed by `:<line>`,
+# which is how a repository-level finding reads (`.:0`).
+_FILE_CELL_RE = re.compile(
+    r'^`?(?P<file>.+?\.(?:tfvars(?:\.json)?|tfstate(?:\.backup)?|tf(?:\.json)?|ya?ml)'
+    r'|<plan>|<state>)`?(?:[:\s]+`?(?P<line>\d+))?\b'
+)
+_PATH_CELL_RE = re.compile(r'^`?(?P<file>[^`]*[./][^`]*?):(?P<line>\d+)`?$')
 
 
 def parse_markdown_report(path: Path) -> list[dict]:
@@ -75,21 +87,71 @@ def parse_markdown_report(path: Path) -> list[dict]:
         m = _FINDING_ROW_RE.match(line)
         if not m:
             continue
-        rows.append({
+        location = next(filter(None, (
+            _FILE_CELL_RE.match(cell) or _PATH_CELL_RE.match(cell)
+            for cell in map(str.strip, m.group("cells").split("|"))
+        )), None)
+        rows.append(_unparsed_row(m.group("id"), line) if location is None else {
             "id": m.group("id"),
-            "file": m.group("file"),
-            "line": int(m.group("line")) if m.group("line") else 0,
+            "file": location.group("file"),
+            "line": int(location.group("line") or 0),
             "resource": "",
         })
     return rows
 
 
-# One `--format text` finding line: `<ID> <file>:<line> <resource>`.
+def _unparsed_row(rule_id: str, line: str) -> dict:
+    """A row that names a finding but not where. It can't be re-probed, and
+    dropping it would read as nothing left to verify: `verify_fixed` keeps
+    it as UNVERIFIABLE and counts it."""
+    return {"id": rule_id, "file": "", "line": 0, "resource": "", "unparsed": line.strip()}
+
+
+# One `--format text` finding line: `[🔥 KEV ]<ID> <file>:<line> <resource>`.
+# The file is whatever precedes `:<line>`, a folder for a repository-level
+# rule, and may hold a space; so may the resource (`<absent: aws_x>`).
 _TEXT_ROW_RE = re.compile(
-    r'^(?P<id>[A-Z]{2,6}(?:-[A-Z0-9]+)+-\d{3}) '
-    r'(?P<file>\S+\.tf(?:\.json)?):(?P<line>\d+)(?: (?P<resource>\S+))?',
-    re.MULTILINE,
+    rf'^(?:🔥 KEV )?(?P<id>{_ID}) '
+    r'(?P<file>.+?):(?P<line>\d+)(?: (?P<resource>.*))?$'
 )
+_TEXT_LOOKS_LIKE_ROW_RE = re.compile(rf'^(?:\S+ ){{0,2}}(?P<id>{_ID})\b')
+_TEXT_HEADER_RE = re.compile(r'(?m)^# tf-analyze: [^\n]*$')
+_TEXT_COUNTS_RE = re.compile(r'(\d+) CRITICAL · (\d+) HIGH · (\d+) MEDIUM · (\d+) LOW')
+# With no rows, a markdown report is clean only if it says so for the whole
+# scan: the exact lines `--format pr-summary` prints. A looser match took
+# "no findings appear in more than one repository" and a filtered MITRE
+# view's "(no findings)" for a clean scan.
+_MARKDOWN_CLEAN_RE = re.compile(
+    r'(?m)^(?:✅ Clean — no findings at default scoring tiers\.|No findings in the rules that ran\.)$'
+)
+_FLEET_HEADER_RE = re.compile(r'(?m)^# Fleet Scan Report\s*$')
+
+
+def _parse_text_report(text: str, header: str) -> list[dict]:
+    """The rows of a `--format text` report. Fewer rows than the header
+    counts means some were lost: those come back as unparsed rows."""
+    rows: list[dict] = []
+    for line in text.splitlines():
+        if line.startswith(("#", " ")):
+            continue
+        m = _TEXT_ROW_RE.match(line)
+        if m:
+            rows.append({
+                "id": m.group("id"),
+                "file": m.group("file"),
+                "line": int(m.group("line")),
+                "resource": m.group("resource") or "",
+            })
+        elif (loose := _TEXT_LOOKS_LIKE_ROW_RE.match(line)):
+            rows.append(_unparsed_row(loose.group("id"), line))
+    counts = _TEXT_COUNTS_RE.search(header)
+    if counts is None:
+        if not rows:
+            raise ValueError("text report states no counts and lists no findings")
+        return rows
+    missing = sum(map(int, counts.groups())) - len(rows)
+    rows.extend(_unparsed_row("UNKNOWN-RULE-000", header) for _ in range(max(missing, 0)))
+    return rows
 
 
 def parse_prior_report(path: Path) -> list[dict]:
@@ -98,7 +160,9 @@ def parse_prior_report(path: Path) -> list[dict]:
 
     Only markdown used to be read, so the CLI's own JSON and text reports
     parsed to zero findings and verification "passed". A report in a
-    format with no finding rows to read (SARIF, HTML) raises ValueError.
+    format with no finding rows to read (SARIF, HTML) raises ValueError,
+    and so does one that yields no rows and doesn't state that it found
+    nothing: `--format pr-summary`, an empty file, a truncated report.
     """
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     try:
@@ -109,6 +173,11 @@ def parse_prior_report(path: Path) -> list[dict]:
         rows = data.get("findings") if isinstance(data, dict) else data
         if not isinstance(rows, list):
             raise ValueError(f"{path} is JSON but not a tf-analyze --format json report")
+        counts = (data.get("summary") or {}).get("counts") if isinstance(data, dict) else None
+        if not rows and not (isinstance(counts, dict) and not any(
+            n for tier, n in counts.items() if tier != "INFO"
+        )):
+            raise ValueError(f"{path} lists no findings and no counts saying there are none")
         return [
             {
                 "id": f["id"],
@@ -117,21 +186,29 @@ def parse_prior_report(path: Path) -> list[dict]:
                 "resource": f.get("resource", ""),
                 "urgency": f.get("urgency"),
             }
-            for f in rows if isinstance(f, dict) and f.get("id")
+            if isinstance(f, dict) and f.get("id")
+            else _unparsed_row("UNKNOWN-RULE-000", json.dumps(f))
+            for f in rows
         ]
-    if text.startswith("# tf-analyze:"):
-        return [
-            {
-                "id": m.group("id"),
-                "file": m.group("file"),
-                "line": int(m.group("line")),
-                "resource": m.group("resource") or "",
-            }
-            for m in _TEXT_ROW_RE.finditer(text)
-        ]
+    # Its paths are cut to two segments and its rows to 50 per repository,
+    # so it can't be re-probed.
+    if _FLEET_HEADER_RE.search(text):
+        raise ValueError(f"{path} is a fleet report; verify each repository's own report")
+    header = _TEXT_HEADER_RE.search(text)
+    if header:
+        try:
+            return _parse_text_report(text, header.group())
+        except ValueError as e:
+            raise ValueError(f"{path}: {e}") from None
     if text.lstrip().startswith("<"):
         raise ValueError(f"{path} is HTML; pass a json, text or markdown report")
-    return parse_markdown_report(path)
+    rows = parse_markdown_report(path)
+    if not rows and not _MARKDOWN_CLEAN_RE.search(text):
+        raise ValueError(
+            f"{path} has no finding rows and doesn't say it found nothing; "
+            f"pass a json, text or markdown report"
+        )
+    return rows
 
 
 def reprobe_finding(
@@ -142,9 +219,13 @@ def reprobe_finding(
     detect_in_file: Callable[[Path, str, list], list[dict]],
     detect_corpus: Callable[[Path, dict, list], list[dict]],
     target: Path | None = None,
+    extra_text: dict | None = None,
+    scan_extra: Callable[[Path, str, list], list[dict]] | None = None,
+    known_kinds: frozenset | None = None,
+    rule_timeouts: list[dict] = (),
 ) -> str:
     """One of: STILL-PRESENT, RESOLVED, MOVED, STALE-LOCATION,
-    BROKEN-SYMLINK, AMBIGUOUS.
+    BROKEN-SYMLINK, AMBIGUOUS, UNVERIFIABLE.
 
     The report's file path is relative to the scan `target` (default: the
     current directory) and is compared with each hit's file after both are
@@ -157,10 +238,18 @@ def reprobe_finding(
     within ±3 lines of the original, STILL-PRESENT. Fires in a
     different file → MOVED. Doesn't fire anywhere → RESOLVED. File
     gone → STALE-LOCATION. Entry missing from catalogue → AMBIGUOUS.
+
+    RESOLVED needs evidence: this probe looked where the finding was, with
+    a check that can fire. Otherwise (`_can_clear`) it is UNVERIFIABLE: a
+    finding from a plan or state, a file outside the corpus (`extra_text`
+    covers tfvars and workflow YAML; `ignore_paths` can still hide one), a
+    rule with no offline check, or one that ran out of time (`rule_timeouts`).
     """
     entry = catalog_by_id.get(finding["id"])
     if not entry:
         return "AMBIGUOUS"
+    if finding["file"] in _NOT_FILES:
+        return "UNVERIFIABLE"
     root = Path(target) if target is not None else Path.cwd()
     target_file = Path(finding["file"])
     if not target_file.is_absolute():
@@ -169,6 +258,8 @@ def reprobe_finding(
     hits: list[dict] = []
     for fp, text in all_files_text.items():
         hits.extend(detect_in_file(fp, text, [entry]))
+    for fp, text in (extra_text or {}).items():
+        hits.extend((scan_extra or detect_in_file)(fp, text, [entry]))
     hits.extend(detect_corpus(root, all_files_text, [entry]))
     remap_lines(hits)
 
@@ -194,6 +285,11 @@ def reprobe_finding(
         if target_file.is_symlink():
             return "BROKEN-SYMLINK"
         return "STALE-LOCATION"
+    scanned = {Path(p).resolve() for p in (*all_files_text, *(extra_text or {}))}
+    if not _can_clear(entry, target_file.resolve(), root.resolve(), scanned, known_kinds):
+        return "UNVERIFIABLE"
+    if any(t.get("rule") == entry["id"] for t in rule_timeouts):
+        return "UNVERIFIABLE"
     return "RESOLVED"
 
 
@@ -205,6 +301,23 @@ def _real(path: Path) -> Path:
         return path
 
 
+def _can_clear(
+    entry: dict, path: Path, root: Path, scanned: set, known_kinds: frozenset | None,
+) -> bool:
+    """Whether finding nothing proves the finding gone: the rule has a
+    check this probe runs, and the file it was in was probed (a folder,
+    for a repository-level rule, when it is the target or holds a probed
+    file)."""
+    kinds = {p.get("kind", "") for p in entry.get("patterns") or []}
+    if known_kinds is not None:
+        kinds &= known_kinds
+    if not kinds - _NOT_REPROBED_KINDS:
+        return False
+    if path.is_dir():
+        return path == root or any(p.is_relative_to(path) for p in scanned)
+    return path in scanned
+
+
 def verify_fixed(
     prior_report: Path,
     target: Path,
@@ -214,6 +327,10 @@ def verify_fixed(
     detect_in_file: Callable[[Path, str, list], list[dict]],
     detect_corpus: Callable[[Path, dict, list], list[dict]],
     unreadable_files: list[str] = (),
+    extra_text: dict | None = None,
+    scan_extra: Callable[[Path, str, list], list[dict]] | None = None,
+    known_kinds: frozenset | None = None,
+    rule_timeouts: list[dict] = (),
 ) -> dict:
     """Parse prior report, re-probe every finding, return a verification dict.
 
@@ -221,6 +338,9 @@ def verify_fixed(
     re-checked, and it used to come out RESOLVED. So is one in a file
     that is still there under a `.terraform` folder this run skipped:
     not read, and git can't say it's tracked.
+
+    `extra_text` holds the non-Terraform files a scan reads (tfvars,
+    workflow YAML), probed with `scan_extra`; see `reprobe_finding`.
     """
     prior_findings = parse_prior_report(prior_report)
     unreadable = {Path(p).resolve() for p in unreadable_files}
@@ -250,8 +370,13 @@ def verify_fixed(
         "BROKEN-SYMLINK": [],
         "AMBIGUOUS": [],
         "UNREADABLE": [],
+        # Could not be re-checked at all: never reported as fixed.
+        "UNVERIFIABLE": [],
     }
     for f in prior_findings:
+        if f.get("unparsed"):
+            results["UNVERIFIABLE"].append(f)
+            continue
         fp = Path(f["file"])
         path = fp if fp.is_absolute() else Path(target) / fp
         real = _real(path)
@@ -263,11 +388,16 @@ def verify_fixed(
             detect_in_file=detect_in_file,
             detect_corpus=detect_corpus,
             target=target,
+            extra_text=extra_text,
+            scan_extra=scan_extra,
+            known_kinds=known_kinds,
+            rule_timeouts=rule_timeouts,
         )
         results[state].append(f)
     return {
         "prior_report": str(prior_report),
         "total_prior": len(prior_findings),
+        "unparsed_rows": sum(1 for f in prior_findings if f.get("unparsed")),
         "results": results,
     }
 

@@ -154,6 +154,7 @@ def run_lsp_server(
     project_config: dict,
     *,
     scanner: Callable[[Path, list[dict]], list[dict]],
+    suggester: Callable | None = None,
     load_catalog: Callable[[Path], list[dict]],
 ) -> None:
     """JSON-RPC 2.0 LSP server on stdin/stdout.
@@ -331,14 +332,16 @@ def run_lsp_server(
             elif method == "textDocument/codeAction":
                 uri = msg["params"]["textDocument"]["uri"]
                 req_line = msg["params"]["range"]["start"]["line"] + 1
-                findings = _diagnostics.get(uri, [])
+                # Only the findings asked about: this tries the patcher.
+                findings = [f for f in _diagnostics.get(uri, [])
+                            if abs(f["line"] - req_line) <= 2]
+                if suggester is not None:
+                    suggester(_uri_to_path(uri), findings, entries, _texts.get(uri))
                 actions = []
                 for f in findings:
-                    if abs(f["line"] - req_line) > 2:
-                        continue
-                    entry = id_map.get(f["id"], {})
-                    fix_hcl = entry.get("fix_hcl")
-                    if not fix_hcl:
+                    # What fits this very line, never a catalogue `fix_hcl`.
+                    suggestion = f.get("fix_suggestion")
+                    if not suggestion:
                         continue
                     actions.append({
                         "title": f"tf-analyze fix: {f['id']}",
@@ -348,9 +351,9 @@ def run_lsp_server(
                                 uri: [{
                                     "range": {
                                         "start": {"line": f["line"] - 1, "character": 0},
-                                        "end":   {"line": f["line"] - 1, "character": 0},
+                                        "end":   {"line": f["line"], "character": 0},
                                     },
-                                    "newText": f"\n# tf-analyze fix for {f['id']}:\n{fix_hcl}\n",
+                                    "newText": f"{suggestion}\n",
                                 }]
                             }
                         }

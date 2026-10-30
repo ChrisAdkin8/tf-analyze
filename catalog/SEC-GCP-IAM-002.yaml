@@ -59,7 +59,7 @@ fix_hcl: |
     role   = "roles/storage.objectViewer"
     member = "serviceAccount:${google_service_account.example.email}"
   }
-fix_disruption: none
+fix_disruption: plan_required
 # The member is an example reference; a person picks the real principal.
 fix_hcl_example: true
 fixtures:

@@ -165,6 +165,8 @@ jobs:
           # On a PR, honour an inline `# tf-analyze:ignore` only if the base
           # branch (fetched above) has it too, so the PR can't silence its
           # own findings. If that fetch failed, the engine honours none.
+          # Suggestion comments paste `fix_suggestion`, from the JSON run only.
+          JSON_ARGS=()
           if [ "$TFA_EVENT" = "pull_request" ]; then
             # Not `--help | grep -q`: under pipefail, grep closing the pipe
             # early can fail the pipeline.
@@ -174,6 +176,9 @@ jobs:
                 EXTRA_ARGS+=(--inline-ignores-from refs/tf-analyze/base) ;;
               *)
                 echo "::warning::tf-analyze: this engine ref predates --inline-ignores-from, so inline tf-analyze:ignore comments this PR adds are honoured" ;;
+            esac
+            case "$HELP" in
+              *--fix-suggestions*) JSON_ARGS+=(--fix-suggestions) ;;
             esac
           fi
 
@@ -191,6 +196,7 @@ jobs:
             --mode "$MODE" \
             --format json \
             "${EXTRA_ARGS[@]}" \
+            "${JSON_ARGS[@]}" \
             > "$OUT/tf-analyze-findings.json" 2>"$OUT/tf-analyze-stderr.txt" \
             || JSON_RC=$?
           # Exit 2+ is a crash: fail on it below, whatever the JSON holds.
@@ -307,7 +313,9 @@ jobs:
             // Deduplicate: one comment per (file, line) using highest-urgency finding
             const byLocation = new Map();
             for (const f of findings) {
-              if (!f.fix_hcl) continue;
+              // `fix_suggestion` is text that fits this very line; a suggestion
+              // overwrites the line, and `fix_hcl` is a whole block.
+              if (!f.fix_suggestion) continue;
               const key = `${f.file}:${f.line}`;
               const existing = byLocation.get(key);
               if (!existing || urgencyRank(f.urgency) > urgencyRank(existing.urgency)) {
@@ -325,9 +333,9 @@ jobs:
                 '',
                 `> Urgency: \`${finding.urgency}\`${disruption}`,
                 '',
-                `${fence(finding.fix_hcl)}suggestion`,
-                finding.fix_hcl.trimEnd(),
-                fence(finding.fix_hcl),
+                `${fence(finding.fix_suggestion)}suggestion`,
+                finding.fix_suggestion.trimEnd(),
+                fence(finding.fix_suggestion),
               ].join('\n');
               try {
                 await github.rest.pulls.createReviewComment({

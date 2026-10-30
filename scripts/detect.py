@@ -1413,6 +1413,7 @@ from _output import (
     to_sarif,
     sarif_source_root,
     parse_fallback_notice,
+    coverage_notice,
     _narrative_for_finding,
     _render_executive_view,
     _disruption_badge,
@@ -1503,13 +1504,20 @@ def _file_scanner(all_files_text: dict) -> _Callable[[Path, str, list], list[dic
 
 
 def verify_fixed(prior_report: Path, target: Path, all_files_text: dict,
-                 entries: list[dict], unreadable_files: list[str] = ()) -> dict:
-    """Adapter passing the scan's file detector + detect_corpus to _verify."""
+                 entries: list[dict], unreadable_files: list[str] = (),
+                 extra_text: dict | None = None) -> dict:
+    """Adapter passing the scan's detectors to _verify: `_file_scanner` for
+    Terraform, plain `detect_in_file` for `extra_text`, as `_run_detection`
+    scans them."""
     return _verify_verify_fixed(
         prior_report, target, all_files_text, entries,
         detect_in_file=_file_scanner(all_files_text),
         detect_corpus=detect_corpus,
         unreadable_files=unreadable_files,
+        extra_text=extra_text,
+        scan_extra=detect_in_file,
+        known_kinds=frozenset(_INFILE_HANDLERS) | frozenset(_CORPUS_HANDLERS),
+        rule_timeouts=RULE_TIMEOUTS,
     )
 
 
@@ -1632,6 +1640,7 @@ from _plan_state import (
     evaluate_against_resources as _evaluate_against_resources,
     detect_in_plan,
     detect_in_state,
+    plan_coverage,
     PlanInputError,
 )
 
@@ -2051,8 +2060,13 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
             recommendation,
         ]
         fix_hcl = (entry.get("fix_hcl") or "").strip()
-        if fix_hcl:
-            body_lines += ["", *_md_fence(fix_hcl, "suggestion")]
+        if f.get("fix_suggestion"):
+            body_lines += ["", *_md_fence(f["fix_suggestion"], "suggestion")]
+        elif fix_hcl:
+            # One click must not commit a fix that can't work as it stands.
+            if f.get("fix_manual_reason"):
+                body_lines += ["", f"**Fix needs manual work:** {_md_text(f['fix_manual_reason'])}"]
+            body_lines += ["", *_md_fence(fix_hcl, "hcl")]
         disruption = entry.get("fix_disruption", "")
         if disruption:
             labels = {
@@ -2137,6 +2151,7 @@ from _apply_fixes import (
     find_block_end_in_lines as _find_block_end_in_lines,
     block_indent as _block_indent,
     handle_apply_fixes as _handle_apply_fixes,
+    annotate_fix_blockers,
 )
 
 
@@ -2166,6 +2181,7 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
         findings = detect_in_file(
             path, text, entries, var_defaults.get(str(target_dir), {}),
         )
+        annotate_fix_blockers(findings, entries, {str(path): text})
         # A file the HCL parser can't read is still scanned (regex
         # fallback); tell the user once, as an Information diagnostic.
         _parse_error = parse_tf(text)[1] if path.suffix == ".tf" else None
@@ -2181,10 +2197,17 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
             })
         return findings
 
+    def _suggester(path: Path, findings: list[dict], entries: list[dict],
+                   text: str | None) -> None:
+        # Asked per code action, not per keystroke: see annotate_fix_blockers.
+        annotate_fix_blockers(findings, entries,
+                              None if text is None else {str(path): text}, suggestions=True)
+
     _lsp_run(
         catalog_dir, project_config,
         scanner=_scanner,
         load_catalog=load_catalog,
+        suggester=_suggester,
     )
 
 
@@ -2308,6 +2331,7 @@ def _mode_fleet(args: object, entries: list, emit, out_file) -> int:
     # finding that wasn't escalated, so it passed a CRITICAL.
     _enrich_findings_for_output(all_findings, entries)
     _enrich_findings_for_output(fleet_result["fleet_wide"], entries)
+    annotate_fix_blockers(all_findings, entries, suggestions=args.fix_suggestions)
     # SARIF, HTML and the PR summary render every target's findings with
     # the static scan's renderers; they all used to emit the Markdown
     # fleet report, which code scanning rejects and a browser shows as text.
@@ -2368,8 +2392,9 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     """Re-probe a prior report's findings and classify fixed/still-present.
 
     Extracted from main()'s `--mode verify-fixed` branch. Returns an exit
-    code: the `--fail-on` gate over STILL-PRESENT and MOVED findings (and
-    unreadable files), or 2 when the prior report cannot be read.
+    code: the `--fail-on` gate over every finding not shown to be gone
+    (STILL-PRESENT, MOVED, and those that could not be re-checked) and
+    unreadable files, or 2 when the prior report cannot be read.
     """
     prior = Path(args.prior_report) if args.prior_report else find_latest_prior(reports_dir, ".md")
     if not prior or not prior.exists():
@@ -2390,8 +2415,16 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         except Exception as e:
             print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
+    # The same non-Terraform files the scan reads (tfvars, workflow YAML).
+    extra_text: dict = {}
+    for fp in _collect_extra_files(target, entries, ignore_paths=_ignore_paths_vf):
+        try:
+            extra_text[fp] = _read_normalized(fp)
+        except Exception as e:
+            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            unreadable_files.append(str(fp))
     try:
-        verify = verify_fixed(prior, target, all_text, entries, unreadable_files)
+        verify = verify_fixed(prior, target, all_text, entries, unreadable_files, extra_text)
     except (OSError, ValueError) as e:
         print(f"ERROR: cannot read prior report: {e}", file=sys.stderr)
         return 2
@@ -2405,14 +2438,25 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         print(f"# wrote {out_path}")
         for state, rows in verify["results"].items():
             print(f"# {state}: {len(rows)}")
-    # Gate on what is still there (in place or moved) and on files that
+    # Gate on what is still there (in place or moved) and on anything that
     # could not be re-checked. This mode always exited 0.
     results = verify["results"]
-    still_open = results["STILL-PRESENT"] + results["MOVED"]
+    still_open = [f for state in ("STILL-PRESENT", "MOVED", "UNVERIFIABLE", "AMBIGUOUS",
+                                  "BROKEN-SYMLINK") for f in results[state]]
     unchecked = list(dict.fromkeys(
         [*unreadable_files, *(str(r["file"]) for r in results["UNREADABLE"])]
     ))
-    return _gate_exit_code(args, still_open, entries, [], unchecked)
+    code = _gate_exit_code(args, still_open, entries, [], unchecked, RULE_TIMEOUTS)
+    # A row that couldn't be read says nothing about its urgency.
+    if verify["unparsed_rows"]:
+        print(
+            f"{'ERROR' if args.fail_on else 'WARN'}: {verify['unparsed_rows']} row(s) of "
+            f"{prior} look like findings but could not be read, so were not verified",
+            file=sys.stderr,
+        )
+        if args.fail_on:
+            return code or 1
+    return code
 
 
 def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
@@ -2544,10 +2588,11 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                    ignore_paths: list = ()) -> tuple[list, list]:
     """Core scan: per-file + corpus detection over the loaded corpus, with the
     incremental cache, plus --plan-json and --state-json (drift) findings merged
-    in. Returns ``(findings, parse_fallback_files)``: the second is one
-    ``{"file", "reason"}`` per scanned `.tf` file python-hcl2 could not parse
-    (scanned with the regex fallback instead; tasks/hcl-parser-migration.md
-    §4.8). It is cached alongside the findings.
+    in. Returns ``(findings, parse_fallback_files, unknown)``: the second is
+    one ``{"file", "reason"}`` per scanned `.tf` file python-hcl2 could not
+    parse (scanned with the regex fallback instead;
+    tasks/hcl-parser-migration.md §4.8), cached alongside the findings; the
+    third is `_plan_state.unknown_arguments` of a scan with no source files.
 
     Extracted verbatim from main(). `entries` is the provider-filtered ruleset
     (main() runs that filter first, since downstream consumers reuse the same
@@ -2610,6 +2655,15 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 continue
             findings.extend(detect_in_file(fp, text, entries))
 
+    # With no source files, the plan / state values are all there is: the
+    # rules that can read them as HCL run on them too (`_plan_state`).
+    def _scan_rendered(text: str, rendered_entries: list) -> list[dict]:
+        fp = Path("plan-values.tf")
+        return (detect_in_file(fp, text, rendered_entries)
+                + detect_corpus(target, {fp: text}, rendered_entries))
+    _rendered_scan = None if all_text else _scan_rendered
+    unknown: list[dict] = []
+
     # Plan-mode rule re-evaluation. Findings are merged into the same
     # list so suppression, comparison, and reporting all see them; the
     # `mode` field on each finding lets downstream consumers split.
@@ -2622,7 +2676,9 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             )
             sys.exit(2)
         try:
-            plan_findings = detect_in_plan(plan_path, entries)
+            plan_findings = detect_in_plan(
+                plan_path, entries, _rendered_scan, unknown if _rendered_scan else None,
+            )
         except PlanInputError as e:
             # Exit like a missing file: no findings is not a pass.
             print(f"ERROR: {e}", file=sys.stderr)
@@ -2659,7 +2715,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             )
             sys.exit(2)
         try:
-            state_findings = detect_in_state(state_path, entries)
+            state_findings = detect_in_state(state_path, entries, _rendered_scan)
         except PlanInputError as e:
             # Exit like a missing file: no findings is not a pass.
             print(f"ERROR: {e}", file=sys.stderr)
@@ -2693,7 +2749,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                              [f for f in findings if id(f) not in external_ids],
                              parse_fallback_files=parse_fallback_files)
 
-    return findings, parse_fallback_files
+    return findings, parse_fallback_files, unknown
 
 
 def _finding_dir(finding: dict, target: Path, scanned_dirs: set) -> str:
@@ -2882,7 +2938,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
     # Pass 2 — per-file + corpus detection (with the incremental cache),
     # plus --plan-json and --state-json (drift) findings merged in.
     # See _run_detection. `entries` is already provider-filtered above.
-    findings, parse_fallback_files = _run_detection(
+    findings, parse_fallback_files, _unknown = _run_detection(
         args, all_text, extra_text, entries, diff_files, target, _ignore_paths,
     )
     if gated_dirs:
@@ -2892,6 +2948,12 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
             not in gated_dirs.get(f["id"], ())
         ]
     remap_lines(findings)
+    # Plan or state input and no source: most rules ran, but not all, and
+    # the report has to say so (`coverage_notice`).
+    coverage = None
+    if not all_text and (args.plan_json or args.state_json):
+        coverage = plan_coverage(entries, "plan" if args.plan_json else "state", _unknown)
+        print(f"WARN: {coverage_notice({'coverage': coverage})}", file=sys.stderr)
     for _pf in parse_fallback_files:
         print(
             f"WARN: {_pf['file']}: parse failed, scanned in fallback mode: "
@@ -2966,6 +3028,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         "tf_files": tf_files,
         "entries": entries,
         "inline_ignores": inline_report,
+        "coverage": coverage,
     }
 
 
@@ -3011,17 +3074,22 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                     sarif_source_root(Path(args.targets[0]))
                     if args.targets else None
                 ),
+                coverage=coverage_notice(summary),
             )
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
         elif args.format == "compliance":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
                 _emit(f"# No catalogue entries mapped to compliance framework "
                       f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             _emit(_render_mitre(findings, entries,
                                 tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
@@ -3042,6 +3110,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
             )
             if parse_fallback_notice(summary):
                 _emit(f"# {parse_fallback_notice(summary)}")
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if delta["new"]:
                 _emit("# NEW findings:")
                 for f in delta["new"]:
@@ -3098,17 +3168,22 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                     sarif_source_root(Path(args.targets[0]))
                     if args.targets else None
                 ),
+                coverage=coverage_notice(summary),
             )
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
         elif args.format == "compliance":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
                 _emit(f"# No catalogue entries mapped to compliance framework "
                       f"{getattr(args, 'compliance_framework', 'cis')!r}.")
         elif args.format == "mitre":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             _emit(_render_mitre(findings, entries,
                                 tactic_filter=getattr(args, "mitre_tactic", None)))
         elif args.format == "pr-summary":
@@ -3132,6 +3207,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
             )
             if parse_fallback_notice(summary):
                 _emit(f"# {parse_fallback_notice(summary)}")
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if score_explanation:
                 _emit("")
                 _emit(render_score_explanation(score_explanation))
@@ -3332,6 +3409,16 @@ def _add_output_args(ap: argparse.ArgumentParser) -> None:
         ),
     )
     ap.add_argument(
+        "--fix-suggestions",
+        action="store_true",
+        help=(
+            "Add fix_suggestion to JSON findings: the text that may replace "
+            "the finding's line as a one-click PR suggestion. Tries the "
+            "patcher per finding, so it is off unless something will paste "
+            "the result. --mode pr-review always does this."
+        ),
+    )
+    ap.add_argument(
         "--show-info",
         action="store_true",
         help=(
@@ -3454,7 +3541,9 @@ def _add_mode_args(ap: argparse.ArgumentParser) -> None:
             "/ resource_present / hcl_attr / data_source_present rules "
             "are re-evaluated against resolved values from the plan. "
             "Static findings still run; plan findings are tagged with "
-            "mode='plan' so the report can disambiguate. Required for "
+            "mode='plan' so the report can disambiguate. With no source "
+            "files more rules read the plan's values, the rest cannot run, "
+            "and the report says how many (summary.coverage). Required for "
             "catching variable-resolved violations (e.g. tfvars setting "
             "an IAM role to a forbidden value)."
         ),
@@ -3664,7 +3753,10 @@ def _add_comparison_args(ap: argparse.ArgumentParser) -> None:
         help="Report to verify (for --mode verify-fixed): a markdown report, or "
              "this CLI's --format json / text output. If omitted, picks the most "
              "recent tf-analysis-*.md under reports/. Exits 1 under --fail-on when "
-             "a STILL-PRESENT or MOVED finding meets the threshold.",
+             "a finding not shown to be gone (STILL-PRESENT, MOVED, or one that "
+             "could not be re-checked, such as UNVERIFIABLE) meets the threshold, "
+             "or a row of the report can't be read. Exits 2 on a report with no "
+             "rows that doesn't state it found nothing.",
     )
     ap.add_argument(
         "--reports-dir",
@@ -3715,7 +3807,10 @@ def _add_fix_args(ap: argparse.ArgumentParser) -> None:
             "'dry-run' prints a unified diff to stdout without writing files. "
             "'apply' writes the patched files to disk (creates .bak backups). "
             "Only resource_missing_arg and resource_arg/hcl_attr patterns are "
-            "patched; patterns without fix_hcl are skipped. "
+            "patched; patterns without fix_hcl are skipped. A fix that names "
+            "a resource, variable, local or module the file's module does not "
+            "declare, or holds a placeholder value, is never pasted: every fix "
+            "left undone is listed on stderr with its reason. "
             "Always review dry-run output before applying. "
             "'apply' exits 0 after patching and does not apply --fail-on: "
             "re-run the scan to gate on what is left."
@@ -4069,11 +4164,16 @@ def _main():
     compliance_report: dict | None = None
     if getattr(args, "compliance", False) or args.format == "compliance" or getattr(args, "pdf_output", None):
         fw_arg = getattr(args, "compliance_framework", "cis") or "cis"
-        compliance_report = _compliance_gap_report(findings, entries, framework=fw_arg)
+        _coverage = _scan.get("coverage") or {}
+        compliance_report = _compliance_gap_report(
+            findings, entries, framework=fw_arg,
+            not_evaluated=_coverage.get("not_evaluated_rules", ()),
+        )
         if getattr(args, "oscal", None):
             oscal_data = _compliance_to_oscal(
                 compliance_report,
                 str(args.targets[0]) if args.targets else "",
+                coverage_notice({"coverage": _coverage}),
             )
             oscal_path = Path(args.oscal)
             oscal_path.write_text(json.dumps(oscal_data, indent=2))
@@ -4083,6 +4183,7 @@ def _main():
         # can take to an audit. weasyprint is an optional dep — print
         # an install hint when missing rather than failing silently.
         if getattr(args, "pdf_output", None):
+            from html import escape as _html_escape
             try:
                 from weasyprint import HTML, CSS  # type: ignore
             except ImportError:
@@ -4116,6 +4217,7 @@ def _main():
                 f"<body><h1>tf-analyze · Compliance Gap Report</h1>"
                 f"<p style='color:#666;font-size:9pt'>Framework: <code>{fw_arg}</code>"
                 f" · Generated {os.environ.get('TFA_PDF_GEN_TIMESTAMP') or ''}</p>"
+                f"<p><strong>{_html_escape(coverage_notice({'coverage': _coverage}))}</strong></p>"
                 f"{_comp_html_body}"
                 f"<hr style='margin-top:18pt;border:none;border-top:1px solid #ccc'/>"
                 f"<p style='font-size:8pt;color:#888'>Generated by "
@@ -4142,6 +4244,9 @@ def _main():
     # narratives, fix snippets, and MITRE tags without re-loading the
     # catalogue themselves.
     _enrich_findings_for_output(findings, entries)
+    annotate_fix_blockers(
+        findings, entries, suggestions=args.fix_suggestions or args.mode == "pr-review",
+    )
 
     # Baseline mode: filter findings against a prior snapshot before
     # everything downstream (output, exit-code, attack-graph). Suppressed
@@ -4224,6 +4329,9 @@ def _main():
             entries,
         ),
     )
+    # A plan-only score is a partial one: see `_plan_state.plan_coverage`.
+    if _scan.get("coverage"):
+        summary["coverage"] = _scan["coverage"]
     # Tool diagnostic, not a finding: no score impact. Present only when
     # non-empty so the summary is unchanged for files that all parse.
     if parse_fallback_files:

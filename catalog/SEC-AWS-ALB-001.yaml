@@ -57,6 +57,6 @@ fix_hcl: |
       enabled = true
     }
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - aws_alb_no_access_logs

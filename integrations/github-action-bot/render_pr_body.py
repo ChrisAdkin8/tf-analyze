@@ -61,6 +61,14 @@ def compose_body(scan: dict, apply_summary: str) -> str:
     score = summary.get("score", "?")
     grade = summary.get("grade", "?")
 
+    # What the engine left for a person, `# apply-fixes: manual: <id> ...`.
+    manual = [
+        line.strip().split("manual: ", 1)[1]
+        for line in (apply_summary or "").splitlines()
+        if line.strip().startswith("# apply-fixes: manual: ")
+    ]
+    manual_ids = {line.split()[0] for line in manual}
+
     # Group only the findings the bot would actually have patched
     # (fix_disruption == none). The engine has already filtered to
     # those; we re-derive the count from the apply summary for the
@@ -68,6 +76,7 @@ def compose_body(scan: dict, apply_summary: str) -> str:
     fixable = [
         f for f in findings
         if f.get("fix_disruption") in (None, "none") and not f.get("fix_hcl_example")
+        and f["id"] not in manual_ids
     ]
     by_family: dict[str, list[dict]] = defaultdict(list)
     for f in fixable:
@@ -80,11 +89,12 @@ def compose_body(scan: dict, apply_summary: str) -> str:
     n_skipped = 0
     for line in (apply_summary or "").splitlines():
         s = line.strip()
-        if "would apply" in s:
-            # `# apply-fixes: would apply 5 fix(es) across 3 file(s)`
+        if "would apply" in s or "apply-fixes: applied" in s:
+            # `# apply-fixes: would apply 5 fix(es) across 3 file(s)` or, from
+            # a real run, `# apply-fixes: applied 5 fix(es) across 3 file(s)`
             try:
                 tokens = s.split()
-                n_applied = int(tokens[tokens.index("apply") + 1])
+                n_applied = int(tokens[tokens.index("fix(es)") - 1])
                 n_files = int(tokens[tokens.index("across") + 1])
             except (ValueError, IndexError):
                 pass
@@ -126,6 +136,17 @@ def compose_body(scan: dict, apply_summary: str) -> str:
             f"{n_skipped} additional finding(s) had a `fix_disruption` tier "
             f"above the bot's cap (`none`). Review the next tf-analyze scan "
             f"report for those; they require manual review or a higher cap.",
+            "",
+        ])
+
+    if manual:
+        lines.extend([
+            "### Needs manual work",
+            "",
+            f"{len(manual)} fix(es) were not applied: each needs something only "
+            f"you can supply, such as a resource to reference or a real value.",
+            "",
+            *(f"- `{line.replace('`', chr(39))}`" for line in manual),
             "",
         ])
 

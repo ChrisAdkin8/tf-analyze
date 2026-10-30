@@ -54,6 +54,7 @@ fix_hcl: |
       kms_key_name = "projects/example/locations/us/keyRings/bq/cryptoKeys/data"
     }
   }
+fix_hcl_example: true
 fix_disruption: forces_replacement
 fixtures:
   - gcp_bq_table_no_cmek

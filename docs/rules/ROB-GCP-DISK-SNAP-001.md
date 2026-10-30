@@ -80,7 +80,7 @@ Create a snapshot schedule and attach it:
 
 ## Suggested fix (`fix_hcl`)
 
-![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
+![Plan required](https://img.shields.io/badge/plan%20required-e67e22?style=flat-square)
 
 ```hcl
 resource "google_compute_disk" "example" {

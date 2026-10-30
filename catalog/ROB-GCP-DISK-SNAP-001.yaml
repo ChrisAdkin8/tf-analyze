@@ -55,6 +55,6 @@ fix_hcl: |
     zone              = "us-central1-a"
     resource_policies = [google_compute_resource_policy.daily.id]
   }
-fix_disruption: none
+fix_disruption: plan_required
 fixtures:
   - gcp_disk_no_snapshot

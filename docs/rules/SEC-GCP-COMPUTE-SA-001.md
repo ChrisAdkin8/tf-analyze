@@ -81,7 +81,7 @@ workload needs (objectViewer on a specific bucket, etc.).
 
 ## Suggested fix (`fix_hcl`)
 
-![Non-disruptive](https://img.shields.io/badge/non--disruptive-27ae60?style=flat-square)
+![Plan required](https://img.shields.io/badge/plan%20required-e67e22?style=flat-square)
 
 ```hcl
 resource "google_service_account" "vm" {
