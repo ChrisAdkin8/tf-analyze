@@ -50,7 +50,7 @@ Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files and
 
 ### `--plan-json PATH`
 
-Path to `terraform show -json plan.tfplan` output. When supplied, the catalogue's resource_arg / resource_missing_arg / resource_present / hcl_attr / data_source_present rules are re-evaluated against resolved values from the plan. Static findings still run; plan findings are tagged with mode='plan' so the report can disambiguate. Required for catching variable-resolved violations (e.g. tfvars setting an IAM role to a forbidden value).
+Path to `terraform show -json plan.tfplan` output. When supplied, the catalogue's resource_arg / resource_missing_arg / resource_present / hcl_attr / data_source_present rules are re-evaluated against resolved values from the plan. Static findings still run; plan findings are tagged with mode='plan' so the report can disambiguate. With no source files more rules read the plan's values, the rest cannot run, and the report says how many (summary.coverage). Required for catching variable-resolved violations (e.g. tfvars setting an IAM role to a forbidden value).
 
 
 ## Filtering

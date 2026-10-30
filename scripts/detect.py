@@ -1413,6 +1413,7 @@ from _output import (
     to_sarif,
     sarif_source_root,
     parse_fallback_notice,
+    coverage_notice,
     _narrative_for_finding,
     _render_executive_view,
     _disruption_badge,
@@ -1632,6 +1633,7 @@ from _plan_state import (
     evaluate_against_resources as _evaluate_against_resources,
     detect_in_plan,
     detect_in_state,
+    plan_coverage,
     PlanInputError,
 )
 
@@ -2610,6 +2612,14 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
                 continue
             findings.extend(detect_in_file(fp, text, entries))
 
+    # With no source files, the plan / state values are all there is: the
+    # rules that can read them as HCL run on them too (`_plan_state`).
+    def _scan_rendered(text: str, rendered_entries: list) -> list[dict]:
+        fp = Path("plan-values.tf")
+        return (detect_in_file(fp, text, rendered_entries)
+                + detect_corpus(target, {fp: text}, rendered_entries))
+    _rendered_scan = None if all_text else _scan_rendered
+
     # Plan-mode rule re-evaluation. Findings are merged into the same
     # list so suppression, comparison, and reporting all see them; the
     # `mode` field on each finding lets downstream consumers split.
@@ -2622,7 +2632,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             )
             sys.exit(2)
         try:
-            plan_findings = detect_in_plan(plan_path, entries)
+            plan_findings = detect_in_plan(plan_path, entries, _rendered_scan)
         except PlanInputError as e:
             # Exit like a missing file: no findings is not a pass.
             print(f"ERROR: {e}", file=sys.stderr)
@@ -2659,7 +2669,7 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             )
             sys.exit(2)
         try:
-            state_findings = detect_in_state(state_path, entries)
+            state_findings = detect_in_state(state_path, entries, _rendered_scan)
         except PlanInputError as e:
             # Exit like a missing file: no findings is not a pass.
             print(f"ERROR: {e}", file=sys.stderr)
@@ -2892,6 +2902,12 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
             not in gated_dirs.get(f["id"], ())
         ]
     remap_lines(findings)
+    # Plan or state input and no source: most rules ran, but not all, and
+    # the report has to say so (`coverage_notice`).
+    coverage = None
+    if not all_text and (args.plan_json or args.state_json):
+        coverage = plan_coverage(entries, "plan" if args.plan_json else "state")
+        print(f"WARN: {coverage_notice({'coverage': coverage})}", file=sys.stderr)
     for _pf in parse_fallback_files:
         print(
             f"WARN: {_pf['file']}: parse failed, scanned in fallback mode: "
@@ -2966,6 +2982,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         "tf_files": tf_files,
         "entries": entries,
         "inline_ignores": inline_report,
+        "coverage": coverage,
     }
 
 
@@ -3011,11 +3028,14 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                     sarif_source_root(Path(args.targets[0]))
                     if args.targets else None
                 ),
+                coverage=coverage_notice(summary),
             )
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
         elif args.format == "compliance":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
@@ -3042,6 +3062,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
             )
             if parse_fallback_notice(summary):
                 _emit(f"# {parse_fallback_notice(summary)}")
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if delta["new"]:
                 _emit("# NEW findings:")
                 for f in delta["new"]:
@@ -3098,11 +3120,14 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
                     sarif_source_root(Path(args.targets[0]))
                     if args.targets else None
                 ),
+                coverage=coverage_notice(summary),
             )
             _emit(json.dumps(sarif, indent=2))
         elif args.format == "html":
             _emit(to_html(findings, entries, suppressed_findings, graph=attack_graph, show_fixes=getattr(args, "show_fixes", False), centrality=centrality_scores, compliance_data=compliance_report, summary=summary))
         elif args.format == "compliance":
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if compliance_report:
                 _emit(_render_compliance_text(compliance_report))
             else:
@@ -3132,6 +3157,8 @@ def _render_report(args: object, findings: list, entries: list, *, emit,
             )
             if parse_fallback_notice(summary):
                 _emit(f"# {parse_fallback_notice(summary)}")
+            if coverage_notice(summary):
+                _emit(f"# {coverage_notice(summary)}")
             if score_explanation:
                 _emit("")
                 _emit(render_score_explanation(score_explanation))
@@ -3454,7 +3481,9 @@ def _add_mode_args(ap: argparse.ArgumentParser) -> None:
             "/ resource_present / hcl_attr / data_source_present rules "
             "are re-evaluated against resolved values from the plan. "
             "Static findings still run; plan findings are tagged with "
-            "mode='plan' so the report can disambiguate. Required for "
+            "mode='plan' so the report can disambiguate. With no source "
+            "files more rules read the plan's values, the rest cannot run, "
+            "and the report says how many (summary.coverage). Required for "
             "catching variable-resolved violations (e.g. tfvars setting "
             "an IAM role to a forbidden value)."
         ),
@@ -4224,6 +4253,9 @@ def _main():
             entries,
         ),
     )
+    # A plan-only score is a partial one: see `_plan_state.plan_coverage`.
+    if _scan.get("coverage"):
+        summary["coverage"] = _scan["coverage"]
     # Tool diagnostic, not a finding: no score impact. Present only when
     # non-empty so the summary is unchanged for files that all parse.
     if parse_fallback_files:

@@ -548,12 +548,30 @@ def parse_fallback_notice(summary: dict | None) -> str:
     )
 
 
+def coverage_notice(summary: dict | None) -> str:
+    """One line saying a plan-only (or state-only) scan did not run every
+    rule, or "" for any other scan. A score on its own would read as a
+    clean bill of health. Shared by every renderer and the stderr WARN."""
+    cov = (summary or {}).get("coverage")
+    if not cov:
+        return ""
+    partly = cov.get("rules_partly_evaluated", 0)
+    return (
+        f"PARTIAL SCAN: {cov['source']} only, no Terraform source. "
+        f"{cov['rules_not_evaluated']} of {cov['rules_total']} rules were not "
+        f"evaluated ({cov['not_evaluated_critical_high']} of them CRITICAL/HIGH)"
+        + (f" and {partly} only in part" if partly else "")
+        + ". The score covers only what ran: it is not a clean bill of health."
+    )
+
+
 def to_sarif(
     findings: list[dict],
     entries: list[dict],
     parse_fallback_files: list[dict] | None = None,
     *,
     source_root: Path | None = None,
+    coverage: str = "",
 ) -> dict:
     """Convert findings to SARIF v2.1.0 format with proper taxonomies.
 
@@ -563,7 +581,8 @@ def to_sarif(
 
     Files the HCL parser could not read are tool diagnostics, not results:
     each becomes a ``toolExecutionNotifications`` entry on the run's
-    invocation, so it never shows up as a code-scanning alert.
+    invocation, so it never shows up as a code-scanning alert. So does
+    `coverage` (`coverage_notice`).
     """
     rules = []
     rule_index = {}
@@ -740,7 +759,7 @@ def to_sarif(
             {"name": t["name"], "guid": t["guid"]} for t in taxonomies
         ]
         run["taxonomies"] = taxonomies
-    if parse_fallback_files:
+    if parse_fallback_files or coverage:
         run["invocations"] = [{
             "executionSuccessful": True,
             "toolExecutionNotifications": [
@@ -758,8 +777,8 @@ def to_sarif(
                         },
                     }],
                 }
-                for pf in parse_fallback_files
-            ],
+                for pf in parse_fallback_files or []
+            ] + ([{"level": "warning", "message": {"text": coverage}}] if coverage else []),
         }]
 
     return {
@@ -1491,6 +1510,7 @@ def _render_pr_summary_minimal_fallback(summary: dict, *, reason: str = "") -> s
     counts = summary.get("counts", {})
     lines = [
         f"## tf-analyze: {score} ({grade})",
+        *([f"**{coverage_notice(summary)}**"] if coverage_notice(summary) else []),
         "",
         "| Urgency | Count |",
         "|---------|------:|",
@@ -1607,10 +1627,16 @@ def _render_pr_summary_impl(
     _fallback = parse_fallback_notice(summary)
     if _fallback:
         parts.append(f"⚠️ {_fallback}")
+    _coverage = coverage_notice(summary)
+    if _coverage:
+        parts.append(f"⚠️ **{_coverage}**")
     parts.append("")
 
     if not findings:
-        parts.append("✅ Clean — no findings at default scoring tiers.")
+        parts.append(
+            "No findings in the rules that ran." if _coverage
+            else "✅ Clean — no findings at default scoring tiers."
+        )
         # Even on a clean repo, surface the attack graph if one was
         # built — the picture itself is shareable content.
         if attack_graph and attack_graph.get("edges"):
@@ -2130,6 +2156,13 @@ def to_html(
                 f"<div style='background:#fff3cd;border-left:6px solid #b07d00;"
                 f"padding:.4em 1em;margin-bottom:1em;font-size:13px'>"
                 f"&#9888; {_h(_fallback)}</div>"
+            )
+        _coverage = coverage_notice(summary)
+        if _coverage:
+            summary_banner += (
+                f"<div style='background:#fff3cd;border-left:6px solid #b07d00;"
+                f"padding:.4em 1em;margin-bottom:1em;font-size:13px'>"
+                f"&#9888; <strong>{_h(_coverage)}</strong></div>"
             )
 
     tab_bar = ""

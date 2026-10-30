@@ -334,8 +334,33 @@ def _compliance_summary(data: dict, framework: str) -> str:
     return f"compliance: {framework} {failing}/{total} controls failing."
 
 
+def _coverage_summary(data: dict) -> str:
+    """What the scan left out. A Run Task has the plan and no source, so
+    some rules cannot run, and "passed" alone would claim they did. Not
+    knowing what ran (an older engine) is said too, not passed over."""
+    coverage = (data.get("summary") or {}).get("coverage")
+    if not coverage:
+        return "PARTIAL SCAN: rule coverage unknown; treat this as not a full review."
+    partly = coverage.get("rules_partly_evaluated", 0)
+    return (
+        f"PARTIAL SCAN: plan only, no Terraform source. "
+        f"{coverage['rules_not_evaluated']} of {coverage['rules_total']} rules "
+        f"not evaluated ({coverage['not_evaluated_critical_high']} CRITICAL/HIGH)"
+        + (f", {partly} only in part" if partly else "")
+        + ". Run tf-analyze on the source as well; this result is not a full review."
+    )
+
+
 def _format_status_body(data: dict, threshold: str) -> dict:
-    """Build the HCP Run Task callback payload from the engine JSON."""
+    """Build the HCP Run Task callback payload from the engine JSON.
+
+    The status is `failed` only for a finding at `threshold` or above.
+    Rules that could not run do not fail the task: HCP offers `passed` or
+    `failed`, every plan has such rules, and failing them all would make
+    the task block every apply under mandatory enforcement. So a pass says
+    what it means instead: no finding in the rules that ran, with the
+    rules that didn't run counted beside it (`_coverage_summary`).
+    """
     findings = data.get("findings") or []
     breach = [
         f for f in findings
@@ -348,7 +373,9 @@ def _format_status_body(data: dict, threshold: str) -> dict:
         f"tf-analyze: {len(findings)} finding(s) "
         f"(C:{counts['CRITICAL']} H:{counts['HIGH']} "
         f"M:{counts['MEDIUM']} L:{counts['LOW']}). "
-        f"{'Blocked' if breach else 'No'} {threshold}+ findings.",
+        f"{'Blocked' if breach else 'No'} {threshold}+ findings"
+        f"{'' if breach else ' in the rules evaluated'}.",
+        _coverage_summary(data),
     ]
     if COMPLIANCE_FRAMEWORK:
         compliance_line = _compliance_summary(data, COMPLIANCE_FRAMEWORK)

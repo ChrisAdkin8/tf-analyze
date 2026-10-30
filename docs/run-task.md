@@ -8,6 +8,9 @@ A Run Task is HashiCorp's webhook hook between `terraform plan` and
 3. Runs `detect.py --plan-json plan.json --fail-on HIGH`
 4. POSTs `passed` / `failed` + summary to HCP Terraform's callback URL
 
+A Run Task sees the plan and not your source, so **it does not run every
+rule**: see [What a Run Task does not check](#what-a-run-task-does-not-check).
+
 The server lives at [`integrations/run-task/`](../integrations/run-task/).
 
 ## Why a Run Task
@@ -18,6 +21,68 @@ runtime values: a `var.encrypted = false` set in a tfvars file, an IAM
 role name composed via `format()`, or a count that's only resolvable at
 plan time. The Run Task is the only path that gets plan-JSON without
 re-running Terraform with credentials.
+
+## What a Run Task does not check
+
+HCP Terraform sends the plan, never the `.tf` files. tf-analyze runs what
+it can on the plan's values:
+
+- The `resource_arg`, `resource_missing_arg`, `resource_present`,
+  `hcl_attr` and `data_source_present` rules, as on any `--plan-json` scan.
+- `resource_absent` and `resource_missing_companion`, on the plan's
+  resources (references come from the plan's `configuration` section).
+- Rules that judge resolved values, on those values rendered as HCL:
+  `iam_json_policy_analysis`, `iam_policy_analysis`, `firewall_open_port`,
+  `ip_range_span`, `helm_set_value`, `resource_has_block`,
+  `deprecated_datasource`, and the two ECS `container_definitions` rules.
+
+The rest cannot run. About 72 of the 352 rules are not evaluated, 15 of
+them CRITICAL or HIGH. They are rules about how the source is written,
+which a plan does not record:
+
+- **Hardcoded secrets** (`SEC-SECRETS-001`, `SEC-SECRETS-ENTROPY-001`): a
+  plan shows `password = "..."` whether it came from a literal or a variable.
+- **Modules, variables and outputs**: pinned sources (`MOD-PIN-001`,
+  `MOD-SUPPLY-001`), `variable` blocks, unused outputs. A plan has resources.
+- **Files**: workflow YAML (`SEC-CICD-*`), a committed state
+  (`SEC-STATE-001`), `provisioner` commands, tfvars.
+- **`graph_check` rules** (they follow references, and an unknown value has
+  none) and `lifecycle` (`OPS-ENV-001`), which a plan does not include.
+
+A value that is unknown until apply (`policy = aws_x.y.json` on a resource
+not created yet) can't be judged either: the plan has nothing to read.
+
+So keep scanning the source in CI (`detect.py --target .`): the two together
+cover everything. The numbers for a given run are in the engine's JSON, as
+`summary.coverage`:
+
+```json
+{
+  "partial": true,
+  "source": "plan",
+  "rules_total": 352,
+  "rules_evaluated": 280,
+  "rules_partly_evaluated": 0,
+  "rules_not_evaluated": 72,
+  "not_evaluated_critical_high": 15,
+  "not_evaluated_rules": ["CI-TEST-001", "..."]
+}
+```
+
+### What `passed` means
+
+| Result | Status | Message |
+|---|---|---|
+| A finding at or above `TFA_RUN_TASK_FAIL_ON` | `failed` | `... Blocked HIGH+ findings. PARTIAL SCAN: ...` |
+| No such finding | `passed` | `... No HIGH+ findings in the rules evaluated. PARTIAL SCAN: plan only, no Terraform source. 72 of 352 rules not evaluated (15 CRITICAL/HIGH). ...` |
+
+The status stays `passed` when nothing breached the threshold. A task
+result is `passed` or `failed`, there is no third value, and every plan has
+rules that can't run: returning `failed` for that would block every apply
+under mandatory enforcement, and the task would be switched off. Instead
+the message says what `passed` covers. Read it as "nothing found by the
+rules that ran", not "this plan is safe". A score of 100 (A) on a plan-only
+scan means the same, and every report format carries the `PARTIAL SCAN` line.
 
 ## Quick start
 
@@ -104,7 +169,8 @@ python3 scripts/detect.py --target . --plan-json plan.json --format json
 ```
 
 The server's behaviour is exactly that, plus the HMAC-verified webhook
-plumbing.
+plumbing. Run it from a folder with no `.tf` files to see what the Run Task
+sees: with source files present, the source is scanned too.
 
 ## Engine-crash handling (R30.10 + R30.12)
 
