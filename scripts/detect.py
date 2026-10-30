@@ -173,8 +173,11 @@ def _read_tf_source(path: Path) -> str:
 
 # ---- Resource block extraction ------------------------------------------
 
+# A `/* */` comment may sit between labels. The parser rejects that, so the
+# block is read from text, and a header that didn't match lost it entirely.
+_LABEL_GAP = r'(?:\s|/\*[\s\S]*?\*/)+'
 RESOURCE_START = re.compile(
-    r'^\s*resource\s+"([\w-]+)"\s+"([\w-]+)"\s*\{', re.MULTILINE
+    rf'^\s*resource{_LABEL_GAP}"([\w-]+)"{_LABEL_GAP}"([\w-]+)"\s*\{{', re.MULTILINE
 )
 MODULE_START = re.compile(r'^\s*module\s+"([\w-]+)"\s*\{', re.MULTILINE)
 VARIABLE_START = re.compile(r'^\s*variable\s+"([\w-]+)"\s*\{', re.MULTILINE)
@@ -185,7 +188,7 @@ REMOVED_START = re.compile(r'^\s*removed\s*\{', re.MULTILINE)
 CHECK_START = re.compile(r'^\s*check\s+"([\w-]+)"\s*\{', re.MULTILINE)
 OUTPUT_START = re.compile(r'^\s*output\s+"([\w-]+)"\s*\{', re.MULTILINE)
 DATA_START = re.compile(
-    r'^\s*data\s+"([\w-]+)"\s+"([\w-]+)"\s*\{', re.MULTILINE
+    rf'^\s*data{_LABEL_GAP}"([\w-]+)"{_LABEL_GAP}"([\w-]+)"\s*\{{', re.MULTILINE
 )
 PROVIDER_START = re.compile(r'^\s*provider\s+"([\w-]+)"\s*\{', re.MULTILINE)
 
@@ -442,8 +445,9 @@ _MODULE_META_ARGS = frozenset({
     "lifecycle",
 })
 # One child module called from many places is scanned once per distinct
-# set of caller inputs, up to this many.
-_MAX_VAR_CONTEXTS = 8
+# set of caller inputs, up to this many (each scan costs the module's whole
+# rule pass); past that `_pick_var_contexts` chooses which, and warns.
+_MAX_VAR_CONTEXTS = 64
 
 
 def _top_level_assignments(body: str) -> dict[str, str]:
@@ -511,6 +515,35 @@ def _tfvars_values(directory: Path) -> dict[str, str]:
     return out
 
 
+def _pick_var_contexts(contexts: list[dict], limit: int) -> list[dict]:
+    """At most `limit` of `contexts`, chosen so each value of each input
+    is in at least one of them while the limit allows (rather than the
+    first `limit` callers, which lost a lone `acl = "public-read"` caller
+    behind eight others with different names).
+
+    Inputs with the fewest distinct values go first: a setting such as
+    ``acl`` has a few, while a ``name`` that differs on every call takes a
+    context each and would use up the limit. Room left after that goes
+    to the other contexts, in caller order, for their combinations of
+    values. A limit too small for every value loses the last in line."""
+    if len(contexts) <= limit:
+        return contexts
+    keys = {k for ctx in contexts for k in ctx}
+    values = {k: {ctx.get(k) for ctx in contexts} for k in keys}
+    picked: list[dict] = []
+    covered: set[tuple] = set()
+    for key in sorted(keys, key=lambda k: (len(values[k]), k)):
+        for ctx in contexts:
+            if len(picked) == limit:
+                return picked
+            pair = (key, ctx.get(key))
+            if pair not in covered:
+                picked.append(ctx)
+                covered.update((k, ctx.get(k)) for k in keys)
+    rest = [ctx for ctx in contexts if not any(ctx is p for p in picked)]
+    return picked + rest[:limit - len(picked)]
+
+
 def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
     """Return ``{dir_path: [context, ...]}``: the values `var.X` /
     `local.X` resolve to when a directory's files are scanned.
@@ -525,7 +558,9 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
     one context. A child module called from several places with different
     inputs has one context per distinct set, so a rule sees each caller's
     values — with a single merged dict, whichever caller came last hid the
-    others (a `public = true` caller behind a `public = false` one).
+    others (a `public = true` caller behind a `public = false` one). Past
+    `_MAX_VAR_CONTEXTS` distinct sets, `_pick_var_contexts` chooses and a
+    WARN says how many were not scanned.
     """
     base: dict[str, dict[str, str]] = {}
     for fp, text in all_files_text.items():
@@ -608,6 +643,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             return contexts[d]
         in_progress.add(d)
         found: list[dict] = []
+        distinct: set[frozenset] = set()
         for parent_dir, inputs, aws_provider in incoming:
             for parent_ctx in contexts_of(parent_dir):
                 ctx = dict(own)
@@ -625,11 +661,22 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
                     resolved = resolved.strip().strip('"').strip("'")
                     if resolved and not resolved.startswith(("var.", "local.", "data.")):
                         ctx[k] = resolved
-                if ctx not in found and len(found) < _MAX_VAR_CONTEXTS:
+                key = frozenset(ctx.items())
+                if key not in distinct:
+                    distinct.add(key)
                     found.append(ctx)
         in_progress.discard(d)
-        contexts[d] = found
-        return found
+        picked = _pick_var_contexts(found, _MAX_VAR_CONTEXTS)
+        if len(picked) < len(found):
+            print(
+                f"WARN: module {d}: {len(found) - len(picked)} of {len(found)} "
+                f"distinct sets of caller inputs not scanned (limit "
+                f"{_MAX_VAR_CONTEXTS}); a finding only those callers trigger "
+                "may be missed",
+                file=sys.stderr,
+            )
+        contexts[d] = picked
+        return picked
 
     for d in sorted(set(base) | {c for _, c, _, _ in calls}):
         contexts_of(d)

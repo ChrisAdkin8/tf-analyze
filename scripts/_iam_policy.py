@@ -22,15 +22,31 @@ value`` — so it is parsed again as HCL. Values that are expressions stay
 ``"${...}"`` strings and never match a literal ``"*"``: a wildcard hidden
 behind a variable is not reported (unknown at parse time), which is the
 conservative direction for these rules.
+
+A construct the parser rejects fails its whole file, usually far from any
+policy. The argument or block is then cut out of the text and parsed on
+its own (`text_argument_policies`, `document_block_subtree`), so a policy
+reads the same as on a clean file.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from dataclasses import dataclass, field
 
-from _hcl import brace_walk, normalise_attrs, parse_tf, single_interpolation
+from _hcl import (
+    _hcl_object_to_json,
+    arg_source,
+    block_bodies_at,
+    brace_walk,
+    normalise_attrs,
+    parse_fragment,
+    resolve_value_text,
+    unwrap_value,
+)
+from _network import parse_literal
 
 _JSONENCODE_RE = re.compile(r"\s*jsonencode\s*\((.*)\)\s*", re.DOTALL)
 
@@ -103,12 +119,35 @@ class Statement:
 
 
 def _strings(value) -> list[str]:
-    """A policy field as a list of strings (a lone string is one item)."""
+    """A policy field as a list of strings (a lone string is one item),
+    each literal freed of parentheses and ``${...}``: ``Action = ("*")``
+    is ``"*"``, ``actions = (["*"])`` is ``["*"]``."""
     if isinstance(value, str):
-        return [value]
+        text = resolve_value_text(value, {})
+        if text == value:
+            return [value]
+        literal = parse_literal(text)
+        return _strings(literal) if isinstance(literal, list) else [text]
     if isinstance(value, list):
-        return [v for v in value if isinstance(v, str)]
+        return [s for v in value for s in _strings(v)]
     return []
+
+
+def _structure(value):
+    """A statement list, statement or principal map that parentheses turned
+    into text (``Statement = ([{...}])``), as data; anything else as is."""
+    if isinstance(value, str):
+        try:
+            return ast.literal_eval(unwrap_value(value))
+        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            pass
+    return value
+
+
+def _effect(value) -> str:
+    """A statement's effect; IAM's default when it is not a string."""
+    strings = _strings(value)
+    return strings[0] if strings else "Allow"
 
 
 # ---- JSON policy documents --------------------------------------------------
@@ -117,23 +156,26 @@ def _strings(value) -> list[str]:
 def decode_policy(value) -> dict | None:
     """The policy document a policy-valued argument holds, as a dict, or
     None when it is not analysable here (``data.x.json``, ``file(...)``,
-    a variable, invalid JSON)."""
+    a variable, invalid JSON). Parentheses and ``${...}`` around any of
+    these, however nested, make no difference."""
     if isinstance(value, dict):
         return value
     if not isinstance(value, str):
         return None
-    expr = single_interpolation(value)
-    if expr is not None:
-        m = _JSONENCODE_RE.fullmatch(expr)
-        if m is None:
-            return None
-        arg = m.group(1)
-        try:
-            doc = json.loads(arg)
-        except ValueError:
-            tree, _err = parse_tf("x = " + arg + "\n")
-            doc = (tree or {}).get("x")
+    expr = unwrap_value(value)
+    m = _JSONENCODE_RE.fullmatch(expr)
+    if m is not None:
+        doc = _jsonencode_argument(unwrap_value(m.group(1)))
         return doc if isinstance(doc, dict) else None
+    if expr != value.strip():
+        if not (len(expr) >= 2 and expr[0] == expr[-1] == '"'):
+            return None
+        # A string literal behind the wrappers. The parser leaves its
+        # escapes in place, or takes them out and leaves the quotes.
+        try:
+            value = json.loads(expr)
+        except ValueError:
+            value = expr[1:-1]
     try:  # heredoc or quoted JSON string
         doc = json.loads(value)
     except ValueError:
@@ -147,6 +189,21 @@ def decode_policy(value) -> dict | None:
         except ValueError:
             return None
     return doc if isinstance(doc, dict) else None
+
+
+def _jsonencode_argument(arg: str):
+    """The value of a ``jsonencode(...)`` argument: the parser's JSON text,
+    the Python repr it prints when the argument has parentheses of its own
+    (``jsonencode(({...}))``), or HCL."""
+    try:
+        return json.loads(arg)
+    except ValueError:
+        pass
+    try:
+        return ast.literal_eval(arg)
+    except (ValueError, SyntaxError, MemoryError, RecursionError):
+        tree, _err = parse_fragment("x = " + arg + "\n")
+        return (tree or {}).get("x")
 
 
 def _quote_bare_interpolations(text: str) -> str:
@@ -183,22 +240,22 @@ def _quote_bare_interpolations(text: str) -> str:
 def json_statements(doc: dict) -> list[Statement]:
     """Statements of a JSON policy document (``Statement`` may be one
     object or a list)."""
-    raw = doc.get("Statement") or []
+    raw = _structure(doc.get("Statement")) or []
     if isinstance(raw, dict):
         raw = [raw]
     out: list[Statement] = []
     for st in raw if isinstance(raw, list) else []:
+        st = _structure(st)
         if not isinstance(st, dict):
             continue
-        principal = st.get("Principal")
+        principal = _structure(st.get("Principal"))
         if isinstance(principal, dict):
             principals = [v for vals in principal.values() for v in _strings(vals)]
         else:
             principals = _strings(principal)
-        effect = st.get("Effect", "Allow")
         out.append(
             Statement(
-                effect=effect if isinstance(effect, str) else "Allow",
+                effect=_effect(st.get("Effect")),
                 actions=_strings(st.get("Action")),
                 not_actions=_strings(st.get("NotAction")),
                 resources=_strings(st.get("Resource")),
@@ -219,6 +276,28 @@ def argument_policies(attrs: dict, args: list[str]) -> list[dict]:
     return [d for d in (decode_policy(v) for v in values) if d is not None]
 
 
+def _decode_source(text: str) -> dict | None:
+    """`decode_policy` for an argument's source text. Only the value is
+    parsed, so a construct elsewhere in the file cannot stop it; when the
+    value itself is what the parser rejects, a ``jsonencode`` argument
+    still gets the regex rewrite."""
+    expr = unwrap_value(text)
+    tree, _err = parse_fragment("__v = " + expr + "\n")
+    if tree is not None:
+        return decode_policy(tree.get("__v"))
+    m = _JSONENCODE_RE.fullmatch(expr)
+    return _hcl_object_to_json(m.group(1).strip()) if m else None
+
+
+def text_argument_policies(body: str, args: list[str]) -> list[dict]:
+    """`argument_policies` for a resource without a parse tree, from its
+    body text."""
+    sources = [arg_source(body, a) for a in args]
+    for block in block_bodies_at(body, "inline_policy"):
+        sources.append(arg_source(block, "policy"))
+    return [d for d in (_decode_source(v) for v in sources if v) if d is not None]
+
+
 # ---- aws_iam_policy_document ------------------------------------------------
 
 
@@ -234,10 +313,9 @@ def document_statements(body: dict) -> list[Statement]:
             if isinstance(block, dict)
             for ident in _strings(block.get("identifiers"))
         ]
-        effect = st.get("effect", "Allow")
         out.append(
             Statement(
-                effect=effect if isinstance(effect, str) else "Allow",
+                effect=_effect(st.get("effect")),
                 actions=_strings(st.get("actions")),
                 not_actions=_strings(st.get("not_actions")),
                 resources=_strings(st.get("resources")),
@@ -247,6 +325,17 @@ def document_statements(body: dict) -> list[Statement]:
             )
         )
     return out
+
+
+def document_block_subtree(name: str, start_line: int, body: str) -> dict | None:
+    """The subtree of one ``data "aws_iam_policy_document"`` block, parsed
+    on its own from its text (`policy_document_subtrees` needs the whole
+    file to parse, and a name to be used once). Blank lines in front keep
+    `document_statements` line numbers right for the file. None when the
+    block itself does not parse."""
+    text = "\n" * (start_line - 1) + f'data "aws_iam_policy_document" "{name}" {{{body}}}\n'
+    subtrees = policy_document_subtrees(parse_fragment(text)[0]).get(name)
+    return subtrees[0] if subtrees else None
 
 
 def policy_document_subtrees(tree: dict | None) -> dict[str, list[dict]]:

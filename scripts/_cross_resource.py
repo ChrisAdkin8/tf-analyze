@@ -68,8 +68,9 @@ from _hcl import (
 # the pattern locally so this module stays import-independent of the
 # detect.py top-level module-load order. The two compiled regexes are
 # semantically identical; binding identity is not part of the contract.
+_LABEL_GAP = r'(?:\s|/\*[\s\S]*?\*/)+'
 _RESOURCE_START = re.compile(
-    r'^\s*resource\s+"([\w-]+)"\s+"([\w-]+)"\s*\{', re.MULTILINE
+    rf'^\s*resource{_LABEL_GAP}"([\w-]+)"{_LABEL_GAP}"([\w-]+)"\s*\{{', re.MULTILINE
 )
 
 
