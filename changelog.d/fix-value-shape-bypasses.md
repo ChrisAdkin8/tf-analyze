@@ -18,8 +18,12 @@
   `format("s-%s", var.n)` and `var.w ? ["a"] : ["b"]` in it could not be
   read, because the parser prints the first with raw double quotes and the
   second with Python's single quotes, so an admin statement beside them
-  was never checked and nothing said so. Such a policy is now read, and a
-  policy written out in the source that can't be decoded gets a WARN.
+  was never checked and nothing said so. Such a policy is now read.
+  Statement objects written out inside `concat(...)`, `merge(...)`,
+  `flatten(...)`, a conditional or `tostring(...)` are analysed too. A policy
+  written out in the source that still can't be read, in whole or in part,
+  gets a WARN. `data.x.json`, `file(...)` and `jsonencode(var.p)` hold no
+  document, so they get none.
 - **Parenthesised objects**: `ingress = ([{...}])`,
   `metadata_options = ({...})` and `inline_policy = ([{...}])` now read
   like the plain forms in every rule on the parse-tree path.
@@ -39,10 +43,18 @@
 - **Ninth caller of a shared module**: only the first 8 distinct sets of
   caller inputs were scanned and the rest dropped without a word, so a lone
   `acl = "public-read"` caller behind eight others with different names
-  exited 0. The limit is now 64. Past it, inputs that only a resource's tags
-  read stop counting, and if there are still too many, the sets are chosen
-  so each value of each input is scanned while the limit allows, and the
-  scan reports what it left out: a WARN, `summary.unscanned_contexts`, and
-  `--fail-on` and the GitHub Action's gate fail, as for a rule check that ran
-  out of time. **A repo with a local module that has more than 64 distinct
-  callers now fails `--fail-on`.**
+  exited 0. Every set is now scanned, within a budget of contexts x resources
+  (about 200,000 a module and 1,000,000 a repo; `--max-module-contexts N`,
+  or the Action's `max-module-contexts` input, sets a plain count instead).
+  Inputs holding only unknown expressions (`aws_subnet.a.id`) no longer make
+  a set distinct. Past the budget, inputs the module doesn't read stop
+  counting, and the sets are chosen so each value of each input is scanned.
+  A value left out fails `--fail-on` and the Action's gate, naming the
+  module (`summary.unscanned_contexts`); in `--mode diff`, only for modules
+  the change touches. **Residual risk:** with every value scanned but not
+  every combination, the scan gives only a WARN
+  (`summary.unscanned_combinations`), so a finding needing two values from
+  different callers together can be missed.
+- **`--mode verify-fixed`**: a finding gone from a module with callers left
+  out came out RESOLVED while still live. It is now UNREADABLE, and the mode
+  gates on left-out values and on rule checks that ran out of time.

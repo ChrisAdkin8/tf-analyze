@@ -55,6 +55,12 @@ from _network import parse_literal
 _JSONENCODE_RE = re.compile(r"\s*jsonencode\s*\((.*)\)\s*", re.DOTALL)
 
 WILDCARD_ACTIONS = frozenset({"*", "*:*"})
+_STATEMENT_KEYS = frozenset({
+    "Effect", "Action", "NotAction", "Resource", "NotResource", "Principal", "NotPrincipal",
+})
+_POLICY_FIELD_RE = re.compile(r'\b(?:Statement|Effect)"?\s*[=:]')
+# A pathological expression can't turn into one parse per brace for ever.
+_MAX_OBJECTS_TRIED = 1000
 
 # The `check` values `Statement.matches` knows; the catalogue loader
 # rejects any other (an unknown check would never fire).
@@ -155,14 +161,18 @@ def decode_policy(value) -> dict | None:
         return value
     if not isinstance(value, str):
         return None
+    if value.startswith("${"):
+        # The parser doubles a backslash that escapes a quote in an
+        # expression, which ends the string early for anything reading it.
+        value = value.replace('\\\\"', '\\"')
     expr = unwrap_value(value)
     m = _JSONENCODE_RE.fullmatch(expr)
     if m is not None:
         doc = _jsonencode_argument(unwrap_value(m.group(1)))
-        return doc if isinstance(doc, dict) else None
+        return doc if isinstance(doc, dict) else _document_in(m.group(1))
     if expr != value.strip():
         if not (len(expr) >= 2 and expr[0] == expr[-1] == '"'):
-            return None
+            return _document_in(expr)
         # A string literal behind the wrappers. The parser leaves its
         # escapes in place, or takes them out and leaves the quotes.
         try:
@@ -180,8 +190,19 @@ def decode_policy(value) -> dict | None:
         try:
             doc = json.loads(_quote_bare_interpolations(value))
         except ValueError:
-            return None
+            # Malformed, or a template (`%{ if }`). Whatever else it holds
+            # went unread, so say so even when a statement is found.
+            found = _document_in(value)
+            return found and {**found, "__unread__": True}
     return doc if isinstance(doc, dict) else None
+
+
+def _document_in(text: str) -> dict | None:
+    """A document of the statements written out in an expression that isn't
+    one itself: ``merge(var.x, {...})``, ``var.a ? jsonencode({...}) : ""``,
+    ``tostring(jsonencode({...}))``. None if there are none."""
+    statements = _embedded_statements(text)
+    return {"Statement": statements} if statements else None
 
 
 def _jsonencode_argument(arg: str):
@@ -261,17 +282,60 @@ def _quote_bare_interpolations(text: str) -> str:
     return "".join(out)
 
 
+def _statement_objects(raw) -> list[dict]:
+    """The statement objects of a ``Statement`` value: one object, a list,
+    and any in an expression there (``concat(local.b, [{...}])``), found by
+    `_embedded_statements`. What the expression adds at apply time is
+    unknown, like any other reference."""
+    raw = literal_structure(raw)
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, str):
+        return _embedded_statements(raw)
+    if isinstance(raw, list):
+        return [st for item in raw for st in _statement_objects(item)]
+    return []
+
+
+def _embedded_statements(text: str) -> list[dict]:
+    """Every statement object written out somewhere in `text`: each
+    ``{...}`` that reads as an object, whatever surrounds it. One that is a
+    whole document counts for its statements. An object that doesn't read
+    is looked into, for those inside it."""
+    out: list[dict] = []
+    i = text.find("{")
+    tries = 0
+    while i != -1 and tries < _MAX_OBJECTS_TRIED:
+        tries += 1
+        end = brace_walk(text, i)
+        obj = _jsonencode_argument(text[i:end]) if end else None
+        if isinstance(obj, dict) and _STATEMENT_KEYS & obj.keys():
+            out.append(obj)
+        elif isinstance(obj, dict) and "Statement" in obj:
+            out.extend(_statement_objects(obj["Statement"]))
+        else:
+            i = text.find("{", i + 1)
+            continue
+        i = text.find("{", end)
+    return out
+
+
+def _unread_statements(doc: dict) -> bool:
+    """Whether `doc` has statements written out that could not be read."""
+    if doc.get("__unread__"):
+        return True
+    raw = literal_structure(doc.get("Statement"))
+    return any(
+        isinstance(item, str) and "{" in unwrap_value(item) and not _embedded_statements(item)
+        for item in (raw if isinstance(raw, list) else [raw])
+    )
+
+
 def json_statements(doc: dict) -> list[Statement]:
     """Statements of a JSON policy document (``Statement`` may be one
     object or a list)."""
-    raw = literal_structure(doc.get("Statement")) or []
-    if isinstance(raw, dict):
-        raw = [raw]
     out: list[Statement] = []
-    for st in raw if isinstance(raw, list) else []:
-        st = literal_structure(st)
-        if not isinstance(st, dict):
-            continue
+    for st in _statement_objects(doc.get("Statement")):
         principal = literal_structure(st.get("Principal"))
         if isinstance(principal, dict):
             principals = [v for vals in principal.values() for v in _strings(vals)]
@@ -300,7 +364,7 @@ def _is_written_out(value) -> bool:
     m = _JSONENCODE_RE.fullmatch(expr)
     if m is not None:
         expr = unwrap_value(m.group(1))
-    return expr.lstrip('"').startswith("{")
+    return expr.lstrip('"').startswith("{") or bool(_POLICY_FIELD_RE.search(expr))
 
 
 _UNDECODED_WARNED: set[str] = set()
@@ -328,7 +392,7 @@ def argument_policies(attrs: dict, args: list[str], where: str = "a resource") -
         doc = decode_policy(value)
         if doc is not None:
             docs.append(doc)
-        elif _is_written_out(value):
+        if (_unread_statements(doc) if doc is not None else _is_written_out(value)):
             _warn_undecoded(where)
     return docs
 

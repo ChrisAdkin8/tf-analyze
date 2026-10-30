@@ -55,6 +55,9 @@ inputs:
   extra-args:
     description: 'Additional CLI flags appended verbatim to detect.py (e.g. "--check-registry --compliance").'
     default: ''
+  max-module-contexts:
+    description: 'How many distinct sets of caller inputs to scan a local module in (a whole number), in place of the default budget (contexts x resources). Raise it if the job fails because input values of a module were not scanned. Deliberately not read from .tf-analyze.yaml, which a pull request can edit.'
+    default: ''
   compliance-framework:
     description: 'Optional compliance framework for the gap report (cis, pci_dss, soc2, owasp_iac, all). Empty = disabled. When set, the engine runs the compliance gap report and the PR comment gains a collapsible compliance section.'
     default: ''
@@ -289,6 +292,7 @@ runs:
         TFA_BASELINE: ${{ inputs.baseline }}
         TFA_EXTRA_ARGS: ${{ inputs.extra-args }}
         TFA_FAIL_ON: ${{ inputs.fail-on }}
+        TFA_MAX_MODULE_CONTEXTS: ${{ inputs.max-module-contexts }}
         TFA_COMPLIANCE_FW: ${{ inputs.compliance-framework }}
         TFA_TRUSTED_DIR: ${{ steps.trusted.outputs.dir }}
         TFA_TRUSTED_CONFIG: ${{ steps.trusted.outputs.config }}
@@ -339,6 +343,13 @@ runs:
         fi
         if [ -n "${TFA_COMPLIANCE_FW}" ]; then
           ARGS+=(--compliance --compliance-framework "${TFA_COMPLIANCE_FW}")
+        fi
+        if [ -n "${TFA_MAX_MODULE_CONTEXTS}" ]; then
+          if ! [[ "${TFA_MAX_MODULE_CONTEXTS}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::tf-analyze: max-module-contexts must be a whole number of at least 1"
+            exit 1
+          fi
+          ARGS+=(--max-module-contexts "${TFA_MAX_MODULE_CONTEXTS}")
         fi
         if [ -n "${TFA_EXTRA_ARGS}" ]; then
           # `read -ra` does whitespace tokenisation but no command
@@ -913,10 +924,11 @@ runs:
         if summary.get("rule_timeouts") or summary.get("unreadable_files"):
             print(f"::error::tf-analyze: {len(summary.get('rule_timeouts') or [])} rule check(s) ran out of time and {len(summary.get('unreadable_files') or [])} file(s) could not be read; those were not checked.", file=sys.stderr)
             sys.exit(1)
-        # A shared module with more distinct callers than the scan covers
+        # A value of a shared module's input that no scanned context had
         # (`--fail-on` fails on this too).
         if summary.get("unscanned_contexts"):
-            print(f"::error::tf-analyze: {len(summary['unscanned_contexts'])} module(s) have callers that were not scanned; see summary.unscanned_contexts.", file=sys.stderr)
+            for e in summary["unscanned_contexts"]:
+                print(f"::error::tf-analyze: module {e.get('module')}: input values of its callers were not scanned; raise the max-module-contexts input.", file=sys.stderr)
             sys.exit(1)
         threshold = rank.get(fail_on, 3)
         breach = [f for f in findings if rank.get(f.get("urgency",""), 0) >= threshold]

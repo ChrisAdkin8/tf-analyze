@@ -78,9 +78,13 @@ change them for those runs, edit the fallback after `||` in the file.
   (exit 2 or more) fails the job too.
 - **Unchecked input fails the job.** If a rule check ran out of time
   (`summary.rule_timeouts`), a file couldn't be read
-  (`summary.unreadable_files`), or a local module has more distinct callers
-  than the scan covers (`summary.unscanned_contexts`), part of the target
-  wasn't checked, so the job fails, as `--fail-on` does on the command line.
+  (`summary.unreadable_files`), or a value of an input to a local module
+  was in no scanned caller (`summary.unscanned_contexts`), part of the
+  target wasn't checked, so the job fails, as `--fail-on` does on the
+  command line. Raise the composite action's `max-module-contexts` input for
+  the last one. In `diff` mode this applies only to modules the change
+  touches, directly or through a caller. It is an action input, not a
+  `.tf-analyze.yaml` setting, because a pull request can edit that file.
 - **The composite action's gate reads every report shape.** `mode:
   fleet` reports findings per target (`by_target`), and the gate fails on
   them, and on a fleet's unreadable files, as it does for one target;

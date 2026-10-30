@@ -169,14 +169,24 @@ def test_action_gate_fails_when_a_file_could_not_be_read(tmp_path) -> None:
 
 UNSCANNED = {
     "findings": [],
-    "summary": {"unscanned_contexts": [{"module": "/m", "scanned": 64, "distinct": 70}]},
+    "summary": {
+        "unscanned_contexts": [
+            {"module": "/m", "scanned": 64, "distinct": 70, "unscanned_values": 6}
+        ]
+    },
 }
 
 
 def test_action_gate_fails_when_callers_went_unscanned(tmp_path) -> None:
     res = _gate(tmp_path, UNSCANNED)
     assert res.returncode == 1
-    assert "callers that were not scanned" in res.stderr
+    assert "module /m:" in res.stderr
+    assert "max-module-contexts" in res.stderr
+
+
+def test_action_gate_passes_unscanned_combinations(tmp_path) -> None:
+    report = {"findings": [], "summary": {"unscanned_combinations": [{"module": "/m"}]}}
+    assert _gate(tmp_path, report).returncode == 0
 
 
 def test_action_gate_fails_on_a_fleet_with_callers_unscanned(tmp_path) -> None:

@@ -146,3 +146,24 @@ def test_block_header_does_not_backtrack() -> None:
     assert detect.RESOURCE_START.search(text) is None
     assert detect.DATA_START.search(text.replace("resource", "data")) is None
     assert time.perf_counter() - start < 1.0
+
+
+def test_list_literal_regex_does_not_backtrack() -> None:
+    """A `$` matched two alternatives of the string pattern, so an
+    unterminated string of them was exponential."""
+    import _network
+
+    start = time.perf_counter()
+    assert _network.parse_literal('["' + "$" * 200 + "]")
+    assert time.perf_counter() - start < 1.0
+
+
+def test_unknown_inputs_are_one_context() -> None:
+    """1,000 callers passing their own subnet scan the module once."""
+    files = {
+        Path("/r/child/main.tf"): 'variable "s" {}\nresource "aws_instance" "i" {\n  subnet_id = var.s\n}\n',
+        Path("/r/main.tf"): "".join(
+            f'module "m{i}" {{\n  source = "./child"\n  s = aws_subnet.s{i}.id\n}}\n' for i in range(1000)
+        ),
+    }
+    assert len(detect._extract_var_contexts_by_dir(files)["/r/child"]) == 1
