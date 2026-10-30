@@ -2060,12 +2060,13 @@ def _pr_review_mode(args: object, findings: list[dict], entries: list[dict]) -> 
             recommendation,
         ]
         fix_hcl = (entry.get("fix_hcl") or "").strip()
-        if fix_hcl and f.get("fix_manual_reason"):
-            # One click must not commit a fix that can't work as it stands.
-            body_lines += ["", f"**Fix needs manual work:** {_md_text(f['fix_manual_reason'])}",
-                           "", *_md_fence(fix_hcl, "hcl")]
+        if f.get("fix_suggestion"):
+            body_lines += ["", *_md_fence(f["fix_suggestion"], "suggestion")]
         elif fix_hcl:
-            body_lines += ["", *_md_fence(fix_hcl, "suggestion")]
+            # One click must not commit a fix that can't work as it stands.
+            if f.get("fix_manual_reason"):
+                body_lines += ["", f"**Fix needs manual work:** {_md_text(f['fix_manual_reason'])}"]
+            body_lines += ["", *_md_fence(fix_hcl, "hcl")]
         disruption = entry.get("fix_disruption", "")
         if disruption:
             labels = {
@@ -2180,7 +2181,7 @@ def _run_lsp_server(catalog_dir: Path, project_config: dict) -> None:
         findings = detect_in_file(
             path, text, entries, var_defaults.get(str(target_dir), {}),
         )
-        annotate_fix_blockers(findings, entries)
+        annotate_fix_blockers(findings, entries, {str(path): text})
         # A file the HCL parser can't read is still scanned (regex
         # fallback); tell the user once, as an Information diagnostic.
         _parse_error = parse_tf(text)[1] if path.suffix == ".tf" else None

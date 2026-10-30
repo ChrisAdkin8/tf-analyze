@@ -63,9 +63,11 @@
   reason, and the "applied" count, and the file count, are what really
   changed; each candidate is applied, covered by another rule's fix, or listed.
 - **One-click fixes too**: such a finding now carries `fix_manual_reason`,
-  from the same decision the patcher makes. `--mode pr-review` shows the fix
-  as advice, and the GitHub Action, its template and the editor quick fix
-  don't offer it.
+  from the same decision the patcher makes. A suggestion overwrites one line,
+  and it used to paste the whole `fix_hcl`, `resource "x" "example" {` wrapper
+  included, over the resource's header. `--mode pr-review`, the GitHub Action,
+  its template and the editor quick fix now paste only `fix_suggestion`: the
+  patcher's result, and only where it fits that line. The rest is advice.
 - **Bot PR body**: it read only "would apply", so a real run reported every
   candidate as applied. It now reads the real count and adds a **Needs manual
   work** section.

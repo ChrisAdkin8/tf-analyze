@@ -401,7 +401,10 @@ class TestLspCodeActions:
             edit = a["edit"]["changes"][uri]
             assert isinstance(edit, list)
             assert "newText" in edit[0]
-            assert "tf-analyze fix" in edit[0]["newText"]
+            # A quick fix rewrites the block's own header line, never pastes
+            # a catalogue `fix_hcl` wrapper over it.
+            assert edit[0]["newText"].startswith('resource "aws_db_instance" "x" {\n')
+            assert edit[0]["range"]["end"]["line"] == edit[0]["range"]["start"]["line"] + 1
 
     def test_code_action_far_from_finding_returns_empty(
         self, lsp: LspClient, tmp_path: Path,

@@ -37,6 +37,7 @@ function that touches the filesystem.
 from __future__ import annotations
 
 import difflib
+import functools
 import os
 import re
 import shutil
@@ -152,13 +153,11 @@ def reindent_fix_snippet(
     return result
 
 
-def code_lines(lines: list[str]) -> list[str]:
-    """`lines` with comments, heredoc bodies and string contents blanked to
-    spaces (line count and lengths unchanged), so brace counting and
-    argument matching see only HCL structure: a ``}`` in ``# see } below``
-    or in ``"{"`` no longer closes a block (CLAUDE.md: raw brace walkers
-    must be comment-aware)."""
-    text = mask_comments_and_heredocs("".join(lines))
+@functools.lru_cache(maxsize=16)
+def _blanked(source: str) -> str:
+    """The text of `code_lines`, once per file state: every step of a patch
+    asks again, and a scan tries a patch per finding."""
+    text = mask_comments_and_heredocs(source)
     out = list(text)
     i = 0
     while True:
@@ -170,7 +169,16 @@ def code_lines(lines: list[str]) -> list[str]:
             if out[k] not in "\r\n":
                 out[k] = " "
         i = max(end, i + 1)
-    masked = "".join(out)
+    return "".join(out)
+
+
+def code_lines(lines: list[str]) -> list[str]:
+    """`lines` with comments, heredoc bodies and string contents blanked to
+    spaces (line count and lengths unchanged), so brace counting and
+    argument matching see only HCL structure: a ``}`` in ``# see } below``
+    or in ``"{"`` no longer closes a block (CLAUDE.md: raw brace walkers
+    must be comment-aware)."""
+    masked = _blanked("".join(lines))
     result, pos = [], 0
     for line in lines:
         result.append(masked[pos:pos + len(line)])
@@ -501,15 +509,53 @@ def _pattern_answers(entry: dict, resource_type: str, declared: set[str]) -> lis
     return answers
 
 
-def _refusal_in_block(finding: dict, entry: dict, declared: set[str]) -> str | None:
-    """For a rule whose patches get different answers, which one applies
-    depends on the block: run the patcher on a copy of the file."""
-    try:
-        with open(finding.get("file", ""), encoding="utf-8", newline="") as fh:
-            lines = fh.readlines()
-    except (OSError, ValueError):
+def _file_lines(path: str, texts: dict | None, cache: dict) -> list[str] | None:
+    """The lines of `path` (from `texts`, an editor's unsaved buffers, if
+    there), once; None if unreadable or not patchable."""
+    if path not in cache:
+        lines = None
+        if texts and path in texts:
+            lines = texts[path].splitlines(keepends=True)
+        elif not path.endswith(".tf.json"):
+            try:
+                with open(path, encoding="utf-8", newline="") as fh:
+                    lines = fh.readlines()
+            except (OSError, ValueError):
+                pass
+        cache[path] = lines
+    return cache[path]
+
+
+def _suggestion(finding: dict, entry: dict, declared: set[str], lines: list[str]) -> str | None:
+    """What may replace the finding's line, as a one-click suggestion, or
+    None. A suggestion overwrites exactly that line, so the text comes from
+    running the patcher on a copy (it has passed `snippet_refusal`), and is
+    offered only where it fits that line: the new value when the patch
+    replaced that line, or the block's own header followed by the new
+    argument when the line opens the block the patch added to. Never a
+    catalogue `fix_hcl`, whose `resource "x" "example" {` wrapper would
+    overwrite the user's header."""
+    index = int(finding.get("line") or 0) - 1
+    if not 0 <= index < len(lines):
         return None
-    return _attempt_fix(lines, finding, entry, declared, "\n")[1]
+    patched = lines[:]
+    if _attempt_fix(patched, finding, entry, declared, "\n")[0] is None:
+        return None
+    start = 0
+    while start < len(lines) and start < len(patched) and lines[start] == patched[start]:
+        start += 1
+    tail = 0
+    while (tail < len(lines) - start and tail < len(patched) - start
+           and lines[-1 - tail] == patched[-1 - tail]):
+        tail += 1
+    removed, added = lines[start:len(lines) - tail], patched[start:len(patched) - tail]
+    if removed == [lines[index]] and start == index:
+        text = "".join(added)
+    elif not removed and start > index and code_lines(lines)[index].rstrip().endswith("{"):
+        text = lines[index] + "".join(added)
+    else:
+        return None
+    return text.replace("\r\n", "\n").rstrip("\n")
 
 
 def _scope_of(path: Path, cache: dict) -> set[str]:
@@ -520,14 +566,18 @@ def _scope_of(path: Path, cache: dict) -> set[str]:
     return cache[folder]
 
 
-def annotate_fix_blockers(findings: list[dict], entries: list[dict]) -> None:
-    """Set ``fix_manual_reason`` on each finding whose `fix_hcl` can't be
-    taken as it stands in its module. Every path that offers a fix as one
-    click (the PR suggestions of ``--mode pr-review``, the GitHub Action
-    and its template, the editor's quick fix) reads it and shows the fix
-    as advice instead."""
+def annotate_fix_blockers(
+    findings: list[dict], entries: list[dict], texts: dict | None = None,
+) -> None:
+    """Set ``fix_manual_reason`` on each finding whose fix can't be taken in
+    its module, and ``fix_suggestion`` on each that can be taken in one
+    click (`_suggestion`). Every path that offers a fix as one click (the
+    PR suggestions of ``--mode pr-review``, the GitHub Action and its
+    template, the editor's quick fix) pastes ``fix_suggestion`` or nothing.
+    `texts`: ``{path: text}`` where the file on disk isn't the one scanned."""
     entry_map = {e["id"]: e for e in entries}
     cache: dict = {}
+    files: dict = {}
     reasons: dict[tuple, str | None] = {}
     for f in findings:
         entry = entry_map.get(f["id"]) or {}
@@ -547,10 +597,15 @@ def annotate_fix_blockers(findings: list[dict], entries: list[dict]) -> None:
                 else fix_refusal(entry, resource_type, scope)
             )
         reason = reasons[key]
+        lines = _file_lines(str(f.get("file", "")), texts, files)
         if reason == _IT_DEPENDS:
-            reason = _refusal_in_block(f, entry, scope)
+            reason = _attempt_fix(lines[:], f, entry, scope, "\n")[1] if lines else None
         if reason:
             f["fix_manual_reason"] = reason
+        elif lines and not entry.get("fix_hcl_example"):
+            suggestion = _suggestion(f, entry, scope, lines)
+            if suggestion:
+                f["fix_suggestion"] = suggestion
 
 
 def _nested_in_fix(fix_hcl: str, arg: str) -> bool:

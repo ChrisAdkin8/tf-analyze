@@ -307,8 +307,9 @@ jobs:
             // Deduplicate: one comment per (file, line) using highest-urgency finding
             const byLocation = new Map();
             for (const f of findings) {
-              // `fix_manual_reason`: the fix can't be taken as it stands.
-              if (!f.fix_hcl || f.fix_manual_reason) continue;
+              // `fix_suggestion` is text that fits this very line; a suggestion
+              // overwrites the line, and `fix_hcl` is a whole block.
+              if (!f.fix_suggestion) continue;
               const key = `${f.file}:${f.line}`;
               const existing = byLocation.get(key);
               if (!existing || urgencyRank(f.urgency) > urgencyRank(existing.urgency)) {
@@ -326,9 +327,9 @@ jobs:
                 '',
                 `> Urgency: \`${finding.urgency}\`${disruption}`,
                 '',
-                `${fence(finding.fix_hcl)}suggestion`,
-                finding.fix_hcl.trimEnd(),
-                fence(finding.fix_hcl),
+                `${fence(finding.fix_suggestion)}suggestion`,
+                finding.fix_suggestion.trimEnd(),
+                fence(finding.fix_suggestion),
               ].join('\n');
               try {
                 await github.rest.pulls.createReviewComment({

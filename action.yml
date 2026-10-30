@@ -701,9 +701,10 @@ runs:
 
           const byLoc = new Map();
           for (const f of findings) {
-            // `fix_manual_reason`: the fix can't be taken as it stands (see
-            // annotate_fix_blockers), so it gets no Apply-suggestion button.
-            if (!f.fix_hcl || f.fix_manual_reason) { skipReasons.no_fix_hcl++; continue; }
+            // `fix_suggestion` is text that fits this very line (see
+            // annotate_fix_blockers), so no other fix gets an Apply button:
+            // a suggestion overwrites the line, and `fix_hcl` is a whole block.
+            if (!f.fix_suggestion) { skipReasons.no_fix_hcl++; continue; }
             if (f.line == null) { skipReasons.no_line++; continue; }
             const key = `${f.file}:${f.line}:${f.id}`;
             const existing = byLoc.get(key);
@@ -744,9 +745,9 @@ runs:
               '',
               `> Urgency: \`${f.urgency}\`` + (f.fix_disruption ? ` · Disruption: \`${f.fix_disruption}\`` : ''),
               f.narrative ? `\n> *Adversarial scenario:* ${mdText(f.narrative)}\n` : '',
-              `${fence(f.fix_hcl)}suggestion`,
-              f.fix_hcl.trimEnd(),
-              fence(f.fix_hcl),
+              `${fence(f.fix_suggestion)}suggestion`,
+              f.fix_suggestion.trimEnd(),
+              fence(f.fix_suggestion),
             ].join('\n');
             try {
               await github.rest.pulls.createReviewComment({

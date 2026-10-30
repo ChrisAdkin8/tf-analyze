@@ -410,7 +410,7 @@ def test_example_fixes_are_annotated_too(tmp_path) -> None:
 @pytest.mark.parametrize("path", ["action.yml", "integrations/github-action.yml"])
 def test_the_github_actions_post_no_suggestion_for_such_a_fix(path) -> None:
     text = (REPO / path).read_text()
-    assert "!f.fix_hcl || f.fix_manual_reason" in text
+    assert "!f.fix_suggestion" in text
 
 
 def test_the_pr_body_counts_a_real_run_and_lists_what_is_left() -> None:

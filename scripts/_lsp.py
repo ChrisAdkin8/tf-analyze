@@ -337,8 +337,9 @@ def run_lsp_server(
                     if abs(f["line"] - req_line) > 2:
                         continue
                     entry = id_map.get(f["id"], {})
-                    fix_hcl = entry.get("fix_hcl")
-                    if not fix_hcl or f.get("fix_manual_reason"):
+                    # What fits this very line, never a catalogue `fix_hcl`.
+                    suggestion = f.get("fix_suggestion")
+                    if not suggestion:
                         continue
                     actions.append({
                         "title": f"tf-analyze fix: {f['id']}",
@@ -348,9 +349,9 @@ def run_lsp_server(
                                 uri: [{
                                     "range": {
                                         "start": {"line": f["line"] - 1, "character": 0},
-                                        "end":   {"line": f["line"] - 1, "character": 0},
+                                        "end":   {"line": f["line"], "character": 0},
                                     },
-                                    "newText": f"\n# tf-analyze fix for {f['id']}:\n{fix_hcl}\n",
+                                    "newText": f"{suggestion}\n",
                                 }]
                             }
                         }
