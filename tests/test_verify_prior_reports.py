@@ -134,31 +134,13 @@ def test_a_clean_report_still_verifies(tmp_path) -> None:
     t = tmp_path / "t"
     t.mkdir()
     (t / "main.tf").write_text('terraform {\n  required_version = ">= 1.5"\n}\n')
-    for fmt, name in (("json", "p.json"), ("text", "p.txt")):
-        report = _run(
-            "--target", str(t), "--format", fmt, "--ignore-file", "/dev/null"
-        ).stdout
+    counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 2}
+    for name, clean in (
+        ("p.json", json.dumps({"summary": {"counts": counts}, "findings": []})),
+        ("p.txt", "# tf-analyze: 100 (A) · 0 CRITICAL · 0 HIGH · 0 MEDIUM · 0 LOW · 0 INFO\n"),
+    ):
         prior = tmp_path / name
-        clean = (
-            json.dumps(
-                {
-                    "summary": {
-                        "counts": {
-                            "CRITICAL": 0,
-                            "HIGH": 0,
-                            "MEDIUM": 0,
-                            "LOW": 0,
-                            "INFO": 2,
-                        }
-                    },
-                    "findings": [],
-                }
-            )
-            if fmt == "json"
-            else "# tf-analyze: 100 (A) · 0 CRITICAL · 0 HIGH · 0 MEDIUM · 0 LOW · 0 INFO\n"
-        )
         prior.write_text(clean)
-        assert report  # the real formats exist; the clean forms above mirror them
         res = _verify(t, prior, "--fail-on", "HIGH", "--format", "json")
         assert res.returncode == 0, res.stderr
         assert json.loads(res.stdout)["total_prior"] == 0

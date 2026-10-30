@@ -20,8 +20,10 @@ pipeline:
   attributes inside an HCL block.
 * :func:`fix_blocker` — why a snippet must not be pasted into a module:
   it names something the module does not declare, or holds a placeholder.
-  :func:`annotate_fix_blockers` records that on findings, for the paths
-  that offer a fix as one click (PR suggestions, editor quick fixes).
+  :func:`snippet_refusal` adds the rule for nested snippets; `--apply-fixes`
+  decides with it, and so, through :func:`fix_refusal`, does
+  :func:`annotate_fix_blockers`, which records the answer on findings for
+  the paths that offer a fix as one click (PR suggestions, quick fixes).
 * :func:`handle_apply_fixes` — top-level driver. Groups fixable
   findings by file, processes in reverse line order so later
   insertions don't shift earlier positions, writes ``.bak`` backups
@@ -42,7 +44,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from _hcl import _read_normalized, _string_end, brace_walk, mask_comments_and_heredocs
+from _hcl import (
+    _read_normalized,
+    _string_end,
+    brace_walk,
+    mask_comments,
+    mask_comments_and_heredocs,
+)
 from _tfjson import is_tf_source, read_tf_source
 
 
@@ -288,11 +296,12 @@ _LOCAL_NAME_RE = re.compile(r'^\s*([\w-]+)\s*=')
 # What an expression can reference. A resource type always holds a `_`,
 # which keeps out `each.key`, `count.index`, `path.module`, `self.id`.
 _REFERENCE_RE = re.compile(
-    r'(?<![\w.-])(?:(var|local|module)\.([\w-]+)'
+    r'(?<![\w.])(?<!\w-)(?:(var|local|module)\.([\w-]+)'
     r'|data\.([\w-]+)\.([\w-]+)'
     r'|([a-z][a-z0-9]*_[\w-]*)\.([A-Za-z_][\w-]*))'
 )
-_INTERPOLATION_RE = re.compile(r'(?<!\$)\$\{([^}]*)\}')
+# `${ ... }` and the template directive `%{ if ... }`, in strings and heredocs.
+_INTERPOLATION_RE = re.compile(r'(?<![$%])[$%]\{([^}]*)\}')
 _STRING_RE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 _BLOCK_HEADER_RE = re.compile(r'(?m)^[ \t]*(?:resource|data|module|variable|output|provider)[ \t]+".*$')
 
@@ -308,6 +317,9 @@ _PLACEHOLDER_RE = re.compile(
 )
 
 _EXAMPLE_REASON = "its values are examples: choose your own"
+_NESTED_REASON = "it belongs in a nested block: add it by hand"
+_NO_PATCH_REASON = "no automatic patch for this check"
+_IT_DEPENDS = object()
 
 
 def declared_names(text: str) -> set[str]:
@@ -319,19 +331,33 @@ def declared_names(text: str) -> set[str]:
     for m in _DECL_RE.finditer(code):
         kind, rtype, rname, single, sname = m.groups()
         if kind:
-            names.add(f"{'data.' if kind == 'data' else ''}{rtype}.{rname}")
+            name = f"{'data.' if kind == 'data' else ''}{rtype}.{rname}"
         else:
-            names.add(f"{'var' if single == 'variable' else 'module'}.{sname}")
+            name = f"{'var' if single == 'variable' else 'module'}.{sname}"
+        names.add(name)
+        # `aws_kms_key.logs[]`: it has instances, so a reference needs an index.
+        opening = code.find("{", m.end())
+        end = brace_walk(code, opening) if opening >= 0 else None
+        if end and single != "variable" and {"count", "for_each"} & _top_level_names(
+            code[opening + 1:end - 1]
+        ):
+            names.add(f"{name}[]")
     for m in _LOCALS_RE.finditer(code):
         end = brace_walk(code, m.end() - 1)
-        if end is None:
-            continue
-        depth = 0
-        for line in code_lines(code[m.end():end - 1].splitlines(keepends=True)):
-            name = _LOCAL_NAME_RE.match(line) if depth == 0 else None
-            if name:
-                names.add(f"local.{name.group(1)}")
-            depth += sum(line.count(c) for c in "[{(") - sum(line.count(c) for c in "]})")
+        if end is not None:
+            names.update(f"local.{n}" for n in _top_level_names(code[m.end():end - 1]))
+    return names
+
+
+def _top_level_names(body: str) -> set[str]:
+    """The names assigned directly in a block `body`, not in anything nested."""
+    names: set[str] = set()
+    depth = 0
+    for line in code_lines(body.splitlines(keepends=True)):
+        name = _LOCAL_NAME_RE.match(line) if depth == 0 else None
+        if name:
+            names.add(name.group(1))
+        depth += sum(line.count(c) for c in "[{(") - sum(line.count(c) for c in "]})")
     return names
 
 
@@ -352,14 +378,18 @@ def module_declarations(directory: Path) -> set[str]:
     return names
 
 
-def undeclared_references(snippet: str, declared: set[str]) -> list[str]:
-    """What `snippet` references, in its expressions and in ``${...}`` in
-    its strings, that is declared neither in `declared` nor by `snippet`
-    itself. Plain string contents are not expressions."""
-    text = "".join(code_lines(snippet.splitlines(keepends=True)))
-    text += " " + " ".join(_INTERPOLATION_RE.findall(mask_comments_and_heredocs(snippet)))
-    known = declared | declared_names(snippet)
-    found: dict[str, None] = {}
+def _expressions(snippet: str) -> str:
+    """The parts of `snippet` that are expressions: its code, and what is in
+    ``${...}`` / ``%{...}`` in its strings and heredocs. Plain string
+    contents are not expressions."""
+    code = "".join(code_lines(snippet.splitlines(keepends=True)))
+    return code + " " + " ".join(_INTERPOLATION_RE.findall(mask_comments(snippet)))
+
+
+def _references(snippet: str) -> list[tuple[str, bool]]:
+    """``(reference, whether an index follows it)`` for each one in `snippet`."""
+    text = _expressions(snippet)
+    found = []
     for m in _REFERENCE_RE.finditer(text):
         prefix, name, dtype, dname, rtype, rname = m.groups()
         if prefix:
@@ -368,9 +398,24 @@ def undeclared_references(snippet: str, declared: set[str]) -> list[str]:
             ref = f"data.{dtype}.{dname}"
         else:
             ref = f"{rtype}.{rname}"
-        if ref not in known:
-            found[ref] = None
-    return list(found)
+        found.append((ref, text.startswith(("[", ".*"), m.end())))
+    return found
+
+
+def undeclared_references(snippet: str, declared: set[str]) -> list[str]:
+    """What `snippet` references that is declared neither in `declared` nor
+    by `snippet` itself."""
+    known = declared | declared_names(snippet)
+    return list(dict.fromkeys(ref for ref, _ in _references(snippet) if ref not in known))
+
+
+def unindexed_references(snippet: str, declared: set[str]) -> list[str]:
+    """References in `snippet`, with no index, to something with `count` or
+    `for_each`: ``aws_kms_key.logs.arn`` is an error when `logs` has instances."""
+    return list(dict.fromkeys(
+        ref for ref, indexed in _references(snippet)
+        if not indexed and f"{ref}[]" in declared
+    ))
 
 
 def placeholder_values(snippet: str) -> list[str]:
@@ -380,17 +425,91 @@ def placeholder_values(snippet: str) -> list[str]:
     return [m.group(1) for m in _STRING_RE.finditer(code) if _PLACEHOLDER_RE.search(m.group(1))]
 
 
-def fix_blocker(snippet: str, declared: set[str]) -> str | None:
+def fix_blocker(
+    snippet: str, declared: set[str], block_args: set[str] | None = None,
+) -> str | None:
     """Why `snippet` must not go into a module declaring `declared`, or
     None. Terraform rejects a reference to something undeclared, and a
-    made-up value is not a fix even when it validates."""
+    made-up value is not a fix even when it validates. `block_args`, when
+    the target block is known, holds which of `count` / `for_each` it has:
+    `each.key` means nothing in a block without `for_each`."""
     missing = undeclared_references(snippet, declared)
     if missing:
         return f"references {', '.join(missing)}, not declared in this module"
+    unindexed = unindexed_references(snippet, declared)
+    if unindexed:
+        return f"references {', '.join(unindexed)} without an index, and it has count or for_each"
+    if block_args is not None:
+        code = _expressions(snippet)
+        for word, arg in (("each", "for_each"), ("count", "count")):
+            if arg not in block_args and re.search(rf'(?<![\w.]){word}\.', code):
+                return f"uses {word}.*, and this block has no {arg}"
     placeholders = placeholder_values(snippet)
     if placeholders:
         return f"holds the placeholder value {placeholders[0]!r}: use a real one"
     return None
+
+
+def snippet_refusal(
+    snippet: str, nested: bool, declared: set[str], block_args: set[str] | None = None,
+) -> str | None:
+    """Why `--apply-fixes` won't paste this snippet, or None: the one
+    decision, for the patcher and for the paths that offer a fix as one
+    click."""
+    return _NESTED_REASON if nested else fix_blocker(snippet, declared, block_args)
+
+
+def _patch_snippet(fix_hcl: str, kind: str, arg: str) -> tuple[str, bool] | None:
+    """``(text, nested)``: what a pattern of `kind` on `arg` would paste, and
+    whether that belongs in a nested block; None if there's nothing to paste."""
+    if not arg:
+        return None
+    if kind == "resource_missing_arg":
+        raw = fix_line_for_arg(fix_hcl, arg) or fix_block_for_nested_arg(fix_hcl, arg)
+        return (raw, _nested_in_fix(fix_hcl, arg)) if raw else None
+    if kind in ("resource_arg", "hcl_attr"):
+        raw = fix_line_for_arg(fix_hcl, arg)
+        return (raw, False) if raw else None
+    return None
+
+
+def fix_refusal(entry: dict, resource_type: str, declared: set[str]) -> str | None:
+    """Why a finding of `entry` on `resource_type` can't be taken as a fix
+    in a module declaring `declared`, or None. A rule with a patch for this
+    type answers as `--apply-fixes` would: fine if any pattern's snippet is
+    (which one applies depends on the block; see `annotate_fix_blockers`).
+    One without has only its whole `fix_hcl` to offer, judged as it stands."""
+    if entry.get("fix_hcl_example"):
+        return _EXAMPLE_REASON
+    fix = entry.get("fix_hcl_minimal") or entry.get("fix_hcl") or ""
+    answers = _pattern_answers(entry, resource_type, declared)
+    if not answers:
+        return fix_blocker(fix, declared)
+    return None if None in answers else answers[0]
+
+
+def _pattern_answers(entry: dict, resource_type: str, declared: set[str]) -> list[str | None]:
+    """`snippet_refusal` of each of `entry`'s patches for `resource_type`."""
+    fix = entry.get("fix_hcl_minimal") or entry.get("fix_hcl") or ""
+    answers = []
+    for pat in entry.get("patterns") or []:
+        if pat.get("resource", "") != resource_type:
+            continue
+        snippet = _patch_snippet(fix, pat.get("kind", ""), pat.get("arg", ""))
+        if snippet is not None:
+            answers.append(snippet_refusal(*snippet, declared))
+    return answers
+
+
+def _refusal_in_block(finding: dict, entry: dict, declared: set[str]) -> str | None:
+    """For a rule whose patches get different answers, which one applies
+    depends on the block: run the patcher on a copy of the file."""
+    try:
+        with open(finding.get("file", ""), encoding="utf-8", newline="") as fh:
+            lines = fh.readlines()
+    except (OSError, ValueError):
+        return None
+    return _attempt_fix(lines, finding, entry, declared, "\n")[1]
 
 
 def _scope_of(path: Path, cache: dict) -> set[str]:
@@ -416,14 +535,22 @@ def annotate_fix_blockers(findings: list[dict], entries: list[dict]) -> None:
         if not fix:
             continue
         path = Path(str(f.get("file", "")))
-        key = (f["id"], path.parent)
+        resource_type = str(f.get("resource", "")).split(".")[0]
+        scope = _scope_of(path, cache)
+        key = (f["id"], path.parent, resource_type)
         if key not in reasons:
-            reasons[key] = (
-                _EXAMPLE_REASON if entry.get("fix_hcl_example")
-                else fix_blocker(fix, _scope_of(path, cache))
+            answers = () if entry.get("fix_hcl_example") else _pattern_answers(
+                entry, resource_type, scope,
             )
-        if reasons[key]:
-            f["fix_manual_reason"] = reasons[key]
+            reasons[key] = (
+                _IT_DEPENDS if None in answers and any(answers)
+                else fix_refusal(entry, resource_type, scope)
+            )
+        reason = reasons[key]
+        if reason == _IT_DEPENDS:
+            reason = _refusal_in_block(f, entry, scope)
+        if reason:
+            f["fix_manual_reason"] = reason
 
 
 def _nested_in_fix(fix_hcl: str, arg: str) -> bool:
@@ -534,8 +661,9 @@ def _apply_pattern(
     inline block is split onto its own lines first (`_split_inline_block`),
     and kept split only when the fix then changes it.
 
-    `vet(snippet, nested)` sees the exact text about to go in, and returns
-    False to refuse it; `nested` says it belongs in a nested block."""
+    `vet(snippet, nested, block_args)` sees the exact text about to go in
+    and returns False to refuse it; `nested` says it belongs in a nested
+    block, `block_args` is which of `count` / `for_each` the block has."""
     trial = modified[:]
     _split_inline_block(trial, start_idx, eol)
     if not _apply_pattern_to_block(trial, start_idx, kind, arg, fix_hcl, eol, vet):
@@ -552,6 +680,11 @@ def _apply_pattern_to_block(
     block_end = find_block_end_in_lines(modified, start_idx)
     if block_end is None:
         return False
+
+    def block_args() -> set[str]:
+        return {a for a in ("count", "for_each")
+                if _block_has_top_level_arg(modified, start_idx, block_end, a)}
+
     if kind == "resource_missing_arg" and arg:
         # Idempotency — skip if the argument is already present at the
         # block's top level. Without this, re-running --apply-fixes (or a
@@ -560,15 +693,17 @@ def _apply_pattern_to_block(
         if _block_has_top_level_arg(modified, start_idx, block_end, arg):
             return False
         indent = block_indent(modified, start_idx, block_end)
-        raw = fix_line_for_arg(fix_hcl, arg) or fix_block_for_nested_arg(fix_hcl, arg)
-        nested = bool(raw) and _nested_in_fix(fix_hcl, arg)
-        if not raw or (vet and not vet(raw, nested)) or nested:
+        snippet = _patch_snippet(fix_hcl, kind, arg)
+        if snippet is None:
             return False
-        modified[block_end:block_end] = reindent_fix_snippet(raw, indent, eol, unit=indent)
+        accepted = vet(*snippet, block_args()) if vet else True
+        if snippet[1] or not accepted:
+            return False
+        modified[block_end:block_end] = reindent_fix_snippet(snippet[0], indent, eol, unit=indent)
         return True
     if kind in ("resource_arg", "hcl_attr") and arg:
         fix_line = fix_line_for_arg(fix_hcl, arg)
-        if not fix_line or (vet and not vet(fix_line, False)):
+        if not fix_line or (vet and not vet(fix_line, False, block_args())):
             return False
         # Prefer the resource's own (depth-1) attribute so a same-named
         # key inside a nested block isn't clobbered. Fall back to the
@@ -604,6 +739,51 @@ def _apply_pattern_to_block(
         modified[target_li:value_end + 1] = new
         return True
     return False
+
+
+def _attempt_fix(
+    modified: list[str], finding: dict, entry: dict, scope: set[str], eol: str,
+) -> tuple[str | None, str | None]:
+    """Try `entry`'s fix for `finding` on `modified`, in place. Returns
+    ``(argument patched, None)`` or ``(None, why not)``."""
+    fix_hcl = entry.get("fix_hcl_minimal") or entry.get("fix_hcl", "")
+    resource_addr = finding.get("resource", "")
+    resource_type = resource_addr.split(".")[0] if "." in resource_addr else ""
+    patterns = [
+        pat for pat in entry.get("patterns", [])
+        if pat.get("resource", "") == resource_type
+    ]
+    if not patterns:
+        return None, _NO_PATCH_REASON
+
+    # `line` is the resource keyword's line; the opening `{` can
+    # sit on a later line (e.g. after a comment), so advance to
+    # the line that actually contains it.
+    start_idx = finding.get("line", 1) - 1
+    code = code_lines(modified)
+    while start_idx < len(modified) - 1 and '{' not in code[start_idx]:
+        start_idx += 1
+
+    # Don't patch a block the forward scan overshot into (e.g. the
+    # next resource, when finding.line pointed at a preceding blank
+    # line). Only vetoes a clear resource-address mismatch.
+    if not _line_opens_finding_resource(modified[start_idx], resource_addr):
+        return None, "could not locate the resource block"
+
+    refused: list[str] = []
+
+    def vet(snippet: str, nested: bool, block_args: set[str]) -> bool:
+        reason = snippet_refusal(snippet, nested, scope, block_args)
+        if reason:
+            refused.append(reason)
+        return reason is None
+
+    for pat in patterns:
+        if _apply_pattern(
+            modified, start_idx, pat.get("kind", ""), pat.get("arg", ""), fix_hcl, eol, vet,
+        ):
+            return pat.get("arg", ""), None
+    return None, refused[0] if refused else _NO_PATCH_REASON
 
 
 def handle_apply_fixes(
@@ -644,11 +824,12 @@ def handle_apply_fixes(
     manual: list[tuple[dict, str]] = []
     by_file: dict[str, list[dict]] = {}
     for f in findings:
-        fp = f.get("file", "")
-        if not fp:
-            continue
         entry = entry_map.get(f["id"])
         if not entry or not (entry.get("fix_hcl_minimal") or entry.get("fix_hcl")):
+            continue
+        fp = f.get("file", "")
+        if not fp:
+            manual.append((f, "the finding names no file"))
             continue
         # Example values (`fix_hcl_example: true`) need a person to choose
         # the real ones; pasting `Owner = "platform-team"` is not a fix.
@@ -658,6 +839,7 @@ def handle_apply_fixes(
         by_file.setdefault(fp, []).append(f)
 
     total_applied = 0
+    covered = 0
     files_changed = 0
     scopes: dict = {}
 
@@ -695,6 +877,7 @@ def handle_apply_fixes(
             manual.extend((f, "file is not UTF-8") for f in by_file[file_path])
             continue
         scope = _scope_of(path, scopes)
+        added: set[tuple] = set()
         modified = original_lines[:]
         crlf = sum(line.endswith("\r\n") for line in original_lines)
         eol = "\r\n" if crlf * 2 > len(original_lines) else "\n"
@@ -707,63 +890,21 @@ def handle_apply_fixes(
 
         for finding in file_findings:
             entry = entry_map.get(finding["id"])
-            fix_hcl = entry.get("fix_hcl_minimal") or entry.get("fix_hcl", "")
-            if not fix_hcl:
-                continue
 
             resource_addr = finding.get("resource", "")
-            resource_type = resource_addr.split(".")[0] if "." in resource_addr else ""
-            patterns = [
-                pat for pat in entry.get("patterns", [])
-                if pat.get("resource", "") == resource_type
-            ]
-            if not patterns:
-                manual.append((finding, "no automatic patch for this check"))
-                continue
-
-            # `line` is the resource keyword's line; the opening `{` can
-            # sit on a later line (e.g. after a comment), so advance to
-            # the line that actually contains it.
-            start_idx = finding.get("line", 1) - 1
-            code = code_lines(modified)
-            while start_idx < len(modified) - 1 and '{' not in code[start_idx]:
-                start_idx += 1
-
-            # Don't patch a block the forward scan overshot into (e.g. the
-            # next resource, when finding.line pointed at a preceding blank
-            # line). Only vetoes a clear resource-address mismatch.
-            if not _line_opens_finding_resource(modified[start_idx], resource_addr):
-                manual.append((finding, "could not locate the resource block"))
-                continue
-
-            refused: list[str] = []
-
-            def vet(snippet: str, nested: bool) -> bool:
-                reason = ("it belongs in a nested block: add it by hand" if nested
-                          else fix_blocker(snippet, scope))
-                if reason:
-                    refused.append(reason)
-                return reason is None
-
-            for pat in patterns:
-                if _apply_pattern(
-                    modified, start_idx, pat.get("kind", ""), pat.get("arg", ""),
-                    fix_hcl, eol, vet,
-                ):
-                    total_applied += 1
-                    break
+            applied_arg, reason = _attempt_fix(modified, finding, entry, scope, eol)
+            if applied_arg is not None:
+                total_applied += 1
+                added.add((resource_addr, applied_arg))
+            # Another rule's fix in this run may have added the same
+            # argument (two rules want `retention_in_days`): that one is
+            # done. Only then: an argument the file already had is why the
+            # patcher stopped, not a fix.
+            elif any((resource_addr, pat.get("arg", "")) in added
+                     for pat in entry.get("patterns", [])):
+                covered += 1
             else:
-                # Another rule's fix in this run may have added the same
-                # argument: that one is done, not left over.
-                block_end = find_block_end_in_lines(modified, start_idx)
-                done = block_end is not None and any(
-                    pat.get("kind") == "resource_missing_arg" and pat.get("arg")
-                    and _block_has_top_level_arg(modified, start_idx, block_end, pat["arg"])
-                    for pat in patterns
-                )
-                if not done:
-                    manual.append((finding, refused[0] if refused
-                                   else "no automatic patch for this check"))
+                manual.append((finding, reason))
 
         if modified == original_lines:
             continue
@@ -791,6 +932,8 @@ def handle_apply_fixes(
         f"# apply-fixes: {action} {total_applied} fix(es) across {files_changed} file(s)",
         file=sys.stderr,
     )
+    if covered:
+        print(f"# apply-fixes: {covered} finding(s) covered by a fix above", file=sys.stderr)
     if manual:
         print(f"# apply-fixes: {len(manual)} fix(es) left for you to do by hand:",
               file=sys.stderr)
