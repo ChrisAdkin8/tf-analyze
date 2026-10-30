@@ -55,14 +55,16 @@ from _network import parse_literal
 _JSONENCODE_RE = re.compile(r"\s*jsonencode\s*\((.*)\)\s*", re.DOTALL)
 
 WILDCARD_ACTIONS = frozenset({"*", "*:*"})
-# A `merge(...)` statement whose Effect an unresolved argument may set.
-_UNKNOWN_EFFECT = "unknown"
 _MERGE_CALL_RE = re.compile(r"\bmerge\(")
 _STATEMENT_KEYS = frozenset({
     "Effect", "Action", "NotAction", "Resource", "NotResource", "Principal", "NotPrincipal",
 })
-_EFFECT_UNKNOWN_KEY = "__effect_unknown__"
-_OBJECTS_CUT_KEY = "__objects_cut__"
+# Control markers beside parsed policy data. Private objects, never strings:
+# everything in a policy is text the scanned code chose, so a string marker
+# could be written into a policy to turn its analysis off.
+_EFFECT_UNKNOWN = object()  # dict key: a merge() whose Effect isn't known
+_UNREAD = object()  # dict key: a document with statements left unread
+_OBJECTS_CUT = object()  # list item: objects past `_MAX_OBJECTS_TRIED`
 _POLICY_FIELD_RE = re.compile(r'\b(?:Statement|Effect)"?\s*[=:]')
 # A pathological expression can't turn into one parse per brace for ever.
 _MAX_OBJECTS_TRIED = 1000
@@ -95,11 +97,12 @@ class Statement:
     not_resources: list[str] = field(default_factory=list)
     principals: list[str] = field(default_factory=list)  # identifier values
     line: int | None = None
+    effect_known: bool = True
 
     def matches(self, check: str) -> bool:
         """Whether this statement triggers the catalogue ``check``.
         Deny statements never do, nor one whose effect is unknown."""
-        if self.effect.lower() in ("deny", _UNKNOWN_EFFECT):
+        if not self.effect_known or self.effect.lower() == "deny":
             return False
         # IAM action names are case-insensitive: `IAM:*` is `iam:*`.
         actions = [a.lower() for a in self.actions]
@@ -198,7 +201,7 @@ def decode_policy(value, var_defaults: dict | None = None) -> dict | None:
             # Malformed, or a template (`%{ if }`). Whatever else it holds
             # went unread, so say so even when a statement is found.
             found = _document_in(value, var_defaults)
-            return found and {**found, "__unread__": True}
+            return found and {**found, _UNREAD: True}
     return doc if isinstance(doc, dict) else None
 
 
@@ -287,11 +290,13 @@ def _quote_bare_interpolations(text: str) -> str:
     return "".join(out)
 
 
-def _statement_objects(raw, var_defaults: dict | None = None) -> list[dict]:
+def _statement_objects(raw, var_defaults: dict | None = None) -> list:
     """The statement objects of a ``Statement`` value: one object, a list,
     and any in an expression there (``concat(local.b, [{...}])``), found by
     `_embedded_statements`. What the expression adds at apply time is
     unknown, like any other reference."""
+    if raw is _OBJECTS_CUT:
+        return [raw]
     raw = literal_structure(raw)
     if isinstance(raw, dict):
         return [raw]
@@ -335,12 +340,13 @@ def _call_arguments(text: str) -> list[str]:
 def _merged_object(args: list[str], var_defaults: dict | None) -> dict:
     """What ``merge(...)`` of `args` gives: the objects in order, a later
     key winning, as Terraform does; `var.X` / `local.X` are resolved where
-    known. An ``Effect`` written out stands unless a later known object
-    overrides it: an unknown argument never removes one, or a written-out
-    admin statement would pass. Only when no argument gives one is it
-    unknown (`_EFFECT_UNKNOWN_KEY`)."""
+    known. A later known object always wins. An unknown argument after
+    the last ``Effect`` leaves an Allow standing, or a written-out admin
+    statement would pass; but it could turn a Deny into an Allow, and with
+    no ``Effect`` at all could give any, so those are unknown
+    (`_EFFECT_UNKNOWN`)."""
     merged: dict = {}
-    unresolved = False
+    open_ended = False  # an unknown argument since the last `Effect`
     for arg in args:
         expr = unwrap_value(resolve_value_text(arg.strip(), var_defaults or {}))
         call = _MERGE_CALL_RE.match(expr)
@@ -350,22 +356,26 @@ def _merged_object(args: list[str], var_defaults: dict | None) -> dict:
             obj = _jsonencode_argument(expr)
         else:
             obj = None
-        if isinstance(obj, dict):
-            merged.update(obj)
-        else:
-            unresolved = True
-    if unresolved and "Effect" not in merged:
-        merged[_EFFECT_UNKNOWN_KEY] = True
+        if not isinstance(obj, dict):
+            open_ended = True
+            continue
+        nested_unknown = obj.pop(_EFFECT_UNKNOWN, False)
+        merged.update(obj)
+        if "Effect" in obj:
+            open_ended = False
+        open_ended = open_ended or nested_unknown
+    if open_ended and ("Effect" not in merged or _effect(merged["Effect"]).lower() == "deny"):
+        merged[_EFFECT_UNKNOWN] = True
     return merged
 
 
-def _embedded_statements(text: str, var_defaults: dict | None = None) -> list[dict]:
+def _embedded_statements(text: str, var_defaults: dict | None = None) -> list:
     """Every statement object written out somewhere in `text`: each
     ``{...}`` that reads as an object, whatever surrounds it, and each
     ``merge(...)`` taken as one object (`_merged_object`). One that is a
     whole document counts for its statements. An object that doesn't read
     is looked into, for those inside it. Past `_MAX_OBJECTS_TRIED` the rest
-    goes unread, marked with an `_OBJECTS_CUT_KEY` entry."""
+    goes unread, and `_OBJECTS_CUT` ends the list."""
     out: list[dict] = []
     i, kind = _next_object(text, 0)
     tries = 0
@@ -387,17 +397,17 @@ def _embedded_statements(text: str, var_defaults: dict | None = None) -> list[di
             continue
         i, kind = _next_object(text, end)
     if i != -1:
-        out.append({_OBJECTS_CUT_KEY: True})
+        out.append(_OBJECTS_CUT)
     return out
 
 
 def _unread_statements(doc: dict, var_defaults: dict | None = None) -> bool:
     """Whether `doc` has statements written out that could not be read,
     or whose effect is unknown."""
-    if doc.get("__unread__"):
+    if _UNREAD in doc:
         return True
     statements = _statement_objects(doc.get("Statement"), var_defaults)
-    if any(_EFFECT_UNKNOWN_KEY in st or _OBJECTS_CUT_KEY in st for st in statements):
+    if any(st is _OBJECTS_CUT or _EFFECT_UNKNOWN in st for st in statements):
         return True
     raw = literal_structure(doc.get("Statement"))
     return any(
@@ -413,7 +423,7 @@ def json_statements(doc: dict, var_defaults: dict | None = None) -> list[Stateme
     statement is built from."""
     out: list[Statement] = []
     for st in _statement_objects(doc.get("Statement"), var_defaults):
-        if _OBJECTS_CUT_KEY in st:
+        if st is _OBJECTS_CUT:
             continue
         principal = literal_structure(st.get("Principal"))
         if isinstance(principal, dict):
@@ -422,7 +432,8 @@ def json_statements(doc: dict, var_defaults: dict | None = None) -> list[Stateme
             principals = _strings(principal)
         out.append(
             Statement(
-                effect=_UNKNOWN_EFFECT if _EFFECT_UNKNOWN_KEY in st else _effect(st.get("Effect")),
+                effect=_effect(st.get("Effect")),
+                effect_known=_EFFECT_UNKNOWN not in st,
                 actions=_strings(st.get("Action")),
                 not_actions=_strings(st.get("NotAction")),
                 resources=_strings(st.get("Resource")),

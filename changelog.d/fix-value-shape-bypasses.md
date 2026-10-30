@@ -22,9 +22,9 @@
   Statement objects written out inside `concat(...)`, `flatten(...)`, a
   conditional or `tostring(...)` are analysed too. A `merge(...)` counts as
   one object, later keys winning, with `var.X` / `local.X` resolved where
-  known. An `Effect` written out stands unless a later known object
-  overrides it, and an unknown argument never removes it; only if no
-  argument gives one is it unknown, which gets a WARN and no finding. A
+  known. A later known object always wins. After an unknown argument a
+  literal Allow stands and is reported; a literal Deny, or no `Effect` at
+  all, is unknown, which gets a WARN and no finding. A
   policy written out in the source that still can't be read, in whole or
   in part (more than 1,000 objects in one expression included), gets a
   WARN. `data.x.json`, `file(...)` and `jsonencode(var.p)` hold no document,

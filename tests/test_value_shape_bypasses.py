@@ -1502,7 +1502,9 @@ LOCAL_DENY = 'locals {\n  deny = { Effect = "Deny" }\n  allow = { Effect = "Allo
         ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x)', True),
         ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x, local.other)', True),
         ('merge({ Effect = "Allow", Action = "*", Resource = "*" }, var.x, { Effect = "Deny" })', False),
-        ('merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x)', False),
+        ('merge(merge(var.x, { Action = "*", Resource = "*" }), { Effect = "Allow" })', True),
+        ('merge(merge(var.x, { Action = "*", Resource = "*" }), { Effect = "Deny" })', False),
+        ('merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x, { Effect = "Allow" })', True),
         ('merge(local.deny, var.x, { Action = "*", Resource = "*" })', False),
     ],
 )
@@ -1518,6 +1520,9 @@ def test_merge_is_one_statement(statement, fires, path_mode, tmp_path) -> None:
     "statement",
     [
         'merge(local.unknown, { Action = "*", Resource = "*" })',
+        'merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x)',
+        'merge(merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x), { Sid = "s" })',
+        'merge(merge({ Action = "*", Resource = "*" }, var.x), { Sid = "s" })',
         'merge({ Action = "*", Resource = "*" }, var.x)',
     ],
 )
@@ -1538,12 +1543,6 @@ def test_a_merge_of_nothing_written_out_stays_quiet(tmp_path, capsys) -> None:
     assert "could not be decoded" not in capsys.readouterr().err
 
 
-def test_a_written_out_deny_merged_with_an_unknown_gives_no_warning(tmp_path, capsys) -> None:
-    text = POLICY % 'jsonencode({ Statement = [merge({ Effect = "Deny", Action = "*", Resource = "*" }, var.x)] })'
-    assert not _fires(text, ADMIN_RULE, tmp_path)
-    assert "could not be decoded" not in capsys.readouterr().err
-
-
 def test_hitting_the_object_limit_warns(path_mode, tmp_path, capsys) -> None:
     empties = ",".join(["{}"] * 1100)
     statements = f'concat([{empties}],[{{ Effect = "Allow", Action = "*", Resource = "*" }}])'
@@ -1558,6 +1557,57 @@ def test_under_the_object_limit_does_not_warn(tmp_path, capsys) -> None:
     assert "could not be decoded" not in capsys.readouterr().err
 
 
+# ---- what scanned code writes can't steer the analysis ------------------------------
+
+ADMIN_FIELDS = 'Effect = "Allow", Action = "*", Resource = "*"'
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        f"{{ __objects_cut__ = true, {ADMIN_FIELDS} }}",
+        f"{{ __effect_unknown__ = true, {ADMIN_FIELDS} }}",
+        f"{{ __unread__ = true, {ADMIN_FIELDS} }}",
+        f"merge({{ __effect_unknown__ = true, {ADMIN_FIELDS} }})",
+        f"merge({{ __objects_cut__ = true }}, {{ {ADMIN_FIELDS} }})",
+    ],
+)
+def test_old_marker_text_in_a_policy_changes_nothing(statement, path_mode, tmp_path) -> None:
+    assert _fires(POLICY % f"jsonencode({{ Statement = [{statement}] }})", ADMIN_RULE, tmp_path)
+
+
+def test_a_heredoc_with_old_marker_text_is_analysed(path_mode, tmp_path) -> None:
+    policy = '{"Statement":[{"__objects_cut__":true,"__effect_unknown__":true,"Effect":"Allow","Action":"*","Resource":"*"}]}'
+    assert _fires(POLICY % f"<<POL\n{policy}\nPOL", ADMIN_RULE, tmp_path)
+
+
+def test_the_word_unknown_is_not_an_unknown_effect(path_mode, tmp_path) -> None:
+    text = POLICY % 'jsonencode({ Statement = [{ Effect = "unknown", Action = "*", Resource = "*" }] })'
+    assert _fires(text, ADMIN_RULE, tmp_path)
+
+
+def test_markers_are_private_objects() -> None:
+    assert not any(
+        isinstance(m, str)
+        for m in (_iam_policy._EFFECT_UNKNOWN, _iam_policy._UNREAD, _iam_policy._OBJECTS_CUT)
+    )
+
+
 def test_the_limit_marker_is_not_a_statement() -> None:
-    doc = {"Statement": [{"__objects_cut__": True}, {"Effect": "Allow", "Action": "*"}]}
+    doc = {"Statement": [_iam_policy._OBJECTS_CUT, {"Effect": "Allow", "Action": "*"}]}
     assert len(_iam_policy.json_statements(doc)) == 1
+    assert _iam_policy._unread_statements(doc)
+
+
+def test_a_caller_cannot_mark_its_input_unknown(tmp_path) -> None:
+    (tmp_path / "mid").mkdir()
+    (tmp_path / "child").mkdir()
+    (tmp_path / "child" / "main.tf").write_text('variable "acl" {}\n' + ACL % "var.acl")
+    (tmp_path / "mid" / "main.tf").write_text(
+        'variable "acl" {}\nmodule "c" {\n  source = "../child"\n  acl    = var.acl\n}\n'
+    )
+    (tmp_path / "main.tf").write_text(
+        'module "a" {\n  source = "./mid"\n  acl    = aws_thing.x.val\n}\n'
+        'module "b" {\n  source = "./mid"\n  __unknown_inputs__ = "acl"\n  acl    = "public-read"\n}\n'
+    )
+    assert ACL_RULE in _cli(tmp_path)[0]

@@ -470,8 +470,6 @@ UNSCANNED_COMBINATIONS: list[dict] = []
 # Those modules and all they call: what they pass down was cut short too.
 _PARTIAL_MODULES: set[str] = set()
 _TAG_ARGS = ("tags", "tags_all", "labels")
-# Which inputs a context got an unknown expression for (`_input_is_unknown`).
-_UNKNOWN_INPUTS_KEY = "__unknown_inputs__"
 _BARE_REF_RE = re.compile(r'[A-Za-z_][\w-]*(?:\.[\w-]+|\[[^\]"]*\])+')
 _PLAIN_INPUT_REF_RE = re.compile(r'(var|local)\.([\w-]+)')
 
@@ -539,6 +537,15 @@ def _tfvars_values(directory: Path) -> dict[str, str]:
         else:
             out.update(_top_level_assignments(text))
     return out
+
+
+class _VarContext(dict):
+    """A module's variable table, plus which inputs in it hold an unknown
+    expression (`_input_is_unknown`). An attribute, not a key: every key is
+    a name the scanned code chose, so a marker there could be set by a
+    caller (`__unknown_inputs__ = "acl"`) to hide its own value."""
+
+    unknown_inputs: frozenset = frozenset()
 
 
 def _input_is_unknown(source: str, resolved: str, parent_unknown: set[str]) -> bool:
@@ -660,7 +667,6 @@ def _limit_var_contexts(d: str, contexts: list[dict], texts: list[str], limit: i
         return contexts
     used = _inputs_in_use(texts, skip_tags=not tag_values_read)
     unused = {k for ctx in contexts for k in ctx if not k.startswith("__")} - used
-    unused.add(_UNKNOWN_INPUTS_KEY)
     contexts = _distinct_in_use(contexts, unused)
     picked = _pick_var_contexts(contexts, limit, unused)
     if len(picked) == len(contexts) and not cut_short:
@@ -800,7 +806,7 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
             return contexts[d]
         in_progress.add(d)
         found: list[dict] = []
-        distinct: set[frozenset] = set()
+        distinct: set[tuple] = set()
         representative: dict[str, str] = {}
         tried = 0
         for parent_dir, inputs, aws_provider, sources in incoming:
@@ -808,8 +814,8 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
                 tried += 1
                 if tried > _MAX_CONTEXTS_TRIED:
                     break
-                ctx = dict(own)
-                parent_unknown = set(parent_ctx.get(_UNKNOWN_INPUTS_KEY, "").split())
+                ctx = _VarContext(own)
+                parent_unknown = getattr(parent_ctx, "unknown_inputs", frozenset())
                 unknown: list[str] = []
                 # Provider default_tags reach the child's resources through
                 # the configuration it is given, so its tag rules see them.
@@ -829,9 +835,8 @@ def _extract_var_contexts_by_dir(all_files_text: dict,
                             resolved = representative.setdefault(k, resolved)
                             unknown.append(k)
                         ctx[k] = resolved
-                if unknown:
-                    ctx[_UNKNOWN_INPUTS_KEY] = " ".join(unknown)
-                key = frozenset(ctx.items())
+                ctx.unknown_inputs = frozenset(unknown)
+                key = (frozenset(ctx.items()), ctx.unknown_inputs)
                 if key not in distinct:
                     distinct.add(key)
                     found.append(ctx)
