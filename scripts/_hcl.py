@@ -738,7 +738,7 @@ def _read_normalized(path: Path) -> str:
             # `e` indexes the bytes after a UTF-8 BOM the codec dropped.
             bom = len(codecs.BOM_UTF8) if data.startswith(codecs.BOM_UTF8) else 0
             print(
-                f"WARN: {path}: not valid UTF-8 (byte 0x{e.object[e.start]:02x} "
+                f"WARN: {str(path)!r}: not valid UTF-8 (byte 0x{e.object[e.start]:02x} "
                 f"at offset {e.start + bom}); scanned with invalid bytes replaced",
                 file=sys.stderr,
             )

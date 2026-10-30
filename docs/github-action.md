@@ -55,10 +55,16 @@ change them for those runs, edit the fallback after `||` in the file.
 
 ## Behavior
 
-- **PR runs** use `--mode diff` — only changed files are scanned, plus
-  the rest of a folder whose `.tfvars`, `variable` or `locals` changed,
-  the local modules they call, and the folders that call a changed
-  folder as a local module.
+- **PR runs** use `--mode diff` — only changed files are scanned
+  (including a changed `.tfvars` or workflow file), plus the rest of a
+  folder whose `.tfvars`, `variable` or `locals` changed, the local
+  modules they call, and the folders that call a changed folder as a
+  local module. A changed folder symlink or submodule, or a module
+  `source` that isn't a plain string, scans everything instead, because
+  git can't say which files that changed. `.terraform/` is skipped,
+  except files committed there and a module a scanned file calls with a
+  local `source`. If git can't say what is committed, the job warns and
+  committed code there goes unchecked.
   Failures are gated by the `fail-on` threshold (default `HIGH`).
 - **No Terraform found fails the job.** If there are no `.tf` /
   `.tf.json` files under `target` (a wrong path, or `ignore_paths`

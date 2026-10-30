@@ -223,27 +223,53 @@ def _target_tf_files(target: Path, ignore_paths: list, *,
     enclosing git work tree (the repo being scanned, never other files
     on the machine), and never with ``contain_symlinks`` (fleet: targets
     may be untrusted repos). A file symlink out is still always skipped
-    (`_path_is_ignored`). Every link not followed gets a WARN."""
+    (`_path_is_ignored`). Every link not followed gets a WARN.
+
+    `.terraform` folders aren't walked, but a file in one that git tracks
+    or a local module `source` reaches is listed (`walk_tf_files`), subject
+    to the same `ignore_paths` and containment checks. A module `source`
+    that can't be followed while a `.terraform` folder is there gets a
+    WARN: it may call code there. So does a `.terraform` folder holding
+    Terraform files when git can't say which it tracks; they aren't
+    scanned, or `terraform init` outside a repo would flood the report."""
     from _diff import walk_tf_files
 
     root = target.resolve()
     skipped_links: list[Path] = []
     linked: list[str] = []
-    files = [
-        p for p in walk_tf_files(target, contain=contain_symlinks,
-                                 skipped=skipped_links, followed=linked)
-        if ".terraform" not in p.parts
-        and not _path_is_ignored(p, target, ignore_paths, linked_roots=linked)
-        # fleet targets may be untrusted repos: never follow a symlink out
-        and (not contain_symlinks or p.resolve().is_relative_to(root))
-    ]
+    opaque: list[tuple[Path, str]] = []
+    unknown: list[Path] = []
+
+    def scanned(p: Path) -> bool:
+        return (
+            not _path_is_ignored(p, target, ignore_paths, linked_roots=linked)
+            # fleet targets may be untrusted repos: never follow a symlink out
+            and (not contain_symlinks or p.resolve().is_relative_to(root))
+        )
+
+    files = walk_tf_files(target, contain=contain_symlinks, skipped=skipped_links,
+                          followed=linked, keep=scanned, opaque=opaque, unknown=unknown)
+    for fp, source in opaque:
+        print(
+            f"WARN: {str(fp)!r}: cannot tell which folder module source {source} calls; "
+            f"code it calls in .terraform is scanned only if git tracks it",
+            file=sys.stderr,
+        )
+    if unknown:
+        print(
+            f"WARN: cannot tell which files git tracks in "
+            f"{', '.join(repr(str(c)) for c in unknown[:5])}"
+            f"{', ...' if len(unknown) > 5 else ''}: not scanning them unless "
+            f"a module calls them, so code committed there is unchecked",
+            file=sys.stderr,
+        )
     if skipped_links:
         print(
             f"WARN: not following {len(skipped_links)} symlinked folder(s) "
             f"that point outside {target}"
             f"{'' if contain_symlinks else ' and its git repository'}, "
             f"or to a parent of it, or into .terraform / .git: "
-            f"{', '.join(map(str, skipped_links[:5]))}"
+            f"{', '.join(repr(str(p)) for p in skipped_links[:5])}"
             f"{', ...' if len(skipped_links) > 5 else ''}",
             file=sys.stderr,
         )
@@ -288,14 +314,17 @@ def _path_is_ignored(path: Path, target: Path, ignore_paths: list,
         # — e.g. `x.tf -> ../.git/config` in CI — and `--apply-fixes`
         # would write through it. Always skipped.
         print(
-            f"WARN: skipping {path}: it resolves outside the target "
-            f"({path.resolve()})",
+            f"WARN: skipping {str(path)!r}: it resolves outside the target "
+            f"({str(path.resolve())!r})",
             file=sys.stderr,
         )
         return True
-    if not ignore_paths:
-        return False
-    rel_parts = rel.parts
+    return _in_ignore_paths(rel.parts, ignore_paths)
+
+
+def _in_ignore_paths(rel_parts: tuple, ignore_paths: list) -> bool:
+    """Does a path (its parts, from the scan target) fall under an
+    ``ignore_paths`` entry? See `_path_is_ignored`."""
     for raw in ignore_paths:
         pat = str(raw).strip().strip("/").replace("\\", "/")
         if not pat:
@@ -322,12 +351,19 @@ def _collect_extra_files(
 
     De-duplicates across rules so the same file is read once even when
     multiple catalogue entries share a glob. `.terraform/` is excluded
-    so cached provider plugins never appear in the corpus. ``ignore_paths``
+    so cached provider plugins never appear in the corpus, even in a
+    module scanned there (Terraform doesn't load a child's `.tfvars`),
+    unless git tracks the file: `tracked_cache_files`. Paths are tested
+    from `target` down, so a target inside `.terraform` is scanned.
+    ``ignore_paths``
     further filters via :func:`_path_is_ignored` so a workflow YAML living
     under an excluded directory (e.g. ``examples/.github/workflows/...``)
     doesn't contaminate the scan.
     """
+    from _diff import tracked_cache_files
+
     _ignore_paths = ignore_paths or []
+    tracked: set[Path] | None = None  # asked for once, if it matters
     extra_globs: set[str] = set()
     for entry in entries:
         for pat in entry.get("patterns", []) or []:
@@ -373,8 +409,11 @@ def _collect_extra_files(
             )
             continue
         for p in matches:
-            if ".terraform" in p.parts:
-                continue
+            if ".terraform" in p.relative_to(target).parts:
+                if tracked is None:
+                    tracked = tracked_cache_files(target) or set()
+                if p not in tracked and p.resolve() not in tracked:
+                    continue
             if not p.is_file():
                 continue
             if _path_is_ignored(p, target, _ignore_paths):
@@ -544,8 +583,8 @@ def _extract_var_contexts_by_dir(all_files_text: dict) -> dict[str, list[dict]]:
             if not source or not source.startswith((".", "/")):
                 continue
             try:
-                child_dir = str((Path(parent_dir) / source).resolve())
-            except (OSError, ValueError):
+                child_dir = str(Path(os.path.normpath(Path(parent_dir) / source)).resolve())
+            except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             assigns = _top_level_assignments(mblk["body"])
             inputs = {k: v for k, v in assigns.items() if k not in _MODULE_META_ARGS}
@@ -1046,7 +1085,10 @@ def detect_corpus(target: Path, all_files_text: dict, entries: list,
             mod_name = mblk["groups"][0]
             src = block_arg_value(mblk["body"], "source")
             if src and src.startswith("."):
-                child_dir = (caller_dir / src).resolve()
+                try:
+                    child_dir = Path(os.path.normpath(caller_dir / src)).resolve()
+                except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
+                    continue
                 module_sources[mod_name] = str(child_dir)
 
     # Round 30.14 — pre-build the lazy caches once. Cheap (sub-ms on
@@ -2346,7 +2388,7 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
         try:
             all_text[fp] = _read_tf_source(fp)
         except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
     try:
         verify = verify_fixed(prior, target, all_text, entries, unreadable_files)
@@ -2367,7 +2409,10 @@ def _mode_verify_fixed(args: object, entries: list, project_config: dict,
     # could not be re-checked. This mode always exited 0.
     results = verify["results"]
     still_open = results["STILL-PRESENT"] + results["MOVED"]
-    return _gate_exit_code(args, still_open, entries, [], unreadable_files)
+    unchecked = list(dict.fromkeys(
+        [*unreadable_files, *(str(r["file"]) for r in results["UNREADABLE"])]
+    ))
+    return _gate_exit_code(args, still_open, entries, [], unchecked)
 
 
 def _cmd_apply_fixes(args: object, findings: list, entries: list) -> bool:
@@ -2559,11 +2604,11 @@ def _run_detection(args: object, all_text: dict, extra_text: dict,
             if _parse_error:
                 parse_fallback_files.append({"file": str(fp), "reason": _parse_error})
         # Run grep-style rules against workflow YAML / tfvars / any
-        # other non-tf file_glob (--mode diff intentionally skips these
-        # since they are not in the git diff of *.tf files).
-        if diff_files is None:
-            for fp, text in extra_text.items():
-                findings.extend(detect_in_file(fp, text, entries))
+        # other non-tf file_glob (--mode diff: only the changed ones).
+        for fp, text in extra_text.items():
+            if diff_files is not None and fp.resolve() not in diff_files:
+                continue
+            findings.extend(detect_in_file(fp, text, entries))
 
     # Plan-mode rule re-evaluation. Findings are merged into the same
     # list so suppression, comparison, and reporting all see them; the
@@ -2752,7 +2797,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         try:
             text = _read_tf_source(fp)
         except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
             continue
         all_text[fp] = text
@@ -2781,7 +2826,7 @@ def _scan_target(args: object, target: Path, entries: list, project_config: dict
         try:
             extra_text[fp] = _read_normalized(fp)
         except Exception as e:
-            print(f"WARN: cannot read {fp}: {e}", file=sys.stderr)
+            print(f"WARN: cannot read {str(fp)!r}: {e}", file=sys.stderr)
             unreadable_files.append(str(fp))
 
     # Provider/Terraform-version-aware filter: an entry with `applies_when`
@@ -3383,7 +3428,7 @@ def _add_mode_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--diff-base",
         default=None,
-        help="Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files, plus every .tf file in the folder of a changed .tfvars, a changed file declaring variable / locals, or a deleted or moved file, and the local modules those call.",
+        help="Git ref to diff against (e.g., main). Only scan changed .tf / .tf.json files and other changed files rules read (.tfvars, workflow YAML), plus every .tf file in the folder of a changed .tfvars, a changed file declaring variable / locals, or a deleted or moved file, and the local modules those call.",
     )
     ap.add_argument(
         "--state-json",
@@ -3922,7 +3967,14 @@ def _main():
     diff_files = None
     if args.diff_base or args.mode == "diff":
         base = args.diff_base or _auto_detect_base_branch(target)
-        diff_files = get_diff_files(target, base)
+        _diff_ignores = project_config.get("ignore_paths") or []
+
+        def _diff_ignored(p: Path) -> bool:
+            return p.is_relative_to(target) and _in_ignore_paths(
+                p.relative_to(target).parts, _diff_ignores
+            )
+
+        diff_files = get_diff_files(target, base, _diff_ignored)
         if diff_files is None:
             # The diff itself failed: scanning "no changed files" would
             # pass the gate having checked nothing. Scan everything.
@@ -3930,7 +3982,7 @@ def _main():
                 f"WARN: could not diff against {base!r}; scanning all files",
                 file=sys.stderr,
             )
-        elif not diff_files:
+        elif not any(is_tf_source(fp) for fp in diff_files):
             print("# no changed .tf / .tf.json files in diff", file=sys.stderr)
 
     # Read, detect, filter and suppress — see _scan_target (shared with

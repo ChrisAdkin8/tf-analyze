@@ -13,6 +13,7 @@ Corpus handlers (6):
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -188,8 +189,8 @@ def _corpus_module_unused(c: CorpusCtx) -> list[dict]:
             if not src or not src.startswith((".", "/")):
                 continue
             try:
-                target_dir = str((caller_dir / src).resolve())
-            except (OSError, ValueError):
+                target_dir = str(Path(os.path.normpath(caller_dir / src)).resolve())
+            except (OSError, RuntimeError, ValueError):  # RuntimeError: a symlink loop
                 continue
             referenced_dirs.add(target_dir)
     target_root = str(c.target.resolve()) if isinstance(c.target, Path) else ""

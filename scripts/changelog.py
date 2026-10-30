@@ -154,12 +154,15 @@ def check_fragments(fragment_dir: Path = FRAGMENT_DIR) -> list[str]:
 
 def check_branch(base: str) -> list[str]:
     """This branch adds (or edits) a fragment and leaves CHANGELOG.md to `build`."""
-    out = _git("diff", "--name-status", "--no-renames", f"{base}...HEAD")
+    # `-z`: without it git quotes a non-ASCII name, which then isn't seen
+    # as a fragment. Fields are NUL-separated: status, path, status, path.
+    out = _git("-c", "core.quotepath=off", "diff", "--name-status", "--no-renames",
+               "-z", f"{base}...HEAD")
     if not out and not _git("rev-parse", "--verify", base):
         return [f"can't diff against `{base}` (fetch it, or use fetch-depth: 0)"]
     touched: dict[str, str] = {}
-    for line in out.splitlines():
-        status, _, name = line.partition("\t")
+    fields = out.split("\0")
+    for status, name in zip(fields[::2], fields[1::2]):
         touched[name] = status[:1]
     frag_changes = {
         name: st
