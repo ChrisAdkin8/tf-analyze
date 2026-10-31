@@ -604,7 +604,7 @@ runs:
 
     - name: Upload HTML artifact
       if: always() && inputs.upload-html-artifact == 'true' && steps.scan.outputs.out-dir != ''
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: tf-analyze-report
         path: ${{ steps.scan.outputs.html-report-path }}
@@ -620,7 +620,7 @@ runs:
     # fields the action consumes.
     - name: Upload findings.json artifact (debug)
       if: always() && inputs.debug-upload-findings == 'true' && steps.scan.outputs.out-dir != ''
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: tf-analyze-findings-json
         path: ${{ steps.scan.outputs.json-report-path }}
